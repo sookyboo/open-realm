@@ -65,7 +65,7 @@ fi
 # For $ANALOG_STICKS we have the ability to supply multiple gptk files to support 1 and 2 analogue stick devices in different ways.
 # For a proper documentation how gptokeyb works: [Link](https://github.com/PortsMaster/gptokeyb)
 # $GPTOKEYB "open-realm.${DEVICE_ARCH}" -c "$GAMEDIR/open-realm.gptk" &
-$GPTOKEYB2 -1 "open-realm.${DEVICE_ARCH}" -c "$GAMEDIR/open-realm.gptk" >/dev/null &
+$GPTOKEYB2 -1 "open-realm.${DEVICE_ARCH}" -c "$GAMEDIR/openrealm.gptk2.ini" >/dev/null &
 
 # Do some platform specific stuff right before the port is launched but after GPTOKEYB is run.
 pm_platform_helper "$GAMEDIR/open-realm.${DEVICE_ARCH}"
@@ -74,12 +74,17 @@ pm_platform_helper "$GAMEDIR/open-realm.${DEVICE_ARCH}"
 export LIBGL_ES=2
 export LIBGL_LOGSHADERERROR=1
 export LIBGL_SILENTSTUB=0
+# try shrink textures to see if worth shrinking them - doesn't seem to improve FPS but astc might still help who knows
+# export LIBGL_FORCE16BITS=1
+# export LIBGL_SHRINK=1
+
 #./open-realm.${DEVICE_ARCH} -data "$GAMEDIR/gamefiles"  +menu_single_player_campaign +vid_mode 0
-./open-realm.${DEVICE_ARCH} -data "$GAMEDIR/gamefiles" +map Maps\\Campaign\\Human02.w3m +vid_mode 0 \
+./open-realm.${DEVICE_ARCH} -data "$GAMEDIR/gamefiles" +map Maps\\Campaign\\Human02.w3m +vid_mode 0 +set r_profile 1 +set r_cursor 1 \
++r_entities 1 \
   +r_msaa 0 \
   +r_vsync 0 \
-  +r_fogofwar 0 \
-  +r_particles 0 \
+  +r_fogofwar 1 \
+  +r_particles 1 \
   +r_stats 1
 
 
