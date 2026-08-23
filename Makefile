@@ -32,6 +32,9 @@ endif
 ifeq ($(NO_NETWORK),1)
 	CFLAGS += -DBZ_NO_NETWORK
 endif
+ifeq ($(COMPAT_STRL),1)
+	CFLAGS += -DOPENREALM_COMPAT_STRL -include shared/compat.h
+endif
 # ---------------------------------------------------------------------------
 # Platform detection
 # ---------------------------------------------------------------------------
