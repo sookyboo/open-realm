@@ -1,20 +1,58 @@
 #include "r_local.h"
 #include "r_shader.h"
 
-LPCSTR vs_default =
-"#version 140\n"
-"in vec3 i_position;\n"
-"in vec2 i_texcoord;\n"
-"in vec3 i_normal;\n"
-"in vec4 i_color;\n"
-#ifdef USE_SHADOWMAPS
-"out vec4 v_shadow;\n"
+/*
+ * GLSL compatibility layer.
+ *
+ * gl4es exposes desktop GLSL 1.20, while the native GLES3 path uses
+ * GLSL ES 3.00. Keep one shader body and adapt the syntax at compile time.
+ */
+
+#if defined(BZ_GL_ES3)
+#define GLSL_SOURCE_VERSION "#version 300 es\n"
+#elif defined(BZ_GLSL_120)
+#define GLSL_SOURCE_VERSION GLSL_SOURCE_VERSION
+#else
+#define GLSL_SOURCE_VERSION "#version 140\n"
 #endif
-"out vec2 v_texcoord;\n"
-"out vec2 v_texcoord2;\n"
-"out vec3 v_normal;\n"
-"out vec3 v_lightDir;\n"
-"out vec4 v_color;\n"
+
+#define GLSL_VERTEX_COMPAT \
+"#if __VERSION__ >= 130\n" \
+"#define BZ_ATTRIBUTE in\n" \
+"#define BZ_VARYING out\n" \
+"#else\n" \
+"#define BZ_ATTRIBUTE attribute\n" \
+"#define BZ_VARYING varying\n" \
+"#endif\n"
+
+#define GLSL_FRAGMENT_COMPAT \
+"#if __VERSION__ >= 130\n" \
+"#define BZ_VARYING in\n" \
+"#define BZ_TEXTURE texture\n" \
+"out vec4 bz_FragColor;\n" \
+"#define BZ_FRAGCOLOR bz_FragColor\n" \
+"#else\n" \
+"#define BZ_VARYING varying\n" \
+"#define BZ_TEXTURE texture2D\n" \
+"#define BZ_FRAGCOLOR gl_FragColor\n" \
+"#endif\n"
+
+
+LPCSTR vs_default =
+GLSL_SOURCE_VERSION
+GLSL_VERTEX_COMPAT
+"BZ_ATTRIBUTE vec3 i_position;\n"
+"BZ_ATTRIBUTE vec2 i_texcoord;\n"
+"BZ_ATTRIBUTE vec3 i_normal;\n"
+"BZ_ATTRIBUTE vec4 i_color;\n"
+#ifdef USE_SHADOWMAPS
+"BZ_VARYING vec4 v_shadow;\n"
+#endif
+"BZ_VARYING vec2 v_texcoord;\n"
+"BZ_VARYING vec2 v_texcoord2;\n"
+"BZ_VARYING vec3 v_normal;\n"
+"BZ_VARYING vec3 v_lightDir;\n"
+"BZ_VARYING vec4 v_color;\n"
 "uniform mat4 uViewProjectionMatrix;\n"
 "uniform mat4 uTextureMatrix;\n"
 "uniform mat4 uModelMatrix;\n"
@@ -34,13 +72,13 @@ LPCSTR vs_default =
 "}\n";
 
 LPCSTR fs_default =
-"#version 140\n"
-"in vec2 v_texcoord;\n"
-"in vec2 v_texcoord2;\n"
-"in vec3 v_normal;\n"
-"in vec4 v_color;\n"
-"in vec3 v_lightDir;\n"
-"out vec4 o_color;\n"
+GLSL_SOURCE_VERSION
+GLSL_FRAGMENT_COMPAT
+"BZ_VARYING vec2 v_texcoord;\n"
+"BZ_VARYING vec2 v_texcoord2;\n"
+"BZ_VARYING vec3 v_normal;\n"
+"BZ_VARYING vec4 v_color;\n"
+"BZ_VARYING vec3 v_lightDir;\n"
 "uniform sampler2D uTexture;\n"
 #ifdef USE_FOGOFWAR
 "uniform sampler2D uFogOfWar;\n"
@@ -50,9 +88,9 @@ LPCSTR fs_default =
 "}\n"
 #ifdef USE_SHADOWMAPS
 "uniform sampler2D uShadowmap;\n"
-"in vec4 v_shadow;\n"
+"BZ_VARYING vec4 v_shadow;\n"
 "float get_shadow() {\n"
-"    float depth = texture(uShadowmap, vec2(v_shadow.x + 1.0, v_shadow.y + 1.0) * 0.5).r;\n"
+"    float depth = BZ_TEXTURE(uShadowmap, vec2(v_shadow.x + 1.0, v_shadow.y + 1.0) * 0.5).r;\n"
 "    return depth < (v_shadow.z + 0.99) * 0.5 ? 0.0 : 1.0;\n"
 "}\n"
 "float get_lighting() { return min(1.0, mix(0.35, 1.0, get_shadow() * get_light()) * 1.1); }\n"
@@ -61,107 +99,107 @@ LPCSTR fs_default =
 #endif
 #ifdef USE_FOGOFWAR
 "float get_fogofwar() {\n"
-"    return texture(uFogOfWar, v_texcoord2).r;\n"
+"    return BZ_TEXTURE(uFogOfWar, v_texcoord2).r;\n"
 "}\n"
 #endif
 "void main() {\n"
-"    vec4 col = texture(uTexture, v_texcoord) * v_color;\n"
+"    vec4 col = BZ_TEXTURE(uTexture, v_texcoord) * v_color;\n"
 #ifdef USE_FOGOFWAR
 "    col.rgb *= get_fogofwar() * get_lighting();\n"
 #else
 "    col.rgb *= get_lighting();\n"
 #endif
-"    o_color = col;\n"
+"    BZ_FRAGCOLOR = col;\n"
 "}\n";
 
 LPCSTR fs_ui =
-"#version 140\n"
-"in vec4 v_color;\n"
-"in vec2 v_texcoord;\n"
-"out vec4 o_color;\n"
+GLSL_SOURCE_VERSION
+GLSL_FRAGMENT_COMPAT
+"BZ_VARYING vec4 v_color;\n"
+"BZ_VARYING vec2 v_texcoord;\n"
 "uniform sampler2D uTexture;\n"
 "void main() {\n"
-"    o_color = texture(uTexture, v_texcoord) * v_color;\n"
+"    BZ_FRAGCOLOR = BZ_TEXTURE(uTexture, v_texcoord) * v_color;\n"
 "}\n";
 
 LPCSTR fs_minimap =
-"#version 140\n"
-"in vec4 v_color;\n"
-"in vec2 v_texcoord;\n"
-"out vec4 o_color;\n"
+GLSL_SOURCE_VERSION
+GLSL_FRAGMENT_COMPAT
+"BZ_VARYING vec4 v_color;\n"
+"BZ_VARYING vec2 v_texcoord;\n"
 "uniform sampler2D uTexture;\n"
 "void main() {\n"
 "    float mask = 1.0 - smoothstep(0.49, 0.5, length(v_color.rg - vec2(0.5)));\n"
-"    vec4 tex = texture(uTexture, v_texcoord);\n"
-"    o_color = vec4(tex.rgb, tex.a * mask);\n"
+"    vec4 tex = BZ_TEXTURE(uTexture, v_texcoord);\n"
+"    BZ_FRAGCOLOR = vec4(tex.rgb, tex.a * mask);\n"
 "}\n";
 
 LPCSTR fs_unlit =
-"#version 140\n"
-"in vec4 v_color;\n"
-"in vec2 v_texcoord;\n"
-"out vec4 o_color;\n"
+GLSL_SOURCE_VERSION
+GLSL_FRAGMENT_COMPAT
+"BZ_VARYING vec4 v_color;\n"
+"BZ_VARYING vec2 v_texcoord;\n"
 "uniform sampler2D uTexture;\n"
 "void main() {\n"
-"    o_color = texture(uTexture, v_texcoord) * v_color;\n"
+"    BZ_FRAGCOLOR = BZ_TEXTURE(uTexture, v_texcoord) * v_color;\n"
 "}\n";
 
 LPCSTR fs_splat =
-"#version 140\n"
-"in vec4 v_color;\n"
-"in vec2 v_texcoord;\n"
-"out vec4 o_color;\n"
+GLSL_SOURCE_VERSION
+GLSL_FRAGMENT_COMPAT
+"BZ_VARYING vec4 v_color;\n"
+"BZ_VARYING vec2 v_texcoord;\n"
 "uniform sampler2D uTexture;\n"
 "float crop_edges(vec2 tc) {\n"
 "   return step(abs(tc.x - 0.5), 0.5) * step(abs(tc.y - 0.5), 0.5);\n"
 "}\n"
 "void main() {\n"
-"    o_color = texture(uTexture, v_texcoord) * v_color;\n"
-"    o_color.a *= crop_edges(v_texcoord);\n"
+"    BZ_FRAGCOLOR = BZ_TEXTURE(uTexture, v_texcoord) * v_color;\n"
+"    BZ_FRAGCOLOR.a *= crop_edges(v_texcoord);\n"
 "}\n";
 
 LPCSTR fs_shadow_splat =
-"#version 140\n"
-"in vec4 v_color;\n"
-"in vec2 v_texcoord;\n"
-"out vec4 o_color;\n"
+GLSL_SOURCE_VERSION
+GLSL_FRAGMENT_COMPAT
+"BZ_VARYING vec4 v_color;\n"
+"BZ_VARYING vec2 v_texcoord;\n"
 "uniform sampler2D uTexture;\n"
 "float crop_edges(vec2 tc) {\n"
 "   return step(abs(tc.x - 0.5), 0.5) * step(abs(tc.y - 0.5), 0.5);\n"
 "}\n"
 "void main() {\n"
-"    vec4 tex = texture(uTexture, v_texcoord);\n"
-"    o_color = vec4(0.0, 0.0, 0.0, tex.a * v_color.a * crop_edges(v_texcoord));\n"
+"    vec4 tex = BZ_TEXTURE(uTexture, v_texcoord);\n"
+"    BZ_FRAGCOLOR = vec4(0.0, 0.0, 0.0, tex.a * v_color.a * crop_edges(v_texcoord));\n"
 "}\n";
 
 LPCSTR fs_commandbutton =
-"#version 140\n"
-"in vec4 v_color;\n"
-"in vec2 v_texcoord;\n"
-"out vec4 o_color;\n"
+GLSL_SOURCE_VERSION
+GLSL_FRAGMENT_COMPAT
+"BZ_VARYING vec4 v_color;\n"
+"BZ_VARYING vec2 v_texcoord;\n"
 "uniform sampler2D uTexture;\n"
 "uniform float uActiveGlow;\n"
 "float crop_edges(vec2 tc) {\n"
 "   return step(abs(tc.x - 0.5), 0.5) * step(abs(tc.y - 0.5), 0.5);\n"
 "}\n"
 "void main() {\n"
-"    o_color = texture(uTexture, v_texcoord) * v_color;\n"
+"    BZ_FRAGCOLOR = BZ_TEXTURE(uTexture, v_texcoord) * v_color;\n"
 "    float glow = max(abs(v_texcoord.x - 0.5), abs(v_texcoord.y - 0.5));\n"
 "    glow = smoothstep(0.33, 0.5, glow) * 0.75 * uActiveGlow;\n"
-"    o_color.rgb = mix(o_color.rgb,vec3(0.5,1.0,0.5),glow);\n"
-"    o_color.a *= crop_edges(v_texcoord);\n"
+"    BZ_FRAGCOLOR.rgb = mix(BZ_FRAGCOLOR.rgb,vec3(0.5,1.0,0.5),glow);\n"
+"    BZ_FRAGCOLOR.a *= crop_edges(v_texcoord);\n"
 "}\n";
 
 LPCSTR fs_minimap_fog =
-"#version 140\n"
-"in vec4 v_color;\n"
-"in vec2 v_texcoord;\n"
-"out vec4 o_color;\n"
+GLSL_SOURCE_VERSION
+GLSL_FRAGMENT_COMPAT
+"BZ_VARYING vec4 v_color;\n"
+"BZ_VARYING vec2 v_texcoord;\n"
 "uniform sampler2D uTexture;\n"
 "void main() {\n"
-"    float visibility = texture(uTexture, vec2(v_texcoord.x, 1.0 - v_texcoord.y)).r;\n"
+"    float visibility = BZ_TEXTURE(uTexture, vec2(v_texcoord.x, 1.0 - v_texcoord.y)).r;\n"
 "    float alpha = clamp(1.0 - visibility, 0.0, 1.0) * v_color.a;\n"
-"    o_color = vec4(v_color.rgb, alpha);\n"
+"    BZ_FRAGCOLOR = vec4(v_color.rgb, alpha);\n"
 "}\n";
 
 /* Shared vertex shader for MDX/M2/M3 model formats.
@@ -169,24 +207,32 @@ LPCSTR fs_minimap_fog =
    "#define BZ_USE_INSTANCING 1" injected to switch to per-instance
    matrix attributes and add ground-effect grass wind. */
 static LPCSTR model_vs =
-"#version 140\n"
-"in vec3 i_position;\n"
-"in vec4 i_color;\n"
-"in vec2 i_texcoord;\n"
-"in vec3 i_normal;\n"
-"in vec4 i_skin1;\n"
-"in vec4 i_boneWeight1;\n"
+GLSL_SOURCE_VERSION
+GLSL_VERTEX_COMPAT
+"BZ_ATTRIBUTE vec3 i_position;\n"
+"BZ_ATTRIBUTE vec4 i_color;\n"
+"BZ_ATTRIBUTE vec2 i_texcoord;\n"
+"BZ_ATTRIBUTE vec3 i_normal;\n"
+"BZ_ATTRIBUTE vec4 i_skin1;\n"
+"BZ_ATTRIBUTE vec4 i_boneWeight1;\n"
 "#ifdef BZ_USE_INSTANCING\n"
-"in mat4 i_instance;\n"
+"#if __VERSION__ >= 130\n"
+"BZ_ATTRIBUTE mat4 i_instance;\n"
+"#else\n"
+"BZ_ATTRIBUTE vec4 i_instance0;\n"
+"BZ_ATTRIBUTE vec4 i_instance1;\n"
+"BZ_ATTRIBUTE vec4 i_instance2;\n"
+"BZ_ATTRIBUTE vec4 i_instance3;\n"
 "#endif\n"
-"out vec4 v_color;\n"
+"#endif\n"
+"BZ_VARYING vec4 v_color;\n"
 #ifdef USE_SHADOWMAPS
-"out vec4 v_shadow;\n"
+"BZ_VARYING vec4 v_shadow;\n"
 #endif
-"out vec2 v_texcoord;\n"
-"out vec2 v_texcoord2;\n"
-"out vec3 v_lighting;\n"
-/* The CPU palette and literal GLSL array share one compile-time size; never shrink it from GL limits. */
+"BZ_VARYING vec2 v_texcoord;\n"
+"BZ_VARYING vec2 v_texcoord2;\n"
+"BZ_VARYING vec3 v_lighting;\n"
+/* Keep the Warcraft model palette fixed; shrinking it corrupts valid bone indices. */
 "uniform mat4 uBones[" BZ_XSTR(BZ_BONE_PALETTE_MAX) "];\n"
 "uniform mat4 uViewProjectionMatrix;\n"
 "uniform mat4 uLightMatrix;\n"
@@ -241,6 +287,9 @@ static LPCSTR model_vs =
 "    }\n"
 "    position.w = 1.0;\n"
 "#ifdef BZ_USE_INSTANCING\n"
+"#if __VERSION__ < 130\n"
+"    mat4 i_instance = mat4(i_instance0, i_instance1, i_instance2, i_instance3);\n"
+"#endif\n"
 "    if (uGrassParams[3].z > 0.5) {\n"
 "        float grassHeight = max(uGrassParams[3].y - uGrassParams[3].x, 0.001);\n"
 "        float grassTop = smoothstep(uGrassParams[1].w, 1.0, clamp((position.z - uGrassParams[3].x) / grassHeight, 0.0, 1.0));\n"
@@ -276,15 +325,15 @@ static LPCSTR model_vs =
 "}\n";
 
 static LPCSTR model_fs =
-"#version 140\n"
-"in vec2 v_texcoord;\n"
-"in vec2 v_texcoord2;\n"
+GLSL_SOURCE_VERSION
+GLSL_FRAGMENT_COMPAT
+"BZ_VARYING vec2 v_texcoord;\n"
+"BZ_VARYING vec2 v_texcoord2;\n"
 #ifdef USE_SHADOWMAPS
-"in vec4 v_shadow;\n"
+"BZ_VARYING vec4 v_shadow;\n"
 #endif
-"in vec3 v_lighting;\n"
-"in vec4 v_color;\n"
-"out vec4 o_color;\n"
+"BZ_VARYING vec3 v_lighting;\n"
+"BZ_VARYING vec4 v_color;\n"
 "uniform sampler2D uTexture;\n"
 #ifdef USE_SHADOWMAPS
 "uniform sampler2D uShadowmap;\n"
@@ -307,12 +356,12 @@ static LPCSTR model_fs =
 "uniform vec2 uFogParams;\n"
 #ifdef USE_FOGOFWAR
 "float get_fogofwar() {\n"
-"    return texture(uFogOfWar, v_texcoord2).r;\n"
+"    return BZ_TEXTURE(uFogOfWar, v_texcoord2).r;\n"
 "}\n"
 #endif
 "void main() {\n"
 "    vec2 uv = (uUvMatrix * vec3(v_texcoord, 1.0)).xy;\n"
-"    vec4 col = texture(uTexture, uv);\n"
+"    vec4 col = BZ_TEXTURE(uTexture, uv);\n"
 "    col *= uGeosetColor;\n"
 "    col *= uLayerAlpha;\n"
 "    col *= v_color;\n"
@@ -335,7 +384,7 @@ static LPCSTR model_fs =
 "        col.a = smoothstep(uAlphaCutoff - edge, uAlphaCutoff + edge, col.a);\n"
 #endif
 "    }\n"
-"    o_color = col;\n"
+"    BZ_FRAGCOLOR = col;\n"
 "}\n";
 
 static LPSHADER model_shader;
@@ -380,6 +429,8 @@ static void R_SetShaderSource(GLuint shader, LPCSTR source, LPCSTR extra_defines
     LPCSTR prefix =
 #ifdef BZ_GL_ES3
         "#version 300 es\nprecision highp float;\nprecision highp int;\n";
+#elif defined(BZ_GLSL_120)
+        "#version 120\n";
 #else
         "#version 140\n";
 #endif
@@ -433,7 +484,14 @@ static LPSHADER R_InitShaderDefines(LPCSTR vs_src, LPCSTR fs_src, LPCSTR extra_d
     R_Call(glBindAttribLocation, program->progid, attrib_boneWeight1, "i_boneWeight1");
     R_Call(glBindAttribLocation, program->progid, attrib_particleSize, "i_size");
     R_Call(glBindAttribLocation, program->progid, attrib_particleAxis, "i_axis");
+#if defined(BZ_GLSL_120) && !defined(BZ_GL_ES3)
+    R_Call(glBindAttribLocation, program->progid, attrib_instance + 0, "i_instance0");
+    R_Call(glBindAttribLocation, program->progid, attrib_instance + 1, "i_instance1");
+    R_Call(glBindAttribLocation, program->progid, attrib_instance + 2, "i_instance2");
+    R_Call(glBindAttribLocation, program->progid, attrib_instance + 3, "i_instance3");
+#else
     R_Call(glBindAttribLocation, program->progid, attrib_instance, "i_instance");
+#endif
 
     R_Call(glLinkProgram, program->progid);
     R_CheckShader(program->progid, GL_LINK_STATUS, "Shader program link");
