@@ -1,6 +1,7 @@
 #include "client.h"
 #include "ui_layout.h"
 #include <ctype.h>
+#include <stdlib.h>
 #include <SDL2/SDL.h>
 
 BOOL scr_initialized;
@@ -21,6 +22,23 @@ static FLOAT SCR_UICanvasWidth(void) {
     }
 #endif
     return UI_BASE_WIDTH;
+}
+
+/*
+ * SDL mouse positions are window pixels, while UI/layout coordinates use the
+ * engine's virtual canvas.  Cursor drawing and FDF hit-testing must share this
+ * mapping, including SC2's widened canvas on widescreen displays.
+ */
+static VECTOR2 SCR_ScreenToUI(int x, int y) {
+    size2_t window = re.GetWindowSize();
+    FLOAT nx = 0.0f, ny = 0.0f;
+
+    if (window.width > 0 && window.height > 0) {
+        nx = (FLOAT)x / (FLOAT)window.width;
+        ny = (FLOAT)y / (FLOAT)window.height;
+    }
+
+    return MAKE(VECTOR2, nx * SCR_UICanvasWidth(), ny * UI_BASE_HEIGHT);
 }
 
 static void SCR_DrawString(int x, int y, LPCSTR string) {
@@ -52,6 +70,221 @@ static void SCR_DrawFPS(DWORD msec) {
         snprintf(text, sizeof(text), "FPS --  Drawcalls %u", (unsigned)re.GetDrawCalls());
     }
     SCR_DrawString(10, y, text);
+}
+
+/*
+ * Software mouse cursor modes:
+ *   0 = off
+ *   1 = simple shape cursor
+ *   2 = native Warcraft III MDX cursor
+ *
+ * Keep this as a string-backed cvar so more cursor modes can be added later
+ * without changing the public configuration shape.
+ */
+#define SCR_CURSOR_MODE_OFF    0
+#define SCR_CURSOR_MODE_SHAPE  1
+#define SCR_CURSOR_MODE_SPRITE 2
+
+#define SCR_CURSOR_RADIUS          8.0f
+#define SCR_CURSOR_OUTER_THICKNESS 3.0f
+#define SCR_CURSOR_INNER_THICKNESS 1.0f
+
+#define SCR_CURSOR_MODEL_HUMAN "UI\\Cursor\\HumanCursor.mdx"
+
+typedef enum {
+    CURSOR_NORMAL,
+    CURSOR_SELECT,
+    CURSOR_TARGET,
+    CURSOR_TARGET_SELECT,
+    CURSOR_INVALID_TARGET,
+    CURSOR_HOLD_ITEM,
+    CURSOR_SCROLL_LEFT,
+    CURSOR_SCROLL_RIGHT,
+    CURSOR_SCROLL_UP,
+    CURSOR_SCROLL_DOWN,
+    CURSOR_SCROLL_UP_LEFT,
+    CURSOR_SCROLL_UP_RIGHT,
+    CURSOR_SCROLL_DOWN_LEFT,
+    CURSOR_SCROLL_DOWN_RIGHT
+} cursor_state_t;
+
+typedef struct {
+    LPMODEL model;
+    cursor_state_t state;
+    BOOL load_attempted;
+} scrCursor_t;
+
+static scrCursor_t scr_cursor = {
+    .model = NULL,
+    .state = CURSOR_NORMAL,
+    .load_attempted = false,
+};
+
+static LPCSTR SCR_CursorSequence(cursor_state_t state) {
+    switch (state) {
+    case CURSOR_SELECT:            return "Select";
+    case CURSOR_TARGET:            return "Target";
+    case CURSOR_TARGET_SELECT:     return "TargetSelect";
+    case CURSOR_INVALID_TARGET:    return "InvalidTarget";
+    case CURSOR_HOLD_ITEM:         return "HoldItem";
+    case CURSOR_SCROLL_LEFT:       return "Scroll Left";
+    case CURSOR_SCROLL_RIGHT:      return "Scroll Right";
+    case CURSOR_SCROLL_UP:         return "Scroll Up";
+    case CURSOR_SCROLL_DOWN:       return "Scroll Down";
+    case CURSOR_SCROLL_UP_LEFT:    return "Scroll Up Left";
+    case CURSOR_SCROLL_UP_RIGHT:   return "Scroll Up Right";
+    case CURSOR_SCROLL_DOWN_LEFT:  return "Scroll Down Left";
+    case CURSOR_SCROLL_DOWN_RIGHT: return "Scroll Down Right";
+    case CURSOR_NORMAL:
+    default:
+        return "Normal";
+    }
+}
+
+static int SCR_CursorMode(void) {
+    LPCSTR value = Cvar_String("r_cursor", "0");
+    int mode = value ? atoi(value) : SCR_CURSOR_MODE_OFF;
+
+    if (mode < SCR_CURSOR_MODE_OFF) mode = SCR_CURSOR_MODE_OFF;
+    if (mode > SCR_CURSOR_MODE_SPRITE) mode = SCR_CURSOR_MODE_SPRITE;
+    return mode;
+}
+
+/*
+ * Hide SDL's hardware cursor only while this file owns a visible software
+ * cursor. Preserve the previous SDL state so r_cursor 0 restores whatever
+ * the rest of the client had configured before software cursor drawing.
+ */
+static void SCR_UpdateSystemCursor(BOOL software_cursor_active) {
+    static int previous_visibility = -2;
+
+    if (software_cursor_active) {
+        if (previous_visibility == -2) {
+            previous_visibility = SDL_ShowCursor(SDL_QUERY);
+            if (previous_visibility < 0) previous_visibility = SDL_ENABLE;
+            SDL_ShowCursor(SDL_DISABLE);
+        }
+        return;
+    }
+
+    if (previous_visibility != -2) {
+        SDL_ShowCursor(previous_visibility ? SDL_ENABLE : SDL_DISABLE);
+        previous_visibility = -2;
+    }
+}
+
+/*
+ * Placeholder cursor drawn directly in window-pixel coordinates. R_DrawFill
+ * uses the same top-left-origin pixel space as SDL mouse coordinates, so no
+ * FDF/UI coordinate conversion is required here.
+ *
+ * Four rectangles give a black outline with a one-pixel white centre line;
+ * the exact mouse hotspot is the centre of the cross.
+ */
+static void SCR_DrawShapeCursor(int x, int y) {
+    COLOR32 const outline = MAKE(COLOR32, 0, 0, 0, 255);
+    COLOR32 const fill    = COLOR32_WHITE;
+    FLOAT const radius    = SCR_CURSOR_RADIUS;
+    FLOAT const outer     = SCR_CURSOR_OUTER_THICKNESS;
+    FLOAT const inner     = SCR_CURSOR_INNER_THICKNESS;
+
+    RECT horizontal_outline = MAKE(RECT,
+        (FLOAT)x - radius,
+        (FLOAT)y - outer * 0.5f,
+        radius * 2.0f + 1.0f,
+        outer);
+    RECT vertical_outline = MAKE(RECT,
+        (FLOAT)x - outer * 0.5f,
+        (FLOAT)y - radius,
+        outer,
+        radius * 2.0f + 1.0f);
+    RECT horizontal_fill = MAKE(RECT,
+        (FLOAT)x - radius + 1.0f,
+        (FLOAT)y - inner * 0.5f,
+        radius * 2.0f - 1.0f,
+        inner);
+    RECT vertical_fill = MAKE(RECT,
+        (FLOAT)x - inner * 0.5f,
+        (FLOAT)y - radius + 1.0f,
+        inner,
+        radius * 2.0f - 1.0f);
+
+    re.DrawFill(&horizontal_outline, outline);
+    re.DrawFill(&vertical_outline, outline);
+    re.DrawFill(&horizontal_fill, fill);
+    re.DrawFill(&vertical_fill, fill);
+}
+
+/*
+ * Milestone 1: hard-code the Human cursor model. The model is loaded once and
+ * retained for the lifetime of the screen subsystem. Cursor actions are MDX
+ * sequence changes on this same model, not separate images/models.
+ */
+static BOOL SCR_LoadWarcraftCursor(void) {
+    renderEntity_t probe = {0};
+
+    if (scr_cursor.model) {
+        return true;
+    }
+
+    if (scr_cursor.load_attempted) {
+        return false;
+    }
+
+    scr_cursor.load_attempted = true;
+    scr_cursor.model = re.LoadModel(SCR_CURSOR_MODEL_HUMAN);
+
+    /*
+     * R_LoadModel can return an empty cached model for a missing asset, so a
+     * non-NULL pointer alone is not enough. Validate that the MDX can select
+     * an animation before hiding the useful shape-cursor fallback.
+     */
+    if (!scr_cursor.model ||
+        !re.SetEntityAnimFrame(scr_cursor.model, "Normal", &probe)) {
+        fprintf(stderr, "Failed to load Warcraft cursor: %s\n", SCR_CURSOR_MODEL_HUMAN);
+        if (scr_cursor.model) {
+            re.ReleaseModel(scr_cursor.model);
+            scr_cursor.model = NULL;
+        }
+        return false;
+    }
+
+    fprintf(stderr, "Loaded Warcraft cursor: %s\n", SCR_CURSOR_MODEL_HUMAN);
+    return true;
+}
+
+static BOOL SCR_DrawWarcraftCursor(int x, int y) {
+    VECTOR2 pos;
+
+    if (!SCR_LoadWarcraftCursor()) {
+        return false;
+    }
+
+    pos = SCR_ScreenToUI(x, y);
+    re.DrawSprite(
+        scr_cursor.model,
+        SCR_CursorSequence(scr_cursor.state),
+        pos.x,
+        pos.y);
+    return true;
+}
+
+static void SCR_DrawCursor(void) {
+    int const mode = SCR_CursorMode();
+    int x, y;
+
+    SCR_UpdateSystemCursor(mode != SCR_CURSOR_MODE_OFF);
+    if (mode == SCR_CURSOR_MODE_OFF) {
+        return;
+    }
+
+    SDL_GetMouseState(&x, &y);
+
+    if (mode == SCR_CURSOR_MODE_SPRITE && SCR_DrawWarcraftCursor(x, y)) {
+        return;
+    }
+
+    SCR_DrawShapeCursor(x, y);
 }
 
 void SCR_BeginLoadingPlaque(void) {
@@ -102,6 +335,9 @@ void SCR_DrawScreenField(DWORD msec) {
     if (Cvar_Integer("scr_showfps", 0)) {
         SCR_DrawFPS(msec);
     }
+
+    /* Cursor is deliberately last so it stays above world, HUD, menus and debug text. */
+    SCR_DrawCursor();
 #ifndef BZ_TESTS
     if (CL_ScreenshotReady()) {
         re.Screenshot();
@@ -169,18 +405,6 @@ static DWORD layout_current_layer;
 
 static RECT Rect_inset(LPCRECT r, FLOAT inset) {
     return MAKE(RECT, r->x+inset, r->y+inset, r->w-inset*2, r->h-inset*2);
-}
-
-static VECTOR2 SCR_LayoutScreenToFdf(int x, int y) {
-    LPRENDERER renderer = &re;
-    size2_t window = renderer->GetWindowSize();
-    FLOAT nx = 0, ny = 0;
-
-    if (window.width > 0 && window.height > 0) {
-        nx = (FLOAT)x / (FLOAT)window.width;
-        ny = (FLOAT)y / (FLOAT)window.height;
-    }
-    return MAKE(VECTOR2, nx * SCR_UICanvasWidth(), ny * UI_BASE_HEIGHT);
 }
 
 static RECT get_uvrect(uint8_t const *tc) {
@@ -788,7 +1012,7 @@ void SCR_ClearLayoutLayer(DWORD layer) {
 }
 
 void SCR_LayoutMouseEvent(uiMouseEvent_t event, int x, int y, int32_t param) {
-    VECTOR2 const point = SCR_LayoutScreenToFdf(x, y);
+    VECTOR2 const point = SCR_ScreenToUI(x, y);
 
     layout_hovered_number = 0;
     FOR_LOOP(layer, MAX_LAYOUT_LAYERS) {
@@ -859,7 +1083,7 @@ BOOL SCR_LayoutKeyEvent(int key) {
 }
 
 BOOL SCR_LayoutHitTest(int x, int y) {
-    VECTOR2 const point = SCR_LayoutScreenToFdf(x, y);
+    VECTOR2 const point = SCR_ScreenToUI(x, y);
     FOR_LOOP(layer, MAX_LAYOUT_LAYERS) {
         HANDLE layout = layout_layers[layer];
         DWORD flags = cl.playerstate.uiflags;
