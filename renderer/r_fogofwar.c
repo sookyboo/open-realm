@@ -9,19 +9,19 @@
 #define NUM_SIGHT_SECIONS 5
 
 LPCSTR vs_shadow =
-"#version 140\n"
-"in vec3 i_position;\n"
-"in vec4 i_color;\n"
-"in vec2 i_texcoord;\n"
-"out vec4 v_color;\n"
-"out vec2 v_texcoord;\n"
+"#version 120\n"
+"attribute vec3 i_position;\n"
+"attribute vec4 i_color;\n"
+"attribute vec2 i_texcoord;\n"
+"varying vec4 v_color;\n"
+"varying vec2 v_texcoord;\n"
 "uniform mat4 uViewProjectionMatrix;\n"
 "uniform mat4 uModelMatrix;\n"
 "uniform vec2 uEyePosition;\n"
 "void main() {\n"
 "    vec4 pos = vec4(i_position, 1.0);\n"
 "    vec3 eye = vec3(uEyePosition, 0.0);\n"
-"    vec3 up = vec3(0, 0, 1);\n"
+"    vec3 up = vec3(0.0, 0.0, 1.0);\n"
 "    vec3 dir = normalize(i_position - eye);\n"
 "    vec3 side = normalize(cross(dir, up));\n"
 "    if (distance(eye.xy, i_position.xy) > 100.0) {\n"
@@ -30,21 +30,20 @@ LPCSTR vs_shadow =
 "      pos.xy += side.xy * x * /*i_position.z*/100.0;\n"
 "      pos.xy += normalize(pos.xyz - eye).xy * y * 2000.0;\n"
 "    }\n"
-"    pos.z = 0;\n"
+"    pos.z = 0.0;\n"
 "    v_color = i_color;\n"
 "    v_texcoord = i_texcoord;\n"
 "    gl_Position = uViewProjectionMatrix * uModelMatrix * pos;\n"
 "}\n";
 
 LPCSTR fs_shadow =
-"#version 140\n"
-"in vec4 v_color;\n"
-"in vec2 v_texcoord;\n"
-"out vec4 o_color;\n"
+"#version 120\n"
+"varying vec4 v_color;\n"
+"varying vec2 v_texcoord;\n"
 "void main() {\n"
 "    float f = 2.0 * abs(v_texcoord.x - 0.5);\n"
 "    float k = smoothstep(0.0,0.2,v_texcoord.y);\n"
-"    o_color = vec4(mix(1.0,f*f,k));\n"
+"    gl_FragColor = vec4(mix(1.0,f*f,k));\n"
 "}\n";
 
 enum {
