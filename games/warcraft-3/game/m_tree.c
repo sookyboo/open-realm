@@ -29,6 +29,9 @@ void tree_die(LPEDICT self, LPEDICT attacker) {
         self->s.frame = self->animation->interval[0];
     G_PublishEvent(self, EVENT_UNIT_DEATH);
     self->svflags |= SVF_DEADMONSTER;
+    if (self->s.flags & EF_FOW_BLOCKER) {
+        G_FowMarkBlockersDirty();
+    }
 }
 
 void tree_birth(LPEDICT self) {

@@ -24,6 +24,7 @@
 static DWORD g_fow_blocker_hash;
 static DWORD g_fow_blocker_count;
 static BOOL g_fow_blockers_valid;
+static BOOL g_fow_blockers_dirty = true;
 static DWORD *g_fow_rim_cells;
 static DWORD g_fow_rim_cells_capacity;
 
@@ -211,7 +212,8 @@ static void G_FowCastLight(fowPlayerGrid_t *grid,
                            int xx,
                            int xy,
                            int yx,
-                           int yy)
+                           int yy,
+                           unsigned long long *cells_visited)
 {
     int radius_sq = radius * radius;
 
@@ -226,6 +228,10 @@ static void G_FowCastLight(fowPlayerGrid_t *grid,
 
         for (int delta_x = -distance; delta_x <= 0; delta_x++) {
             int x = cx + delta_x * xx + delta_y * xy;
+
+            if (cells_visited) {
+                (*cells_visited)++;
+            }
             int y = cy + delta_x * yx + delta_y * yy;
             FLOAT left_slope = ((FLOAT)delta_x - 0.5f) / ((FLOAT)delta_y + 0.5f);
             FLOAT right_slope = ((FLOAT)delta_x + 0.5f) / ((FLOAT)delta_y - 0.5f);
@@ -267,7 +273,8 @@ static void G_FowCastLight(fowPlayerGrid_t *grid,
                                xx,
                                xy,
                                yx,
-                               yy);
+                               yy,
+                               cells_visited);
                 next_start = right_slope;
             }
         }
@@ -288,6 +295,7 @@ static void G_FowRevealShadowcast(fowPlayerGrid_t *grid, DWORD cx, DWORD cy, int
         { 0,  1, -1,  0 },
         { 1,  0,  0, -1 },
     };
+    unsigned long long cells_visited = 0;
 
     G_FowSetVisible(grid, cx, cy);
     FOR_LOOP(octant, 8) {
@@ -301,11 +309,17 @@ static void G_FowRevealShadowcast(fowPlayerGrid_t *grid, DWORD cx, DWORD cy, int
                        mult[octant][0],
                        mult[octant][1],
                        mult[octant][2],
-                       mult[octant][3]);
+                       mult[octant][3],
+                       &cells_visited);
     }
 }
 
-static BOOL G_FowHasVisibleNeighbor(fowPlayerGrid_t *grid, int x, int y, int margin) {
+static BOOL G_FowHasVisibleNeighbor(fowPlayerGrid_t *grid,
+                                    int x,
+                                    int y,
+                                    int margin,
+                                    unsigned long long *cells_processed)
+{
     int margin_sq = margin * margin;
 
     for (int dy = -margin; dy <= margin; dy++) {
@@ -317,6 +331,9 @@ static BOOL G_FowHasVisibleNeighbor(fowPlayerGrid_t *grid, int x, int y, int mar
             int nx = x + dx;
             DWORD index;
 
+            if (cells_processed) {
+                (*cells_processed)++;
+            }
             if (nx < 0 || nx >= (int)level.fow.width) {
                 continue;
             }
@@ -335,7 +352,8 @@ static BOOL G_FowHasVisibleNeighbor(fowPlayerGrid_t *grid, int x, int y, int mar
 static void G_FowCommitRimCells(fowPlayerGrid_t *grid,
                                 DWORD cx,
                                 DWORD cy,
-                                int max_radius)
+                                int max_radius,
+                                unsigned long long *cells_processed)
 {
     for (int dy = -max_radius; dy <= max_radius; dy++) {
         int y = (int)cy + dy;
@@ -346,6 +364,9 @@ static void G_FowCommitRimCells(fowPlayerGrid_t *grid,
             int x = (int)cx + dx;
             DWORD index;
 
+            if (cells_processed) {
+                (*cells_processed)++;
+            }
             if (x < 0 || x >= (int)level.fow.width) {
                 continue;
             }
@@ -400,6 +421,7 @@ static void G_FowRevealBlockerRim(fowPlayerGrid_t *grid, DWORD cx, DWORD cy, int
             int x = (int)cx + dx;
             DWORD index;
 
+            cells_processed++;
             if (x < 0 || x >= (int)level.fow.width) {
                 continue;
             }
@@ -412,7 +434,7 @@ static void G_FowRevealBlockerRim(fowPlayerGrid_t *grid, DWORD cx, DWORD cy, int
                 continue;
             }
             if (!grid->visible[index] &&
-                G_FowHasVisibleNeighbor(grid, x, y, margin))
+                G_FowHasVisibleNeighbor(grid, x, y, margin, &cells_processed))
             {
                 grid->visible[index] = 2;
                 if (use_rim_cell_list) {
@@ -433,6 +455,7 @@ static void G_FowRevealCircle(DWORD player, LPCEDICT ent, FLOAT radius) {
     fowPlayerGrid_t *grid;
     DWORD cx, cy;
     int radius_cells;
+    BOOL has_blockers;
 
     if (player >= MAX_PLAYERS || !ent || radius <= 0.0f || !G_FowReady()) {
         return;
@@ -447,11 +470,13 @@ static void G_FowRevealCircle(DWORD player, LPCEDICT ent, FLOAT radius) {
     }
 
     radius_cells = G_FowRadiusCells(radius);
-    if (G_FowAnyBlockedInBox((int)cx - radius_cells,
-                             (int)cy - radius_cells,
-                             (int)cx + radius_cells,
-                             (int)cy + radius_cells))
-    {
+
+    has_blockers = G_FowAnyBlockedInBox((int)cx - radius_cells,
+                                        (int)cy - radius_cells,
+                                        (int)cx + radius_cells,
+                                        (int)cy + radius_cells);
+
+    if (has_blockers) {
         G_FowRevealShadowcast(grid, cx, cy, radius_cells);
         G_FowRevealBlockerRim(grid, cx, cy, radius_cells);
     } else {
@@ -531,9 +556,18 @@ static DWORD G_FowHashPointer(DWORD hash, void const *ptr) {
     return G_FowHashMix(hash, (DWORD)(value >> 16 >> 16));
 }
 
+void G_FowMarkBlockersDirty(void) {
+    g_fow_blockers_dirty = true;
+}
+
 static BOOL G_FowBlockersChanged(void) {
     DWORD hash = 2166136261u;
     DWORD count = 0;
+
+    if (!g_fow_blockers_dirty) {
+        return false;
+    }
+    g_fow_blockers_dirty = false;
 
     FOR_LOOP(i, globals.num_edicts) {
         LPCEDICT ent = &g_edicts[i];
@@ -811,6 +845,7 @@ void G_FowShutdown(void) {
     g_fow_blocker_hash = 0;
     g_fow_blocker_count = 0;
     g_fow_blockers_valid = false;
+    g_fow_blockers_dirty = true;
 }
 
 void G_FowInit(void) {
@@ -818,6 +853,7 @@ void G_FowInit(void) {
 
     G_FowShutdown();
     g_fow_blockers_valid = false;
+    g_fow_blockers_dirty = true;
     g_fow_building_cache_count = 0;
     level.fow.bounds = CM_GetWorldBounds();
     level.fow.width = (DWORD)ceilf((level.fow.bounds.max.x - level.fow.bounds.min.x) / (FLOAT)FOW_CELL_SIZE);
@@ -856,11 +892,15 @@ void G_FowInit(void) {
 }
 
 void G_FowUpdate(void) {
+    BOOL blockers_changed;
+
     if (!G_FowReady()) {
         return;
     }
 
-    if (G_FowBlockersChanged()) {
+    blockers_changed = G_FowBlockersChanged();
+
+    if (blockers_changed) {
         G_FowRebuildBlockers();
     }
     FOR_LOOP(player, MAX_PLAYERS) {
