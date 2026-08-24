@@ -1,5 +1,7 @@
 #include "s_skills.h"
 
+#include <stdint.h>
+
 typedef struct {
     LPCSTR classname;
     ability_t *ability;
@@ -27,17 +29,64 @@ FLOAT AB_Data(LPCSTR classname, DWORD level, DWORD index) {
         }
         return 0;
     }
-    level = MAX(1, MIN(level, 4)); index = MAX(1, MIN(index, 9));
-    snprintf(letter, sizeof(letter), "Data%c%u", 'A' + (int)index - 1, (unsigned)level);
-    snprintf(numeric, sizeof(numeric), "Data%u%u", (unsigned)level, (unsigned)index);
+
+    level = MAX(1, MIN(level, 4));
+    index = MAX(1, MIN(index, 9));
+
+    snprintf(letter, sizeof(letter), "Data%c%u",
+             'A' + (int)index - 1, (unsigned)level);
+    snprintf(numeric, sizeof(numeric), "Data%u%u",
+             (unsigned)level, (unsigned)index);
+
     str = FS_FindSheetCell(game.config.abilities, classname, letter);
-    if (!str)
+    if (!str) {
         str = FS_FindSheetCell(game.config.abilities, classname, numeric);
-    if (str)
+    }
+
+    if (str) {
         return atof(str);
-    fprintf(stderr, "AB_Data: %.4s data slot %u level %u is absent from AbilityData.slk\n",
+    }
+
+    fprintf(stderr,
+            "AB_Data: %.4s data slot %u level %u is absent from AbilityData.slk\n",
             classname, (unsigned)index, (unsigned)level);
     return 0;
+}
+
+#define ABILITY_INDEX_HASH_SIZE 256
+
+typedef struct {
+    ability_t const *ability;
+    BYTE index;
+} abilityIndexEntry_t;
+
+static abilityIndexEntry_t abilityIndexHash[ABILITY_INDEX_HASH_SIZE];
+
+static DWORD AbilityIndexHashSlot(ability_t const *ability) {
+    uintptr_t value = (uintptr_t)ability >> 4;
+    value ^= value >> 17;
+    value ^= value >> 9;
+    return (DWORD)(value & (ABILITY_INDEX_HASH_SIZE - 1));
+}
+
+static void RegisterAbilityIndex(ability_t const *ability, BYTE index) {
+    DWORD slot = AbilityIndexHashSlot(ability);
+
+    FOR_LOOP(i, ABILITY_INDEX_HASH_SIZE) {
+        abilityIndexEntry_t *entry = &abilityIndexHash[slot];
+
+        if (!entry->ability) {
+            entry->ability = ability;
+            entry->index = index;
+            return;
+        }
+
+        if (entry->ability == ability) {
+            return;
+        }
+
+        slot = (slot + 1) & (ABILITY_INDEX_HASH_SIZE - 1);
+    }
 }
 
 static abilityitem_t abilitylist[] = {
@@ -118,7 +167,7 @@ static abilityitem_t abilitylist[] = {
 
     /* Additional hero spells. */
     { "ANfs", &a_flame_strike },  /* Flame Strike (Pit Lord) */
-    { "ANdr", &a_siphon_mana },  /* Siphon Mana (Blood Mage) */
+    { "ANdr", &a_siphon_mana },   /* Siphon Mana (Blood Mage) */
 };
 
 ability_t const *FindAbilityByClassname(LPCSTR classname) {
@@ -142,9 +191,15 @@ DWORD FindAbilityIndex(LPCSTR classname) {
 }
 
 void InitAbilities(void) {
-    game.num_abilities = sizeof(abilitylist)/sizeof(abilitylist[0]);
+    game.num_abilities = sizeof(abilitylist) / sizeof(abilitylist[0]);
+
+    memset(abilityIndexHash, 0, sizeof(abilityIndexHash));
+
     FOR_LOOP(i, game.num_abilities) {
         abilityitem_t *abil = &abilitylist[i];
+
+        RegisterAbilityIndex(abil->ability, (BYTE)i);
+
         if (abil->ability->init) {
             abil->ability->init(abil->classname, abil->ability);
         }
@@ -166,10 +221,27 @@ ability_t const *GetAbilityByIndex(DWORD index) {
 }
 
 DWORD GetAbilityIndex(ability_t const *ability) {
-    FOR_LOOP(i, game.num_abilities) {
-        if (abilitylist[i].ability == ability) {
-            return i;
-        }
+    DWORD slot;
+
+    if (!ability) {
+        return 255;
     }
+
+    slot = AbilityIndexHashSlot(ability);
+
+    FOR_LOOP(i, ABILITY_INDEX_HASH_SIZE) {
+        abilityIndexEntry_t const *entry = &abilityIndexHash[slot];
+
+        if (!entry->ability) {
+            return 255;
+        }
+
+        if (entry->ability == ability) {
+            return entry->index;
+        }
+
+        slot = (slot + 1) & (ABILITY_INDEX_HASH_SIZE - 1);
+    }
+
     return 255;
 }
