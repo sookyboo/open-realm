@@ -106,6 +106,9 @@ void unit_die(LPEDICT self, LPEDICT attacker) {
     G_PublishEvent(self, EVENT_UNIT_DEATH);
     G_PublishEvent(self, EVENT_PLAYER_UNIT_DEATH);
     self->svflags |= SVF_DEADMONSTER;
+    if (self->s.flags & EF_FOW_BLOCKER) {
+        G_FowMarkBlockersDirty();
+    }
     /* Award experience to the killer's nearby heroes (enemy kills only). */
     if (attacker && attacker != self && attacker->s.player != self->s.player) {
         G_GrantKillXP(self, attacker);
@@ -555,6 +558,9 @@ void G_ReviveHero(LPEDICT ent, FLOAT x, FLOAT y) {
     FLOAT const lifeFactor = G_MiscNum("HeroReviveLifeFactor", 1.0f);
     FLOAT const manaFactor = G_MiscNum("HeroReviveManaFactor", 0.0f);
     ent->svflags &= ~SVF_DEADMONSTER;
+    if (ent->s.flags & EF_FOW_BLOCKER) {
+        G_FowMarkBlockersDirty();
+    }
     ent->aiflags &= ~AI_HOLD_FRAME;
     ent->combatentity = NULL;
     ent->health.value = MAX(1.0f, ent->health.max_value * lifeFactor);
