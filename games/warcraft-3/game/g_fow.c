@@ -146,15 +146,9 @@ static void G_FowClearVisible(fowPlayerGrid_t *grid) {
     }
     FOR_LOOP(y, level.fow.height) {
         BYTE *row = grid->visible + y * level.fow.width;
-        BOOL dirty = false;
 
-        FOR_LOOP(x, level.fow.width) {
-            if (row[x]) {
-                row[x] = 0;
-                dirty = true;
-            }
-        }
-        if (dirty) {
+        if (memchr(row, 1, level.fow.width)) {
+            memset(row, 0, level.fow.width);
             grid->dirty_visible_rows[y] = 1;
         }
     }
