@@ -53,6 +53,9 @@ DWORD KillDestructable(LPJASS j) {
     LPEDICT d = jass_checkhandle(j, 1, "destructable");
     if (d && !M_IsDead(d)) {
         d->health.value = 0;
+        if (d->s.flags & EF_FOW_BLOCKER) {
+            G_FowMarkBlockersDirty();
+        }
         if (d->die) {
             d->die(d, d);
         }
@@ -115,7 +118,11 @@ DWORD SetDestructableLife(LPJASS j) {
     LPEDICT d = jass_checkhandle(j, 1, "destructable");
     FLOAT life = jass_checknumber(j, 2);
     if (d) {
+        BOOL was_dead = M_IsDead(d);
         d->health.value = life;
+        if ((d->s.flags & EF_FOW_BLOCKER) && was_dead != M_IsDead(d)) {
+            G_FowMarkBlockersDirty();
+        }
     }
     return 0;
 }
@@ -152,6 +159,9 @@ DWORD DestructableRestoreLife(LPJASS j) {
     if (d) {
         BOOL was_dead = M_IsDead(d);
         d->health.value = MIN(life, d->health.max_value);
+        if ((d->s.flags & EF_FOW_BLOCKER) && was_dead != M_IsDead(d)) {
+            G_FowMarkBlockersDirty();
+        }
         if (was_dead && d->health.value > 0) {
             d->svflags &= ~SVF_DEADMONSTER;
             d->aiflags &= ~AI_HOLD_FRAME;
@@ -186,6 +196,9 @@ DWORD ShowDestructable(LPJASS j) {
             d->s.renderfx &= ~RF_HIDDEN;
         } else {
             d->s.renderfx |= RF_HIDDEN;
+        }
+        if (d->s.flags & EF_FOW_BLOCKER) {
+            G_FowMarkBlockersDirty();
         }
     }
     return 0;

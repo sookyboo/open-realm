@@ -153,6 +153,7 @@ static void SP_SpawnDestructable(LPEDICT edict) {
     edict->targtype = G_GetTargetType(DESTRUCTABLE_TARGETED_AS(edict->class_id));
     if (DESTRUCTABLE_OCCLUDER_HEIGHT(edict->class_id) > 0 || edict->targtype == TARG_TREE) {
         edict->s.flags |= EF_FOW_BLOCKER;
+        G_FowMarkBlockersDirty();
     }
     edict->movetype = MOVETYPE_NONE;
 }
