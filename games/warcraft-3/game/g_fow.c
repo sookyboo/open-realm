@@ -24,6 +24,7 @@
 static DWORD g_fow_blocker_hash;
 static DWORD g_fow_blocker_count;
 static BOOL g_fow_blockers_valid;
+static BOOL g_fow_blockers_dirty = true;
 static DWORD *g_fow_rim_cells;
 static DWORD g_fow_rim_cells_capacity;
 
@@ -530,9 +531,18 @@ static DWORD G_FowHashPointer(DWORD hash, void const *ptr) {
     return G_FowHashMix(hash, (DWORD)(value >> 16 >> 16));
 }
 
+void G_FowMarkBlockersDirty(void) {
+    g_fow_blockers_dirty = true;
+}
+
 static BOOL G_FowBlockersChanged(void) {
     DWORD hash = 2166136261u;
     DWORD count = 0;
+
+    if (!g_fow_blockers_dirty) {
+        return false;
+    }
+    g_fow_blockers_dirty = false;
 
     FOR_LOOP(i, globals.num_edicts) {
         LPCEDICT ent = &g_edicts[i];
@@ -792,6 +802,7 @@ void G_FowShutdown(void) {
     g_fow_blocker_hash = 0;
     g_fow_blocker_count = 0;
     g_fow_blockers_valid = false;
+    g_fow_blockers_dirty = true;
 }
 
 void G_FowInit(void) {
@@ -799,6 +810,7 @@ void G_FowInit(void) {
 
     G_FowShutdown();
     g_fow_blockers_valid = false;
+    g_fow_blockers_dirty = true;
     g_fow_building_cache_count = 0;
     level.fow.bounds = CM_GetWorldBounds();
     level.fow.width = (DWORD)ceilf((level.fow.bounds.max.x - level.fow.bounds.min.x) / (FLOAT)FOW_CELL_SIZE);
