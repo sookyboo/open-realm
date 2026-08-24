@@ -25,6 +25,34 @@ static DWORD g_fow_blocker_hash;
 static DWORD g_fow_blocker_count;
 static BOOL g_fow_blockers_valid;
 
+#define FOW_BUILDING_CACHE_SIZE 1024
+
+typedef struct {
+    DWORD class_id;
+    BOOL is_building;
+} fowBuildingCacheEntry_t;
+
+static fowBuildingCacheEntry_t g_fow_building_cache[FOW_BUILDING_CACHE_SIZE];
+static DWORD g_fow_building_cache_count;
+
+static BOOL G_FowUnitIsBuilding(DWORD class_id) {
+    FOR_LOOP(i, g_fow_building_cache_count) {
+        if (g_fow_building_cache[i].class_id == class_id) {
+            return g_fow_building_cache[i].is_building;
+        }
+    }
+
+    BOOL is_building = UNIT_IS_BUILDING(class_id);
+
+    if (g_fow_building_cache_count < FOW_BUILDING_CACHE_SIZE) {
+        fowBuildingCacheEntry_t *entry = &g_fow_building_cache[g_fow_building_cache_count++];
+        entry->class_id = class_id;
+        entry->is_building = is_building;
+    }
+
+    return is_building;
+}
+
 static DWORD G_FowCellCount(void) {
     return level.fow.width * level.fow.height;
 }
@@ -738,6 +766,7 @@ void G_FowInit(void) {
 
     G_FowShutdown();
     g_fow_blockers_valid = false;
+    g_fow_building_cache_count = 0;
     level.fow.bounds = CM_GetWorldBounds();
     level.fow.width = (DWORD)ceilf((level.fow.bounds.max.x - level.fow.bounds.min.x) / (FLOAT)FOW_CELL_SIZE);
     level.fow.height = (DWORD)ceilf((level.fow.bounds.max.y - level.fow.bounds.min.y) / (FLOAT)FOW_CELL_SIZE);
