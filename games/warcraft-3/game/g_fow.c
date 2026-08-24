@@ -24,6 +24,8 @@
 static DWORD g_fow_blocker_hash;
 static DWORD g_fow_blocker_count;
 static BOOL g_fow_blockers_valid;
+static DWORD *g_fow_rim_cells;
+static DWORD g_fow_rim_cells_capacity;
 
 #define FOW_BUILDING_CACHE_SIZE 1024
 
@@ -357,10 +359,37 @@ static void G_FowCommitRimCells(fowPlayerGrid_t *grid,
     }
 }
 
+static void G_FowCommitRimCellList(fowPlayerGrid_t *grid,
+                                   DWORD count,
+                                   unsigned long long *cells_processed)
+{
+    FOR_LOOP(i, count) {
+        DWORD index = g_fow_rim_cells[i];
+        DWORD y;
+        DWORD x;
+
+        if (cells_processed) {
+            (*cells_processed)++;
+        }
+        if (index >= G_FowCellCount() || grid->visible[index] != 2) {
+            continue;
+        }
+
+        y = index / level.fow.width;
+        x = index - y * level.fow.width;
+        grid->visible[index] = 0;
+        G_FOW_SET_VISIBLE_CELL(grid, x, y);
+    }
+}
+
 static void G_FowRevealBlockerRim(fowPlayerGrid_t *grid, DWORD cx, DWORD cy, int radius_cells) {
     int margin = FOW_BLOCKER_LIGHT_MARGIN_CELLS;
     int max_radius = radius_cells + margin;
     int max_radius_sq = max_radius * max_radius;
+    unsigned long long cells_processed = 0;
+    DWORD rim_cell_count = 0;
+    BOOL use_rim_cell_list = g_fow_rim_cells &&
+                             g_fow_rim_cells_capacity >= G_FowCellCount();
 
     for (int dy = -max_radius; dy <= max_radius; dy++) {
         int y = (int)cy + dy;
@@ -386,10 +415,18 @@ static void G_FowRevealBlockerRim(fowPlayerGrid_t *grid, DWORD cx, DWORD cy, int
                 G_FowHasVisibleNeighbor(grid, x, y, margin))
             {
                 grid->visible[index] = 2;
+                if (use_rim_cell_list) {
+                    g_fow_rim_cells[rim_cell_count++] = index;
+                }
             }
         }
     }
-    G_FowCommitRimCells(grid, cx, cy, max_radius);
+
+    if (use_rim_cell_list) {
+        G_FowCommitRimCellList(grid, rim_cell_count, &cells_processed);
+    } else {
+        G_FowCommitRimCells(grid, cx, cy, max_radius, &cells_processed);
+    }
 }
 
 static void G_FowRevealCircle(DWORD player, LPCEDICT ent, FLOAT radius) {
@@ -766,6 +803,8 @@ void G_FowShutdown(void) {
         SAFE_DELETE(grid->dirty_explored_rows, gi.MemFree);
     }
     SAFE_DELETE(level.fow.blocked, gi.MemFree);
+    SAFE_DELETE(g_fow_rim_cells, gi.MemFree);
+    g_fow_rim_cells_capacity = 0;
     memset(&level.fow, 0, sizeof(level.fow));
     memset(g_fog_modifiers, 0, sizeof(g_fog_modifiers));
     g_num_fog_modifiers = 0;
@@ -792,6 +831,11 @@ void G_FowInit(void) {
         return;
     }
     memset(level.fow.blocked, 0, cells);
+
+    g_fow_rim_cells = gi.MemAlloc(sizeof(*g_fow_rim_cells) * cells);
+    if (g_fow_rim_cells) {
+        g_fow_rim_cells_capacity = cells;
+    }
 
     FOR_LOOP(player, MAX_PLAYERS) {
         fowPlayerGrid_t *grid = &level.fow.players[player];
