@@ -28,6 +28,14 @@
 #define BZ_FRAGCOLOR "o_color"
 #endif
 
+/* Temporary A/B test for the post-rebase bone-index regression.
+ * Define BZ_BREAK_BONE_COUNT (for example 64) to keep the real 128-matrix
+ * palette but clamp shader bone lookups to that smaller effective palette.
+ * This isolates the bad index-remapping behaviour without changing uniform
+ * upload sizes.
+ */
+#define BZ_STRINGIFY_INNER(x) #x
+#define BZ_STRINGIFY(x) BZ_STRINGIFY_INNER(x)
 
 LPCSTR vs_default =
 BZ_SHADER_VERSION
@@ -209,6 +217,9 @@ BZ_VS_OUT " vec2 v_texcoord;\n"
 BZ_VS_OUT " vec2 v_texcoord2;\n"
 BZ_VS_OUT " vec3 v_lighting;\n"
 "uniform mat4 uBones[128];\n"
+#ifdef BZ_BREAK_BONE_COUNT
+"const int BZ_TEST_BONE_COUNT = " BZ_STRINGIFY(BZ_BREAK_BONE_COUNT) ";\n"
+#endif
 "uniform mat4 uViewProjectionMatrix;\n"
 "uniform mat4 uModelMatrix;\n"
 "uniform mat4 uLightMatrix;\n"
@@ -259,7 +270,11 @@ BZ_VS_OUT " vec3 v_lighting;\n"
 "    vec4 position = vec4(0.0);\n"
 "    vec4 normal = vec4(0.0);\n"
 "    for (int i = 0; i < 4; ++i) {\n"
+#ifdef BZ_BREAK_BONE_COUNT
+"        int boneIdx = min(int(i_skin1[i]) + int(uFirstBoneLookupIndex), BZ_TEST_BONE_COUNT - 1);\n"
+#else
 "        int boneIdx = int(i_skin1[i]) + int(uFirstBoneLookupIndex);\n"
+#endif
 "        position += uBones[boneIdx] * pos4 * i_boneWeight1[i];\n"
 "        normal += uBones[boneIdx] * norm4 * i_boneWeight1[i];\n"
 "    }\n"
@@ -378,6 +393,9 @@ BZ_VS_OUT " vec2 v_texcoord;\n"
 BZ_VS_OUT " vec2 v_texcoord2;\n"
 BZ_VS_OUT " vec3 v_lighting;\n"
 "uniform mat4 uBones[128];\n"
+#ifdef BZ_BREAK_BONE_COUNT
+"const int BZ_TEST_BONE_COUNT = " BZ_STRINGIFY(BZ_BREAK_BONE_COUNT) ";\n"
+#endif
 "uniform mat4 uViewProjectionMatrix;\n"
 "uniform mat4 uLightMatrix;\n"
 "uniform mat4 uTextureMatrix;\n"
@@ -433,7 +451,11 @@ BZ_VS_OUT " vec3 v_lighting;\n"
 "    vec4 position = vec4(0.0);\n"
 "    vec4 normal = vec4(0.0);\n"
 "    for (int i = 0; i < 4; ++i) {\n"
+#ifdef BZ_BREAK_BONE_COUNT
+"        int boneIdx = min(int(i_skin1[i]) + int(uFirstBoneLookupIndex), BZ_TEST_BONE_COUNT - 1);\n"
+#else
 "        int boneIdx = int(i_skin1[i]) + int(uFirstBoneLookupIndex);\n"
+#endif
 "        position += uBones[boneIdx] * pos4 * i_boneWeight1[i];\n"
 "        normal += uBones[boneIdx] * norm4 * i_boneWeight1[i];\n"
 "    }\n"

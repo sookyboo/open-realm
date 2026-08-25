@@ -15,6 +15,14 @@ ifeq ($(GLSL),120)
 	CFLAGS += -DBZ_GLSL_120
 endif
 
+# Temporary bone-index regression A/B test.
+# Example: make GLSL=120 BREAK_BONES=64 build
+# Omit BREAK_BONES (or set 0) for the known-good 128-bone path.
+BREAK_BONES ?= 0
+ifneq ($(BREAK_BONES),0)
+	CFLAGS += -DBZ_BREAK_BONE_COUNT=$(BREAK_BONES)
+endif
+
 ifeq ($(DIAG_OUTPUT),1)
 	CFLAGS += -DDIAG_OUTPUT
 endif
