@@ -322,7 +322,8 @@ void SCR_DrawScreenField(DWORD msec) {
     /* Cursor is deliberately last so it stays above world, HUD, menus and debug text. */
     SCR_DrawCursor();
 #ifndef BZ_TESTS
-    if (CL_ScreenshotReady()) {
+    if (cl_screenshot_pending) {
+        cl_screenshot_pending = false;
         re.Screenshot();
     }
 #endif
