@@ -11,7 +11,7 @@
 #if defined(BZ_GL_ES3)
 #define GLSL_SOURCE_VERSION "#version 300 es\n"
 #elif defined(BZ_GLSL_120)
-#define GLSL_SOURCE_VERSION GLSL_SOURCE_VERSION
+#define GLSL_SOURCE_VERSION "#version 120\n"
 #else
 #define GLSL_SOURCE_VERSION "#version 140\n"
 #endif

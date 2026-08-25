@@ -8,13 +8,36 @@
 #define MAX_FOGOFWAR_REVEALERS MAX_FOGOFWAR_CASTERS
 #define NUM_SIGHT_SECIONS 5
 
+#ifdef BZ_GL_ES3
+#define FOW_GLSL_VERSION "#version 300 es\n"
+#define FOW_VS_IN "in"
+#define FOW_VS_OUT "out"
+#define FOW_FS_IN "in"
+#define FOW_FS_OUT "out vec4 o_color;\n"
+#define FOW_FRAGCOLOR "o_color"
+#elif defined(BZ_GLSL_120)
+#define FOW_GLSL_VERSION "#version 120\n"
+#define FOW_VS_IN "attribute"
+#define FOW_VS_OUT "varying"
+#define FOW_FS_IN "varying"
+#define FOW_FS_OUT ""
+#define FOW_FRAGCOLOR "gl_FragColor"
+#else
+#define FOW_GLSL_VERSION "#version 140\n"
+#define FOW_VS_IN "in"
+#define FOW_VS_OUT "out"
+#define FOW_FS_IN "in"
+#define FOW_FS_OUT "out vec4 o_color;\n"
+#define FOW_FRAGCOLOR "o_color"
+#endif
+
 LPCSTR vs_shadow =
-"#version 120\n"
-"attribute vec3 i_position;\n"
-"attribute vec4 i_color;\n"
-"attribute vec2 i_texcoord;\n"
-"varying vec4 v_color;\n"
-"varying vec2 v_texcoord;\n"
+FOW_GLSL_VERSION
+FOW_VS_IN " vec3 i_position;\n"
+FOW_VS_IN " vec4 i_color;\n"
+FOW_VS_IN " vec2 i_texcoord;\n"
+FOW_VS_OUT " vec4 v_color;\n"
+FOW_VS_OUT " vec2 v_texcoord;\n"
 "uniform mat4 uViewProjectionMatrix;\n"
 "uniform mat4 uModelMatrix;\n"
 "uniform vec2 uEyePosition;\n"
@@ -37,13 +60,14 @@ LPCSTR vs_shadow =
 "}\n";
 
 LPCSTR fs_shadow =
-"#version 120\n"
-"varying vec4 v_color;\n"
-"varying vec2 v_texcoord;\n"
+FOW_GLSL_VERSION
+FOW_FS_IN " vec4 v_color;\n"
+FOW_FS_IN " vec2 v_texcoord;\n"
+FOW_FS_OUT
 "void main() {\n"
 "    float f = 2.0 * abs(v_texcoord.x - 0.5);\n"
 "    float k = smoothstep(0.0,0.2,v_texcoord.y);\n"
-"    gl_FragColor = vec4(mix(1.0,f*f,k));\n"
+"    " FOW_FRAGCOLOR " = vec4(mix(1.0,f*f,k));\n"
 "}\n";
 
 enum {
