@@ -426,7 +426,7 @@ static void G_FowRevealBlockerRim(fowPlayerGrid_t *grid, DWORD cx, DWORD cy, int
     if (use_rim_cell_list) {
         G_FowCommitRimCellList(grid, rim_cell_count, &cells_processed);
     } else {
-        G_FowCommitRimCells(grid, cx, cy, max_radius, &cells_processed);
+        G_FowCommitRimCells(grid, cx, cy, max_radius);
     }
 }
 
