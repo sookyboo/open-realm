@@ -518,25 +518,6 @@ static LPSHADER R_InitShaderDefines(LPCSTR vs_src, LPCSTR fs_src, LPCSTR extra_d
 
     R_Call(glLinkProgram, program->progid);
 
-    GLint link_status = GL_FALSE;
-    R_Call(glGetProgramiv, program->progid, GL_LINK_STATUS, &link_status);
-    if (link_status == GL_FALSE) {
-        GLint logLength = 0;
-        glGetProgramiv(program->progid, GL_INFO_LOG_LENGTH, &logLength);
-        if (logLength > 1) {
-            char *log = malloc(logLength);
-            if (log) {
-                glGetProgramInfoLog(program->progid, logLength, NULL, log);
-                fprintf(stderr, "Shader program link failed:\n%s\n", log);
-                free(log);
-            } else {
-                fprintf(stderr, "Shader program link failed (could not allocate log buffer)\n");
-            }
-        } else {
-            fprintf(stderr, "Shader program link failed (no log)\n");
-        }
-        return NULL;
-    }
 
     R_Call(glUseProgram, program->progid);
 
