@@ -81,7 +81,7 @@ LPCSTR fs_particle =
 "    gl_FragColor = texture2D(uTexture, v_texcoord) * v_color;\n"
 "    if (uAlphaKey) {\n"
 #ifndef BZ_USE_MSAA
-"        if (o_color.a < uAlphaCutoff) discard;\n"
+"        if (gl_FragColor.a < uAlphaCutoff) discard;\n"
 #else
 "        float edge = max(fwidth(gl_FragColor.a), 1.0 / 255.0);\n"
 "        gl_FragColor.a = smoothstep(uAlphaCutoff - edge, uAlphaCutoff + edge, gl_FragColor.a);\n"
@@ -115,7 +115,7 @@ void R_UpdateParticles(void) {
     cparticle_t *tail = NULL;
     cparticle_t *next = NULL;
     float frameTime = tr.viewDef.deltaTime / 1000.f;
-    
+
     for (cparticle_t *p = active_particles; p; p = next) {
         next = p->next;
         p->time += frameTime;
@@ -163,6 +163,10 @@ COLOR32 FX_BlendColor(cparticle_t const *p) {
 }
 
 static void R_FlushParticles(LPCTEXTURE texture, LPCMATRIX4 matrix, particleVertex_t *pv, BLEND_MODE blend_mode) {
+    if (!particles_resources.shader || !particles_resources.particles) {
+        return;
+    }
+
     R_Call(glBindVertexArray, particles_resources.particles->vao);
     R_Call(glBindBuffer, GL_ARRAY_BUFFER, particles_resources.particles->vbo);
     R_Call(glBufferData, GL_ARRAY_BUFFER, sizeof(particleVertex_t) * (pv - particles_resources.vertices), particles_resources.vertices, GL_DYNAMIC_DRAW);
@@ -227,10 +231,10 @@ void R_DrawParticles(void) {
 
     if (!R_CvarEnabled("r_particles", "1") || !active_particles) return;
     texture = active_particles->texture; blend_mode = active_particles->blend_mode;
-    
+
     Matrix4_identity(&matrix);
     R_UpdateParticles();
-    
+
     FOR_EACH_LIST(cparticle_t const, p, active_particles) {
         if (p->texture != texture || p->blend_mode != blend_mode) {
             R_FlushParticles(texture, &matrix, pv, blend_mode);
@@ -250,7 +254,7 @@ void R_DrawParticles(void) {
         texture = p->texture;
         blend_mode = p->blend_mode;
     }
-    
+
     R_FlushParticles(texture, &matrix, pv, blend_mode);
     R_SetAlphaKeyState(false);
 }
@@ -283,7 +287,7 @@ static LPBUFFER R_MakeParticlesVertexArrayObject(void) {
     R_Call(glEnableVertexAttribArray, attrib_texcoord);
     R_Call(glEnableVertexAttribArray, attrib_particleSize);
     R_Call(glEnableVertexAttribArray, attrib_particleAxis);
-    
+
     R_Call(glVertexAttribPointer, attrib_position, 3, GL_FLOAT, GL_FALSE, sizeof(struct particle_vertex), FOFS(particle_vertex, position));
     R_Call(glVertexAttribPointer, attrib_color, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(struct particle_vertex), FOFS(particle_vertex, color));
     R_Call(glVertexAttribPointer, attrib_texcoord, 2, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(struct particle_vertex), FOFS(particle_vertex, uv));
@@ -313,7 +317,7 @@ void R_InitParticles(void) {
         data[x][y].b = 0xff;
         data[x][y].a = dottexture[x][y] * 127;
     }
-    
+
     particles_resources.texture = R_AllocateTexture(DOT_TEXTURE, DOT_TEXTURE);
     R_LoadTextureMipLevel(particles_resources.texture, &(TEXMIP){ data, DOT_TEXTURE, DOT_TEXTURE, 0, PIXEL_RGBA });
 
@@ -323,6 +327,13 @@ void R_InitParticles(void) {
 }
 
 void R_ShutdownParticles(void) {
-    R_ReleaseVertexArrayObject(particles_resources.particles);
-    R_ReleaseShader(particles_resources.shader);
+    if (particles_resources.particles) {
+        R_ReleaseVertexArrayObject(particles_resources.particles);
+        particles_resources.particles = NULL;
+    }
+
+    if (particles_resources.shader) {
+        R_ReleaseShader(particles_resources.shader);
+        particles_resources.shader = NULL;
+    }
 }
