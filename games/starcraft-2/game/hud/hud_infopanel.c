@@ -9,7 +9,9 @@
 #include "hud.h"
 
 static sc2BaseFrame_t *infopanel_find(void) {
-    return SC2_LayoutFindFrameByType(SC2_FRAMETYPE_INFO_PANEL);
+    sc2BaseFrame_t *r = SC2_LayoutFindFrameByType(SC2_FRAMETYPE_INFO_PANEL);
+    if (r) return r;
+    return SC2_HUD_FindFallbackFrameByType(SC2_FRAMETYPE_INFO_PANEL);
 }
 
 void SC2_HUD_WriteInfoPanel(LPEDICT ent) {
