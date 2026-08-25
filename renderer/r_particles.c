@@ -23,6 +23,32 @@ cparticle_t *active_particles, *free_particles;
 cparticle_t particles[MAX_PARTICLES];
 int cl_numparticles = MAX_PARTICLES;
 
+#ifdef BZ_GL_ES3
+#define PARTICLE_GLSL_VERSION "#version 300 es\n"
+#define PARTICLE_VS_IN "in"
+#define PARTICLE_VS_OUT "out"
+#define PARTICLE_FS_IN "in"
+#define PARTICLE_FS_OUT "out vec4 o_color;\n"
+#define PARTICLE_FRAGCOLOR "o_color"
+#define PARTICLE_TEXTURE "texture"
+#elif defined(BZ_GLSL_120)
+#define PARTICLE_GLSL_VERSION "#version 120\n"
+#define PARTICLE_VS_IN "attribute"
+#define PARTICLE_VS_OUT "varying"
+#define PARTICLE_FS_IN "varying"
+#define PARTICLE_FS_OUT ""
+#define PARTICLE_FRAGCOLOR "gl_FragColor"
+#define PARTICLE_TEXTURE "texture2D"
+#else
+#define PARTICLE_GLSL_VERSION "#version 140\n"
+#define PARTICLE_VS_IN "in"
+#define PARTICLE_VS_OUT "out"
+#define PARTICLE_FS_IN "in"
+#define PARTICLE_FS_OUT "out vec4 o_color;\n"
+#define PARTICLE_FRAGCOLOR "o_color"
+#define PARTICLE_TEXTURE "texture"
+#endif
+
 void R_ClearParticles(void) {
     free_particles = &particles[0];
     active_particles = NULL;
@@ -46,14 +72,14 @@ cparticle_t *R_SpawnParticle(void) {
 }
 
 LPCSTR vs_particle =
-"#version 120\n"
-"attribute vec3 i_position;\n"
-"attribute vec4 i_color;\n"
-"attribute vec2 i_texcoord;\n"
-"attribute float i_size;\n"
-"attribute vec2 i_axis;\n"
-"varying vec4 v_color;\n"
-"varying vec2 v_texcoord;\n"
+PARTICLE_GLSL_VERSION
+PARTICLE_VS_IN " vec3 i_position;\n"
+PARTICLE_VS_IN " vec4 i_color;\n"
+PARTICLE_VS_IN " vec2 i_texcoord;\n"
+PARTICLE_VS_IN " float i_size;\n"
+PARTICLE_VS_IN " vec2 i_axis;\n"
+PARTICLE_VS_OUT " vec4 v_color;\n"
+PARTICLE_VS_OUT " vec2 v_texcoord;\n"
 "uniform mat4 uViewProjectionMatrix;\n"
 "uniform mat4 uModelMatrix;\n"
 "void main() {\n"
@@ -68,9 +94,10 @@ LPCSTR vs_particle =
 "}\n";
 
 LPCSTR fs_particle =
-"#version 120\n"
-"varying vec4 v_color;\n"
-"varying vec2 v_texcoord;\n"
+PARTICLE_GLSL_VERSION
+PARTICLE_FS_IN " vec4 v_color;\n"
+PARTICLE_FS_IN " vec2 v_texcoord;\n"
+PARTICLE_FS_OUT
 "uniform sampler2D uTexture;\n"
 "uniform bool uAlphaKey;\n"
 "uniform float uAlphaCutoff;\n"
@@ -78,13 +105,13 @@ LPCSTR fs_particle =
 "   return step(abs(tc.x - 0.5), 0.5) * step(abs(tc.y - 0.5), 0.5);\n"
 "}\n"
 "void main() {\n"
-"    gl_FragColor = texture2D(uTexture, v_texcoord) * v_color;\n"
+"    " PARTICLE_FRAGCOLOR " = " PARTICLE_TEXTURE "(uTexture, v_texcoord) * v_color;\n"
 "    if (uAlphaKey) {\n"
 #ifndef BZ_USE_MSAA
-"        if (gl_FragColor.a < uAlphaCutoff) discard;\n"
+"        if (" PARTICLE_FRAGCOLOR ".a < uAlphaCutoff) discard;\n"
 #else
-"        float edge = max(fwidth(gl_FragColor.a), 1.0 / 255.0);\n"
-"        gl_FragColor.a = smoothstep(uAlphaCutoff - edge, uAlphaCutoff + edge, gl_FragColor.a);\n"
+"        float edge = max(fwidth(" PARTICLE_FRAGCOLOR ".a), 1.0 / 255.0);\n"
+"        " PARTICLE_FRAGCOLOR ".a = smoothstep(uAlphaCutoff - edge, uAlphaCutoff + edge, " PARTICLE_FRAGCOLOR ".a);\n"
 #endif
 "    }\n"
 "}\n";
