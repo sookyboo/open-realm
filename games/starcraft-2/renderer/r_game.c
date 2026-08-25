@@ -276,8 +276,6 @@ FLOAT R_GameSelectionRadius(renderEntity_t const *entity) {
     return entity->radius;
 }
 
-FLOAT R_GameEntityHeight(renderEntity_t const *entity) { return entity ? entity->radius * 2.0f : 0.0f; }
-
 static void R_GameTextureCacheAdd(LPCSTR path) {
     if (!path || !*path || model_texture_cache.count >= 256) {
         return;
