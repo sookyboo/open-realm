@@ -109,7 +109,7 @@ LPTEXTURE R_LoadTexturePCX(HANDLE data, DWORD filesize) {
     }
 
     texture = R_AllocateTexture(width, height);
-    R_LoadTextureMipLevel(texture, 0, pixels, width, height);
+    R_LoadTextureMipLevelBGRA(texture, 0, pixels, width, height);
 
 done:
     SAFE_DELETE(rows, ri.MemFree);

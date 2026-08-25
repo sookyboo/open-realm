@@ -257,6 +257,7 @@ LPTEXTURE R_MakeSelectionCircleTexture(void);
 BOOL R_IsTexturePCX(HANDLE data, DWORD filesize);
 LPTEXTURE R_LoadTexturePCX(HANDLE data, DWORD filesize);
 void R_LoadTextureMipLevel(LPCTEXTURE pTexture, DWORD level, LPCCOLOR32 pPixels, DWORD width, DWORD height);
+void R_LoadTextureMipLevelBGRA(LPCTEXTURE pTexture, DWORD level, LPCCOLOR32 pPixels, DWORD width, DWORD height);
 void R_BindTexture(LPCTEXTURE texture, DWORD unit);
 void R_SetTextureWrap(LPCTEXTURE texture, bool wrapS, bool wrapT);
 void R_RenderModel(renderEntity_t const *edict);
