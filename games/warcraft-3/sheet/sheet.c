@@ -316,6 +316,12 @@ sheetRow_t *FS_ParseSLK(LPCSTR fileName) {
 }
 
 LPCSTR FS_FindSheetCell(sheetRow_t *sheet, LPCSTR row, LPCSTR column) {
+//     fprintf(stderr,
+//             "FS_FindSheetCell: sheet=%p row=\"%s\" column=\"%s\"\n",
+//             (void *)sheet,
+//             row ? row : "(null)",
+//             column ? column : "(null)");
+
     FOR_EACH_LIST(sheetRow_t const, srow, sheet) {
         if (strcmp(srow->name, row))
             continue;
