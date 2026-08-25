@@ -82,6 +82,8 @@ static void UI_CopyFrameBase(LPUIFRAME dest, LPCFRAMEDEF src) {
     dest->flags.alphaMode = src->AlphaMode;
     dest->textLength = src->TextLength;
     dest->stat = src->Stat;
+    dest->value = src->Value;
+    dest->hotkey = src->Hotkey;
     dest->text = src->Text;
     dest->tooltip = tooltip[0] ? tooltip : NULL;
     dest->onclick = src->OnClick;
@@ -192,9 +194,9 @@ BOOL UI_BuildFrameForWrite(LPCFRAMEDEF frame,
             DWORD size = sizeof(uiBuildQueue_t) + sizeof(uiBuildQueueItem_t) * frame->BuildQueue.NumQueue;
             uiBuildQueue_t *data = (uiBuildQueue_t *)(buf.data + buf.cursize);
             if (buf.cursize + size > buf.maxsize) { buf.overflowed = true; break; }
-            data->firstitem = 0;
-            data->buildtimer = 0;
-            data->itemoffset = 0.0f;
+            data->firstitem = FindFrameNumber(frame->BuildQueue.FirstItem, 0);
+            data->buildtimer = FindFrameNumber(frame->BuildQueue.BuildTimer, 0);
+            data->itemoffset = frame->BuildQueue.ItemOffset;
             data->numitems = frame->BuildQueue.NumQueue;
             memcpy(data->items, frame->BuildQueue.Queue, sizeof(uiBuildQueueItem_t) * data->numitems);
             buf.cursize += size;
@@ -206,8 +208,8 @@ BOOL UI_BuildFrameForWrite(LPCFRAMEDEF frame,
             if (buf.cursize + size > buf.maxsize) { buf.overflowed = true; break; }
             data->hp_bar = frame->Multiselect.HpBar;
             data->mana_bar = frame->Multiselect.ManaBar;
-            data->offset = MAKE(VECTOR2, 0.031f, 0.050f);
-            data->numcolumns = 6;
+            data->offset = frame->Multiselect.Offset;
+            data->numcolumns = frame->Multiselect.NumColumns;
             data->numitems = frame->Multiselect.NumItems;
             memcpy(data->items, frame->Multiselect.Items, sizeof(uiMultiselectItem_t) * data->numitems);
             buf.cursize += size;

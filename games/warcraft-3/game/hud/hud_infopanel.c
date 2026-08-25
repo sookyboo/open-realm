@@ -8,22 +8,18 @@
  */
 
 #include "hud_local.h"
+#include "hud_utils.h"
 #include "../generated/info_panel_unit_detail.h"
-#include "../generated/info_panel_building_detail.h"
 
 static InfoPanelUnitDetail_t unit_panel;
-static InfoPanelBuildingDetail_t building_panel;
-static FRAMEDEF bottom_panel;
+static LPFRAMEDEF info_panel;
 static BOOL infopanel_loaded;
 
 static void InfoPanelEnsureLoaded(void) {
     if (infopanel_loaded) return;
     infopanel_loaded = true;
     InfoPanelUnitDetail_Load(&unit_panel);
-    InfoPanelBuildingDetail_Load(&building_panel);
-    UI_InitFrame(&bottom_panel, FT_SIMPLEFRAME);
-    UI_SetSize(&bottom_panel, 0.180f, 0.120f);
-    UI_SetPoint(&bottom_panel, FRAMEPOINT_TOPLEFT, NULL, FRAMEPOINT_TOPLEFT, 0.310f, UI_BASE_HEIGHT - 0.120f);
+    info_panel = UI_HudFrame("OpenWarcraftInfoPanel");
 }
 
 void UI_WriteSingleInfo(LPEDICT ent) {
@@ -102,35 +98,23 @@ void UI_WriteSingleInfo(LPEDICT ent) {
         }
     }
 
-    /* InfoPanelUnitDetail uses SetAllPoints and must fill the old bottom-center panel, not the whole scene. */
-    UI_WriteFrame(&bottom_panel);
-    UI_WriteFrameWithChildren(unit_panel.InfoPanelUnitDetail, &bottom_panel);
+    UI_WriteFrame(info_panel);
+    UI_WriteFrameWithChildren(unit_panel.InfoPanelUnitDetail, info_panel);
 }
 
 void UI_WriteMultiselect(LPEDICT *ents, DWORD count) {
     if (count > 12) count = 12;
-    DWORD size = sizeof(uiMultiselect_t) + sizeof(uiMultiselectItem_t) * count;
-    LPBYTE buffer = gi.MemAlloc(size);
-    uiMultiselect_t *multi = (uiMultiselect_t *)buffer;
-    uiFrame_t frame;
+    LPFRAMEDEF frame = UI_HudFrame("OpenWarcraftMultiselect");
 
-    memset(buffer, 0, size);
-    multi->hp_bar = gi.ImageIndex(Theme_String("SimpleHpBarConsole", "UI\\Widgets\\Console\\Human\\human-statbar-fill.blp"));
-    multi->mana_bar = gi.ImageIndex(Theme_String("SimpleManaBarConsole", "UI\\Widgets\\Console\\Human\\human-statbar-fill.blp"));
-    multi->offset = MAKE(VECTOR2, 0.031f, 0.050f);
-    multi->numcolumns = 6;
-    multi->numitems = count;
+    if (!frame) return;
+    frame->Multiselect.HpBar = gi.ImageIndex(Theme_String("SimpleHpBarConsole", "UI\\Widgets\\Console\\Human\\human-statbar-fill.blp"));
+    frame->Multiselect.ManaBar = gi.ImageIndex(Theme_String("SimpleManaBarConsole", "UI\\Widgets\\Console\\Human\\human-statbar-fill.blp"));
+    frame->Multiselect.NumItems = count;
     FOR_LOOP(i, count) {
-        multi->items[i].entity = ents[i]->s.number;
-        multi->items[i].image = gi.ImageIndex(FindConfigValue(GetClassName(ents[i]->class_id), STR_ART));
+        frame->Multiselect.Items[i].entity = ents[i]->s.number;
+        frame->Multiselect.Items[i].image = gi.ImageIndex(FindConfigValue(GetClassName(ents[i]->class_id), STR_ART));
     }
-
-    memset(&frame, 0, sizeof(frame));
-    frame.flags.type = FT_MULTISELECT;
-    frame.color = COLOR32_WHITE;
-    UI_SetFrameRect(&frame, 0.314f, 0.500f, 0.025f, 0.025f);
-    UI_WriteProxyFrame(&frame, buffer, size);
-    gi.MemFree(buffer);
+    UI_WriteFrame(frame);
 }
 
 void UI_SeedInfoPanelCache(LPEDICT ent, LPEDICT *selected, DWORD count) {
@@ -191,33 +175,26 @@ void Get_Commands_f(LPEDICT ent) {
 }
 
 static void WritePortraitFrame(LPEDICT ent) {
-    uiFrame_t frame;
+    LPFRAMEDEF frame;
     if (!ent || !ent->s.model) return;
-    memset(&frame, 0, sizeof(frame));
-    frame.flags.type = FT_PORTRAIT;
-    frame.color = COLOR32_WHITE;
-    frame.tex.index = ent->s.model;
-    UI_SetFrameRect(&frame, 0.215f, 0.486f, 0.080f, 0.080f);
-    UI_WriteProxyFrame(&frame, NULL, 0);
+    frame = UI_HudFrame("OpenWarcraftPortrait");
+    if (!frame) return;
+    UI_SetPortraitFrameModel(frame, ent->s.model);
+    UI_WriteFrame(frame);
 }
 
 static void WriteInventory(LPEDICT ent) {
     gameInventoryItem_t items[MAX_INVENTORY];
     BYTE count = G_GetInventory(ent, items, MAX_INVENTORY);
     FOR_LOOP(i, count) {
-        FLOAT bx = UI_BASE_WIDTH * 0.5f + 0.1315f + (FLOAT)(items[i].slot % 2) * 0.0394f;
-        FLOAT by = UI_BASE_HEIGHT - 0.0971f + (FLOAT)(items[i].slot / 2) * 0.0384f;
-        uiFrame_t frame;
+        LPFRAMEDEF frame = UI_InventoryFrame(items[i].slot);
         char onclick[128];
-        memset(&frame, 0, sizeof(frame));
-        frame.flags.type = FT_COMMANDBUTTON;
-        frame.color = COLOR32_WHITE;
-        frame.tex.index = gi.ImageIndex(items[i].art);
-        frame.tooltip = items[i].ubertip[0] ? items[i].ubertip : items[i].tooltip;
+        if (!frame) continue;
+        frame->Texture.Image = gi.ImageIndex(items[i].art);
+        frame->Tip = items[i].ubertip[0] ? items[i].ubertip : items[i].tooltip;
         snprintf(onclick, sizeof(onclick), "inventory %u", (unsigned)items[i].slot);
-        frame.onclick = onclick;
-        UI_SetFrameRect(&frame, bx - 0.0165f, by - 0.0165f, 0.033f, 0.033f);
-        UI_WriteProxyFrame(&frame, NULL, 0);
+        snprintf(frame->OnClick, sizeof(frame->OnClick), "%s", onclick);
+        UI_WriteFrame(frame);
     }
     if (count) UI_WriteTooltipFrame();
 }
@@ -292,7 +269,6 @@ void G_RefreshResourceBar(LPEDICT ent) {
 
     UI_WriteStart(LAYER_CONSOLE);
     UI_WriteConsoleBackdrop(food_u);
-    UI_WriteMinimapFrame();
     UI_WriteEnd(ent);
 
     ent->client->resourcebar.gold      = gold;

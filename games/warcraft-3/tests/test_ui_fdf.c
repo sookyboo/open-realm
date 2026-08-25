@@ -1531,6 +1531,7 @@ static LPCSTR const authored_dialog_files[] = {
     "UI\\FrameDef\\Glue\\StandardTemplates.fdf",
     "UI\\FrameDef\\Glue\\BattleNetTemplates.fdf",
     "UI\\FrameDef\\UI\\ScriptDialog.fdf",
+    "UI\\FrameDef\\OpenWarcraft3\\DialogTemplates.fdf",
 };
 
 TEST(ui_fdf, dialog_supports_battlenet_template) {
@@ -1844,7 +1845,7 @@ static void test_single_player_campaign_profile(BOOL tft) {
     SinglePlayerMenu_ShowCampaign();
     campaign_select_frame = UI_FindFrame("CampaignSelectFrame");
     campaign_list_box = campaign_select_frame
-        ? UI_FindChildFrame(campaign_select_frame, "MapListBox")
+        ? UI_FindChildFrame(campaign_select_frame, "OpenWarcraftCampaignList")
         : NULL;
 
     if (!require_not_null(campaign_list_box)) {

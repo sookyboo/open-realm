@@ -9,11 +9,12 @@
 #include "hud_local.h"
 #include "hud_utils.h"
 #include "../generated/cinematic_panel.h"
+#include "../generated/message_overlay.h"
 
 static CinematicPanel_t cin;
-static FRAMEDEF msg_overlay_root, msg_overlay_text;
+static MessageOverlay_t msg;
 static BOOL cinematic_loaded;
-static BOOL msg_overlay_loaded;
+static BOOL message_loaded;
 
 static void CinematicEnsureLoaded(void) {
     if (cinematic_loaded) return;
@@ -21,31 +22,19 @@ static void CinematicEnsureLoaded(void) {
     CinematicPanel_Load(&cin);
 }
 
-/* Construct the message overlay frame tree inline; no FDF needed. */
+/* The project FDF owns the message schema; JASS only supplies content and an optional position. */
 static BOOL MessageEnsureLoaded(void) {
-    if (msg_overlay_loaded) return true;
-    msg_overlay_loaded = true;
-    UI_InitFrame(&msg_overlay_root, FT_FRAME);
-    snprintf(msg_overlay_root.Name, sizeof(msg_overlay_root.Name), "OpenWarcraftMessageOverlay");
-    UI_SetAllPoints(&msg_overlay_root);
-    UI_InitFrame(&msg_overlay_text, FT_TEXTAREA);
-    snprintf(msg_overlay_text.Name, sizeof(msg_overlay_text.Name), "OpenWarcraftMessageText");
-    UI_SetParent(&msg_overlay_text, &msg_overlay_root);
-    UI_SetSize(&msg_overlay_text, 0.30f, 0.145f);
-    UI_SetPoint(&msg_overlay_text, FRAMEPOINT_TOPLEFT, &msg_overlay_root, FRAMEPOINT_TOPLEFT, 0.05f, -0.30f);
-    msg_overlay_text.Font.Size = 0.010f;
-    msg_overlay_text.Font.Index = gi.FontIndex(Theme_String("MasterFont", "Fonts\\FRIZQT__.TTF"), HUD_FONT_SIZE);
-    msg_overlay_text.TextArea.Inset = 0.0f;
-    return true;
+    if (!message_loaded) message_loaded = MessageOverlay_Load(&msg);
+    return message_loaded;
 }
 
-/* Copy the constructed frame so one player's runtime text/position never mutates the shared template. */
+/* Copy the authored frame so one player's runtime text/position never mutates the shared template. */
 static FRAMEDEF MessageFrame(LPCVECTOR2 pos, LPCSTR message) {
-    FRAMEDEF frame = msg_overlay_text;
+    FRAMEDEF frame = *msg.OpenWarcraftMessageText;
     frame.Text = (LPSTR)message;
     frame.TextLength = strlen(message);
     if (pos && pos->x >= 0.0f && pos->x <= UI_BASE_WIDTH && pos->y >= 0.0f && pos->y <= UI_BASE_HEIGHT)
-        UI_SetPoint(&frame, FRAMEPOINT_TOPLEFT, &msg_overlay_root, FRAMEPOINT_TOPLEFT, pos->x, -pos->y);
+        UI_SetPoint(&frame, FRAMEPOINT_TOPLEFT, msg.OpenWarcraftMessageOverlay, FRAMEPOINT_TOPLEFT, pos->x, -pos->y);
     return frame;
 }
 
@@ -81,8 +70,8 @@ void UI_ShowText(LPEDICT ent, LPCVECTOR2 pos, LPCSTR text, FLOAT duration) {
     frame = MessageFrame(pos, message);
 
     UI_WriteStart(LAYER_MESSAGE);
-    UI_WriteFrame(&msg_overlay_root);
-    UI_WriteFrameWithChildren(&frame, &msg_overlay_root);
+    UI_WriteFrame(msg.OpenWarcraftMessageOverlay);
+    UI_WriteFrameWithChildren(&frame, msg.OpenWarcraftMessageOverlay);
     UI_WriteEnd(ent);
 }
 
