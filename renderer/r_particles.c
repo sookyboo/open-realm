@@ -81,7 +81,7 @@ LPCSTR fs_particle =
 "    gl_FragColor = texture2D(uTexture, v_texcoord) * v_color;\n"
 "    if (uAlphaKey) {\n"
 #ifndef BZ_USE_MSAA
-"        if (o_color.a < uAlphaCutoff) discard;\n"
+"        if (gl_FragColor.a < uAlphaCutoff) discard;\n"
 #else
 "        float edge = max(fwidth(gl_FragColor.a), 1.0 / 255.0);\n"
 "        gl_FragColor.a = smoothstep(uAlphaCutoff - edge, uAlphaCutoff + edge, gl_FragColor.a);\n"
@@ -115,7 +115,7 @@ void R_UpdateParticles(void) {
     cparticle_t *tail = NULL;
     cparticle_t *next = NULL;
     float frameTime = tr.viewDef.deltaTime / 1000.f;
-    
+
     for (cparticle_t *p = active_particles; p; p = next) {
         next = p->next;
         p->time += frameTime;
@@ -163,17 +163,28 @@ COLOR32 FX_BlendColor(cparticle_t const *p) {
 }
 
 static void R_FlushParticles(LPCTEXTURE texture, LPCMATRIX4 matrix, particleVertex_t *pv, BLEND_MODE blend_mode) {
+    if (!particles_resources.shader || !particles_resources.particles) {
+        return;
+    }
+
     R_Call(glBindVertexArray, particles_resources.particles->vao);
     R_Call(glBindBuffer, GL_ARRAY_BUFFER, particles_resources.particles->vbo);
-    R_Call(glBufferData, GL_ARRAY_BUFFER, sizeof(particleVertex_t) * (pv - particles_resources.vertices), particles_resources.vertices, GL_DYNAMIC_DRAW);
+    R_Call(glBufferData, GL_ARRAY_BUFFER,
+           sizeof(particleVertex_t) * (pv - particles_resources.vertices),
+           particles_resources.vertices,
+           GL_DYNAMIC_DRAW);
     R_Call(glUseProgram, particles_resources.shader->progid);
     R_Call(glUniformMatrix4fv, particles_resources.shader->uModelMatrix, 1, GL_FALSE, matrix->v);
-    R_Call(glUniformMatrix4fv, particles_resources.shader->uViewProjectionMatrix, 1, GL_FALSE, tr.viewDef.viewProjectionMatrix.v);
+    R_Call(glUniformMatrix4fv, particles_resources.shader->uViewProjectionMatrix, 1, GL_FALSE,
+           tr.viewDef.viewProjectionMatrix.v);
     R_Call(glActiveTexture, GL_TEXTURE0);
-    R_Call(glBindTexture, GL_TEXTURE_2D, (texture?texture:particles_resources.texture)->texid);
-    R_Call(glUniform1i, particles_resources.shader->uAlphaKey, blend_mode == BLEND_MODE_ALPHAKEY);
+    R_Call(glBindTexture, GL_TEXTURE_2D,
+           (texture ? texture : particles_resources.texture)->texid);
+    R_Call(glUniform1i, particles_resources.shader->uAlphaKey,
+           blend_mode == BLEND_MODE_ALPHAKEY);
     R_Call(glUniform1f, particles_resources.shader->uAlphaCutoff, 0.5f);
     R_SetAlphaKeyState(blend_mode == BLEND_MODE_ALPHAKEY);
+
     if (blend_mode == BLEND_MODE_NONE) {
         R_Call(glDisable, GL_BLEND);
         R_Call(glDepthMask, GL_TRUE);
@@ -181,6 +192,7 @@ static void R_FlushParticles(LPCTEXTURE texture, LPCMATRIX4 matrix, particleVert
     } else if (blend_mode != BLEND_MODE_ALPHAKEY) {
         R_Call(glEnable, GL_BLEND);
         R_Call(glDepthMask, GL_FALSE);
+
         switch (blend_mode) {
         case BLEND_MODE_ADD:
             R_Call(glBlendFunc, GL_SRC_ALPHA, GL_ONE);
@@ -193,24 +205,30 @@ static void R_FlushParticles(LPCTEXTURE texture, LPCMATRIX4 matrix, particleVert
             break;
         }
     }
+
     R_StatsDraw(GL_TRIANGLES, (DWORD)(pv - particles_resources.vertices), 1);
-    R_Call(glDrawArrays, GL_TRIANGLES, 0, (GLsizei)(pv - particles_resources.vertices));
+    R_Call(glDrawArrays, GL_TRIANGLES, 0,
+           (GLsizei)(pv - particles_resources.vertices));
 }
 
 static COLOR32 FX_GetFrame(const cparticle_t *p) {
     DWORD columns = p->columns ? p->columns : 1;
     DWORD rows = p->rows ? p->rows : 1;
     DWORD total = columns * rows;
+
     /* The sprite-sheet frame advances over the particle's own lifetime, not a
      * global clock — otherwise every particle flips frames in unison, which
      * reads as a crude strobing "old game" effect. */
     float k = (p->lifespan > 0.0f) ? (p->time / p->lifespan) : 0.0f;
     DWORD frame = (DWORD)(k * (float)total);
-    if (frame >= total) frame = total - 1;
+    if (frame >= total)
+        frame = total - 1;
+
     DWORD u = frame % columns;
     DWORD v = frame / columns;
     DWORD usize = 256 / columns;
     DWORD vsize = 256 / rows;
+
     return (COLOR32) {
         usize * u,
         vsize * v,
@@ -225,17 +243,21 @@ void R_DrawParticles(void) {
     LPCTEXTURE texture;
     BLEND_MODE blend_mode;
 
-    if (!R_CvarEnabled("r_particles", "1") || !active_particles) return;
-    texture = active_particles->texture; blend_mode = active_particles->blend_mode;
-    
+    if (!R_CvarEnabled("r_particles", "1") || !active_particles)
+        return;
+
+    texture = active_particles->texture;
+    blend_mode = active_particles->blend_mode;
+
     Matrix4_identity(&matrix);
     R_UpdateParticles();
-    
+
     FOR_EACH_LIST(cparticle_t const, p, active_particles) {
         if (p->texture != texture || p->blend_mode != blend_mode) {
             R_FlushParticles(texture, &matrix, pv, blend_mode);
             pv = particles_resources.vertices;
         }
+
         /* Kinematics: org = org0 + vel0*t + 1/2*accel*t^2. The original engine
          * integrates gravity per-frame (semi-implicit Euler), which over a
          * particle's life is the 1/2*a*t^2 closed form below; applying the full
@@ -244,13 +266,16 @@ void R_DrawParticles(void) {
         VECTOR3 vel = Vector3_add(&p->vel, &halfAccelT);
         VECTOR3 org = Vector3_mad(&p->org, p->time, &vel);
         COLOR32 col = FX_BlendColor(p);
-        float size = p->size_value_scale * FX_BlendFloat(p->size, p->time * p->size_time_scale,
-                                                         BYTE2FLOAT(p->midtime));
+        float size = p->size_value_scale *
+                     FX_BlendFloat(p->size,
+                                   p->time * p->size_time_scale,
+                                   BYTE2FLOAT(p->midtime));
+
         pv = R_AddParticle(pv, &org, FX_GetFrame(p), col, size);
         texture = p->texture;
         blend_mode = p->blend_mode;
     }
-    
+
     R_FlushParticles(texture, &matrix, pv, blend_mode);
     R_SetAlphaKeyState(false);
 }
@@ -263,7 +288,9 @@ void R_DrawBillboardSprite(LPCTEXTURE texture, LPCVECTOR3 origin, float size, CO
     particleVertex_t *pv = particles_resources.vertices;
     COLOR32 const uv = { 0, 255, 255, 0 };
 
-    if (!texture) texture = particles_resources.texture;
+    if (!texture)
+        texture = particles_resources.texture;
+
     Matrix4_identity(&matrix);
     pv = R_AddParticle(pv, origin, uv, color, size);
     R_FlushParticles(texture, &matrix, pv, BLEND_MODE_BLEND);
@@ -283,12 +310,18 @@ static LPBUFFER R_MakeParticlesVertexArrayObject(void) {
     R_Call(glEnableVertexAttribArray, attrib_texcoord);
     R_Call(glEnableVertexAttribArray, attrib_particleSize);
     R_Call(glEnableVertexAttribArray, attrib_particleAxis);
-    
-    R_Call(glVertexAttribPointer, attrib_position, 3, GL_FLOAT, GL_FALSE, sizeof(struct particle_vertex), FOFS(particle_vertex, position));
-    R_Call(glVertexAttribPointer, attrib_color, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(struct particle_vertex), FOFS(particle_vertex, color));
-    R_Call(glVertexAttribPointer, attrib_texcoord, 2, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(struct particle_vertex), FOFS(particle_vertex, uv));
-    R_Call(glVertexAttribPointer, attrib_particleSize, 1, GL_FLOAT, GL_FALSE, sizeof(struct particle_vertex), FOFS(particle_vertex, size));
-    R_Call(glVertexAttribPointer, attrib_particleAxis, 2, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(struct particle_vertex), FOFS(particle_vertex, axis));
+
+    R_Call(glVertexAttribPointer, attrib_position, 3, GL_FLOAT, GL_FALSE,
+           sizeof(struct particle_vertex), FOFS(particle_vertex, position));
+    R_Call(glVertexAttribPointer, attrib_color, 4, GL_UNSIGNED_BYTE, GL_TRUE,
+           sizeof(struct particle_vertex), FOFS(particle_vertex, color));
+    R_Call(glVertexAttribPointer, attrib_texcoord, 2, GL_UNSIGNED_BYTE, GL_TRUE,
+           sizeof(struct particle_vertex), FOFS(particle_vertex, uv));
+    R_Call(glVertexAttribPointer, attrib_particleSize, 1, GL_FLOAT, GL_FALSE,
+           sizeof(struct particle_vertex), FOFS(particle_vertex, size));
+    R_Call(glVertexAttribPointer, attrib_particleAxis, 2, GL_UNSIGNED_BYTE, GL_TRUE,
+           sizeof(struct particle_vertex), FOFS(particle_vertex, axis));
+
     return buf;
 }
 
@@ -307,15 +340,19 @@ float dottexture[DOT_TEXTURE][DOT_TEXTURE] = {
 
 void R_InitParticles(void) {
     COLOR32 data[DOT_TEXTURE][DOT_TEXTURE];
+
     FOR_LOOP(x, DOT_TEXTURE) FOR_LOOP(y, DOT_TEXTURE) {
         data[x][y].r = 0xff;
         data[x][y].g = 0xff;
         data[x][y].b = 0xff;
         data[x][y].a = dottexture[x][y] * 127;
     }
-    
+
     particles_resources.texture = R_AllocateTexture(DOT_TEXTURE, DOT_TEXTURE);
-    R_LoadTextureMipLevel(particles_resources.texture, 0, (LPCCOLOR32)data, DOT_TEXTURE, DOT_TEXTURE);
+    R_LoadTextureMipLevel(particles_resources.texture, 0,
+                          (LPCCOLOR32)data,
+                          DOT_TEXTURE,
+                          DOT_TEXTURE);
 
     particles_resources.shader = R_InitShader(vs_particle, fs_particle);
     particles_resources.particles = R_MakeParticlesVertexArrayObject();
@@ -323,6 +360,13 @@ void R_InitParticles(void) {
 }
 
 void R_ShutdownParticles(void) {
-    R_ReleaseVertexArrayObject(particles_resources.particles);
-    R_ReleaseShader(particles_resources.shader);
+    if (particles_resources.particles) {
+        R_ReleaseVertexArrayObject(particles_resources.particles);
+        particles_resources.particles = NULL;
+    }
+
+    if (particles_resources.shader) {
+        R_ReleaseShader(particles_resources.shader);
+        particles_resources.shader = NULL;
+    }
 }
