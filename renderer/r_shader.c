@@ -4,9 +4,18 @@
 /*
  * GLSL compatibility layer.
  *
- * gl4es exposes desktop GLSL 1.20, while the native GLES3 path uses
- * GLSL ES 3.00. Keep one shader body and adapt the syntax at compile time.
+ * Normal desktop OpenGL uses GLSL 1.40. gl4es can be built with
+ * -DBZ_GLSL_120 to use GLSL 1.20 instead. Native GLES3 remains GLSL ES 3.00.
+ * Keep one shader body and adapt syntax at shader compile time.
  */
+#ifdef BZ_GL_ES3
+#define BZ_GLSL_VERSION_LINE "#version 300 es\n"
+#elif defined(BZ_GLSL_120)
+#define BZ_GLSL_VERSION_LINE "#version 120\n"
+#else
+#define BZ_GLSL_VERSION_LINE "#version 140\n"
+#endif
+
 #define GLSL_VERTEX_COMPAT \
 "#if __VERSION__ >= 130\n" \
 "#define BZ_ATTRIBUTE in\n" \
@@ -20,8 +29,8 @@
 "#if __VERSION__ >= 130\n" \
 "#define BZ_VARYING in\n" \
 "#define BZ_TEXTURE texture\n" \
-"out vec4 bz_FragColor;\n" \
-"#define BZ_FRAGCOLOR bz_FragColor\n" \
+"out vec4 o_color;\n" \
+"#define BZ_FRAGCOLOR o_color\n" \
 "#else\n" \
 "#define BZ_VARYING varying\n" \
 "#define BZ_TEXTURE texture2D\n" \
@@ -30,7 +39,7 @@
 
 
 LPCSTR vs_default =
-"#version 120\n"
+BZ_GLSL_VERSION_LINE
 GLSL_VERTEX_COMPAT
 "BZ_ATTRIBUTE vec3 i_position;\n"
 "BZ_ATTRIBUTE vec2 i_texcoord;\n"
@@ -63,7 +72,7 @@ GLSL_VERTEX_COMPAT
 "}\n";
 
 LPCSTR fs_default =
-"#version 120\n"
+BZ_GLSL_VERSION_LINE
 GLSL_FRAGMENT_COMPAT
 "BZ_VARYING vec2 v_texcoord;\n"
 "BZ_VARYING vec2 v_texcoord2;\n"
@@ -104,7 +113,7 @@ GLSL_FRAGMENT_COMPAT
 "}\n";
 
 LPCSTR fs_ui =
-"#version 120\n"
+BZ_GLSL_VERSION_LINE
 GLSL_FRAGMENT_COMPAT
 "BZ_VARYING vec4 v_color;\n"
 "BZ_VARYING vec2 v_texcoord;\n"
@@ -114,7 +123,7 @@ GLSL_FRAGMENT_COMPAT
 "}\n";
 
 LPCSTR fs_minimap =
-"#version 120\n"
+BZ_GLSL_VERSION_LINE
 GLSL_FRAGMENT_COMPAT
 "BZ_VARYING vec4 v_color;\n"
 "BZ_VARYING vec2 v_texcoord;\n"
@@ -126,7 +135,7 @@ GLSL_FRAGMENT_COMPAT
 "}\n";
 
 LPCSTR fs_unlit =
-"#version 120\n"
+BZ_GLSL_VERSION_LINE
 GLSL_FRAGMENT_COMPAT
 "BZ_VARYING vec4 v_color;\n"
 "BZ_VARYING vec2 v_texcoord;\n"
@@ -136,7 +145,7 @@ GLSL_FRAGMENT_COMPAT
 "}\n";
 
 LPCSTR fs_splat =
-"#version 120\n"
+BZ_GLSL_VERSION_LINE
 GLSL_FRAGMENT_COMPAT
 "BZ_VARYING vec4 v_color;\n"
 "BZ_VARYING vec2 v_texcoord;\n"
@@ -150,7 +159,7 @@ GLSL_FRAGMENT_COMPAT
 "}\n";
 
 LPCSTR fs_shadow_splat =
-"#version 120\n"
+BZ_GLSL_VERSION_LINE
 GLSL_FRAGMENT_COMPAT
 "BZ_VARYING vec4 v_color;\n"
 "BZ_VARYING vec2 v_texcoord;\n"
@@ -164,7 +173,7 @@ GLSL_FRAGMENT_COMPAT
 "}\n";
 
 LPCSTR fs_commandbutton =
-"#version 120\n"
+BZ_GLSL_VERSION_LINE
 GLSL_FRAGMENT_COMPAT
 "BZ_VARYING vec4 v_color;\n"
 "BZ_VARYING vec2 v_texcoord;\n"
@@ -182,7 +191,7 @@ GLSL_FRAGMENT_COMPAT
 "}\n";
 
 LPCSTR fs_minimap_fog =
-"#version 120\n"
+BZ_GLSL_VERSION_LINE
 GLSL_FRAGMENT_COMPAT
 "BZ_VARYING vec4 v_color;\n"
 "BZ_VARYING vec2 v_texcoord;\n"
@@ -198,7 +207,7 @@ GLSL_FRAGMENT_COMPAT
    "#define BZ_USE_INSTANCING 1" injected to switch to per-instance
    matrix attributes and add ground-effect grass wind. */
 static LPCSTR model_vs =
-"#version 120\n"
+BZ_GLSL_VERSION_LINE
 GLSL_VERTEX_COMPAT
 "BZ_ATTRIBUTE vec3 i_position;\n"
 "BZ_ATTRIBUTE vec4 i_color;\n"
@@ -207,10 +216,14 @@ GLSL_VERTEX_COMPAT
 "BZ_ATTRIBUTE vec4 i_skin1;\n"
 "BZ_ATTRIBUTE vec4 i_boneWeight1;\n"
 "#ifdef BZ_USE_INSTANCING\n"
+#if defined(BZ_GLSL_120) && !defined(BZ_GL_ES3)
 "BZ_ATTRIBUTE vec4 i_instance0;\n"
 "BZ_ATTRIBUTE vec4 i_instance1;\n"
 "BZ_ATTRIBUTE vec4 i_instance2;\n"
 "BZ_ATTRIBUTE vec4 i_instance3;\n"
+#else
+"BZ_ATTRIBUTE mat4 i_instance;\n"
+#endif
 "#endif\n"
 "BZ_VARYING vec4 v_color;\n"
 #ifdef USE_SHADOWMAPS
@@ -273,7 +286,9 @@ GLSL_VERTEX_COMPAT
 "    }\n"
 "    position.w = 1.0;\n"
 "#ifdef BZ_USE_INSTANCING\n"
+#if defined(BZ_GLSL_120) && !defined(BZ_GL_ES3)
 "    mat4 i_instance = mat4(i_instance0, i_instance1, i_instance2, i_instance3);\n"
+#endif
 "    if (uGrassParams[3].z > 0.5) {\n"
 "        float grassHeight = max(uGrassParams[3].y - uGrassParams[3].x, 0.001);\n"
 "        float grassTop = smoothstep(uGrassParams[1].w, 1.0, clamp((position.z - uGrassParams[3].x) / grassHeight, 0.0, 1.0));\n"
@@ -309,7 +324,7 @@ GLSL_VERTEX_COMPAT
 "}\n";
 
 static LPCSTR model_fs =
-"#version 120\n"
+BZ_GLSL_VERSION_LINE
 GLSL_FRAGMENT_COMPAT
 "BZ_VARYING vec2 v_texcoord;\n"
 "BZ_VARYING vec2 v_texcoord2;\n"
@@ -410,17 +425,19 @@ LPSHADER R_ModelShaderInstanced(void) {
     return instanced_shader;
 }
 
-/* gl4es/desktop uses GLSL 1.20; GLES 3 uses GLSL ES 300.
-   Compatibility macros keep one shader body for both paths.
-   extra_defines is injected between the version/BZ_BONE_COUNT prefix and the shader body. */
+/* Desktop defaults to GLSL 1.40; -DBZ_GLSL_120 selects the gl4es GLSL 1.20 path.
+   GLES 3 always uses GLSL ES 3.00. extra_defines is injected between the
+   version/BZ_BONE_COUNT prefix and the shader body. */
 static void R_SetShaderSource(GLuint shader, LPCSTR source, LPCSTR extra_defines) {
     char prefix[160];
     LPCSTR body = strchr(source, '\n');
     snprintf(prefix, sizeof(prefix),
 #ifdef BZ_GL_ES3
              "#version 300 es\nprecision highp float;\nprecision highp int;\n#define BZ_BONE_COUNT %u\n",
-#else
+#elif defined(BZ_GLSL_120)
              "#version 120\n#define BZ_BONE_COUNT %u\n",
+#else
+             "#version 140\n#define BZ_BONE_COUNT %u\n",
 #endif
              (unsigned)tr.bone_count);
     LPCSTR strings[] = { prefix, extra_defines ? extra_defines : "", body ? body + 1 : source };
@@ -490,10 +507,14 @@ static LPSHADER R_InitShaderDefines(LPCSTR vs_src, LPCSTR fs_src, LPCSTR extra_d
     R_Call(glBindAttribLocation, program->progid, attrib_boneWeight1, "i_boneWeight1");
     R_Call(glBindAttribLocation, program->progid, attrib_particleSize, "i_size");
     R_Call(glBindAttribLocation, program->progid, attrib_particleAxis, "i_axis");
+#if defined(BZ_GLSL_120) && !defined(BZ_GL_ES3)
     R_Call(glBindAttribLocation, program->progid, attrib_instance + 0, "i_instance0");
     R_Call(glBindAttribLocation, program->progid, attrib_instance + 1, "i_instance1");
     R_Call(glBindAttribLocation, program->progid, attrib_instance + 2, "i_instance2");
     R_Call(glBindAttribLocation, program->progid, attrib_instance + 3, "i_instance3");
+#else
+    R_Call(glBindAttribLocation, program->progid, attrib_instance, "i_instance");
+#endif
 
     R_Call(glLinkProgram, program->progid);
 
