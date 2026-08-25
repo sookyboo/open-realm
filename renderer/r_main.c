@@ -120,7 +120,7 @@ static LPTEXTURE R_LoadTextureSTB(HANDLE data, DWORD filesize) {
     }
 
     texture = R_AllocateTexture((DWORD)width, (DWORD)height);
-    R_LoadTextureMipLevel(texture, 0, pixels, (DWORD)width, (DWORD)height);
+    R_LoadTextureMipLevelBGRA(texture, 0, pixels, (DWORD)width, (DWORD)height);
     ri.MemFree(pixels);
     stbi_image_free(image);
     return texture;

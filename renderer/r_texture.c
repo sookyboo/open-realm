@@ -136,15 +136,12 @@ void R_ReleaseTexture(LPTEXTURE texture) {
     ri.MemFree(texture);
 }
 
-void R_LoadTextureMipLevel(LPCTEXTURE pTexture, DWORD level, LPCCOLOR32 pPixels, DWORD width, DWORD height) {
+static void R_LoadTextureMipLevelFormat(LPCTEXTURE pTexture, DWORD level, LPCVOID pPixels,
+                                        DWORD width, DWORD height, GLenum format) {
     if (width == 0 || height == 0)
         return;
     R_Call(glBindTexture, GL_TEXTURE_2D, pTexture->texid);
-#if __linux__
-    R_Call(glTexImage2D, GL_TEXTURE_2D, level, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pPixels);
-#else
-    R_Call(glTexImage2D, GL_TEXTURE_2D, level, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, pPixels);
-#endif
+    R_Call(glTexImage2D, GL_TEXTURE_2D, level, GL_RGBA, width, height, 0, format, GL_UNSIGNED_BYTE, pPixels);
     if (level > 0) {
         R_Call(glTexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, level);
         R_Call(glTexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -154,4 +151,27 @@ void R_LoadTextureMipLevel(LPCTEXTURE pTexture, DWORD level, LPCCOLOR32 pPixels,
         R_Call(glTexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         R_Call(glTexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     }
+}
+
+/* COLOR32 is RGBA in engine code. Asset decoders that preserve BGRA byte order
+ * must call R_LoadTextureMipLevelBGRA explicitly. */
+void R_LoadTextureMipLevel(LPCTEXTURE pTexture, DWORD level, LPCCOLOR32 pPixels, DWORD width, DWORD height) {
+    R_LoadTextureMipLevelFormat(pTexture, level, pPixels, width, height, GL_RGBA);
+}
+
+void R_LoadTextureMipLevelBGRA(LPCTEXTURE pTexture, DWORD level, LPCCOLOR32 pPixels, DWORD width, DWORD height) {
+#ifdef BZ_GL_ES3
+    LPCOLOR32 rgba;
+    size_t count;
+
+    if (width == 0 || height == 0)
+        return;
+    count = (size_t)width * height;
+    rgba = ri.MemAlloc((long)(count * sizeof(*rgba)));
+    FOR_LOOP(i, count) rgba[i] = MAKE(COLOR32, pPixels[i].b, pPixels[i].g, pPixels[i].r, pPixels[i].a);
+    R_LoadTextureMipLevelFormat(pTexture, level, rgba, width, height, GL_RGBA);
+    ri.MemFree(rgba);
+#else
+    R_LoadTextureMipLevelFormat(pTexture, level, pPixels, width, height, GL_BGRA);
+#endif
 }
