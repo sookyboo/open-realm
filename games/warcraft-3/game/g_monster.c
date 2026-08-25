@@ -390,9 +390,6 @@ static void G_RegisterUnitSounds(LPEDICT self) {
     }
 }
 
-/* Unit data decides the persistent AI capabilities assigned at spawn. */
-DWORD unit_spawn_aiflags(DWORD class_id) { return UNIT_IS_BUILDING(class_id) ? AI_IMMOBILE : 0; }
-
 /* Initialize a unit entity from the unit data tables.
  * Reads model path, scale, collision radius, HP, mana, and attack parameters
  * (type, weapon class, damage dice, range, projectile model/speed) for the
@@ -440,9 +437,6 @@ void SP_SpawnUnit(LPEDICT self) {
     self->balance.sight_radius.night = UNIT_SIGHT_RADIUS_NIGHT(self->class_id);
     self->think = monster_think;
     self->svflags |= SVF_MONSTER;
-    /* Buildings use a single immobility contract so smart orders, combat, and
-     * future movement paths cannot rotate or translate them independently. */
-    self->aiflags |= unit_spawn_aiflags(self->class_id);
     /* Cache the air/ground collision layer once. Flyers ('movetp' == "fly")
      * never collide with ground units and vice-versa. */
     {
