@@ -74,83 +74,48 @@ cparticle_t *R_SpawnParticle(void) {
 
 LPCSTR vs_particle =
 PARTICLE_GLSL_VERSION
-PARTICLE_VS_IN " vec3 i_position;
-"
-PARTICLE_VS_IN " vec4 i_color;
-"
-PARTICLE_VS_IN " vec2 i_texcoord;
-"
-PARTICLE_VS_IN " float i_size;
-"
-PARTICLE_VS_IN " vec2 i_axis;
-"
-PARTICLE_VS_OUT " vec4 v_color;
-"
-PARTICLE_VS_OUT " vec2 v_texcoord;
-"
-"uniform mat4 uViewProjectionMatrix;
-"
-"uniform mat4 uModelMatrix;
-"
-"void main() {
-"
-"    mat4 m = uViewProjectionMatrix;
-"
-"    vec3 left = normalize(vec3(m[0][0], m[1][0], m[2][0])) * i_size;
-"
-"    vec3 up = normalize(vec3(m[0][1], m[1][1], m[2][1])) * i_size;
-"
-"    mat3 bb_mat = mat3(left, up, i_position);
-"
-"    vec3 pos = bb_mat * vec3(i_axis - vec2(0.5), 1.0);
-"
-"    gl_Position = uViewProjectionMatrix * vec4(pos, 1.0);
-"
-"    v_color = i_color;
-"
-"    v_texcoord = i_texcoord;
-"
-"}
-";
+PARTICLE_VS_IN " vec3 i_position;\n"
+PARTICLE_VS_IN " vec4 i_color;\n"
+PARTICLE_VS_IN " vec2 i_texcoord;\n"
+PARTICLE_VS_IN " float i_size;\n"
+PARTICLE_VS_IN " vec2 i_axis;\n"
+PARTICLE_VS_OUT " vec4 v_color;\n"
+PARTICLE_VS_OUT " vec2 v_texcoord;\n"
+"uniform mat4 uViewProjectionMatrix;\n"
+"uniform mat4 uModelMatrix;\n"
+"void main() {\n"
+"    mat4 m = uViewProjectionMatrix;\n"
+"    vec3 left = normalize(vec3(m[0][0], m[1][0], m[2][0])) * i_size;\n"
+"    vec3 up = normalize(vec3(m[0][1], m[1][1], m[2][1])) * i_size;\n"
+"    mat3 bb_mat = mat3(left, up, i_position);\n"
+"    vec3 pos = bb_mat * vec3(i_axis - vec2(0.5), 1.0);\n"
+"    gl_Position = uViewProjectionMatrix * vec4(pos, 1.0);\n"
+"    v_color = i_color;\n"
+"    v_texcoord = i_texcoord;\n"
+"}\n";
 
 LPCSTR fs_particle =
 PARTICLE_GLSL_VERSION
-PARTICLE_FS_IN " vec4 v_color;
-"
-PARTICLE_FS_IN " vec2 v_texcoord;
-"
+PARTICLE_FS_IN " vec4 v_color;\n"
+PARTICLE_FS_IN " vec2 v_texcoord;\n"
 PARTICLE_FS_OUT
-"uniform sampler2D uTexture;
-"
-"uniform bool uAlphaKey;
-"
-"uniform float uAlphaCutoff;
-"
-"float crop_edges(vec2 tc) {
-"
-"   return step(abs(tc.x - 0.5), 0.5) * step(abs(tc.y - 0.5), 0.5);
-"
-"}
-"
-"void main() {
-"
-"    " PARTICLE_FRAGCOLOR " = " PARTICLE_TEXTURE "(uTexture, v_texcoord) * v_color;
-"
-"    if (uAlphaKey) {
-"
+"uniform sampler2D uTexture;\n"
+"uniform bool uAlphaKey;\n"
+"uniform float uAlphaCutoff;\n"
+"float crop_edges(vec2 tc) {\n"
+"   return step(abs(tc.x - 0.5), 0.5) * step(abs(tc.y - 0.5), 0.5);\n"
+"}\n"
+"void main() {\n"
+"    " PARTICLE_FRAGCOLOR " = " PARTICLE_TEXTURE "(uTexture, v_texcoord) * v_color;\n"
+"    if (uAlphaKey) {\n"
 #if defined(BZ_GLSL_120) && !defined(BZ_GL_ES3)
-"        if (" PARTICLE_FRAGCOLOR ".a < uAlphaCutoff) discard;
-"
+"        if (" PARTICLE_FRAGCOLOR ".a < uAlphaCutoff) discard;\n"
 #else
-"        float edge = max(fwidth(" PARTICLE_FRAGCOLOR ".a), 1.0 / 255.0);
-"
-"        " PARTICLE_FRAGCOLOR ".a = smoothstep(uAlphaCutoff - edge, uAlphaCutoff + edge, " PARTICLE_FRAGCOLOR ".a);
-"
+"        float edge = max(fwidth(" PARTICLE_FRAGCOLOR ".a), 1.0 / 255.0);\n"
+"        " PARTICLE_FRAGCOLOR ".a = smoothstep(uAlphaCutoff - edge, uAlphaCutoff + edge, " PARTICLE_FRAGCOLOR ".a);\n"
 #endif
-"    }
-"
-"}
-";
+"    }\n"
+"}\n";
 
 particleVertex_t *
 R_AddParticle(particleVertex_t *buffer,

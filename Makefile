@@ -65,7 +65,9 @@ else
         # library's transitive deps (e.g. libgame.so -> libjass.so).
         RPATH     := -Wl,-rpath,'$$ORIGIN/../lib'
         LIB_RPATH := -Wl,-rpath,'$$ORIGIN'
-        CFLAGS    += -fPIC
+        # glibc does not provide BSD strlcpy/strlcat. Use OpenRealm's
+        # compatibility implementation from shared/compat.h instead of libbsd.
+        CFLAGS    += -fPIC -DOPENREALM_COMPAT_STRL -include shared/compat.h
         LDFLAGS   := -L$(LIB_DIR) -Wl,-z,defs
 		LIBS      := -lSDL2 -lEGL -lGL -lm
 		NET_LIBS  :=

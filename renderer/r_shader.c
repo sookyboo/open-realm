@@ -1,58 +1,48 @@
 #include "r_local.h"
-#include "r_shader.h"
 
 /*
- * Shader-language compatibility only.
+ * Shader language selection only.
  *
- * Desktop defaults to GLSL 1.40.
- * -DBZ_GLSL_120 selects the gl4es GLSL 1.20 syntax.
- * BZ_GL_ES3 keeps the existing GLES3 path available.
+ * Default:        GLSL 1.40
+ * -DBZ_GLSL_120: GLSL 1.20 / gl4es
+ *
+ * Everything else in this file remains the pre-patch implementation.
  */
-#ifdef BZ_GL_ES3
-#define BZ_GLSL_VERSION_LINE "#version 300 es\nprecision highp float;\nprecision highp int;\n"
-#elif defined(BZ_GLSL_120)
-#define BZ_GLSL_VERSION_LINE "#version 120\n"
+#ifdef BZ_GLSL_120
+#define BZ_SHADER_VERSION "#version 120\n"
+#define BZ_VS_IN "attribute"
+#define BZ_VS_OUT "varying"
+#define BZ_FS_IN "varying"
+#define BZ_FS_OUT ""
+#define BZ_FS_COMPAT "#define BZ_TEXTURE texture2D\n#define BZ_FRAGCOLOR gl_FragColor\n"
+#define BZ_TEXTURE "texture2D"
+#define BZ_FRAGCOLOR "gl_FragColor"
 #else
-#define BZ_GLSL_VERSION_LINE "#version 140\n"
+#define BZ_SHADER_VERSION "#version 140\n"
+#define BZ_VS_IN "in"
+#define BZ_VS_OUT "out"
+#define BZ_FS_IN "in"
+#define BZ_FS_OUT "out vec4 o_color;\n"
+#define BZ_FS_COMPAT "#define BZ_TEXTURE texture\n#define BZ_FRAGCOLOR o_color\n"
+#define BZ_TEXTURE "texture"
+#define BZ_FRAGCOLOR "o_color"
 #endif
-
-#define GLSL_VERTEX_COMPAT \
-"#if __VERSION__ >= 130\n" \
-"#define BZ_ATTRIBUTE in\n" \
-"#define BZ_VARYING out\n" \
-"#else\n" \
-"#define BZ_ATTRIBUTE attribute\n" \
-"#define BZ_VARYING varying\n" \
-"#endif\n"
-
-#define GLSL_FRAGMENT_COMPAT \
-"#if __VERSION__ >= 130\n" \
-"#define BZ_VARYING in\n" \
-"#define BZ_TEXTURE texture\n" \
-"out vec4 o_color;\n" \
-"#define BZ_FRAGCOLOR o_color\n" \
-"#else\n" \
-"#define BZ_VARYING varying\n" \
-"#define BZ_TEXTURE texture2D\n" \
-"#define BZ_FRAGCOLOR gl_FragColor\n" \
-"#endif\n"
 
 
 LPCSTR vs_default =
-BZ_GLSL_VERSION_LINE
-GLSL_VERTEX_COMPAT
-"BZ_ATTRIBUTE vec3 i_position;\n"
-"BZ_ATTRIBUTE vec2 i_texcoord;\n"
-"BZ_ATTRIBUTE vec3 i_normal;\n"
-"BZ_ATTRIBUTE vec4 i_color;\n"
+BZ_SHADER_VERSION
+BZ_VS_IN " vec3 i_position;\n"
+BZ_VS_IN " vec2 i_texcoord;\n"
+BZ_VS_IN " vec3 i_normal;\n"
+BZ_VS_IN " vec4 i_color;\n"
 #ifdef USE_SHADOWMAPS
-"BZ_VARYING vec4 v_shadow;\n"
+BZ_VS_OUT " vec4 v_shadow;\n"
 #endif
-"BZ_VARYING vec2 v_texcoord;\n"
-"BZ_VARYING vec2 v_texcoord2;\n"
-"BZ_VARYING vec3 v_normal;\n"
-"BZ_VARYING vec3 v_lightDir;\n"
-"BZ_VARYING vec4 v_color;\n"
+BZ_VS_OUT " vec2 v_texcoord;\n"
+BZ_VS_OUT " vec2 v_texcoord2;\n"
+BZ_VS_OUT " vec3 v_normal;\n"
+BZ_VS_OUT " vec3 v_lightDir;\n"
+BZ_VS_OUT " vec4 v_color;\n"
 "uniform mat4 uViewProjectionMatrix;\n"
 "uniform mat4 uTextureMatrix;\n"
 "uniform mat4 uModelMatrix;\n"
@@ -72,16 +62,17 @@ GLSL_VERTEX_COMPAT
 "}\n";
 
 LPCSTR fs_default =
-BZ_GLSL_VERSION_LINE
-GLSL_FRAGMENT_COMPAT
-"BZ_VARYING vec2 v_texcoord;\n"
-"BZ_VARYING vec2 v_texcoord2;\n"
+BZ_SHADER_VERSION
+BZ_FS_COMPAT
+BZ_FS_IN " vec2 v_texcoord;\n"
+BZ_FS_IN " vec2 v_texcoord2;\n"
 #ifdef USE_SHADOWMAPS
-"BZ_VARYING vec4 v_shadow;\n"
+BZ_FS_IN " vec4 v_shadow;\n"
 #endif
-"BZ_VARYING vec3 v_normal;\n"
-"BZ_VARYING vec4 v_color;\n"
-"BZ_VARYING vec3 v_lightDir;\n"
+BZ_FS_IN " vec3 v_normal;\n"
+BZ_FS_IN " vec4 v_color;\n"
+BZ_FS_IN " vec3 v_lightDir;\n"
+BZ_FS_OUT
 "uniform sampler2D uTexture;\n"
 #if defined(USE_SHADOWMAPS) || defined(DEBUG_PATHFINDING)
 "uniform sampler2D uShadowmap;\n"
@@ -130,42 +121,22 @@ GLSL_FRAGMENT_COMPAT
 "}\n";
 
 LPCSTR fs_ui =
-BZ_GLSL_VERSION_LINE
-GLSL_FRAGMENT_COMPAT
-"BZ_VARYING vec4 v_color;\n"
-"BZ_VARYING vec2 v_texcoord;\n"
-"uniform sampler2D uTexture;\n"
-"void main() {\n"
-"    BZ_FRAGCOLOR = BZ_TEXTURE(uTexture, v_texcoord) * v_color;\n"
-"}\n";
-
-LPCSTR fs_minimap =
-BZ_GLSL_VERSION_LINE
-GLSL_FRAGMENT_COMPAT
-"BZ_VARYING vec4 v_color;\n"
-"BZ_VARYING vec2 v_texcoord;\n"
-"uniform sampler2D uTexture;\n"
-"void main() {\n"
-"    float mask = 1.0 - smoothstep(0.49, 0.5, length(v_color.rg - vec2(0.5)));\n"
-"    vec4 tex = BZ_TEXTURE(uTexture, v_texcoord);\n"
-"    BZ_FRAGCOLOR = vec4(tex.rgb, tex.a * mask);\n"
-"}\n";
-
-LPCSTR fs_unlit =
-BZ_GLSL_VERSION_LINE
-GLSL_FRAGMENT_COMPAT
-"BZ_VARYING vec4 v_color;\n"
-"BZ_VARYING vec2 v_texcoord;\n"
+BZ_SHADER_VERSION
+BZ_FS_COMPAT
+BZ_FS_IN " vec4 v_color;\n"
+BZ_FS_IN " vec2 v_texcoord;\n"
+BZ_FS_OUT
 "uniform sampler2D uTexture;\n"
 "void main() {\n"
 "    BZ_FRAGCOLOR = BZ_TEXTURE(uTexture, v_texcoord) * v_color;\n"
 "}\n";
 
 LPCSTR fs_splat =
-BZ_GLSL_VERSION_LINE
-GLSL_FRAGMENT_COMPAT
-"BZ_VARYING vec4 v_color;\n"
-"BZ_VARYING vec2 v_texcoord;\n"
+BZ_SHADER_VERSION
+BZ_FS_COMPAT
+BZ_FS_IN " vec4 v_color;\n"
+BZ_FS_IN " vec2 v_texcoord;\n"
+BZ_FS_OUT
 "uniform sampler2D uTexture;\n"
 "float crop_edges(vec2 tc) {\n"
 "   return step(abs(tc.x - 0.5), 0.5) * step(abs(tc.y - 0.5), 0.5);\n"
@@ -176,10 +147,11 @@ GLSL_FRAGMENT_COMPAT
 "}\n";
 
 LPCSTR fs_shadow_splat =
-BZ_GLSL_VERSION_LINE
-GLSL_FRAGMENT_COMPAT
-"BZ_VARYING vec4 v_color;\n"
-"BZ_VARYING vec2 v_texcoord;\n"
+BZ_SHADER_VERSION
+BZ_FS_COMPAT
+BZ_FS_IN " vec4 v_color;\n"
+BZ_FS_IN " vec2 v_texcoord;\n"
+BZ_FS_OUT
 "uniform sampler2D uTexture;\n"
 "float crop_edges(vec2 tc) {\n"
 "   return step(abs(tc.x - 0.5), 0.5) * step(abs(tc.y - 0.5), 0.5);\n"
@@ -190,10 +162,11 @@ GLSL_FRAGMENT_COMPAT
 "}\n";
 
 LPCSTR fs_commandbutton =
-BZ_GLSL_VERSION_LINE
-GLSL_FRAGMENT_COMPAT
-"BZ_VARYING vec4 v_color;\n"
-"BZ_VARYING vec2 v_texcoord;\n"
+BZ_SHADER_VERSION
+BZ_FS_COMPAT
+BZ_FS_IN " vec4 v_color;\n"
+BZ_FS_IN " vec2 v_texcoord;\n"
+BZ_FS_OUT
 "uniform sampler2D uTexture;\n"
 "uniform float uActiveGlow;\n"
 "float crop_edges(vec2 tc) {\n"
@@ -208,10 +181,11 @@ GLSL_FRAGMENT_COMPAT
 "}\n";
 
 LPCSTR fs_minimap_fog =
-BZ_GLSL_VERSION_LINE
-GLSL_FRAGMENT_COMPAT
-"BZ_VARYING vec4 v_color;\n"
-"BZ_VARYING vec2 v_texcoord;\n"
+BZ_SHADER_VERSION
+BZ_FS_COMPAT
+BZ_FS_IN " vec4 v_color;\n"
+BZ_FS_IN " vec2 v_texcoord;\n"
+BZ_FS_OUT
 "uniform sampler2D uTexture;\n"
 "void main() {\n"
 "    float visibility = BZ_TEXTURE(uTexture, vec2(v_texcoord.x, 1.0 - v_texcoord.y)).r;\n"
@@ -220,21 +194,20 @@ GLSL_FRAGMENT_COMPAT
 "}\n";
 
 static LPCSTR model_vs =
-BZ_GLSL_VERSION_LINE
-GLSL_VERTEX_COMPAT
-"BZ_ATTRIBUTE vec3 i_position;\n"
-"BZ_ATTRIBUTE vec4 i_color;\n"
-"BZ_ATTRIBUTE vec2 i_texcoord;\n"
-"BZ_ATTRIBUTE vec3 i_normal;\n"
-"BZ_ATTRIBUTE vec4 i_skin1;\n"
-"BZ_ATTRIBUTE vec4 i_boneWeight1;\n"
-"BZ_VARYING vec4 v_color;\n"
+BZ_SHADER_VERSION
+BZ_VS_IN " vec3 i_position;\n"
+BZ_VS_IN " vec4 i_color;\n"
+BZ_VS_IN " vec2 i_texcoord;\n"
+BZ_VS_IN " vec3 i_normal;\n"
+BZ_VS_IN " vec4 i_skin1;\n"
+BZ_VS_IN " vec4 i_boneWeight1;\n"
+BZ_VS_OUT " vec4 v_color;\n"
 #ifdef USE_SHADOWMAPS
-"BZ_VARYING vec4 v_shadow;\n"
+BZ_VS_OUT " vec4 v_shadow;\n"
 #endif
-"BZ_VARYING vec2 v_texcoord;\n"
-"BZ_VARYING vec2 v_texcoord2;\n"
-"BZ_VARYING vec3 v_lighting;\n"
+BZ_VS_OUT " vec2 v_texcoord;\n"
+BZ_VS_OUT " vec2 v_texcoord2;\n"
+BZ_VS_OUT " vec3 v_lighting;\n"
 "uniform mat4 uBones[128];\n"
 "uniform mat4 uViewProjectionMatrix;\n"
 "uniform mat4 uModelMatrix;\n"
@@ -304,15 +277,16 @@ GLSL_VERTEX_COMPAT
 "}\n";
 
 static LPCSTR model_fs =
-BZ_GLSL_VERSION_LINE
-GLSL_FRAGMENT_COMPAT
-"BZ_VARYING vec2 v_texcoord;\n"
-"BZ_VARYING vec2 v_texcoord2;\n"
+BZ_SHADER_VERSION
+BZ_FS_COMPAT
+BZ_FS_IN " vec2 v_texcoord;\n"
+BZ_FS_IN " vec2 v_texcoord2;\n"
 #ifdef USE_SHADOWMAPS
-"BZ_VARYING vec4 v_shadow;\n"
+BZ_FS_IN " vec4 v_shadow;\n"
 #endif
-"BZ_VARYING vec3 v_lighting;\n"
-"BZ_VARYING vec4 v_color;\n"
+BZ_FS_IN " vec3 v_lighting;\n"
+BZ_FS_IN " vec4 v_color;\n"
+BZ_FS_OUT
 "uniform sampler2D uTexture;\n"
 #if defined(USE_SHADOWMAPS) || defined(DEBUG_PATHFINDING)
 "uniform sampler2D uShadowmap;\n"
@@ -320,7 +294,6 @@ GLSL_FRAGMENT_COMPAT
 "uniform sampler2D uFogOfWar;\n"
 "uniform float uLayerAlpha;\n"
 "uniform vec4 uGeosetColor;\n"
-"uniform mat3 uUvMatrix;\n"
 "uniform vec2 uUvTrans;\n"
 "uniform vec2 uUvRot;\n"
 "uniform vec2 uUvScale;\n"
@@ -339,7 +312,7 @@ GLSL_FRAGMENT_COMPAT
 "    return BZ_TEXTURE(uFogOfWar, v_texcoord2).r;\n"
 "}\n"
 "void main() {\n"
-"    vec2 uv = (uUvMatrix * vec3(v_texcoord, 1.0)).xy;\n"
+"    vec2 uv = v_texcoord;\n"
 "    uv += uUvTrans;\n"
 "    uv = quat_transform(uUvRot, uv - 0.5) + 0.5;\n"
 "    uv = uUvScale * (uv - 0.5) + 0.5;\n"
@@ -355,7 +328,7 @@ GLSL_FRAGMENT_COMPAT
 "        }\n"
 "    }\n"
 "    if (uAlphaKey) {\n"
-#if defined(BZ_GLSL_120) && !defined(BZ_GL_ES3)
+#ifdef BZ_GLSL_120
 "        if (col.a < uAlphaCutoff) discard;\n"
 #else
 "        float edge = max(fwidth(col.a), 1.0 / 255.0);\n"
@@ -386,25 +359,24 @@ LPSHADER R_ModelShader(void) {
    vertex attribute instead of uModelMatrix so thousands of instances share one
    draw call. */
 static LPCSTR instanced_vs =
-BZ_GLSL_VERSION_LINE
-GLSL_VERTEX_COMPAT
-"BZ_ATTRIBUTE vec3 i_position;\n"
-"BZ_ATTRIBUTE vec4 i_color;\n"
-"BZ_ATTRIBUTE vec2 i_texcoord;\n"
-"BZ_ATTRIBUTE vec3 i_normal;\n"
-"BZ_ATTRIBUTE vec4 i_skin1;\n"
-"BZ_ATTRIBUTE vec4 i_boneWeight1;\n"
-"BZ_ATTRIBUTE vec4 i_instance0;\n"
-"BZ_ATTRIBUTE vec4 i_instance1;\n"
-"BZ_ATTRIBUTE vec4 i_instance2;\n"
-"BZ_ATTRIBUTE vec4 i_instance3;\n"
-"BZ_VARYING vec4 v_color;\n"
+BZ_SHADER_VERSION
+BZ_VS_IN " vec3 i_position;\n"
+BZ_VS_IN " vec4 i_color;\n"
+BZ_VS_IN " vec2 i_texcoord;\n"
+BZ_VS_IN " vec3 i_normal;\n"
+BZ_VS_IN " vec4 i_skin1;\n"
+BZ_VS_IN " vec4 i_boneWeight1;\n"
+BZ_VS_IN " vec4 i_instance0;\n"
+BZ_VS_IN " vec4 i_instance1;\n"
+BZ_VS_IN " vec4 i_instance2;\n"
+BZ_VS_IN " vec4 i_instance3;\n"
+BZ_VS_OUT " vec4 v_color;\n"
 #ifdef USE_SHADOWMAPS
-"BZ_VARYING vec4 v_shadow;\n"
+BZ_VS_OUT " vec4 v_shadow;\n"
 #endif
-"BZ_VARYING vec2 v_texcoord;\n"
-"BZ_VARYING vec2 v_texcoord2;\n"
-"BZ_VARYING vec3 v_lighting;\n"
+BZ_VS_OUT " vec2 v_texcoord;\n"
+BZ_VS_OUT " vec2 v_texcoord2;\n"
+BZ_VS_OUT " vec3 v_lighting;\n"
 "uniform mat4 uBones[128];\n"
 "uniform mat4 uViewProjectionMatrix;\n"
 "uniform mat4 uLightMatrix;\n"
@@ -507,58 +479,107 @@ LPSHADER R_ModelShaderInstanced(void) {
     return instanced_shader;
 }
 
-LPSHADER R_InitShader(LPCSTR vs_default, LPCSTR fs_default){
+static void R_PrintShaderCompileFailure(GLuint shader, LPCSTR stage, LPCSTR source) {
+    GLint logLength = 0;
+
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
+    fprintf(stderr, "%s shader compilation failed.\n", stage);
+    if (source) {
+        fprintf(stderr, "---- %s shader source ----\n%s\n---- end shader source ----\n",
+                stage, source);
+    }
+    if (logLength > 1) {
+        char *log = malloc((size_t)logLength);
+        if (log) {
+            glGetShaderInfoLog(shader, logLength, NULL, log);
+            fprintf(stderr, "%s shader log:\n%s\n", stage, log);
+            free(log);
+        } else {
+            fprintf(stderr, "%s shader log unavailable (allocation failed).\n", stage);
+        }
+    } else {
+        fprintf(stderr, "%s shader returned no compiler log.\n", stage);
+    }
+}
+
+static void R_PrintProgramLinkFailure(GLuint program, LPCSTR vs_source, LPCSTR fs_source) {
+    GLint logLength = 0;
+
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
+    fprintf(stderr, "Shader program link failed.\n");
+    if (vs_source) {
+        fprintf(stderr, "---- vertex shader source ----\n%s\n---- end vertex shader source ----\n",
+                vs_source);
+    }
+    if (fs_source) {
+        fprintf(stderr, "---- fragment shader source ----\n%s\n---- end fragment shader source ----\n",
+                fs_source);
+    }
+    if (logLength > 1) {
+        char *log = malloc((size_t)logLength);
+        if (log) {
+            glGetProgramInfoLog(program, logLength, NULL, log);
+            fprintf(stderr, "Program link log:\n%s\n", log);
+            free(log);
+        } else {
+            fprintf(stderr, "Program link log unavailable (allocation failed).\n");
+        }
+    } else {
+        fprintf(stderr, "Program returned no linker log.\n");
+    }
+}
+
+LPSHADER R_InitShader(LPCSTR vs_default, LPCSTR fs_default) {
     GLuint vs = R_Call(glCreateShader, GL_VERTEX_SHADER);
     GLuint fs = R_Call(glCreateShader, GL_FRAGMENT_SHADER);
+    GLint status = GL_FALSE;
+    int length;
 
-    int length = (int)strlen(vs_default);
-    R_Call(glShaderSource, vs, 1, (const GLchar **)&vs_default, &length);
-    R_Call(glCompileShader, vs);
-
-    GLint status;
-    R_Call(glGetShaderiv, vs, GL_COMPILE_STATUS, &status);
-    if (status == GL_FALSE) {
-        GLint logLength = 0;
-        glGetShaderiv(vs, GL_INFO_LOG_LENGTH, &logLength);
-        if (logLength > 1) { // There's something to print
-            char *log = malloc(logLength);
-            if (log) {
-                glGetShaderInfoLog(vs, logLength, NULL, log);
-                fprintf(stderr, "Vertex shader compilation failed:\n%s\n", log);
-                free(log);
-            } else {
-                fprintf(stderr, "Vertex shader compilation failed (could not allocate log buffer)\n");
-            }
-        } else {
-            fprintf(stderr, "Vertex shader compilation failed (no log)\n");
-        }
+    if (!vs || !fs) {
+        fprintf(stderr, "Shader creation failed: vertex=%u fragment=%u\n", vs, fs);
+        if (vs) glDeleteShader(vs);
+        if (fs) glDeleteShader(fs);
         return NULL;
     }
+
+    length = (int)strlen(vs_default);
+    R_Call(glShaderSource, vs, 1, (const GLchar **)&vs_default, &length);
+    R_Call(glCompileShader, vs);
+    R_Call(glGetShaderiv, vs, GL_COMPILE_STATUS, &status);
+    if (status == GL_FALSE) {
+        R_PrintShaderCompileFailure(vs, "Vertex", vs_default);
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+        return NULL;
+    }
+
     length = (int)strlen(fs_default);
     R_Call(glShaderSource, fs, 1, (const GLchar **)&fs_default, &length);
     R_Call(glCompileShader, fs);
-
     R_Call(glGetShaderiv, fs, GL_COMPILE_STATUS, &status);
     if (status == GL_FALSE) {
-        GLint logLength = 0;
-        glGetShaderiv(fs, GL_INFO_LOG_LENGTH, &logLength);
-        if (logLength > 1) { // There's something to print
-            char *log = malloc(logLength);
-            if (log) {
-                glGetShaderInfoLog(fs, logLength, NULL, log);
-                fprintf(stderr, "Vertex shader compilation failed:\n%s\n", log);
-                free(log);
-            } else {
-                fprintf(stderr, "Vertex shader compilation failed (could not allocate log buffer)\n");
-            }
-        } else {
-            fprintf(stderr, "Vertex shader compilation failed (no log)\n");
-        }
+        R_PrintShaderCompileFailure(fs, "Fragment", fs_default);
+        glDeleteShader(vs);
+        glDeleteShader(fs);
         return NULL;
     }
 
     LPSHADER program = ri.MemAlloc(sizeof(struct shader_program));
+    if (!program) {
+        fprintf(stderr, "Shader program allocation failed.\n");
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+        return NULL;
+    }
+    memset(program, 0, sizeof(*program));
     program->progid = R_Call(glCreateProgram, );
+    if (!program->progid) {
+        fprintf(stderr, "glCreateProgram failed.\n");
+        ri.MemFree(program);
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+        return NULL;
+    }
 
     R_Call(glAttachShader, program->progid, vs);
     R_Call(glAttachShader, program->progid, fs);
@@ -571,12 +592,25 @@ LPSHADER R_InitShader(LPCSTR vs_default, LPCSTR fs_default){
     R_Call(glBindAttribLocation, program->progid, attrib_boneWeight1, "i_boneWeight1");
     R_Call(glBindAttribLocation, program->progid, attrib_particleSize, "i_size");
     R_Call(glBindAttribLocation, program->progid, attrib_particleAxis, "i_axis");
-    R_Call(glBindAttribLocation, program->progid, attrib_instance + 0, "i_instance0");
-    R_Call(glBindAttribLocation, program->progid, attrib_instance + 1, "i_instance1");
-    R_Call(glBindAttribLocation, program->progid, attrib_instance + 2, "i_instance2");
-    R_Call(glBindAttribLocation, program->progid, attrib_instance + 3, "i_instance3");
+    R_Call(glBindAttribLocation, program->progid, attrib_instance0, "i_instance0");
+    R_Call(glBindAttribLocation, program->progid, attrib_instance1, "i_instance1");
+    R_Call(glBindAttribLocation, program->progid, attrib_instance2, "i_instance2");
+    R_Call(glBindAttribLocation, program->progid, attrib_instance3, "i_instance3");
 
     R_Call(glLinkProgram, program->progid);
+    R_Call(glGetProgramiv, program->progid, GL_LINK_STATUS, &status);
+    if (status == GL_FALSE) {
+        R_PrintProgramLinkFailure(program->progid, vs_default, fs_default);
+        glDeleteProgram(program->progid);
+        ri.MemFree(program);
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+        return NULL;
+    }
+
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
     R_Call(glUseProgram, program->progid);
 
 #define R_RegisterUniform(PROGRAM, NAME) PROGRAM->NAME = glGetUniformLocation(PROGRAM->progid, #NAME);
@@ -597,10 +631,14 @@ LPSHADER R_InitShader(LPCSTR vs_default, LPCSTR fs_default){
     R_RegisterUniform(program, uUnshaded);
     R_RegisterUniform(program, uLayerAlpha);
     R_RegisterUniform(program, uGeosetColor);
-    R_RegisterUniform(program, uUvMatrix);
+    R_RegisterUniform(program, uUvTrans);
+    R_RegisterUniform(program, uUvRot);
+    R_RegisterUniform(program, uUvScale);
+    R_RegisterUniform(program, uLightDir);
+    R_RegisterUniform(program, uLightColor);
+    R_RegisterUniform(program, uLightAmbient);
     R_RegisterUniform(program, uLightCount);
     program->uLights = glGetUniformLocation(program->progid, "uLights[0]");
-    R_RegisterUniform(program, uGrassParams);
     R_RegisterUniform(program, uEyePosition);
     R_RegisterUniform(program, uActiveGlow);
     R_RegisterUniform(program, uFogEnable);
@@ -614,59 +652,7 @@ LPSHADER R_InitShader(LPCSTR vs_default, LPCSTR fs_default){
 #endif
     R_Call(glUniform1i, program->uFogOfWar, 2);
 
-    /* Support both the old target UV uniforms and the rebased uUvMatrix caller. */
-    {
-        GLint loc;
-        GLfloat identity_uv[9] = { 1,0,0, 0,1,0, 0,0,1 };
-        R_Call(glUniformMatrix3fv, program->uUvMatrix, 1, GL_FALSE, identity_uv);
-        loc = glGetUniformLocation(program->progid, "uUvTrans");
-        if (loc >= 0) R_Call(glUniform2f, loc, 0.0f, 0.0f);
-        loc = glGetUniformLocation(program->progid, "uUvRot");
-        if (loc >= 0) R_Call(glUniform2f, loc, 0.0f, 1.0f);
-        loc = glGetUniformLocation(program->progid, "uUvScale");
-        if (loc >= 0) R_Call(glUniform2f, loc, 1.0f, 1.0f);
-    }
-
     return program;
-}
-
-
-/* Current model callers keep their semantic lighting interface. The target
- * shader consumes the same packed uLights[] representation when count > 0. */
-void R_SetModelLighting(LPCSHADER shader, LPCMODELLIGHTING lighting) {
-    MATRIX4 packed[BZ_MODEL_LIGHT_MAX];
-    if (!lighting || lighting->count < 1 || lighting->count > BZ_MODEL_LIGHT_MAX) {
-        ri.error("R_SetModelLighting: light count must be 1..%u, got %u",
-                 BZ_MODEL_LIGHT_MAX, lighting ? lighting->count : 0);
-        return;
-    }
-    R_PackModelLighting(packed, lighting);
-    R_Call(glUniform1i, shader->uLightCount, lighting->count);
-    R_Call(glUniformMatrix4fv, shader->uLights, lighting->count,
-           GL_FALSE, packed[0].v);
-}
-
-/* Adapt the current semantic grass state to the target shader's separate
- * grass uniforms instead of the rebased packed uGrassParams matrix. */
-void R_SetModelGrass(LPCSHADER shader, LPCMODELGRASS grass) {
-    GLint loc;
-    if (!shader || !grass) return;
-
-    loc = glGetUniformLocation(shader->progid, "uGrassCameraPos");
-    if (loc >= 0) R_Call(glUniform3f, loc, grass->camera.x, grass->camera.y, 0.0f);
-    loc = glGetUniformLocation(shader->progid, "uGrassFade");
-    if (loc >= 0) R_Call(glUniform2f, loc, grass->fade.x, grass->fade.y);
-    loc = glGetUniformLocation(shader->progid, "uGrassTime");
-    if (loc >= 0) R_Call(glUniform1f, loc, grass->time);
-    loc = glGetUniformLocation(shader->progid, "uGrassWind");
-    if (loc >= 0) R_Call(glUniform3f, loc, grass->wind.x, grass->wind.y, grass->wind.z);
-    loc = glGetUniformLocation(shader->progid, "uGrassPhase");
-    if (loc >= 0) R_Call(glUniform4f, loc, grass->phase.x, grass->phase.y,
-                         grass->phase.z, grass->phase.w);
-    loc = glGetUniformLocation(shader->progid, "uGrassHeight");
-    if (loc >= 0) R_Call(glUniform2f, loc, grass->height.x, grass->height.y);
-    loc = glGetUniformLocation(shader->progid, "uGroundEffect");
-    if (loc >= 0) R_Call(glUniform1i, loc, grass->enabled ? 1 : 0);
 }
 
 void R_ReleaseShader(LPSHADER shader) {

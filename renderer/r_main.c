@@ -20,6 +20,7 @@ SDL_GLContext context;
 bool is_rendering_lights = false;
 #endif
 static bool renderer_shutdown = false;
+static bool renderer_shader_init_failed = false;
 
 /* Capture the physical GL drawable; SDL window dimensions are logical points on Retina. */
 static void R_Screenshot(void) {
@@ -325,6 +326,12 @@ void R_ReleaseRenderTexture(LPRENDERTARGET rt) {
 
 static void R_SetupGL(bool drawLight) {
     size2_t const window = R_GetWindowSize();
+
+    if (renderer_shader_init_failed ||
+        !tr.shader[SHADER_DEFAULT] || !tr.shader[SHADER_UI]) {
+        fprintf(stderr, "R_SetupGL skipped: required shaders are unavailable.\n");
+        return;
+    }
     
     MATRIX4 model_matrix;
     MATRIX3 normal_matrix;
@@ -437,6 +444,7 @@ static void R_UpdateSwapInterval(void) {
 
 void R_Init(DWORD width, DWORD height) {
     renderer_shutdown = false;
+    renderer_shader_init_failed = false;
     r_swapinterval = -999;
     BOOL gl_current = false;
     int requested_msaa = R_MsaaRequest(atoi(ri.CvarString ? ri.CvarString("r_msaa", BZ_MSAA_DEFAULT_STRING) : BZ_MSAA_DEFAULT_STRING));
@@ -534,6 +542,23 @@ void R_Init(DWORD width, DWORD height) {
     tr.shader[SHADER_SHADOWSPLAT] = R_InitShader(vs_default, fs_shadow_splat);
     tr.shader[SHADER_COMMANDBUTTON] = R_InitShader(vs_default, fs_commandbutton);
     tr.shader[SHADER_MINIMAP_FOG] = R_InitShader(vs_default, fs_minimap_fog);
+
+    {
+        static LPCSTR const shader_names[SHADER_COUNT] = {
+            "default", "ui", "splat", "shadow_splat", "command_button", "minimap_fog"
+        };
+        FOR_LOOP(i, SHADER_COUNT) {
+            if (!tr.shader[i]) {
+                fprintf(stderr, "Required shader '%s' failed to initialize. Renderer disabled.\n",
+                        shader_names[i]);
+                renderer_shader_init_failed = true;
+            }
+        }
+    }
+    if (renderer_shader_init_failed) {
+        fprintf(stderr, "Shader initialization failed; skipping renderer resource initialization.\n");
+        return;
+    }
     fprintf(stderr, "Loading shaders succeeded.\n");
 
     tr.buffer[RBUF_TEMP1] = R_MakeVertexArrayObject(NULL, 0);
@@ -663,6 +688,10 @@ void R_RenderView(void) {
 }
 
 void R_RenderFrame(viewDef_t const *viewDef) {
+    if (renderer_shader_init_failed) {
+        return;
+    }
+
     tr.viewDef = *viewDef;
 
     /* UI scene and portrait callers zero-initialise their viewDef, leaving
