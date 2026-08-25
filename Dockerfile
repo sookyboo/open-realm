@@ -74,7 +74,7 @@ WORKDIR /src
 
 COPY . .
 
-RUN make COMPAT_STRLCPY=1 build
+RUN make COMPAT_STRLCPY=1 GLSL=120 build
 
 RUN mkdir -p release &&  \
       cp build/bin/openwarcraft3 release/ && \
