@@ -2,14 +2,14 @@
 #include "r_shader.h"
 
 /*
- * GLSL compatibility layer.
+ * Shader-language compatibility only.
  *
- * Normal desktop OpenGL uses GLSL 1.40. gl4es can be built with
- * -DBZ_GLSL_120 to use GLSL 1.20 instead. Native GLES3 remains GLSL ES 3.00.
- * Keep one shader body and adapt syntax at shader compile time.
+ * Desktop defaults to GLSL 1.40.
+ * -DBZ_GLSL_120 selects the gl4es GLSL 1.20 syntax.
+ * BZ_GL_ES3 keeps the existing GLES3 path available.
  */
 #ifdef BZ_GL_ES3
-#define BZ_GLSL_VERSION_LINE "#version 300 es\n"
+#define BZ_GLSL_VERSION_LINE "#version 300 es\nprecision highp float;\nprecision highp int;\n"
 #elif defined(BZ_GLSL_120)
 #define BZ_GLSL_VERSION_LINE "#version 120\n"
 #else
@@ -76,40 +76,57 @@ BZ_GLSL_VERSION_LINE
 GLSL_FRAGMENT_COMPAT
 "BZ_VARYING vec2 v_texcoord;\n"
 "BZ_VARYING vec2 v_texcoord2;\n"
+#ifdef USE_SHADOWMAPS
+"BZ_VARYING vec4 v_shadow;\n"
+#endif
 "BZ_VARYING vec3 v_normal;\n"
 "BZ_VARYING vec4 v_color;\n"
 "BZ_VARYING vec3 v_lightDir;\n"
 "uniform sampler2D uTexture;\n"
-#ifdef USE_FOGOFWAR
-"uniform sampler2D uFogOfWar;\n"
+#if defined(USE_SHADOWMAPS) || defined(DEBUG_PATHFINDING)
+"uniform sampler2D uShadowmap;\n"
 #endif
+"uniform sampler2D uFogOfWar;\n"
 "float get_light() {\n"
 "    return dot(v_normal, v_lightDir);\n"
 "}\n"
 #ifdef USE_SHADOWMAPS
-"uniform sampler2D uShadowmap;\n"
-"BZ_VARYING vec4 v_shadow;\n"
 "float get_shadow() {\n"
 "    float depth = BZ_TEXTURE(uShadowmap, vec2(v_shadow.x + 1.0, v_shadow.y + 1.0) * 0.5).r;\n"
 "    return depth < (v_shadow.z + 0.99) * 0.5 ? 0.0 : 1.0;\n"
 "}\n"
-"float get_lighting() { return min(1.0, mix(0.35, 1.0, get_shadow() * get_light()) * 1.1); }\n"
-#else
-"float get_lighting() { return min(1.0, mix(0.35, 1.0, get_light()) * 1.1); }\n"
 #endif
-#ifdef USE_FOGOFWAR
+"float get_lighting() {\n"
+#ifdef USE_SHADOWMAPS
+"    return min(1.0, mix(0.35, 1.0, get_shadow() * get_light()) * 1.1);"
+#else
+"    return min(1.0, mix(0.35, 1.0, get_light()) * 1.1);"
+#endif
+"}\n"
 "float get_fogofwar() {\n"
 "    return BZ_TEXTURE(uFogOfWar, v_texcoord2).r;\n"
 "}\n"
-#endif
 "void main() {\n"
-"    vec4 col = BZ_TEXTURE(uTexture, v_texcoord) * v_color;\n"
-#ifdef USE_FOGOFWAR
-"    col.rgb *= get_fogofwar() * get_lighting();\n"
-#else
-"    col.rgb *= get_lighting();\n"
+#ifdef DEBUG_PATHFINDING
+"    vec4 debug = BZ_TEXTURE(uShadowmap, v_texcoord2);\n"
+"    vec4 color = BZ_TEXTURE(uTexture, v_texcoord);\n"
+"    float sin_factor = sin(debug.g * 3.14159 * 2.0);\n"
+"    float cos_factor = cos(debug.g * 3.14159 * 2.0);\n"
+"    vec2 tc = fract(v_texcoord2 * 384.0);\n"
+"    tc = (tc - 0.5) * mat2(cos_factor, sin_factor, -sin_factor, cos_factor);\n"
+"    tc += 0.5;\n"
+"    float stp = step(abs(0.5 - tc.y), tc.x * 0.25);"
+"    /*debug.a = color.a*/;\n"
+"    BZ_FRAGCOLOR = debug * 0.7;// mix(debug, color, 0.5) + vec4(stp);\n"
+"    return;\n"
 #endif
+"    vec4 col = BZ_TEXTURE(uTexture, v_texcoord) * v_color;\n"
+#ifdef WOW
 "    BZ_FRAGCOLOR = col;\n"
+#else
+"    col.rgb *= get_fogofwar() * get_lighting();\n"
+"    BZ_FRAGCOLOR = col;\n"
+#endif
 "}\n";
 
 LPCSTR fs_ui =
@@ -202,10 +219,6 @@ GLSL_FRAGMENT_COMPAT
 "    BZ_FRAGCOLOR = vec4(v_color.rgb, alpha);\n"
 "}\n";
 
-/* Shared vertex shader for MDX/M2/M3 model formats.
-   Compiled twice: once as-is (uModelMatrix path), and once with
-   "#define BZ_USE_INSTANCING 1" injected to switch to per-instance
-   matrix attributes and add ground-effect grass wind. */
 static LPCSTR model_vs =
 BZ_GLSL_VERSION_LINE
 GLSL_VERTEX_COMPAT
@@ -215,16 +228,6 @@ GLSL_VERTEX_COMPAT
 "BZ_ATTRIBUTE vec3 i_normal;\n"
 "BZ_ATTRIBUTE vec4 i_skin1;\n"
 "BZ_ATTRIBUTE vec4 i_boneWeight1;\n"
-"#ifdef BZ_USE_INSTANCING\n"
-#if defined(BZ_GLSL_120) && !defined(BZ_GL_ES3)
-"BZ_ATTRIBUTE vec4 i_instance0;\n"
-"BZ_ATTRIBUTE vec4 i_instance1;\n"
-"BZ_ATTRIBUTE vec4 i_instance2;\n"
-"BZ_ATTRIBUTE vec4 i_instance3;\n"
-#else
-"BZ_ATTRIBUTE mat4 i_instance;\n"
-#endif
-"#endif\n"
 "BZ_VARYING vec4 v_color;\n"
 #ifdef USE_SHADOWMAPS
 "BZ_VARYING vec4 v_shadow;\n"
@@ -232,45 +235,48 @@ GLSL_VERTEX_COMPAT
 "BZ_VARYING vec2 v_texcoord;\n"
 "BZ_VARYING vec2 v_texcoord2;\n"
 "BZ_VARYING vec3 v_lighting;\n"
-"uniform mat4 uBones[BZ_BONE_COUNT];\n"
+"uniform mat4 uBones[128];\n"
 "uniform mat4 uViewProjectionMatrix;\n"
+"uniform mat4 uModelMatrix;\n"
 "uniform mat4 uLightMatrix;\n"
+"uniform mat3 uNormalMatrix;\n"
 "uniform mat4 uTextureMatrix;\n"
+"uniform vec3 uLightDir;\n"
+"uniform vec3 uLightColor;\n"
+"uniform vec3 uLightAmbient;\n"
 "uniform int uLightCount;\n"
 "uniform float uFirstBoneLookupIndex;\n"
 "uniform mat4 uLights[8];\n"
-"#ifdef BZ_USE_INSTANCING\n"
-"uniform mat4 uGrassParams;\n"
-"#else\n"
-"uniform mat4 uModelMatrix;\n"
-"uniform mat3 uNormalMatrix;\n"
-"#endif\n"
 "const int MODEL_LIGHT_OMNI = 0;\n"
 "const int MODEL_LIGHT_DIRECT = 1;\n"
 "const int MODEL_LIGHT_AMBIENT = 2;\n"
-"vec3 apply_light(mat4 light, vec3 n, vec3 worldPos) {\n"
-"    int type = int(light[0].w + 0.5);\n"
-"    vec3 color = light[2].rgb * light[2].a;\n"
-"    vec3 ambient = light[3].rgb * light[3].a;\n"
-"    if (type == MODEL_LIGHT_AMBIENT) {\n"
-"        return color + ambient;\n"
-"    } else if (type == MODEL_LIGHT_DIRECT) {\n"
-"        vec3 l = normalize(-light[1].xyz);\n"
-"        return clamp(color * max(dot(n, l), 0.0), vec3(0.0), vec3(1.0)) + ambient;\n"
-"    } else {\n"
-"        vec3 delta = light[0].xyz - worldPos;\n"
-"        vec3 l = normalize(delta);\n"
-"        float dist = length(delta) / 64.0 + 1.0;\n"
-"        float atten = 1.0 / (dist * dist);\n"
-"        return clamp(color * atten * max(dot(n, l), 0.0), vec3(0.0), vec3(1.0)) + ambient * atten;\n"
-"    }\n"
-"}\n"
 "vec3 vertex_lighting(vec3 normal, vec3 worldPos) {\n"
 "    vec3 n = normalize(normal);\n"
-"    vec3 lighting = vec3(0.0);\n"
+"    if (uLightCount == 0)\n"
+"        return uLightAmbient + uLightColor * max(dot(n, normalize(uLightDir)), 0.0);\n"
+"    vec3 lighting = uLightAmbient;\n"
 "    for (int i = 0; i < 8; ++i) {\n"
 "        if (i >= uLightCount) break;\n"
-"        lighting += apply_light(uLights[i], n, worldPos);\n"
+"        vec4 positionType = uLights[i][0];\n"
+"        vec4 direction = uLights[i][1];\n"
+"        vec4 colorIntensity = uLights[i][2];\n"
+"        vec4 ambientIntensity = uLights[i][3];\n"
+"        int type = int(positionType.w + 0.5);\n"
+"        vec3 color = colorIntensity.rgb * colorIntensity.a;\n"
+"        vec3 ambient = ambientIntensity.rgb * ambientIntensity.a;\n"
+"        if (type == MODEL_LIGHT_AMBIENT) {\n"
+"            lighting += color + ambient;\n"
+"        } else if (type == MODEL_LIGHT_DIRECT) {\n"
+"            vec3 l = normalize(-direction.xyz);\n"
+"            lighting += clamp(color * max(dot(n, l), 0.0), vec3(0.0), vec3(1.0)) + ambient;\n"
+"        } else {\n"
+"            vec3 delta = positionType.xyz - worldPos;\n"
+"            vec3 l = normalize(delta);\n"
+"            float dist = length(delta) / 64.0 + 1.0;\n"
+"            float atten = 1.0 / (dist * dist);\n"
+"            lighting += clamp(color * atten * max(dot(n, l), 0.0), vec3(0.0), vec3(1.0));\n"
+"            lighting += ambient * atten;\n"
+"        }\n"
 "    }\n"
 "    return min(lighting, vec3(1.0));\n"
 "}\n"
@@ -280,36 +286,11 @@ GLSL_VERTEX_COMPAT
 "    vec4 position = vec4(0.0);\n"
 "    vec4 normal = vec4(0.0);\n"
 "    for (int i = 0; i < 4; ++i) {\n"
-"        int boneIdx = min(int(i_skin1[i]) + int(uFirstBoneLookupIndex), BZ_BONE_COUNT - 1);\n"
+"        int boneIdx = int(i_skin1[i]) + int(uFirstBoneLookupIndex);\n"
 "        position += uBones[boneIdx] * pos4 * i_boneWeight1[i];\n"
 "        normal += uBones[boneIdx] * norm4 * i_boneWeight1[i];\n"
 "    }\n"
 "    position.w = 1.0;\n"
-"#ifdef BZ_USE_INSTANCING\n"
-#if defined(BZ_GLSL_120) && !defined(BZ_GL_ES3)
-"    mat4 i_instance = mat4(i_instance0, i_instance1, i_instance2, i_instance3);\n"
-#endif
-"    if (uGrassParams[3].z > 0.5) {\n"
-"        float grassHeight = max(uGrassParams[3].y - uGrassParams[3].x, 0.001);\n"
-"        float grassTop = smoothstep(uGrassParams[1].w, 1.0, clamp((position.z - uGrassParams[3].x) / grassHeight, 0.0, 1.0));\n"
-"        float grassPhase = dot(i_instance[3].xy, uGrassParams[2].xy);\n"
-"        float grassSway = sin(uGrassParams[1].x * uGrassParams[1].y + grassPhase) * uGrassParams[1].z * grassHeight * grassTop;\n"
-"        position.xy += uGrassParams[2].zw * grassSway;\n"
-"    }\n"
-"    vec4 worldPos4 = i_instance * position;\n"
-"    v_color = i_color;\n"
-"    if (uGrassParams[3].z > 0.5) {\n"
-"        float fadeDist = length(worldPos4.xy - uGrassParams[0].xy);\n"
-"        v_color.a *= 1.0 - smoothstep(uGrassParams[0].z, uGrassParams[0].w, fadeDist);\n"
-"    }\n"
-"    v_texcoord = i_texcoord;\n"
-"    v_texcoord2 = (uTextureMatrix * worldPos4).xy;\n"
-"    v_lighting = vertex_lighting(normalize(mat3(i_instance) * normal.xyz), worldPos4.xyz);\n"
-#ifdef USE_SHADOWMAPS
-"    v_shadow = uLightMatrix * worldPos4;\n"
-#endif
-"    gl_Position = uViewProjectionMatrix * worldPos4;\n"
-"#else\n"
 "    v_color = i_color;\n"
 "    v_texcoord = i_texcoord;\n"
 "    v_texcoord2 = (uTextureMatrix * uModelMatrix * position).xy;\n"
@@ -320,7 +301,6 @@ GLSL_VERTEX_COMPAT
 "    v_shadow = uLightMatrix * uModelMatrix * position;\n"
 #endif
 "    gl_Position = uViewProjectionMatrix * uModelMatrix * position;\n"
-"#endif\n"
 "}\n";
 
 static LPCSTR model_fs =
@@ -334,49 +314,48 @@ GLSL_FRAGMENT_COMPAT
 "BZ_VARYING vec3 v_lighting;\n"
 "BZ_VARYING vec4 v_color;\n"
 "uniform sampler2D uTexture;\n"
-#ifdef USE_SHADOWMAPS
+#if defined(USE_SHADOWMAPS) || defined(DEBUG_PATHFINDING)
 "uniform sampler2D uShadowmap;\n"
 #endif
-#ifdef USE_FOGOFWAR
 "uniform sampler2D uFogOfWar;\n"
-#endif
 "uniform float uLayerAlpha;\n"
 "uniform vec4 uGeosetColor;\n"
 "uniform mat3 uUvMatrix;\n"
+"uniform vec2 uUvTrans;\n"
+"uniform vec2 uUvRot;\n"
+"uniform vec2 uUvScale;\n"
 "uniform bool uAlphaKey;\n"
-/* In MSAA mode, hard discard is replaced by smoothstep alpha-to-coverage
-   to avoid edge aliasing; uAlphaCutoff is still used as the threshold. */
 "uniform float uAlphaCutoff;\n"
-/* uUnshaded: MDX emissive layers skip lighting and fog-of-war. */
 "uniform bool uUnshaded;\n"
-// TODO: Add USE_FOG to skip compilation in games that never use it
 "uniform bool uFogEnable;\n"
 "uniform vec3 uFogColor;\n"
 "uniform vec2 uFogParams;\n"
-#ifdef USE_FOGOFWAR
+"vec2 quat_transform(vec2 q, vec2 v) {\n"
+"    float c = q.y * q.y - q.x * q.x;\n"
+"    float s = 2.0 * q.x * q.y;\n"
+"    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);\n"
+"}\n"
 "float get_fogofwar() {\n"
 "    return BZ_TEXTURE(uFogOfWar, v_texcoord2).r;\n"
 "}\n"
-#endif
 "void main() {\n"
 "    vec2 uv = (uUvMatrix * vec3(v_texcoord, 1.0)).xy;\n"
+"    uv += uUvTrans;\n"
+"    uv = quat_transform(uUvRot, uv - 0.5) + 0.5;\n"
+"    uv = uUvScale * (uv - 0.5) + 0.5;\n"
 "    vec4 col = BZ_TEXTURE(uTexture, uv);\n"
 "    col *= uGeosetColor;\n"
 "    col *= uLayerAlpha;\n"
 "    col *= v_color;\n"
 "    if (!uUnshaded) {\n"
-#ifdef USE_FOGOFWAR
 "        col.rgb *= get_fogofwar() * v_lighting;\n"
-#else
-"        col.rgb *= v_lighting;\n"
-#endif
 "        if (uFogEnable) {\n"
 "            float fogFactor = clamp((uFogParams.y - gl_FragCoord.z / gl_FragCoord.w) / (uFogParams.y - uFogParams.x), 0.0, 1.0);\n"
 "            col.rgb = mix(uFogColor, col.rgb, fogFactor);\n"
 "        }\n"
 "    }\n"
 "    if (uAlphaKey) {\n"
-#ifndef BZ_USE_MSAA
+#if defined(BZ_GLSL_120) && !defined(BZ_GL_ES3)
 "        if (col.a < uAlphaCutoff) discard;\n"
 #else
 "        float edge = max(fwidth(col.a), 1.0 / 255.0);\n"
@@ -402,54 +381,138 @@ LPSHADER R_ModelShader(void) {
     return model_shader ? model_shader : tr.shader[SHADER_DEFAULT];
 }
 
-
-static LPSHADER R_InitShaderDefines(LPCSTR vs_src, LPCSTR fs_src, LPCSTR extra_defines);
+/* Instanced model shader for static meshes (ground-effect clutter). Identical
+   skinning/lighting to model_vs, but the per-instance world transform is a
+   vertex attribute instead of uModelMatrix so thousands of instances share one
+   draw call. */
+static LPCSTR instanced_vs =
+BZ_GLSL_VERSION_LINE
+GLSL_VERTEX_COMPAT
+"BZ_ATTRIBUTE vec3 i_position;\n"
+"BZ_ATTRIBUTE vec4 i_color;\n"
+"BZ_ATTRIBUTE vec2 i_texcoord;\n"
+"BZ_ATTRIBUTE vec3 i_normal;\n"
+"BZ_ATTRIBUTE vec4 i_skin1;\n"
+"BZ_ATTRIBUTE vec4 i_boneWeight1;\n"
+"BZ_ATTRIBUTE vec4 i_instance0;\n"
+"BZ_ATTRIBUTE vec4 i_instance1;\n"
+"BZ_ATTRIBUTE vec4 i_instance2;\n"
+"BZ_ATTRIBUTE vec4 i_instance3;\n"
+"BZ_VARYING vec4 v_color;\n"
+#ifdef USE_SHADOWMAPS
+"BZ_VARYING vec4 v_shadow;\n"
+#endif
+"BZ_VARYING vec2 v_texcoord;\n"
+"BZ_VARYING vec2 v_texcoord2;\n"
+"BZ_VARYING vec3 v_lighting;\n"
+"uniform mat4 uBones[128];\n"
+"uniform mat4 uViewProjectionMatrix;\n"
+"uniform mat4 uLightMatrix;\n"
+"uniform mat4 uTextureMatrix;\n"
+"uniform vec3 uLightDir;\n"
+"uniform vec3 uLightColor;\n"
+"uniform vec3 uLightAmbient;\n"
+"uniform int uLightCount;\n"
+"uniform float uFirstBoneLookupIndex;\n"
+"uniform mat4 uLights[8];\n"
+"uniform vec3 uGrassCameraPos;\n"
+"uniform vec2 uGrassFade;\n"
+"uniform float uGrassTime;\n"
+"uniform vec3 uGrassWind;\n"
+"uniform vec4 uGrassPhase;\n"
+"uniform vec2 uGrassHeight;\n"
+"uniform int uGroundEffect;\n"
+"const int MODEL_LIGHT_OMNI = 0;\n"
+"const int MODEL_LIGHT_DIRECT = 1;\n"
+"const int MODEL_LIGHT_AMBIENT = 2;\n"
+"vec3 vertex_lighting(vec3 normal, vec3 worldPos) {\n"
+"    vec3 n = normalize(normal);\n"
+"    if (uLightCount == 0)\n"
+"        return uLightAmbient + uLightColor * max(dot(n, normalize(uLightDir)), 0.0);\n"
+"    vec3 lighting = uLightAmbient;\n"
+"    for (int i = 0; i < 8; ++i) {\n"
+"        if (i >= uLightCount) break;\n"
+"        vec4 positionType = uLights[i][0];\n"
+"        vec4 direction = uLights[i][1];\n"
+"        vec4 colorIntensity = uLights[i][2];\n"
+"        vec4 ambientIntensity = uLights[i][3];\n"
+"        int type = int(positionType.w + 0.5);\n"
+"        vec3 color = colorIntensity.rgb * colorIntensity.a;\n"
+"        vec3 ambient = ambientIntensity.rgb * ambientIntensity.a;\n"
+"        if (type == MODEL_LIGHT_AMBIENT) {\n"
+"            lighting += color + ambient;\n"
+"        } else if (type == MODEL_LIGHT_DIRECT) {\n"
+"            vec3 l = normalize(-direction.xyz);\n"
+"            lighting += clamp(color * max(dot(n, l), 0.0), vec3(0.0), vec3(1.0)) + ambient;\n"
+"        } else {\n"
+"            vec3 delta = positionType.xyz - worldPos;\n"
+"            vec3 l = normalize(delta);\n"
+"            float dist = length(delta) / 64.0 + 1.0;\n"
+"            float atten = 1.0 / (dist * dist);\n"
+"            lighting += clamp(color * atten * max(dot(n, l), 0.0), vec3(0.0), vec3(1.0));\n"
+"            lighting += ambient * atten;\n"
+"        }\n"
+"    }\n"
+"    return min(lighting, vec3(1.0));\n"
+"}\n"
+"void main() {\n"
+"    vec4 pos4 = vec4(i_position, 1.0);\n"
+"    vec4 norm4 = vec4(i_normal, 0.0);\n"
+"    vec4 position = vec4(0.0);\n"
+"    vec4 normal = vec4(0.0);\n"
+"    for (int i = 0; i < 4; ++i) {\n"
+"        int boneIdx = int(i_skin1[i]) + int(uFirstBoneLookupIndex);\n"
+"        position += uBones[boneIdx] * pos4 * i_boneWeight1[i];\n"
+"        normal += uBones[boneIdx] * norm4 * i_boneWeight1[i];\n"
+"    }\n"
+"    position.w = 1.0;\n"
+"    mat4 i_instance = mat4(i_instance0, i_instance1, i_instance2, i_instance3);\n"
+"    if (uGroundEffect != 0) {\n"
+"        float grassHeight = max(uGrassHeight.y - uGrassHeight.x, 0.001);\n"
+"        float grassTop = smoothstep(uGrassWind.z, 1.0, clamp((position.z - uGrassHeight.x) / grassHeight, 0.0, 1.0));\n"
+"        float grassPhase = dot(i_instance3.xy, uGrassPhase.xy);\n"
+"        float grassSway = sin(uGrassTime * uGrassWind.x + grassPhase) * uGrassWind.y * grassHeight * grassTop;\n"
+"        position.xy += uGrassPhase.zw * grassSway;\n"
+"    }\n"
+"    vec4 worldPos = i_instance * position;\n"
+"    v_color = i_color;\n"
+"    if (uGroundEffect != 0) {\n"
+"        float fadeDist = length(worldPos.xy - uGrassCameraPos.xy);\n"
+"        v_color.a *= 1.0 - smoothstep(uGrassFade.x, uGrassFade.y, fadeDist);\n"
+"    }\n"
+"    v_texcoord = i_texcoord;\n"
+"    v_texcoord2 = (uTextureMatrix * worldPos).xy;\n"
+"    v_lighting = vertex_lighting(normalize(mat3(i_instance) * normal.xyz), worldPos.xyz);\n"
+#ifdef USE_SHADOWMAPS
+"    v_shadow = uLightMatrix * worldPos;\n"
+#endif
+"    gl_Position = uViewProjectionMatrix * worldPos;\n"
+"}\n";
 
 static LPSHADER instanced_shader;
 
-/* Instanced model shader for static meshes (ground-effect clutter). Uses model_vs
-   compiled with BZ_USE_INSTANCING to replace uModelMatrix with per-instance attributes. */
 LPSHADER R_ModelShaderInstanced(void) {
     if (!instanced_shader) {
         MATRIX4 bones[128];
 
-        instanced_shader = R_InitShaderDefines(model_vs, model_fs, "#define BZ_USE_INSTANCING 1\n");
+        instanced_shader = R_InitShader(instanced_vs, model_fs);
         if (instanced_shader) {
             FOR_LOOP(i, 128) Matrix4_identity(&bones[i]);
             R_Call(glUseProgram, instanced_shader->progid);
             R_Call(glUniform1f, instanced_shader->uAlphaCutoff, 0.5f);
             /* Static grass has no keyed bones; install its identity palette once, not once per frame. */
-            R_Call(glUniformMatrix4fv, instanced_shader->uBones, tr.bone_count, GL_FALSE, bones[0].v);
+            R_Call(glUniformMatrix4fv, instanced_shader->uBones, 128, GL_FALSE, bones[0].v);
         }
     }
     return instanced_shader;
 }
 
-/* Desktop defaults to GLSL 1.40; -DBZ_GLSL_120 selects the gl4es GLSL 1.20 path.
-   GLES 3 always uses GLSL ES 3.00. extra_defines is injected between the
-   version/BZ_BONE_COUNT prefix and the shader body. */
-static void R_SetShaderSource(GLuint shader, LPCSTR source, LPCSTR extra_defines) {
-    char prefix[160];
-    LPCSTR body = strchr(source, '\n');
-    snprintf(prefix, sizeof(prefix),
-#ifdef BZ_GL_ES3
-             "#version 300 es\nprecision highp float;\nprecision highp int;\n#define BZ_BONE_COUNT %u\n",
-#elif defined(BZ_GLSL_120)
-             "#version 120\n#define BZ_BONE_COUNT %u\n",
-#else
-             "#version 140\n#define BZ_BONE_COUNT %u\n",
-#endif
-             (unsigned)tr.bone_count);
-    LPCSTR strings[] = { prefix, extra_defines ? extra_defines : "", body ? body + 1 : source };
-    GLint lengths[] = { (GLint)strlen(strings[0]), (GLint)strlen(strings[1]), (GLint)strlen(strings[2]) };
-    R_Call(glShaderSource, shader, 3, strings, lengths);
-}
-
-static LPSHADER R_InitShaderDefines(LPCSTR vs_src, LPCSTR fs_src, LPCSTR extra_defines) {
+LPSHADER R_InitShader(LPCSTR vs_default, LPCSTR fs_default){
     GLuint vs = R_Call(glCreateShader, GL_VERTEX_SHADER);
     GLuint fs = R_Call(glCreateShader, GL_FRAGMENT_SHADER);
 
-    R_SetShaderSource(vs, vs_src, extra_defines);
+    int length = (int)strlen(vs_default);
+    R_Call(glShaderSource, vs, 1, (const GLchar **)&vs_default, &length);
     R_Call(glCompileShader, vs);
 
     GLint status;
@@ -457,7 +520,7 @@ static LPSHADER R_InitShaderDefines(LPCSTR vs_src, LPCSTR fs_src, LPCSTR extra_d
     if (status == GL_FALSE) {
         GLint logLength = 0;
         glGetShaderiv(vs, GL_INFO_LOG_LENGTH, &logLength);
-        if (logLength > 1) {
+        if (logLength > 1) { // There's something to print
             char *log = malloc(logLength);
             if (log) {
                 glGetShaderInfoLog(vs, logLength, NULL, log);
@@ -471,24 +534,25 @@ static LPSHADER R_InitShaderDefines(LPCSTR vs_src, LPCSTR fs_src, LPCSTR extra_d
         }
         return NULL;
     }
-    R_SetShaderSource(fs, fs_src, extra_defines);
+    length = (int)strlen(fs_default);
+    R_Call(glShaderSource, fs, 1, (const GLchar **)&fs_default, &length);
     R_Call(glCompileShader, fs);
 
     R_Call(glGetShaderiv, fs, GL_COMPILE_STATUS, &status);
     if (status == GL_FALSE) {
         GLint logLength = 0;
         glGetShaderiv(fs, GL_INFO_LOG_LENGTH, &logLength);
-        if (logLength > 1) {
+        if (logLength > 1) { // There's something to print
             char *log = malloc(logLength);
             if (log) {
                 glGetShaderInfoLog(fs, logLength, NULL, log);
-                fprintf(stderr, "Fragment shader compilation failed:\n%s\n", log);
+                fprintf(stderr, "Vertex shader compilation failed:\n%s\n", log);
                 free(log);
             } else {
-                fprintf(stderr, "Fragment shader compilation failed (could not allocate log buffer)\n");
+                fprintf(stderr, "Vertex shader compilation failed (could not allocate log buffer)\n");
             }
         } else {
-            fprintf(stderr, "Fragment shader compilation failed (no log)\n");
+            fprintf(stderr, "Vertex shader compilation failed (no log)\n");
         }
         return NULL;
     }
@@ -507,18 +571,12 @@ static LPSHADER R_InitShaderDefines(LPCSTR vs_src, LPCSTR fs_src, LPCSTR extra_d
     R_Call(glBindAttribLocation, program->progid, attrib_boneWeight1, "i_boneWeight1");
     R_Call(glBindAttribLocation, program->progid, attrib_particleSize, "i_size");
     R_Call(glBindAttribLocation, program->progid, attrib_particleAxis, "i_axis");
-#if defined(BZ_GLSL_120) && !defined(BZ_GL_ES3)
     R_Call(glBindAttribLocation, program->progid, attrib_instance + 0, "i_instance0");
     R_Call(glBindAttribLocation, program->progid, attrib_instance + 1, "i_instance1");
     R_Call(glBindAttribLocation, program->progid, attrib_instance + 2, "i_instance2");
     R_Call(glBindAttribLocation, program->progid, attrib_instance + 3, "i_instance3");
-#else
-    R_Call(glBindAttribLocation, program->progid, attrib_instance, "i_instance");
-#endif
 
     R_Call(glLinkProgram, program->progid);
-
-
     R_Call(glUseProgram, program->progid);
 
 #define R_RegisterUniform(PROGRAM, NAME) PROGRAM->NAME = glGetUniformLocation(PROGRAM->progid, #NAME);
@@ -529,12 +587,10 @@ static LPSHADER R_InitShaderDefines(LPCSTR vs_src, LPCSTR fs_src, LPCSTR extra_d
     R_RegisterUniform(program, uNormalMatrix);
     R_RegisterUniform(program, uTextureMatrix);
     R_RegisterUniform(program, uTexture);
-#ifdef USE_SHADOWMAPS
+#if defined(USE_SHADOWMAPS) || defined(DEBUG_PATHFINDING)
     R_RegisterUniform(program, uShadowmap);
 #endif
-#ifdef USE_FOGOFWAR
     R_RegisterUniform(program, uFogOfWar);
-#endif
     R_RegisterUniform(program, uBones);
     R_RegisterUniform(program, uAlphaKey);
     R_RegisterUniform(program, uAlphaCutoff);
@@ -553,41 +609,64 @@ static LPSHADER R_InitShaderDefines(LPCSTR vs_src, LPCSTR fs_src, LPCSTR extra_d
     R_RegisterUniform(program, uFirstBoneLookupIndex);
 
     R_Call(glUniform1i, program->uTexture, 0);
-#ifdef USE_SHADOWMAPS
+#if defined(USE_SHADOWMAPS) || defined(DEBUG_PATHFINDING)
     R_Call(glUniform1i, program->uShadowmap, 1);
 #endif
-#ifdef USE_FOGOFWAR
     R_Call(glUniform1i, program->uFogOfWar, 2);
-#endif
-    /* UV transform defaults to identity so callers that don't animate UVs can skip the upload. */
-    GLfloat identity_uv[9] = { 1,0,0, 0,1,0, 0,0,1 };
-    R_Call(glUniformMatrix3fv, program->uUvMatrix, 1, GL_FALSE, identity_uv);
+
+    /* Support both the old target UV uniforms and the rebased uUvMatrix caller. */
+    {
+        GLint loc;
+        GLfloat identity_uv[9] = { 1,0,0, 0,1,0, 0,0,1 };
+        R_Call(glUniformMatrix3fv, program->uUvMatrix, 1, GL_FALSE, identity_uv);
+        loc = glGetUniformLocation(program->progid, "uUvTrans");
+        if (loc >= 0) R_Call(glUniform2f, loc, 0.0f, 0.0f);
+        loc = glGetUniformLocation(program->progid, "uUvRot");
+        if (loc >= 0) R_Call(glUniform2f, loc, 0.0f, 1.0f);
+        loc = glGetUniformLocation(program->progid, "uUvScale");
+        if (loc >= 0) R_Call(glUniform2f, loc, 1.0f, 1.0f);
+    }
 
     return program;
 }
 
-LPSHADER R_InitShader(LPCSTR vs_default, LPCSTR fs_default) {
-    return R_InitShaderDefines(vs_default, fs_default, NULL);
-}
 
-/* Model callers submit one semantic lighting state; only this proxy knows the uniform packing contract. */
+/* Current model callers keep their semantic lighting interface. The target
+ * shader consumes the same packed uLights[] representation when count > 0. */
 void R_SetModelLighting(LPCSHADER shader, LPCMODELLIGHTING lighting) {
     MATRIX4 packed[BZ_MODEL_LIGHT_MAX];
     if (!lighting || lighting->count < 1 || lighting->count > BZ_MODEL_LIGHT_MAX) {
-        ri.error("R_SetModelLighting: light count must be 1..%u, got %u", BZ_MODEL_LIGHT_MAX,
-                 lighting ? lighting->count : 0);
+        ri.error("R_SetModelLighting: light count must be 1..%u, got %u",
+                 BZ_MODEL_LIGHT_MAX, lighting ? lighting->count : 0);
         return;
     }
     R_PackModelLighting(packed, lighting);
     R_Call(glUniform1i, shader->uLightCount, lighting->count);
-    R_Call(glUniformMatrix4fv, shader->uLights, lighting->count, GL_FALSE, packed[0].v);
+    R_Call(glUniformMatrix4fv, shader->uLights, lighting->count,
+           GL_FALSE, packed[0].v);
 }
 
-/* Grass uses the same proxy boundary so game code never uploads its packed matrix directly. */
+/* Adapt the current semantic grass state to the target shader's separate
+ * grass uniforms instead of the rebased packed uGrassParams matrix. */
 void R_SetModelGrass(LPCSHADER shader, LPCMODELGRASS grass) {
-    MATRIX4 packed;
-    R_PackModelGrass(&packed, grass);
-    R_Call(glUniformMatrix4fv, shader->uGrassParams, 1, GL_FALSE, packed.v);
+    GLint loc;
+    if (!shader || !grass) return;
+
+    loc = glGetUniformLocation(shader->progid, "uGrassCameraPos");
+    if (loc >= 0) R_Call(glUniform3f, loc, grass->camera.x, grass->camera.y, 0.0f);
+    loc = glGetUniformLocation(shader->progid, "uGrassFade");
+    if (loc >= 0) R_Call(glUniform2f, loc, grass->fade.x, grass->fade.y);
+    loc = glGetUniformLocation(shader->progid, "uGrassTime");
+    if (loc >= 0) R_Call(glUniform1f, loc, grass->time);
+    loc = glGetUniformLocation(shader->progid, "uGrassWind");
+    if (loc >= 0) R_Call(glUniform3f, loc, grass->wind.x, grass->wind.y, grass->wind.z);
+    loc = glGetUniformLocation(shader->progid, "uGrassPhase");
+    if (loc >= 0) R_Call(glUniform4f, loc, grass->phase.x, grass->phase.y,
+                         grass->phase.z, grass->phase.w);
+    loc = glGetUniformLocation(shader->progid, "uGrassHeight");
+    if (loc >= 0) R_Call(glUniform2f, loc, grass->height.x, grass->height.y);
+    loc = glGetUniformLocation(shader->progid, "uGroundEffect");
+    if (loc >= 0) R_Call(glUniform1i, loc, grass->enabled ? 1 : 0);
 }
 
 void R_ReleaseShader(LPSHADER shader) {

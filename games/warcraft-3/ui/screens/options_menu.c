@@ -4,7 +4,6 @@
 
 #include <stdlib.h>
 
-#include "common/video_modes.h"
 #include "../ui_local.h"
 #include "../ui_screen.h"
 #include "../generated/options_menu.h"
@@ -30,6 +29,11 @@ typedef struct {
     LPCSTR text;
     LONG value;
 } optionsMenuItem_t;
+
+typedef struct {
+    DWORD width;
+    DWORD height;
+} optionsResolution_t;
 
 static OptionsMenu_t options_menu;
 static optionsPanel_t current_panel = OPTIONS_PANEL_GAMEPLAY;
@@ -186,27 +190,42 @@ static void OptionsMenu_InitVideoMenus(void) {
         { "OFF", 0 },
         { "ON", 1 },
     };
+    static optionsResolution_t const resolutions[] = {
+        { 640, 480 },
+        { 800, 600 },
+        { 1024, 768 },
+        { 1152, 864 },
+        { 1280, 720 },
+        { 1280, 960 },
+        { 1280, 1024 },
+        { 1366, 768 },
+        { 1600, 900 },
+        { 1600, 1200 },
+        { 1920, 1080 },
+        { 1920, 1200 },
+        { 2560, 1440 },
+    };
     DWORD selected;
     char current_resolution[32];
 
     if (options_menu.ResolutionPopupMenuMenu) {
         UI_MenuClearItems(options_menu.ResolutionPopupMenuMenu);
-        FOR_LOOP(i, video_mode_count()) {
+        FOR_LOOP(i, OPTIONS_ARRAY_COUNT(resolutions)) {
             char text[32];
 
             snprintf(text,
                      sizeof(text),
                      "%ux%u",
-                     (unsigned)video_modes[i].width,
-                     (unsigned)video_modes[i].height);
+                     (unsigned)resolutions[i].width,
+                     (unsigned)resolutions[i].height);
             UI_MenuAddItem(options_menu.ResolutionPopupMenuMenu, text, (LONG)i);
         }
-        selected = OptionsMenu_CvarSelection("vid_mode", BZ_VIDEO_MODE_DEFAULT, video_mode_count());
+        selected = OptionsMenu_CvarSelection("vid_mode", 2, OPTIONS_ARRAY_COUNT(resolutions));
         snprintf(current_resolution,
                  sizeof(current_resolution),
                  "%ux%u",
-                 (unsigned)video_modes[selected].width,
-                 (unsigned)video_modes[selected].height);
+                 (unsigned)resolutions[selected].width,
+                 (unsigned)resolutions[selected].height);
         OptionsMenu_SetPopupTitle(options_menu.ResolutionMenu, current_resolution);
         UI_SetHidden(options_menu.ResolutionPopupMenuMenu, true);
         OptionsMenu_SetPopupCvar(options_menu.ResolutionPopupMenuMenu, "vid_mode");
