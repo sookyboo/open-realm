@@ -78,14 +78,21 @@ export LIBGL_SILENTSTUB=0
 # export LIBGL_FORCE16BITS=1
 # export LIBGL_SHRINK=1
 
-#./open-realm.${DEVICE_ARCH} -data "$GAMEDIR/gamefiles"  +menu_single_player_campaign +vid_mode 0
-./open-realm.${DEVICE_ARCH} -data "$GAMEDIR/gamefiles" +map Maps\\Campaign\\Human02.w3m +vid_mode 0 +set r_profile 1 +set r_cursor 1 \
-+r_entities 1 \
-  +r_msaa 0 \
-  +r_vsync 0 \
-  +r_fogofwar 1 \
-  +r_particles 1 \
-  +r_stats 1
+#./openwarcraft3.${DEVICE_ARCH} -data "$GAMEDIR/gamefiles/warcraft-3"  +menu_single_player_campaign +vid_mode 0
+#./openwarcraft3.${DEVICE_ARCH} -data "$GAMEDIR/gamefiles/warcraft-3" +map Maps\\Campaign\\Human02.w3m +vid_mode 0 +set r_profile 0 +set r_cursor 2 \
+#+r_entities 1 \
+#  +r_msaa 0 \
+#  +r_vsync 0 \
+#  +r_fogofwar 1 \
+#  +r_particles 1 \
+#  +r_shadows 0 \
+#  +r_stats 1
+
+#/opt/muos/bin/strace
+./openwow.${DEVICE_ARCH} -data "$GAMEDIR/gamefiles/world-of-warcraft" +vid_mode 0 +set r_profile 0 +set r_cursor 1  \
+  +set wow_playerinfo '\race\Human\sex\Male\class\1\appearance\0' \
+  +map playercreate
+
 
 
 # Cleanup any running gptokeyb instances, and any platform specific stuff.
