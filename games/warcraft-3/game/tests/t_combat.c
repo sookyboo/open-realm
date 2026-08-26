@@ -115,6 +115,22 @@ TEST(wc3_combat, tdamage_lethal_calls_die) {
     T_ASSERT(_die_last_attacker == attacker);
 }
 
+TEST(wc3_combat, tdamage_lethal_without_die_callback_is_safe) {
+    LPEDICT target   = make_combat_unit(MAKEFOURCC('B','0','0','1'), 100.0f, 0.0f, 0.0f);
+    LPEDICT attacker = make_combat_unit(MAKEFOURCC('h','p','e','a'), 250.0f, 50.0f, 0.0f);
+
+    /* Destructables/chests may rely on generic death state and have no
+     * per-entity death callback.  A lethal hit must not call through NULL. */
+    target->die = NULL;
+
+    T_Damage(target, attacker, 100);
+
+    T_ASSERT(target->health.value == 0.0f);
+    T_ASSERT(M_IsDead(target));
+    T_NOT_NULL(attacker->currentmove);
+    T_STREQ(attacker->currentmove->animation, "stand");
+}
+
 TEST(wc3_combat, tdamage_lethal_resets_attacker_to_stand) {
     LPEDICT target   = make_combat_unit(MAKEFOURCC('h','f','o','o'), 50.0f, 0.0f, 0.0f);
     LPEDICT attacker = make_combat_unit(MAKEFOURCC('h','p','e','a'), 250.0f, 50.0f, 0.0f);
