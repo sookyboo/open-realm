@@ -143,9 +143,20 @@ void T_Damage(LPEDICT target, LPEDICT attacker, int damage) {
 
     if (target->health.value <= damage) {
         target->health.value = 0;
+
+        /* Death state is generic; die() is an optional entity-specific hook.
+         * Destructables such as chests may legitimately have no callback. */
+        if (target->s.flags & EF_FOW_BLOCKER) {
+            G_FowMarkBlockersDirty();
+        }
+
         unit_leavecombat(target);
         unit_leavecombat(attacker);
-        target->die(target, attacker);
+
+        if (target->die) {
+            target->die(target, attacker);
+        }
+
         if (attacker->patrol_a) {
             order_patrol_resume(attacker);
         } else if (attacker->attackmove_waypoint) {
