@@ -74,13 +74,17 @@ WORKDIR /src
 
 COPY . .
 
-RUN make COMPAT_STRLCPY=1 build
+RUN make COMPAT_STRL=1 GLSL=120 build
+
+RUN make openwow COMPAT_STRL=1 GLSL=120 build
 
 RUN mkdir -p release &&  \
       cp build/bin/openwarcraft3 release/ && \
+      cp build/bin/openwow release/ && \
       cp -r build/lib/. release/ && \
 	  cp /opt/gl4es/lib/libGL.so.1 release/ && \
 	  cp /opt/gl4es/lib/libEGL.so.1 release/ && \
-      mv  release/openwarcraft3 release/open-realm.aarch64
+      mv  release/openwarcraft3 release/openwarcraft3.aarch64 && \
+      mv  release/openwow release/openwow.aarch64
 
 # Abuse port provided libglx so and libgldispatch so until I add them to the build
