@@ -97,3 +97,7 @@ export LIBGL_SILENTSTUB=0
 
 # Cleanup any running gptokeyb instances, and any platform specific stuff.
 pm_finish
+
+# Useful commands
+# ./perf record -F 499 -g --call-graph fp -p $(pidof open-realm.aarch64) -- sleep 15
+# ./perf report --stdio --children > full.txt
