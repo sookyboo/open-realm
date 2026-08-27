@@ -563,7 +563,7 @@ DWORD GetDyingUnit(LPJASS j) {
     return jass_pushlighthandle(j, jass_getcontext(j)->unit, "unit");
 }
 DWORD GetKillingUnit(LPJASS j) {
-    return jass_pushlighthandle(j, jass_getcontext(j)->unit, "unit");
+    return jass_pushlighthandle(j, jass_getcontext(j)->source, "unit");
 }
 DWORD GetDecayingUnit(LPJASS j) {
     return jass_pushlighthandle(j, jass_getcontext(j)->unit, "unit");
