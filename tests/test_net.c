@@ -376,8 +376,10 @@ TEST(net, msg_writebyte_readbyte_roundtrip) {
     BYTE buf[16];
     sizeBuf_t sb = make_msg_buf(buf, sizeof(buf));
     MSG_WriteByte(&sb, 0xAB);
+    MSG_WriteByte(&sb, 0xFF);
     sb.readcount = 0;
-    T_EQ(MSG_ReadByte(&sb) & 0xFF, 0xAB);
+    T_EQ(MSG_ReadByte(&sb), 0xAB);
+    T_EQ(MSG_ReadByte(&sb), 0xFF);
 }
 
 TEST(net, msg_writeshort_readshort_roundtrip) {

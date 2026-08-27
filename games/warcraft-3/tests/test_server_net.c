@@ -502,13 +502,16 @@ TEST(server_net, local_map_uses_loopback_without_udp) {
     test_mapinfo = NULL;
 }
 
-TEST(server_net, server_snapshot_ring_scales_to_client_capacity) {
+TEST(server_net, server_snapshot_ring_retains_delta_history_for_all_clients) {
     reset_server_state(4);
 
     SV_InitGame();
-    /* History is required; the old test omitted it before the per-frame packet budget was reduced. */
-    T_EQ(svs.num_client_entities, (DWORD)(test_ge.max_clients * MAX_PACKET_ENTITIES * UPDATE_BACKUP));
-    T_ASSERT(svs.num_client_entities < (DWORD)(UPDATE_BACKUP * test_ge.max_clients * MAX_GAME_ENTITIES));
+
+    /* The entity ring backs UPDATE_BACKUP frame snapshots for every client.
+     * Dropping the UPDATE_BACKUP factor can overwrite an older frame while it
+     * is still eligible to be used as the base for delta compression. */
+    T_EQ(svs.num_client_entities,
+         (DWORD)(UPDATE_BACKUP * test_ge.max_clients * MAX_PACKET_ENTITIES));
     T_ASSERT(svs.client_entities != NULL);
 }
 
@@ -691,8 +694,8 @@ TEST(server_net, lobby_setup_message_round_trips_slot_table) {
     FOR_LOOP(i, 1) {
         T_EQ(MSG_ReadByte(&msg), 0);
         T_EQ(MSG_ReadByte(&msg), 0);
-        T_EQ(MSG_ReadByte(&msg), -1);
-        T_EQ(MSG_ReadByte(&msg), -1);
+        T_EQ(MSG_ReadByte(&msg), 255);
+        T_EQ(MSG_ReadByte(&msg), 255);
         T_EQ(MSG_ReadByte(&msg), 0);
         T_EQ(MSG_ReadByte(&msg), 0);
         T_EQ(MSG_ReadByte(&msg), 0);
