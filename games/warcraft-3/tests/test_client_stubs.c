@@ -67,6 +67,12 @@ void CL_Disconnect(LPCSTR reason, BOOL notify) { (void)reason; (void)notify; cls
 void CL_EntityEvent(entityState_t const *ent) { (void)ent; }
 void Cbuf_AddText(LPCSTR text) { (void)text; }
 unsigned int SDL_GetTicks(void) { return 0; }
+int SDL_ShowCursor(int toggle) { (void)toggle; return 1; }
+unsigned int SDL_GetMouseState(int *x, int *y) {
+    if (x) *x = 0;
+    if (y) *y = 0;
+    return 0;
+}
 void Com_Error(errorCode_t code, LPCSTR fmt, ...) { (void)code; (void)fmt; }
 
 void test_client_stubs_init(void) {
