@@ -740,17 +740,18 @@ TEST(renderer_terrain, cliff_ramps_require_adjacent_corners_one_level_apart) {
 
 /* The shadow and non-shadow builds share lighting; only the key's direct contribution is occluded.
    The descriptor always emits the receiver wiring and gates it behind GLSL `#ifdef USE_SHADOWMAPS`,
-   so the raw source carries the same body in both builds. */
+   so the raw source carries the same body in both builds.  Shared declaration keywords are dialect-specific
+   (`varying` in GLSL 120, `out`/`in` in newer dialects) and are tested separately below. */
 TEST(renderer_shader, shadow_receiver_contract) {
     R_SetShaderSourceFromDesc(1, &sd_model, true, NULL);
     T_NOT_NULL(strstr(shader_src, "return lighting;")); /* clamp moved out of vertex_lighting */
-    T_NOT_NULL(strstr(shader_src, "out vec3 v_shadowlight;"));
+    T_NOT_NULL(strstr(shader_src, "vec3 v_shadowlight;"));
     T_NOT_NULL(strstr(shader_src, "v_shadowlight = vec3(0.0);"));
     T_NOT_NULL(strstr(shader_src, "contribution - u_lights[i][3].rgb * u_lights[i][3].a"));
 
     R_SetShaderSourceFromDesc(1, &sd_model, false, NULL);
     T_NOT_NULL(strstr(shader_src, "light = min(light, vec3(1.0));")); /* clamp applied after occlusion */
-    T_NOT_NULL(strstr(shader_src, "in vec3 v_shadowlight;"));
+    T_NOT_NULL(strstr(shader_src, "vec3 v_shadowlight;"));
     T_NOT_NULL(strstr(shader_src, "light -= v_shadowlight * (1.0 - shadow_visibility(u_shadowmap, v_shadow));"));
     T_NOT_NULL(strstr(shader_src, "textureSize(depths, 0)"));
 }
