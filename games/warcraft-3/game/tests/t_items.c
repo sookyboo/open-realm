@@ -17,6 +17,8 @@ static BOOL inventory_refresh_saw_inventory_layer;
 static BOOL inventory_refresh_saw_other_layer;
 static PATHSTR inventory_panel_images[8];
 static DWORD inventory_panel_image_count;
+static uiFrame_t inventory_panel_frame;
+static BOOL inventory_panel_frame_seen;
 
 static int capture_inventory_panel_image(LPCSTR name) {
     DWORD index = inventory_panel_image_count;
@@ -31,11 +33,18 @@ static int capture_inventory_panel_image(LPCSTR name) {
 static void reset_inventory_panel_capture(void) {
     memset(inventory_panel_images, 0, sizeof(inventory_panel_images));
     inventory_panel_image_count = 0;
+    memset(&inventory_panel_frame, 0, sizeof(inventory_panel_frame));
+    inventory_panel_frame_seen = false;
 }
 
 static void capture_inventory_refresh_write(pfWriteType_t type, void const *value) {
     LONG byte;
 
+    if (type == PF_UIFRAME && value) {
+        inventory_panel_frame = *(uiFrame_t const *)value;
+        inventory_panel_frame_seen = true;
+        return;
+    }
     if (type != PF_BYTE || !value) {
         return;
     }
@@ -304,6 +313,13 @@ TEST(wc3_items, inventory_panel_uses_race_cover_when_selected_unit_has_no_invent
     T_ASSERT(!inventory_refresh_saw_other_layer);
     T_EQ(inventory_panel_image_count, 1);
     T_STREQ(inventory_panel_images[0], "TestUI\\Textures\\human-inventory-cover.blp");
+    T_ASSERT(inventory_panel_frame_seen);
+    T_EQ(inventory_panel_frame.flags.type, FT_TEXTURE);
+    T_EQ(inventory_panel_frame.flags.alphaMode, BLEND_MODE_ALPHAKEY);
+    T_EQ(inventory_panel_frame.tex.coord[0], 0);
+    T_EQ(inventory_panel_frame.tex.coord[1], 0xff);
+    T_EQ(inventory_panel_frame.tex.coord[2], (BYTE)(0.25f * 0xff));
+    T_EQ(inventory_panel_frame.tex.coord[3], (BYTE)(0.75f * 0xff));
 }
 
 TEST(wc3_items, inventory_panel_uses_local_player_race_not_selected_unit_race) {

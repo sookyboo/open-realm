@@ -91,6 +91,25 @@ void UI_WriteTextureFrame(FLOAT x, FLOAT y, FLOAT w, FLOAT h, LPCSTR art) {
     UI_WriteProxyFrame(&frame, NULL, 0);
 }
 
+void UI_WriteTextureFrameFromDef(FLOAT x, FLOAT y, FLOAT w, FLOAT h, LPCSTR art, LPCFRAMEDEF def) {
+    uiFrame_t frame;
+
+    if (!art || !*art || !def || def->Type != FT_TEXTURE) {
+        return;
+    }
+    memset(&frame, 0, sizeof(frame));
+    frame.flags.type = FT_TEXTURE;
+    frame.flags.alphaMode = def->AlphaMode;
+    frame.color = def->Color;
+    frame.tex.index = gi.ImageIndex(art);
+    frame.tex.coord[0] = (BYTE)(def->Texture.TexCoord.min.x * 0xff);
+    frame.tex.coord[1] = (BYTE)(def->Texture.TexCoord.max.x * 0xff);
+    frame.tex.coord[2] = (BYTE)(def->Texture.TexCoord.min.y * 0xff);
+    frame.tex.coord[3] = (BYTE)(def->Texture.TexCoord.max.y * 0xff);
+    UI_SetFrameRect(&frame, x, y, w, h);
+    UI_WriteProxyFrame(&frame, NULL, 0);
+}
+
 void UI_WriteTextFrameSized(FLOAT x, FLOAT y, FLOAT w, FLOAT h, LPCSTR text, COLOR32 color,
                             uiFontJustificationH_t align, DWORD font_size) {
     uiFrame_t frame;

@@ -234,13 +234,25 @@ static void WriteInventory(LPEDICT player, LPEDICT ent) {
     BYTE count;
 
     if (!capacity) {
+        LPCFRAMEDEF cover_def;
+        LPCSTR cover_art;
+
         /* The console artwork underneath always exposes the six-slot inventory
-         * area. Units without an inventory must cover that area with the
-         * local player's race skin instead of showing six empty usable slots. */
-        UI_WriteTextureFrame(0.5150f, 0.4864f, 0.0724f, 0.1098f,
-                             Theme_PlayerString(player ? player->client : NULL,
-                                                "ConsoleInventoryCoverTexture",
-                                                "ConsoleInventoryCoverTexture"));
+         * area. The authoritative FDF owns the source-image crop/alpha mode;
+         * war3skins owns the local player's race-specific replacement image. */
+        if (!UI_EnsureFDF("UI\\FrameDef\\UI\\InventoryBar.fdf") ||
+            !(cover_def = UI_FindFrame("InventoryCoverTexture"))) {
+            fprintf(stderr, "WriteInventory: missing InventoryCoverTexture in UI\\FrameDef\\UI\\InventoryBar.fdf\n");
+            return;
+        }
+        cover_art = Theme_PlayerString(player ? player->client : NULL,
+                                       "ConsoleInventoryCoverTexture", NULL);
+        if (!cover_art || !*cover_art) {
+            fprintf(stderr, "WriteInventory: missing ConsoleInventoryCoverTexture for player skin\n");
+            return;
+        }
+        UI_WriteTextureFrameFromDef(0.5150f, 0.4864f, 0.0724f, 0.1098f,
+                                    cover_art, cover_def);
         return;
     }
 

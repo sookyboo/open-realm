@@ -21,6 +21,7 @@ void UI_WriteProxyFrameToParent(LPUIFRAME frame, HANDLE data, DWORD data_size, D
 void UI_SetFramePointRelative(uiFramePoint_t *point, uiFramePointPos_t target, DWORD relative, FLOAT offset, BOOL y_axis);
 void UI_WriteTextFrame(FLOAT x, FLOAT y, FLOAT w, FLOAT h, LPCSTR text, COLOR32 color, uiFontJustificationH_t align);
 void UI_WriteTextureFrame(FLOAT x, FLOAT y, FLOAT w, FLOAT h, LPCSTR art);
+void UI_WriteTextureFrameFromDef(FLOAT x, FLOAT y, FLOAT w, FLOAT h, LPCSTR art, LPCFRAMEDEF def);
 void UI_WriteTextFrameSized(FLOAT x, FLOAT y, FLOAT w, FLOAT h, LPCSTR text, COLOR32 color, uiFontJustificationH_t align, DWORD font_size);
 void UI_WriteCommandTextFrame(FLOAT x, FLOAT y, FLOAT w, FLOAT h, LPCSTR text, LPCSTR command, COLOR32 color, uiFontJustificationH_t align, DWORD font_size);
 void UI_WriteBackdropFrame(FLOAT x, FLOAT y, FLOAT w, FLOAT h, LPCSTR background, LPCSTR edge);

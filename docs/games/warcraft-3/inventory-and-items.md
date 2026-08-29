@@ -95,12 +95,19 @@ authors one of three states:
 - capacity `6`: leave all six normal slots visible.
 
 Both texture keys come from `UI\war3skins.txt`, using the local player's race
-section with `Default` fallback. The selected unit determines whether inventory
-exists and what it contains; the local player's console skin determines the
-cover/filler artwork. Hero/non-hero stats remain an independent info-panel
-decision. This prevents an ordinary peasant from exposing six empty inventory
-slots while still allowing custom non-hero units with an inventory ability to
-show their inventory.
+section with `Default` fallback. For the no-inventory cover,
+`UI\FrameDef\UI\InventoryBar.fdf` remains authoritative for the texture
+frame's `TexCoord` crop and alpha mode while the skin supplies the actual
+race-specific BLP. This matters because Warcraft III console BLPs can contain
+unused regions; the renderer must sample the FDF-selected sub-region rather
+than squeeze the complete image canvas into the cover rectangle. No gameplay
+code derives crop values from BLP dimensions or alpha pixels.
+
+The selected unit determines whether inventory exists and what it contains;
+the local player's console skin determines the cover/filler artwork. Hero/non-
+hero stats remain an independent info-panel decision. This prevents an ordinary
+peasant from exposing six empty inventory slots while still allowing custom
+non-hero units with an inventory ability to show their inventory.
 
 ## Inventory Refresh Lifecycle
 

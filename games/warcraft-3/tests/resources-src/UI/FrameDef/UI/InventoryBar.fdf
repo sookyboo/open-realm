@@ -1,0 +1,6 @@
+Frame "SIMPLEFRAME" "SimpleInventoryCover" {
+    Texture "InventoryCoverTexture" {
+        TexCoord 0.0, 1.0, 0.25, 0.75,
+        AlphaMode "ALPHAKEY",
+    }
+}
