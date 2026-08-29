@@ -16,6 +16,7 @@ extern LPGAMECLIENT ui_current_client;
 void UI_SetCurrentClient(LPGAMECLIENT client);
 void UI_SetFramePoint(uiFramePoint_t *point, uiFramePointPos_t target, DWORD relative, FLOAT offset, BOOL y_axis);
 void UI_SetFrameRect(LPUIFRAME frame, FLOAT x, FLOAT y, FLOAT w, FLOAT h);
+BOOL UI_GetAbsoluteFrameRect(LPCFRAMEDEF def, LPRECT out);
 void UI_WriteProxyFrame(LPUIFRAME frame, HANDLE data, DWORD data_size);
 void UI_WriteProxyFrameToParent(LPUIFRAME frame, HANDLE data, DWORD data_size, DWORD parent);
 void UI_SetFramePointRelative(uiFramePoint_t *point, uiFramePointPos_t target, DWORD relative, FLOAT offset, BOOL y_axis);

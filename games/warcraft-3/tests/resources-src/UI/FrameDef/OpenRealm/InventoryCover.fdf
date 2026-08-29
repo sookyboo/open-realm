@@ -1,4 +1,7 @@
 Frame "SIMPLEFRAME" "OpenRealmInventoryCover" {
+    Width 0.128,
+    Height 0.175,
+    Anchor BOTTOMRIGHT, 0.600, 0.000,
     Texture "OpenRealmInventoryCoverTexture" {
         TexCoord 0.0, 1.0, 0.380859375, 1.0,
         AlphaMode "ALPHAKEY",

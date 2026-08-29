@@ -234,15 +234,20 @@ static void WriteInventory(LPEDICT player, LPEDICT ent) {
     BYTE count;
 
     if (!capacity) {
+        LPCFRAMEDEF cover_layout;
         LPCFRAMEDEF cover_def;
         LPCSTR cover_art;
+        RECT cover_rect;
 
         /* The console artwork underneath always exposes the six-slot inventory
          * area. The authoritative FDF owns the source-image crop/alpha mode;
          * war3skins owns the local player's race-specific replacement image. */
         if (!UI_EnsureFDF("UI\\FrameDef\\OpenRealm\\InventoryCover.fdf") ||
-            !(cover_def = UI_FindFrame("OpenRealmInventoryCoverTexture"))) {
-            fprintf(stderr, "WriteInventory: missing OpenRealm inventory-cover compatibility FDF\n");
+            !(cover_layout = UI_FindFrame("OpenRealmInventoryCover")) ||
+            !(cover_def = UI_FindChildFrame((LPFRAMEDEF)cover_layout,
+                                            "OpenRealmInventoryCoverTexture")) ||
+            !UI_GetAbsoluteFrameRect(cover_layout, &cover_rect)) {
+            fprintf(stderr, "WriteInventory: invalid OpenRealm inventory-cover compatibility FDF\n");
             return;
         }
         cover_art = Theme_PlayerString(player ? player->client : NULL,
@@ -251,7 +256,7 @@ static void WriteInventory(LPEDICT player, LPEDICT ent) {
             fprintf(stderr, "WriteInventory: missing ConsoleInventoryCoverTexture for player skin\n");
             return;
         }
-        UI_WriteTextureFrameFromDef(0.5150f, 0.4864f, 0.0724f, 0.1098f,
+        UI_WriteTextureFrameFromDef(cover_rect.x, cover_rect.y, cover_rect.w, cover_rect.h,
                                     cover_art, cover_def);
         return;
     }

@@ -100,8 +100,12 @@ provide the later `UI\FrameDef\UI\InventoryBar.fdf`; a runtime trace showed
 `UI_EnsureFDF` failing before any cover frame could be authored. OpenRealm
 therefore ships the compatibility definition
 `UI\FrameDef\OpenRealm\InventoryCover.fdf` in its per-game `share/` tree.
-That FDF owns only the texture frame's `TexCoord` crop and alpha mode while
-`war3skins.txt` remains authoritative for the actual race-specific BLP.
+That FDF owns the cover's destination `Width`/`Height`/`Anchor` as well as the
+texture frame's `TexCoord` crop and alpha mode, while `war3skins.txt` remains
+authoritative for the actual race-specific BLP. The compatibility definition
+uses Warcraft III's native `0.128 x 0.175` cover frame anchored `BOTTOMRIGHT` at
+`(0.600, 0.000)`; the HUD bridge converts that bottom-left-origin FDF anchor to
+OpenRealm's top-left proxy rectangle when serializing the layer.
 
 This matters because Warcraft III console BLPs can contain unused regions. The
 Human inventory-cover BLP is 256x512 while its useful cover artwork occupies

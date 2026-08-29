@@ -36,6 +36,29 @@ void UI_SetFrameRect(LPUIFRAME frame, FLOAT x, FLOAT y, FLOAT w, FLOAT h) {
     frame->size.height = h;
 }
 
+BOOL UI_GetAbsoluteFrameRect(LPCFRAMEDEF def, LPRECT out) {
+    DWORD x_anchor;
+    DWORD y_anchor;
+
+    if (!def || !out || !def->AnyPointsSet || def->Width <= 0.0f || def->Height <= 0.0f) {
+        return false;
+    }
+    x_anchor = def->Anchor.corner & 3;
+    y_anchor = (def->Anchor.corner >> 2) & 3;
+    if (x_anchor > FPP_MAX || y_anchor > FPP_MAX) {
+        return false;
+    }
+
+    /* FDF Anchor coordinates use Warcraft III's bottom-left screen origin.
+     * HUD proxy rectangles use OpenRealm's top-left origin.  Anchor position,
+     * frame size, and source TexCoord remain independent UI metadata. */
+    out->x = def->Anchor.x - def->Width * ((FLOAT)x_anchor * 0.5f);
+    out->y = UI_BASE_HEIGHT - def->Anchor.y - def->Height * ((FLOAT)y_anchor * 0.5f);
+    out->w = def->Width;
+    out->h = def->Height;
+    return true;
+}
+
 void UI_WriteProxyFrame(LPUIFRAME frame, HANDLE data, DWORD data_size) {
     frame->number = ui_next_frame_number++;
     frame->color = frame->color.a ? frame->color : COLOR32_WHITE;
