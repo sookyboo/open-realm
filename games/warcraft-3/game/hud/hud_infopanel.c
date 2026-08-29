@@ -221,9 +221,41 @@ static void WriteInventoryCharge(FLOAT x, FLOAT y, FLOAT w, FLOAT h, DWORD charg
     UI_WriteProxyFrame(&frame, &label, sizeof(label));
 }
 
-static void WriteInventory(LPEDICT ent) {
+static void WriteInventoryNoCapacitySlot(BYTE slot, LPCSTR art) {
+    FLOAT bx = UI_BASE_WIDTH * 0.5f + 0.1315f + (FLOAT)(slot % 2) * 0.0394f;
+    FLOAT by = UI_BASE_HEIGHT - 0.0971f + (FLOAT)(slot / 2) * 0.0384f;
+
+    UI_WriteTextureFrame(bx - 0.0165f, by - 0.0165f, 0.033f, 0.033f, art);
+}
+
+static void WriteInventory(LPEDICT player, LPEDICT ent) {
     gameInventoryItem_t items[MAX_INVENTORY];
-    BYTE count = G_GetInventory(ent, items, MAX_INVENTORY);
+    DWORD capacity = G_InventoryCapacity(ent);
+    BYTE count;
+
+    if (!capacity) {
+        /* The console artwork underneath always exposes the six-slot inventory
+         * area. Units without an inventory must cover that area with the
+         * local player's race skin instead of showing six empty usable slots. */
+        UI_WriteTextureFrame(0.5150f, 0.4864f, 0.0724f, 0.1098f,
+                             Theme_PlayerString(player ? player->client : NULL,
+                                                "ConsoleInventoryCoverTexture",
+                                                "ConsoleInventoryCoverTexture"));
+        return;
+    }
+
+    if (capacity < MAX_INVENTORY) {
+        /* An inventory with reduced capacity keeps its valid slots visible;
+         * only the slots beyond inv1 receive the no-capacity skin. */
+        LPCSTR no_capacity = Theme_PlayerString(player ? player->client : NULL,
+                                                "ConsoleInventoryNoCapacity",
+                                                "ConsoleInventoryNoCapacity");
+        for (DWORD slot = capacity; slot < MAX_INVENTORY; slot++) {
+            WriteInventoryNoCapacitySlot((BYTE)slot, no_capacity);
+        }
+    }
+
+    count = G_GetInventory(ent, items, MAX_INVENTORY);
     FOR_LOOP(i, count) {
         FLOAT bx = UI_BASE_WIDTH * 0.5f + 0.1315f + (FLOAT)(items[i].slot % 2) * 0.0394f;
         FLOAT by = UI_BASE_HEIGHT - 0.0971f + (FLOAT)(items[i].slot / 2) * 0.0384f;
@@ -247,7 +279,7 @@ static void WriteInventory(LPEDICT ent) {
 
 static void UI_SendInventoryLayer(LPEDICT ent, LPEDICT *selected, DWORD count) {
     UI_WriteStart(LAYER_INVENTORY);
-    if (count == 1) WriteInventory(selected[0]);
+    if (count == 1) WriteInventory(ent, selected[0]);
     UI_WriteEnd(ent);
 }
 
