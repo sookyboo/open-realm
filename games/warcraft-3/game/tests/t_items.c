@@ -318,8 +318,8 @@ TEST(wc3_items, inventory_panel_uses_race_cover_when_selected_unit_has_no_invent
     T_EQ(inventory_panel_frame.flags.alphaMode, BLEND_MODE_ALPHAKEY);
     T_EQ(inventory_panel_frame.tex.coord[0], 0);
     T_EQ(inventory_panel_frame.tex.coord[1], 0xff);
-    T_EQ(inventory_panel_frame.tex.coord[2], (BYTE)(0.25f * 0xff));
-    T_EQ(inventory_panel_frame.tex.coord[3], (BYTE)(0.75f * 0xff));
+    T_EQ(inventory_panel_frame.tex.coord[2], (BYTE)(0.380859375f * 0xff));
+    T_EQ(inventory_panel_frame.tex.coord[3], 0xff);
 }
 
 TEST(wc3_items, inventory_panel_uses_local_player_race_not_selected_unit_race) {

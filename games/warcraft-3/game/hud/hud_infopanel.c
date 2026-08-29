@@ -240,9 +240,9 @@ static void WriteInventory(LPEDICT player, LPEDICT ent) {
         /* The console artwork underneath always exposes the six-slot inventory
          * area. The authoritative FDF owns the source-image crop/alpha mode;
          * war3skins owns the local player's race-specific replacement image. */
-        if (!UI_EnsureFDF("UI\\FrameDef\\UI\\InventoryBar.fdf") ||
-            !(cover_def = UI_FindFrame("InventoryCoverTexture"))) {
-            fprintf(stderr, "WriteInventory: missing InventoryCoverTexture in UI\\FrameDef\\UI\\InventoryBar.fdf\n");
+        if (!UI_EnsureFDF("UI\\FrameDef\\OpenRealm\\InventoryCover.fdf") ||
+            !(cover_def = UI_FindFrame("OpenRealmInventoryCoverTexture"))) {
+            fprintf(stderr, "WriteInventory: missing OpenRealm inventory-cover compatibility FDF\n");
             return;
         }
         cover_art = Theme_PlayerString(player ? player->client : NULL,

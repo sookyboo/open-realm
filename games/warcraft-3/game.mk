@@ -229,8 +229,8 @@ test-assets: blpgen mdxgen mpqtool mdxtool | $(TESTS_DIR)
 		grep -q "spro" && echo "  cat item UI OK"
 	@$(BIN_DIR)/mpqtool$(EXE_EXT) -mpq $(TESTS_MPQ) cat UI/war3skins.txt | \
 		grep -q "ConsoleInventoryCoverTexture" && echo "  cat skin UI OK"
-	@$(BIN_DIR)/mpqtool$(EXE_EXT) -mpq $(TESTS_MPQ) cat UI/FrameDef/UI/InventoryBar.fdf | \
-		grep -q "InventoryCoverTexture" && echo "  cat inventory FDF OK"
+	@$(BIN_DIR)/mpqtool$(EXE_EXT) -mpq $(TESTS_MPQ) cat UI/FrameDef/OpenRealm/InventoryCover.fdf | \
+		grep -q "OpenRealmInventoryCoverTexture" && echo "  cat inventory FDF OK"
 	@$(BIN_DIR)/mpqtool$(EXE_EXT) -mpq $(TESTS_MPQ) cat Units/UnitBalance.slk | grep -q "hpea" && echo "  cat unit SLK OK"
 	@$(BIN_DIR)/mpqtool$(EXE_EXT) -mpq $(TESTS_MPQ) cat Scripts/common.j | \
 		grep -q "playergameresult" && echo "  cat common.j OK"

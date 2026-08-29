@@ -95,13 +95,21 @@ authors one of three states:
 - capacity `6`: leave all six normal slots visible.
 
 Both texture keys come from `UI\war3skins.txt`, using the local player's race
-section with `Default` fallback. For the no-inventory cover,
-`UI\FrameDef\UI\InventoryBar.fdf` remains authoritative for the texture
-frame's `TexCoord` crop and alpha mode while the skin supplies the actual
-race-specific BLP. This matters because Warcraft III console BLPs can contain
-unused regions; the renderer must sample the FDF-selected sub-region rather
-than squeeze the complete image canvas into the cover rectangle. No gameplay
-code derives crop values from BLP dimensions or alpha pixels.
+section with `Default` fallback. Classic ROC data used by OpenRealm does not
+provide the later `UI\FrameDef\UI\InventoryBar.fdf`; a runtime trace showed
+`UI_EnsureFDF` failing before any cover frame could be authored. OpenRealm
+therefore ships the compatibility definition
+`UI\FrameDef\OpenRealm\InventoryCover.fdf` in its per-game `share/` tree.
+That FDF owns only the texture frame's `TexCoord` crop and alpha mode while
+`war3skins.txt` remains authoritative for the actual race-specific BLP.
+
+This matters because Warcraft III console BLPs can contain unused regions. The
+Human inventory-cover BLP is 256x512 while its useful cover artwork occupies
+the lower portion of that canvas; the compatibility FDF records the crop as UI
+metadata so the renderer samples the intended sub-region instead of squeezing
+the complete image into the cover rectangle. Gameplay/HUD C code does not
+derive crop values from BLP dimensions or alpha pixels and contains no
+race-specific image paths.
 
 The selected unit determines whether inventory exists and what it contains;
 the local player's console skin determines the cover/filler artwork. Hero/non-

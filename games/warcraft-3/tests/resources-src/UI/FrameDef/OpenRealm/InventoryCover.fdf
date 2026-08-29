@@ -1,0 +1,6 @@
+Frame "SIMPLEFRAME" "OpenRealmInventoryCover" {
+    Texture "OpenRealmInventoryCoverTexture" {
+        TexCoord 0.0, 1.0, 0.380859375, 1.0,
+        AlphaMode "ALPHAKEY",
+    }
+}
