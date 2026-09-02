@@ -62,14 +62,18 @@ DWORD TriggerRegisterVariableEvent(LPJASS j) {
     return jass_pushnullhandle(j, "event");
 }
 DWORD TriggerRegisterTimerEvent(LPJASS j) {
-    //LPTRIGGER whichTrigger = jass_checkhandle(j, 1, "trigger");
-    //FLOAT timeout = jass_checknumber(j, 2);
-    //BOOL periodic = jass_checkboolean(j, 3);
+    LPTRIGGER whichTrigger = jass_checkhandle(j, 1, "trigger");
+    FLOAT timeout = jass_checknumber(j, 2);
+    BOOL periodic = jass_checkboolean(j, 3);
+    G_EndgameDebugf("native TriggerRegisterTimerEvent STUB callsite=%s trigger=%p timeout=%.3f periodic=%d\n",
+                    JassCallsite(j), (void *)whichTrigger, timeout, periodic);
     return jass_pushnullhandle(j, "event");
 }
 DWORD TriggerRegisterTimerExpireEvent(LPJASS j) {
-    //LPTRIGGER whichTrigger = jass_checkhandle(j, 1, "trigger");
-    //HANDLE t = jass_checkhandle(j, 2, "timer");
+    LPTRIGGER whichTrigger = jass_checkhandle(j, 1, "trigger");
+    HANDLE t = jass_checkhandle(j, 2, "timer");
+    G_EndgameDebugf("native TriggerRegisterTimerExpireEvent STUB callsite=%s trigger=%p timer=%p\n",
+                    JassCallsite(j), (void *)whichTrigger, t);
     return jass_pushnullhandle(j, "event");
 }
 DWORD TriggerRegisterGameStateEvent(LPJASS j) {
@@ -90,8 +94,10 @@ DWORD TriggerRegisterDialogButtonEvent(LPJASS j) {
     return jass_pushnullhandle(j, "event");
 }
 DWORD TriggerRegisterGameEvent(LPJASS j) {
-    //LPTRIGGER whichTrigger = jass_checkhandle(j, 1, "trigger");
-    //HANDLE whichGameEvent = jass_checkhandle(j, 2, "gameevent");
+    LPTRIGGER whichTrigger = jass_checkhandle(j, 1, "trigger");
+    DWORD *whichGameEvent = jass_checkhandle(j, 2, "gameevent");
+    G_EndgameDebugf("native TriggerRegisterGameEvent STUB callsite=%s trigger=%p event=%d\n",
+                    JassCallsite(j), (void *)whichTrigger, whichGameEvent ? (int)*whichGameEvent : -1);
     return jass_pushnullhandle(j, "event");
 }
 DWORD TriggerRegisterEnterRegion(LPJASS j) {
@@ -101,6 +107,9 @@ DWORD TriggerRegisterEnterRegion(LPJASS j) {
     LPEVENT evt = G_MakeEvent(EVENT_GAME_ENTER_REGION);
     evt->trigger = whichTrigger;
     evt->region = *whichRegion;
+    G_EndgameDebugf("register event=%s trigger=%p rects=%u callsite=%s\n",
+                    G_EventName(EVENT_GAME_ENTER_REGION), (void *)whichTrigger,
+                    whichRegion ? (unsigned)whichRegion->num_rects : 0u, JassCallsite(j));
     return jass_pushlighthandle(j, evt, "event");
 }
 DWORD GetTriggeringRegion(LPJASS j) {
@@ -129,6 +138,12 @@ DWORD TriggerRegisterPlayerEvent(LPJASS j) {
     LPEVENT evt = G_MakeEvent(*whichPlayerEvent);
     evt->subject = PLAYER_ENT(whichPlayer);
     evt->trigger = whichTrigger;
+    if (G_EndgameDebug() && G_EndgameEventInteresting(*whichPlayerEvent)) {
+        G_EndgameDebugf("register event=%s(%d) trigger=%p player=%d callsite=%s\n",
+                        G_EventName(*whichPlayerEvent), (int)*whichPlayerEvent,
+                        (void *)whichTrigger, whichPlayer ? (int)PLAYER_NUM(whichPlayer) : -1,
+                        JassCallsite(j));
+    }
     return jass_pushlighthandle(j, evt, "event");
 }
 DWORD GetTriggerPlayer(LPJASS j) {
@@ -142,6 +157,12 @@ DWORD TriggerRegisterPlayerUnitEvent(LPJASS j) {
     LPEVENT evt = G_MakeEvent(*whichPlayerUnitEvent);
     evt->subject = PLAYER_ENT(whichPlayer);
     evt->trigger = whichTrigger;
+    if (G_EndgameDebug() && G_EndgameEventInteresting(*whichPlayerUnitEvent)) {
+        G_EndgameDebugf("register event=%s(%d) trigger=%p player=%d callsite=%s\n",
+                        G_EventName(*whichPlayerUnitEvent), (int)*whichPlayerUnitEvent,
+                        (void *)whichTrigger, whichPlayer ? (int)PLAYER_NUM(whichPlayer) : -1,
+                        JassCallsite(j));
+    }
     return jass_pushlighthandle(j, evt, "event");
 }
 DWORD TriggerRegisterPlayerAllianceChange(LPJASS j) {
@@ -178,6 +199,10 @@ DWORD TriggerRegisterDeathEvent(LPJASS j) {
     LPEVENT evt = G_MakeEvent(EVENT_UNIT_DEATH);
     evt->subject = whichWidget;
     evt->trigger = whichTrigger;
+    G_EndgameDebugf("register event=%s trigger=%p subject=%ld class=%.4s owner=%u callsite=%s\n",
+                    G_EventName(EVENT_UNIT_DEATH), (void *)whichTrigger,
+                    (long)whichWidget->s.number, (LPCSTR)&whichWidget->class_id,
+                    (unsigned)whichWidget->s.player, JassCallsite(j));
     return jass_pushlighthandle(j, evt, "event");
 }
 DWORD TriggerRegisterUnitStateEvent(LPJASS j) {
@@ -198,6 +223,12 @@ DWORD TriggerRegisterUnitEvent(LPJASS j) {
     LPEVENT evt = G_MakeEvent(*whichEvent);
     evt->subject = whichUnit;
     evt->trigger = whichTrigger;
+    if (G_EndgameDebug() && G_EndgameEventInteresting(*whichEvent)) {
+        G_EndgameDebugf("register event=%s(%d) trigger=%p subject=%ld class=%.4s owner=%u callsite=%s\n",
+                        G_EventName(*whichEvent), (int)*whichEvent, (void *)whichTrigger,
+                        (long)whichUnit->s.number, (LPCSTR)&whichUnit->class_id,
+                        (unsigned)whichUnit->s.player, JassCallsite(j));
+    }
     return jass_pushlighthandle(j, evt, "event");
 }
 DWORD TriggerRegisterFilterUnitEvent(LPJASS j) {
@@ -219,6 +250,9 @@ DWORD TriggerRegisterUnitInRange(LPJASS j) {
     evt->subject = whichUnit;
     evt->trigger = whichTrigger;
     evt->range = range;
+    G_EndgameDebugf("register event=%s trigger=%p subject=%ld class=%.4s range=%.1f callsite=%s\n",
+                    G_EventName(EVENT_UNIT_IN_RANGE), (void *)whichTrigger,
+                    (long)whichUnit->s.number, (LPCSTR)&whichUnit->class_id, range, JassCallsite(j));
     return jass_pushlighthandle(j, evt, "event");
 }
 DWORD TriggerAddCondition(LPJASS j) {
@@ -259,6 +293,8 @@ DWORD TriggerClearActions(LPJASS j) {
 }
 DWORD TriggerSleepAction(LPJASS j) {
     FLOAT timeout = jass_checknumber(j, 1);
+    G_EndgameDebugf("native TriggerSleepAction callsite=%s requested=%.3f skip=%d time=%u\n",
+                    JassCallsite(j), timeout, G_SkipCutscene(), (unsigned)gi.GetTime());
     if (G_SkipCutscene()) {
         timeout = MIN(timeout, 0.001f);
     }
@@ -268,6 +304,9 @@ DWORD TriggerSleepAction(LPJASS j) {
 DWORD TriggerWaitForSound(LPJASS j) {
     gsound_t *s = jass_checkhandle(j, 1, "sound");
     FLOAT offset = jass_checknumber(j, 2);
+    G_EndgameDebugf("native TriggerWaitForSound callsite=%s sound_ms=%u offset=%.3f skip=%d time=%u\n",
+                    JassCallsite(j), s ? (unsigned)s->duration : 0u, offset,
+                    G_SkipCutscene(), (unsigned)gi.GetTime());
     if (G_SkipCutscene()) {
         jass_sleep(j, 1);
         return 0;
@@ -286,11 +325,15 @@ DWORD TriggerEvaluate(LPJASS j) {
 }
 DWORD TriggerExecute(LPJASS j) {
     LPTRIGGER whichTrigger = jass_checkhandle(j, 1, "trigger");
+    G_EndgameDebugf("native TriggerExecute callsite=%s target=%p time=%u\n",
+                    JassCallsite(j), (void *)whichTrigger, (unsigned)gi.GetTime());
     jass_executetrigger(j, whichTrigger, NULL);
     return 0;
 }
 DWORD TriggerExecuteWait(LPJASS j) {
-    //LPTRIGGER whichTrigger = jass_checkhandle(j, 1, "trigger");
+    LPTRIGGER whichTrigger = jass_checkhandle(j, 1, "trigger");
+    G_EndgameDebugf("native TriggerExecuteWait STUB callsite=%s target=%p time=%u\n",
+                    JassCallsite(j), (void *)whichTrigger, (unsigned)gi.GetTime());
     return 0;
 }
 DWORD GetTriggerUnit(LPJASS j) {

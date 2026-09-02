@@ -1,5 +1,11 @@
 #include "jass/jass.h"
 
+static LPCSTR JassCallsite(LPJASS j) {
+    LPCJASSCONTEXT context = jass_getcontext(j);
+    LPCSTR name = context && context->func ? jass_functionname(context->func) : NULL;
+    return name ? name : "(no-trigger-context)";
+}
+
 #include "api_ai.h"
 #include "api_test.h"
 #include "api_unit.h"

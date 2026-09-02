@@ -464,6 +464,8 @@ void Cvar_Init(void) {
 #ifdef WC3
     Cvar_GetD("wc3_campaign_mission_visibility", "all", CVAR_ARCHIVE,
               "campaign mission list visibility: all or played");
+    Cvar_GetD("wc3_endgame_debug", "0", 0,
+              "log WC3 end-of-mission trigger, cinematic, and result flow");
 #endif
     Cvar_GetD("game_port",        PORT_SERVER_STRING,  CVAR_ARCHIVE, "UDP port the game server listens on");
     Cvar_GetD("name",             "Player",            CVAR_ARCHIVE, "player display name shown in lobbies");

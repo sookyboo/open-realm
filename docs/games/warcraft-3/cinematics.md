@@ -56,6 +56,28 @@ This is separate from the JASS-level ESC skip mechanism.
 ### Console Commands
 - `skip_cutscene 1` — fast-forward all cinematic timing
 - `skip_cutscene 0` — restore normal timing
+- `wc3_endgame_debug 1` — trace end-of-mission trigger conditions/actions, selected event dispatch, cinematic/result natives, and known end-game stubs. Prefer enabling this immediately before the final objective to avoid unrelated trigger noise. Launch with `+set wc3_endgame_debug 1` when startup event-registration diagnostics are needed.
+- `wc3_endgame_debug 0` — disable the end-of-mission trace.
+
+### End-of-mission trace
+
+`wc3_endgame_debug` writes lines prefixed `WC3_ENDGAME`. Use the sequence, not one isolated line, to locate a missing campaign ending:
+
+1. A final unit death/region event should show `publish`, then `handler match`. If it reports `no-matching-handler`, the expected map event was not registered or its subject did not match.
+2. Matched triggers print every condition function and `true`/`false`, then each scheduled action function. A false condition explains why the ending action did not start.
+3. A JASS runtime failure prints the owning trigger action and error text. Targeted timer/game-event registrations and `TriggerExecuteWait` are marked `STUB` when reached.
+4. Cinematic entry is visible through `ShowInterface`, `EnableUserControl`, `DisplayCineFilter`, camera-setup, `SetCinematicScene`, sleeps/waits, and `EndCinematicScene`.
+5. Result flow prints `RemovePlayer`, queued `EVENT_PLAYER_VICTORY`/`DEFEAT`, and `UI_ShowGameResult`. `EndGame`, `ChangeLevel`, `RestartGame`, `PauseGame`, and `DisplayLoadDialog` are explicitly marked `STUB` if the map reaches them.
+
+A particularly important ordering check is `RemovePlayer`: the current implementation queues the player victory/defeat event and immediately writes `LAYER_GAME_RESULT`; queued player-result trigger handlers run on the event loop afterward. The trace is intended to establish whether a Human02 ending cinematic never starts, aborts inside its action, or starts only after the result overlay has already been shown. Do not change this ordering based on assumption alone; capture the runtime sequence first.
+
+Example launch when the registration trace is useful:
+
+```sh
+build/bin/openwarcraft3 -data 'data/Warcraft III' -roc +map 'Maps\Campaign\Human02.w3m' +set wc3_endgame_debug 1
+```
+
+For a cleaner reproduction, launch normally and enter `wc3_endgame_debug 1` in the console immediately before completing the final objective.
 
 ### Log Output
 - `SetCinematicScene: player=N speaker=... time=T` — dialogue shown for player N

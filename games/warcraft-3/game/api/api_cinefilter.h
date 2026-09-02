@@ -68,6 +68,10 @@ DWORD SetCineFilterDuration(LPJASS j) {
 }
 DWORD DisplayCineFilter(LPJASS j) {
     level.cinefilter.displayed = jass_checkboolean(j, 1);
+    G_EndgameDebugf("native DisplayCineFilter callsite=%s displayed=%d skip=%d start=%u end=%u time=%u\n",
+                    JassCallsite(j), level.cinefilter.displayed, G_SkipCutscene(),
+                    (unsigned)level.cinefilter.start.time, (unsigned)level.cinefilter.end.time,
+                    (unsigned)gi.GetTime());
     if (G_SkipCutscene()) {
         level.cinefilter.displayed = false;
     }

@@ -556,8 +556,15 @@ static BOOL jass_yielded(LPJASS j) {
 
 static void jass_setruntimeerror(LPJASS j, LPCSTR message) {
     LPJASS root = jass_root(j);
+    LPCJASSCONTEXT context = jass_getcontext(j);
     root->rterror_pending = true;
     snprintf(root->rterror_message, sizeof(root->rterror_message), "%s", message ? message : "(nil)");
+    if (G_EndgameDebug()) {
+        G_EndgameDebugf("JASS runtime error action=%s message=\"%s\" time=%u\n",
+                        context && context->func && jass_functionname(context->func)
+                            ? jass_functionname(context->func) : "(no-trigger-context)",
+                        root->rterror_message, (unsigned)gi.GetTime());
+    }
     jass_host.RuntimeError(root->rterror_message);
 }
 
@@ -860,6 +867,12 @@ static BOOL jass_evaluatetriggercontext(LPJASS j,
     LPPLAYER player = jass_eventplayer(unit);
 
     if (trigger->disabled) {
+        if (G_EndgameDebug()) {
+            G_EndgameDebugf("trigger=%p skipped disabled unit=%ld class=%.4s\n",
+                            (void *)trigger,
+                            unit ? (long)unit->s.number : -1L,
+                            unit ? (LPCSTR)&unit->class_id : "----");
+        }
         return false;
     }
     JASS tmp_state;
@@ -877,9 +890,20 @@ static BOOL jass_evaluatetriggercontext(LPJASS j,
         currentplayer = player;
         currentunit = unit;
         DWORD result_count = jass_call(&tmp_state, 0);
+        BOOL passed = result_count == 1 && jass_popboolean(&tmp_state);
         currentunit = previous_unit;
         currentplayer = previous_player;
-        if (result_count != 1 || !jass_popboolean(&tmp_state)) {
+        if (G_EndgameDebug()) {
+            G_EndgameDebugf(
+                "trigger=%p condition=%s result=%s unit=%ld class=%.4s owner=%u\n",
+                (void *)trigger,
+                jass_functionname(cond->expr) ? jass_functionname(cond->expr) : "(anonymous)",
+                passed ? "true" : "false",
+                unit ? (long)unit->s.number : -1L,
+                unit ? (LPCSTR)&unit->class_id : "----",
+                unit ? (unsigned)unit->s.player : 0u);
+        }
+        if (!passed) {
             return false;
         }
     }
@@ -932,6 +956,16 @@ static void jass_executetriggercontext(LPJASS j,
                                        LPEDICT source) {
     FOR_EACH_LIST(TRIGGERACTION, action, trigger->actions) {
         LPPLAYER player = jass_eventplayer(unit);
+        if (G_EndgameDebug()) {
+            G_EndgameDebugf(
+                "trigger=%p schedule action=%s unit=%ld class=%.4s owner=%u source=%ld\n",
+                (void *)trigger,
+                jass_functionname(action->func) ? jass_functionname(action->func) : "(anonymous)",
+                unit ? (long)unit->s.number : -1L,
+                unit ? (LPCSTR)&unit->class_id : "----",
+                unit ? (unsigned)unit->s.player : 0u,
+                source ? (long)source->s.number : -1L);
+        }
         jass_startcoroutine(j, &MAKE(JASSCONTEXT,
                                   .trigger = trigger,
                                   .func = action->func,

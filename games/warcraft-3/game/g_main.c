@@ -32,6 +32,64 @@ struct edict_s *g_edicts;
 
 extern JASSMODULE jass_funcs[];
 
+
+BOOL G_EndgameDebug(void) {
+    if (!gi.CvarString) return false;
+    return atoi(gi.CvarString("wc3_endgame_debug", "0")) != 0;
+}
+
+void G_EndgameDebugf(LPCSTR fmt, ...) {
+    va_list args;
+
+    if (!G_EndgameDebug()) return;
+    fprintf(stderr, "WC3_ENDGAME ");
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+}
+
+LPCSTR G_EventName(EVENTTYPE type) {
+    switch (type) {
+        case EVENT_GAME_VICTORY: return "EVENT_GAME_VICTORY";
+        case EVENT_GAME_END_LEVEL: return "EVENT_GAME_END_LEVEL";
+        case EVENT_GAME_TIMER_EXPIRED: return "EVENT_GAME_TIMER_EXPIRED";
+        case EVENT_GAME_ENTER_REGION: return "EVENT_GAME_ENTER_REGION";
+        case EVENT_GAME_LEAVE_REGION: return "EVENT_GAME_LEAVE_REGION";
+        case EVENT_PLAYER_DEFEAT: return "EVENT_PLAYER_DEFEAT";
+        case EVENT_PLAYER_VICTORY: return "EVENT_PLAYER_VICTORY";
+        case EVENT_PLAYER_LEAVE: return "EVENT_PLAYER_LEAVE";
+        case EVENT_PLAYER_END_CINEMATIC: return "EVENT_PLAYER_END_CINEMATIC";
+        case EVENT_PLAYER_UNIT_DEATH: return "EVENT_PLAYER_UNIT_DEATH";
+        case EVENT_UNIT_DEATH: return "EVENT_UNIT_DEATH";
+        case EVENT_DIALOG_BUTTON_CLICK: return "EVENT_DIALOG_BUTTON_CLICK";
+        case EVENT_DIALOG_CLICK: return "EVENT_DIALOG_CLICK";
+        case EVENT_UNIT_IN_RANGE: return "EVENT_UNIT_IN_RANGE";
+        default: return "EVENT_OTHER";
+    }
+}
+
+BOOL G_EndgameEventInteresting(EVENTTYPE type) {
+    switch (type) {
+        case EVENT_GAME_VICTORY:
+        case EVENT_GAME_END_LEVEL:
+        case EVENT_GAME_TIMER_EXPIRED:
+        case EVENT_GAME_ENTER_REGION:
+        case EVENT_GAME_LEAVE_REGION:
+        case EVENT_PLAYER_DEFEAT:
+        case EVENT_PLAYER_VICTORY:
+        case EVENT_PLAYER_LEAVE:
+        case EVENT_PLAYER_END_CINEMATIC:
+        case EVENT_PLAYER_UNIT_DEATH:
+        case EVENT_UNIT_DEATH:
+        case EVENT_DIALOG_BUTTON_CLICK:
+        case EVENT_DIALOG_CLICK:
+        case EVENT_UNIT_IN_RANGE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static bool G_LoadMap(LPCSTR mapFilename) {
     if (!CM_LoadMap(mapFilename)) {
         return false;
@@ -485,6 +543,18 @@ GAMEEVENT *G_PublishEventWithSource(LPEDICT edict, EVENTTYPE type, LPEDICT sourc
     evt->type = type;
     evt->edict = edict;
     evt->source = source;
+    if (G_EndgameDebug() && G_EndgameEventInteresting(type)) {
+        G_EndgameDebugf(
+            "publish event=%s(%d) subject=%ld class=%.4s owner=%u source=%ld source_class=%.4s time=%u\n",
+            G_EventName(type),
+            (int)type,
+            edict ? (long)edict->s.number : -1L,
+            edict ? (LPCSTR)&edict->class_id : "----",
+            edict ? (unsigned)edict->s.player : 0u,
+            source ? (long)source->s.number : -1L,
+            source ? (LPCSTR)&source->class_id : "----",
+            (unsigned)gi.GetTime());
+    }
     return evt;
 }
 

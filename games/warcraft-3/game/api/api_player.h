@@ -402,17 +402,36 @@ DWORD RemovePlayer(LPJASS j) {
      * -> RemovePlayer -> the victory dialog/quest completion). */
     LPPLAYER whichPlayer = jass_checkhandle(j, 1, "player");
     DWORD *gameResult = jass_checkhandle(j, 2, "playergameresult");
+    if (G_EndgameDebug()) {
+        G_EndgameDebugf(
+            "native RemovePlayer callsite=%s player=%d result=%d currentplayer=%d time=%u\n",
+            JassCallsite(j),
+            whichPlayer ? (int)PLAYER_NUM(whichPlayer) : -1,
+            gameResult ? (int)*gameResult : -1,
+            currentplayer ? (int)PLAYER_NUM(currentplayer) : -1,
+            (unsigned)gi.GetTime());
+    }
     if (whichPlayer && gameResult) {
         LPEDICT pent = PLAYER_ENT(whichPlayer);
         G_BotRequestStop(PLAYER_NUM(whichPlayer));
         if (pent) {
             if (*gameResult == 0) {
+                G_EndgameDebugf("RemovePlayer -> publish victory and show result player=%u\n",
+                                (unsigned)PLAYER_NUM(whichPlayer));
                 G_PublishEvent(pent, EVENT_PLAYER_VICTORY);
                 UI_ShowGameResult(pent, true);
             } else if (*gameResult == 1) {
+                G_EndgameDebugf("RemovePlayer -> publish defeat and show result player=%u\n",
+                                (unsigned)PLAYER_NUM(whichPlayer));
                 G_PublishEvent(pent, EVENT_PLAYER_DEFEAT);
                 UI_ShowGameResult(pent, false);
+            } else {
+                G_EndgameDebugf("RemovePlayer result=%u has no result UI/event path\n",
+                                (unsigned)*gameResult);
             }
+        } else {
+            G_EndgameDebugf("RemovePlayer player=%u has no player edict\n",
+                            (unsigned)PLAYER_NUM(whichPlayer));
         }
     }
     return 0;

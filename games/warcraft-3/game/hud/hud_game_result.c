@@ -21,8 +21,14 @@ static void GameResultEnsureLoaded(void) {
  * No-ops gracefully when the FDF is not loaded (e.g., test environment). */
 void UI_ShowGameResult(LPEDICT ent, BOOL victory) {
     if (!ent) return;
+    G_EndgameDebugf("UI_ShowGameResult player=%u victory=%d connected=%d time=%u\n",
+                    ent->client ? (unsigned)ent->client->ps.number : 0u, victory,
+                    ent->client ? ent->client->connected : 0, (unsigned)gi.GetTime());
     GameResultEnsureLoaded();
-    if (!grd.GameResultDialog) return; /* FDF unavailable — UI_WriteLayout would crash on NULL root */
+    if (!grd.GameResultDialog) {
+        G_EndgameDebugf("UI_ShowGameResult missing GameResultDialog FDF\n");
+        return; /* FDF unavailable — UI_WriteLayout would crash on NULL root */
+    }
     UI_SetText(grd.GameResultText, "%s", victory ? "Victory!" : "Defeat!");
     UI_SetText(grd.GameResultContinueButtonText, "Continue");
     UI_SetOnClick(grd.GameResultContinueButton, "hidegameresult");
@@ -31,6 +37,9 @@ void UI_ShowGameResult(LPEDICT ent, BOOL victory) {
     UI_SetText(grd.GameResultQuitButtonText, "Quit");
     UI_SetOnClick(grd.GameResultQuitButton, "gameresult_quit");
     UI_WriteLayout(ent, grd.GameResultDialog, LAYER_GAME_RESULT);
+    G_EndgameDebugf("UI_ShowGameResult wrote layer=%u player=%u\n",
+                    (unsigned)LAYER_GAME_RESULT,
+                    ent->client ? (unsigned)ent->client->ps.number : 0u);
 }
 
 /* UI_HideGameResult — clear the game result layer for a client. */

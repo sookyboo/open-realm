@@ -2,8 +2,33 @@
 
 BOOL jass_calltrigger(LPJASS j, LPTRIGGER trigger, LPEDICT unit, LPEDICT source);
 
+static BOOL G_DispatchEventTrigger(GAMEEVENT *evt, LPEVENT handler, LPEDICT subject) {
+    BOOL ran;
+
+    if (G_EndgameDebug() && G_EndgameEventInteresting(evt->type)) {
+        G_EndgameDebugf(
+            "handler match event=%s(%d) trigger=%p subject=%ld class=%.4s owner=%u\n",
+            G_EventName(evt->type),
+            (int)evt->type,
+            (void *)handler->trigger,
+            subject ? (long)subject->s.number : -1L,
+            subject ? (LPCSTR)&subject->class_id : "----",
+            subject ? (unsigned)subject->s.player : 0u);
+    }
+    ran = jass_calltrigger(level.vm, handler->trigger, subject, evt->source);
+    if (G_EndgameDebug() && G_EndgameEventInteresting(evt->type)) {
+        G_EndgameDebugf(
+            "handler result event=%s trigger=%p conditions=%s\n",
+            G_EventName(evt->type),
+            (void *)handler->trigger,
+            ran ? "passed" : "failed-or-disabled");
+    }
+    return ran;
+}
+
 static void G_ExecuteEvent(GAMEEVENT *evt) {
     LPEDICT subject = evt->edict;
+    BOOL matched = false;
     FOR_EACH_LIST(EVENT, e, level.events.handlers) {
         switch (e->type) {
             case EVENT_GAME_VICTORY:
@@ -18,17 +43,20 @@ static void G_ExecuteEvent(GAMEEVENT *evt) {
                 break;
             case EVENT_GAME_ENTER_REGION:
                 if (evt->responseTo == e) {
-                    jass_calltrigger(level.vm, e->trigger, subject, evt->source);
+                    matched = true;
+                    G_DispatchEventTrigger(evt, e, subject);
                 }
                 break;
             case EVENT_GAME_LEAVE_REGION:
                 if (evt->responseTo == e) {
-                    jass_calltrigger(level.vm, e->trigger, subject, evt->source);
+                    matched = true;
+                    G_DispatchEventTrigger(evt, e, subject);
                 }
                 break;
             case EVENT_UNIT_IN_RANGE:
                 if (evt->responseTo == e) {
-                    jass_calltrigger(level.vm, e->trigger, subject, evt->source);
+                    matched = true;
+                    G_DispatchEventTrigger(evt, e, subject);
                 }
                 break;
             case EVENT_GAME_TRACKABLE_HIT:
@@ -53,10 +81,20 @@ static void G_ExecuteEvent(GAMEEVENT *evt) {
                 if (e->type == evt->type && subject &&
                     (e->subject == subject ||
                      e->subject == G_GetPlayerEntityByNumber(subject->s.player))) {
-                    jass_calltrigger(level.vm, e->trigger, subject, evt->source);
+                    matched = true;
+                    G_DispatchEventTrigger(evt, e, subject);
                 }
                 break;
         }
+    }
+    if (G_EndgameDebug() && G_EndgameEventInteresting(evt->type) && !matched) {
+        G_EndgameDebugf(
+            "dispatch event=%s(%d) no-matching-handler subject=%ld class=%.4s owner=%u\n",
+            G_EventName(evt->type),
+            (int)evt->type,
+            subject ? (long)subject->s.number : -1L,
+            subject ? (LPCSTR)&subject->class_id : "----",
+            subject ? (unsigned)subject->s.player : 0u);
     }
 }
 

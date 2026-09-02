@@ -310,6 +310,8 @@ DWORD GetStartLocationLoc(LPJASS j) {
 }
 
 DWORD CreateTimer(LPJASS j) {
+    G_EndgameDebugf("native CreateTimer STUB callsite=%s time=%u\n",
+                    JassCallsite(j), (unsigned)gi.GetTime());
     return jass_pushnullhandle(j, "timer");
 }
 DWORD DestroyTimer(LPJASS j) {
@@ -317,10 +319,14 @@ DWORD DestroyTimer(LPJASS j) {
     return 0;
 }
 DWORD TimerStart(LPJASS j) {
-    //HANDLE whichTimer = jass_checkhandle(j, 1, "timer");
-    //FLOAT timeout = jass_checknumber(j, 2);
-    //BOOL periodic = jass_checkboolean(j, 3);
-    //LPCJASSFUNC handlerFunc = jass_checkcode(j, 4);
+    HANDLE whichTimer = jass_checkhandle(j, 1, "timer");
+    FLOAT timeout = jass_checknumber(j, 2);
+    BOOL periodic = jass_checkboolean(j, 3);
+    LPCJASSFUNC handlerFunc = jass_checkcode(j, 4);
+    G_EndgameDebugf("native TimerStart STUB callsite=%s timer=%p timeout=%.3f periodic=%d handler=%s time=%u\n",
+                    JassCallsite(j), whichTimer, timeout, periodic,
+                    jass_functionname(handlerFunc) ? jass_functionname(handlerFunc) : "(null)",
+                    (unsigned)gi.GetTime());
     return 0;
 }
 DWORD TimerGetElapsed(LPJASS j) {
@@ -699,16 +705,22 @@ DWORD GetFoodUsed(LPJASS j) {
 }
 
 DWORD EndGame(LPJASS j) {
-    //BOOL doScoreScreen = jass_checkboolean(j, 1);
+    BOOL doScoreScreen = jass_checkboolean(j, 1);
+    G_EndgameDebugf("native EndGame STUB callsite=%s score=%d time=%u\n",
+                    JassCallsite(j), doScoreScreen, (unsigned)gi.GetTime());
     return 0;
 }
 DWORD ChangeLevel(LPJASS j) {
-    //LPCSTR newLevel = jass_checkstring(j, 1);
-    //BOOL doScoreScreen = jass_checkboolean(j, 2);
+    LPCSTR newLevel = jass_checkstring(j, 1);
+    BOOL doScoreScreen = jass_checkboolean(j, 2);
+    G_EndgameDebugf("native ChangeLevel STUB callsite=%s level=\"%s\" score=%d time=%u\n",
+                    JassCallsite(j), newLevel ? newLevel : "", doScoreScreen, (unsigned)gi.GetTime());
     return 0;
 }
 DWORD RestartGame(LPJASS j) {
-    //BOOL doScoreScreen = jass_checkboolean(j, 1);
+    BOOL doScoreScreen = jass_checkboolean(j, 1);
+    G_EndgameDebugf("native RestartGame STUB callsite=%s score=%d time=%u\n",
+                    JassCallsite(j), doScoreScreen, (unsigned)gi.GetTime());
     return 0;
 }
 DWORD ReloadGame(LPJASS j) {
@@ -1174,6 +1186,9 @@ DWORD SetSkyModel(LPJASS j) {
 }
 DWORD EnableUserControl(LPJASS j) {
     BOOL b = jass_checkboolean(j, 1);
+    G_EndgameDebugf("native EnableUserControl callsite=%s enabled=%d player=%d time=%u\n",
+                    JassCallsite(j), b, currentplayer ? (int)PLAYER_NUM(currentplayer) : -1,
+                    (unsigned)gi.GetTime());
     /* Fast-forwarding must preserve the script's input lock; early edge scrolling overwrote its final camera snap. */
     if (currentplayer) {
         PLAYER_CLIENT(currentplayer)->no_control = !b;
@@ -1182,6 +1197,9 @@ DWORD EnableUserControl(LPJASS j) {
 }
 DWORD EnableUserUI(LPJASS j) {
     BOOL enabled = jass_checkboolean(j, 1);
+    G_EndgameDebugf("native EnableUserUI callsite=%s enabled=%d player=%d time=%u\n",
+                    JassCallsite(j), enabled, currentplayer ? (int)PLAYER_NUM(currentplayer) : -1,
+                    (unsigned)gi.GetTime());
     /* Warcraft keeps this separate from EnableUserControl: it suppresses UI
      * affordances such as hover/tooltips, but does not make world selection or
      * gameplay orders inert.  Keep the state for the client presentation path;
@@ -1203,6 +1221,10 @@ DWORD GetTimeOfDayScale(LPJASS j) {
 DWORD ShowInterface(LPJASS j) {
     BOOL flag = jass_checkboolean(j, 1);
     FLOAT fadeDuration = jass_checknumber(j, 2);
+    G_EndgameDebugf("native ShowInterface callsite=%s show=%d fade=%.3f player=%d time=%u\n",
+                    JassCallsite(j), flag, fadeDuration,
+                    currentplayer ? (int)PLAYER_NUM(currentplayer) : -1,
+                    (unsigned)gi.GetTime());
     LPPLAYER player = currentplayer;
     /* Fast-forwarding compresses time, but the script still owns the cinematic-to-game UI transition. */
     if (player)
@@ -1210,7 +1232,9 @@ DWORD ShowInterface(LPJASS j) {
     return 0;
 }
 DWORD PauseGame(LPJASS j) {
-    //BOOL flag = jass_checkboolean(j, 1);
+    BOOL flag = jass_checkboolean(j, 1);
+    G_EndgameDebugf("native PauseGame STUB callsite=%s paused=%d time=%u\n",
+                    JassCallsite(j), flag, (unsigned)gi.GetTime());
     return 0;
 }
 DWORD AddIndicator(LPJASS j) {
@@ -1255,6 +1279,8 @@ DWORD ForceUICancel(LPJASS j) {
     return 0;
 }
 DWORD DisplayLoadDialog(LPJASS j) {
+    G_EndgameDebugf("native DisplayLoadDialog STUB callsite=%s time=%u\n",
+                    JassCallsite(j), (unsigned)gi.GetTime());
     return 0;
 }
 DWORD CreateTrackable(LPJASS j) {
@@ -1314,6 +1340,13 @@ DWORD SetCinematicScene(LPJASS j) {
     LPCSTR text = jass_checkstring(j, 4);
     FLOAT sceneDuration = jass_checknumber(j, 5);
     FLOAT voiceoverDuration = jass_checknumber(j, 6);
+    G_EndgameDebugf(
+        "native SetCinematicScene callsite=%s player=%d portrait=%.4s speaker=\"%s\" scene=%.3f voice=%.3f skip=%d time=%u\n",
+        JassCallsite(j),
+        currentplayer ? (int)PLAYER_NUM(currentplayer) : -1,
+        portraitUnitId ? (LPCSTR)&portraitUnitId : "----",
+        speakerTitle ? speakerTitle : "",
+        sceneDuration, voiceoverDuration, G_SkipCutscene(), (unsigned)gi.GetTime());
     if (G_SkipCutscene()) return 0;
     if (currentplayer) {
         LPGAMECLIENT gc = PLAYER_CLIENT(currentplayer);
@@ -1338,6 +1371,9 @@ DWORD SetCinematicScene(LPJASS j) {
     return 0;
 }
 DWORD EndCinematicScene(LPJASS j) {
+    G_EndgameDebugf("native EndCinematicScene callsite=%s player=%d time=%u\n",
+                    JassCallsite(j), currentplayer ? (int)PLAYER_NUM(currentplayer) : -1,
+                    (unsigned)gi.GetTime());
     if (currentplayer) {
         LPGAMECLIENT gc = PLAYER_CLIENT(currentplayer);
         G_SetPlayerText(gc, PLAYERTEXT_SPEAKER, "");

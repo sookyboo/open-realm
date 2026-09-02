@@ -172,9 +172,15 @@ void UI_WriteDialoguePresentation(LPEDICT ent) {
 }
 
 void UI_ShowInterface(LPEDICT ent, BOOL flag, FLOAT duration) {
+    DWORD old_state;
     (void)duration;
     if (!ent || !ent->client) return;
+    old_state = ent->client->ps.client_ui_state;
     ent->client->ps.client_ui_state = flag ? CLIENT_UI_GAME : CLIENT_UI_CINEMATIC;
+    G_EndgameDebugf("UI_ShowInterface player=%u show=%d state=%u->%u connected=%d time=%u\n",
+                    (unsigned)ent->client->ps.number, flag, (unsigned)old_state,
+                    (unsigned)ent->client->ps.client_ui_state, ent->client->connected,
+                    (unsigned)gi.GetTime());
     if (flag)
         ent->client->ps.uiflags = 1 << LAYER_CINEMATIC;
     else

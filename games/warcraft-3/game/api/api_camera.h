@@ -152,7 +152,9 @@ DWORD PanCameraToTimedWithZ(LPJASS j) {
     return 0;
 }
 DWORD SetCinematicCamera(LPJASS j) {
-    //LPCSTR cameraModelFile = jass_checkstring(j, 1);
+    LPCSTR cameraModelFile = jass_checkstring(j, 1);
+    G_EndgameDebugf("native SetCinematicCamera STUB callsite=%s model=\"%s\" time=%u\n",
+                    JassCallsite(j), cameraModelFile ? cameraModelFile : "", (unsigned)gi.GetTime());
     return 0;
 }
 DWORD SetCameraField(LPJASS j) {
@@ -261,6 +263,12 @@ static void G_ApplyCameraSetup(LPCAMERASETUP setup, FLOAT duration_ms) {
     gc->camera.state.position = G_ClampCameraPosition(gc, &gc->camera.state.position);
     gc->camera.start_time = gi.GetTime();
     gc->camera.end_time = gc->camera.start_time + duration_ms;
+    G_EndgameDebugf(
+        "camera setup apply player=%u pos=(%.1f,%.1f) fov=%.2f distance=%.1f duration_ms=%.0f start=%u end=%u\n",
+        (unsigned)PLAYER_NUM(currentplayer),
+        gc->camera.state.position.x, gc->camera.state.position.y,
+        gc->camera.state.fov, gc->camera.state.target_distance, duration_ms,
+        (unsigned)gc->camera.start_time, (unsigned)gc->camera.end_time);
 }
 DWORD CameraSetupApply(LPJASS j) {
     LPCAMERASETUP whichSetup = jass_checkhandle(j, 1, "camerasetup");
