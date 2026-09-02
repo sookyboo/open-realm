@@ -142,10 +142,12 @@ void UI_ShowQuests(LPEDICT ent) {
         }
     }
     UI_ShowQuest(ent, quest);
+    G_SetQuestDialogOpen(ent, true);
 }
 
 void UI_HideQuests(LPEDICT ent) {
     if (!ent) return;
     UI_WriteStart(LAYER_QUESTDIALOG);
     UI_WriteEnd(ent);
+    G_SetQuestDialogOpen(ent, false);
 }

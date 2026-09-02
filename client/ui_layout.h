@@ -20,6 +20,7 @@ void SCR_SetLayoutLayer(DWORD layer, HANDLE data);
 void SCR_ClearLayoutLayer(DWORD layer);
 void SCR_SetLayoutRoot(LPCRECT root);
 BOOL SCR_LayoutHitTest(int x, int y);
+BOOL SCR_LayoutModalActive(void);
 void SCR_LayoutClampSelectionRect(LPRECT rect);
 void SCR_DrawLayout(void);
 void SCR_LayoutMouseEvent(uiMouseEvent_t event, int x, int y, int32_t param);

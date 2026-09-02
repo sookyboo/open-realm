@@ -214,6 +214,7 @@ void SV_InitGameProgs(void) {
     import.SoundIndex = SV_SoundIndex;
     import.FontIndex = SV_FontIndex;
     import.GetTime = SV_GetTime;
+    import.SetPaused = SV_SetPaused;
     import.ReadFile = FS_ReadFile;
     import.ReadFileAll = FS_ReadFileAll;
     import.error = PF_error;

@@ -232,8 +232,14 @@ void CL_InputModeMouseMotion(SDL_MouseMotionEvent const *motion) {
     if (!motion) {
         return;
     }
-    if (CL_GameplayInputReady() &&
-        !CL_MouseOverGameplayUI() &&
+    if (!CL_GameplayInputReady()) {
+        camera_drag.active = false;
+        minimap_drag_active = false;
+        cl.selection.in_progress = false;
+        cl.hover_entity = 0;
+        return;
+    }
+    if (!CL_MouseOverGameplayUI() &&
         re.TraceEntity(&cl.viewDef, (float)motion->x, (float)motion->y, &entnum) &&
         CL_CanHoverHealthEntity(entnum))
     {
@@ -278,8 +284,17 @@ void CL_InputModeFrame(void) {
     last_ms = now;
     if (dt > 0.1f) dt = 0.1f; /* clamp after a stall */
 
-    /* Drag-pan takes over; don't fight it. Also require in-game input. */
-    if (camera_drag.active || !CL_GameplayInputReady() || dt <= 0.0f) {
+    /* A server-authored modal owns input completely; terminate any world drag
+     * that began before the modal arrived. */
+    if (!CL_GameplayInputReady()) {
+        camera_drag.active = false;
+        minimap_drag_active = false;
+        cl.selection.in_progress = false;
+        cl.hover_entity = 0;
+        return;
+    }
+    /* Drag-pan takes over; don't fight it. */
+    if (camera_drag.active || dt <= 0.0f) {
         return;
     }
 

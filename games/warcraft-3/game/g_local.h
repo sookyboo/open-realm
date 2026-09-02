@@ -364,6 +364,7 @@ struct client_s {
     LPCMAPPLAYER mapplayer;
     DWORD ping;
     BOOL no_control, no_ui;
+    BOOL quest_dialog_open;
     menu_t menu;
     struct {
         CAMERASETUP state;
@@ -1060,6 +1061,8 @@ struct level_locals {
     CINEFILTER cinefilter;
     DWORD framenum;
     DWORD time;
+    BOOL script_paused;
+    BOOL quest_paused;
     BOOL started;
     BOOL scriptsStarted;
 };
@@ -1083,6 +1086,8 @@ void G_InitJassHost(void);
 LPEDICT G_GetPlayerEntityByNumber(DWORD);
 LPGAMECLIENT G_GetPlayerClientByNumber(DWORD);
 void G_SetClientConnected(LPEDICT player, BOOL connected);
+void G_SetScriptPaused(BOOL paused);
+void G_SetQuestDialogOpen(LPEDICT player, BOOL open);
 TARGTYPE G_GetTargetType(LPCSTR);
 LPCSTR G_LevelString(LPCSTR);
 FLOAT G_Cinefade(void);

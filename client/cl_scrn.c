@@ -901,12 +901,25 @@ void SCR_ClearLayoutLayer(DWORD layer) {
     if (layer < MAX_LAYOUT_LAYERS) layout_layers[layer] = NULL;
 }
 
+static BOOL SCR_LayoutLayerVisible(DWORD layer) { return layer < MAX_LAYOUT_LAYERS && layout_layers[layer] && !((1u << layer) & cl.playerstate.uiflags); }
+
+/* Result screens outrank Quest when malformed/server-overlapping modal layers coexist. */
+static int SCR_LayoutModalLayer(void) {
+    if (SCR_LayoutLayerVisible(LAYER_GAME_RESULT)) return LAYER_GAME_RESULT;
+    if (SCR_LayoutLayerVisible(LAYER_QUESTDIALOG)) return LAYER_QUESTDIALOG;
+    return -1;
+}
+
+BOOL SCR_LayoutModalActive(void) { return SCR_LayoutModalLayer() >= 0; }
+
 void SCR_LayoutMouseEvent(uiMouseEvent_t event, int x, int y, int32_t param) {
     VECTOR2 const point = SCR_ScreenToUI(x, y);
+    int const modal_layer = SCR_LayoutModalLayer();
 
     layout_hovered_number = 0;
     FOR_LOOP(layer, MAX_LAYOUT_LAYERS) {
         HANDLE layout = layout_layers[layer];
+        if (modal_layer >= 0 && (int)layer != modal_layer) continue;
         DWORD flags = cl.playerstate.uiflags;
         if (!layout || layer == LAYER_WORLD_HOVER || (1 << layer) & flags) continue;
         SCR_Clear(layout);
@@ -931,6 +944,7 @@ void SCR_LayoutMouseEvent(uiMouseEvent_t event, int x, int y, int32_t param) {
     FOR_LOOP(layer, MAX_LAYOUT_LAYERS) {
         HANDLE layout = layout_layers[layer];
         DWORD flags = cl.playerstate.uiflags;
+        if (modal_layer >= 0 && (int)layer != modal_layer) continue;
         if (!layout || layer == LAYER_WORLD_HOVER || (1 << layer) & flags) continue;
         SCR_Clear(layout);
         for (DWORD i = SCR_NumFrames(); i > 0; i--) {
@@ -950,9 +964,11 @@ void SCR_LayoutMouseEvent(uiMouseEvent_t event, int x, int y, int32_t param) {
 /* Dispatch a command-button hotkey the same way a mouse click on that */
 BOOL SCR_LayoutKeyEvent(int key) {
     int const upper = toupper(key);
+    int const modal_layer = SCR_LayoutModalLayer();
 
     FOR_LOOP(layer, MAX_LAYOUT_LAYERS) {
         HANDLE layout = layout_layers[layer];
+        if (modal_layer >= 0 && (int)layer != modal_layer) continue;
         DWORD flags = cl.playerstate.uiflags;
         if (!layout || layer == LAYER_WORLD_HOVER || (1 << layer) & flags) continue;
         SCR_Clear(layout);
@@ -1057,6 +1073,7 @@ void SCR_LayoutClampSelectionRect(LPRECT rect) {
 
 BOOL SCR_LayoutHitTest(int x, int y) {
     VECTOR2 const point = SCR_ScreenToUI(x, y);
+    if (SCR_LayoutModalActive()) return true;
     FOR_LOOP(layer, MAX_LAYOUT_LAYERS) {
         HANDLE layout = layout_layers[layer];
         DWORD flags = cl.playerstate.uiflags;
