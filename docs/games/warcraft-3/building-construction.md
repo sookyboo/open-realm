@@ -39,6 +39,10 @@ UnitProfile.Builds
 `-1` is the unlimited/default sentinel for `SetPlayerTechMaxAllowed`; non-negative values are exact maxima. Starting a queued unit spawns its hidden entity immediately, so it also counts against the maximum before training completes. The queued entity carries `edict.training` until `ShowTrainedUnit()` succeeds; requirement counts exclude both `construction.active` structures and `training` units so in-progress production cannot satisfy a prerequisite early.
 Training queues are linked through each queued entity's `edict.build` pointer. Completion preserves the next queue pointer before calling `ShowTrainedUnit()`, because the reveal path calls `unit_stand()` and standing clears the completed unit's `build` field. The producer then advances to the saved next entry, so completing the head cannot discard later paid queue entries.
 
+Train/build command presentation is resolved from the same normalized unit object data as the rest of the unit definition. For a four-character unit rawcode, `G_BuildCommandButton()` prefers the resolved `UnitProfile` for command art, `Buttonpos`, `Tip`, `Ubertip`, and `Hotkey`, while abilities and research retain their existing presentation lookups. `G_UnitProfile()` deliberately passes rawcodes through `ResolveUnitID()`: a `war3map.w3u` custom unit therefore falls back to its original/base unit profile until map-local field overlays are merged into normalized typed rows. Callers must not reject that profile merely because its stored `id` is the original rawcode rather than the map-created rawcode.
+
+Tooltip hover and command activation are separate client concerns. A disabled command button intentionally serializes without `onclick`, but it still carries its authored tooltip and unavailable-reason text. Layout hit testing therefore allows a frame with tooltip text to own hover even when it has no click command; mouse-up still requires `onclick`, so this does not make disabled train/build buttons actionable.
+
 Training command flow is:
 
 ```text

@@ -1021,6 +1021,66 @@ TEST(net, layout_text_length_uses_space_advance_for_implicit_width) {
     T_FEQ(rect->w, 0.060f, 0.001f);
 }
 
+TEST(net, disabled_command_button_remains_hoverable_for_tooltip) {
+    BYTE buf[1024];
+    sizeBuf_t sb = make_msg_buf(buf, sizeof(buf));
+    uiFrame_t empty = {0}, button = {0}, tooltip_frame = {0};
+    uiTooltip_t tooltip = {0};
+
+    button.number = 1;
+    button.flags.type = FT_COMMANDBUTTON;
+    button.tooltip = "Requires Blacksmith";
+    button.size.width = 0.1f;
+    button.size.height = 0.1f;
+    button.points.x[FPP_MIN] = (uiFramePoint_t){
+        .used = 1, .targetPos = FPP_MIN, .relativeTo = 0,
+        .offset = (SHORT)(0.1f * UI_FRAMEPOINT_SCALE),
+    };
+    button.points.y[FPP_MIN] = (uiFramePoint_t){
+        .used = 1, .targetPos = FPP_MIN, .relativeTo = 0,
+        .offset = (SHORT)(-0.1f * UI_FRAMEPOINT_SCALE),
+    };
+    /* No onclick: this is the wire shape of a disabled build/train command. */
+
+    tooltip_frame.number = 2;
+    tooltip_frame.flags.type = FT_TOOLTIPTEXT;
+    tooltip_frame.color = COLOR32_WHITE;
+    tooltip_frame.size.width = 0.22f;
+    tooltip_frame.size.height = 0.1f;
+    tooltip_frame.points.x[FPP_MIN] = (uiFramePoint_t){
+        .used = 1, .targetPos = FPP_MIN, .relativeTo = 0,
+        .offset = (SHORT)(0.58f * UI_FRAMEPOINT_SCALE),
+    };
+    tooltip_frame.points.y[FPP_MIN] = (uiFramePoint_t){
+        .used = 1, .targetPos = FPP_MIN, .relativeTo = 0,
+        .offset = (SHORT)(-0.34f * UI_FRAMEPOINT_SCALE),
+    };
+
+    test_client_stubs_init();
+    FOR_LOOP(layer, MAX_LAYOUT_LAYERS) SCR_ClearLayoutLayer(layer);
+    test_textarea_draws = 0;
+    re.GetTextSize = text_length_mock_size;
+    re.DrawText = capture_textarea;
+
+    MSG_WriteByte(&sb, LAYER_COMMANDBAR);
+    MSG_WriteDeltaUIFrame(&sb, &empty, &button, true);
+    MSG_WriteByte(&sb, 0);
+    MSG_WriteDeltaUIFrame(&sb, &empty, &tooltip_frame, true);
+    MSG_WriteByte(&sb, sizeof(tooltip));
+    MSG_Write(&sb, &tooltip, sizeof(tooltip));
+    MSG_WriteLong(&sb, 0);
+    MSG_WriteShort(&sb, 0);
+    sb.readcount = 0;
+
+    CL_ParseLayout(&sb);
+    /* (0.15, 0.15) on the 0.8 x 0.6 WC3 canvas maps to (192,192) at 1024x768. */
+    SCR_LayoutMouseEvent(UI_MOUSE_MOVE, 192, 192, 0);
+    SCR_DrawLayout();
+
+    T_ASSERT(test_textarea_draws > 0);
+    T_STREQ(test_textarea_draw.text, "Requires Blacksmith");
+}
+
 TEST(net, layout_authored_height_with_top_bottom_anchors_keeps_bottom_edge) {
     BYTE buf[512];
     sizeBuf_t sb = make_msg_buf(buf, sizeof(buf));

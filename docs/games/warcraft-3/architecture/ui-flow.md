@@ -93,6 +93,8 @@ menu_game
 
 The screen switch is local to the client. No network traffic is required for menu transitions.
 
+The UI module does not keep a separate gameplay-mode boolean. Entering a map or handling `menu_ingame` clears the active glue screen with `UI_ClearScreen()`. `UI_MouseEventLocal()` therefore gates only on `ui_state.active`; gameplay-vs-menu input ownership belongs to the client `key_dest`/gameplay-window path. Do not reintroduce the removed `ui_state.game_mode` check when rebasing older UI patches.
+
 ## Single Player Flow
 
 The WC3 single-player frontend uses the native Blizzard glue FDFs and keeps campaign/map metadata separate from the

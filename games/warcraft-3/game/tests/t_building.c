@@ -606,6 +606,44 @@ TEST(wc3_building, enable_user_ui_does_not_block_build_command_button) {
     client->no_ui = false;
 }
 
+TEST(wc3_building, map_created_train_button_uses_resolved_base_unit_tooltip) {
+    LPEDICT producer = alloc_test_unit(MAKEFOURCC('h','b','a','r'), 0, 0);
+    gameCommandButton_t button;
+    MAPINFO mapinfo = { 0 };
+    unitData_t custom = {
+        .originalUnitID = MAKEFOURCC('h','f','o','o'),
+        .newUnitID = MAKEFOURCC('u','0','0','1'),
+    };
+    LPCMAPINFO old_mapinfo = level.mapinfo;
+    slkTestData_t *profile_rows = parse_slk_string(
+        "C;Y1;X1;K\"id\"\n"
+        "C;Y1;X2;K\"Art\"\n"
+        "C;Y1;X3;K\"Buttonpos\"\n"
+        "C;Y1;X4;K\"Tip\"\n"
+        "C;Y1;X5;K\"Ubertip\"\n"
+        "C;Y1;X6;K\"Hotkey\"\n"
+        "C;Y2;X1;K\"hfoo\"\n"
+        "C;Y2;X2;K\"ReplaceableTextures\\CommandButtons\\BTNFootman.blp\"\n"
+        "C;Y2;X3;K\"0,0\"\n"
+        "C;Y2;X4;K\"Train Footman\"\n"
+        "C;Y2;X5;K\"Versatile foot soldier.\"\n"
+        "C;Y2;X6;K\"F\"\n"
+        "E\n");
+    slkTestData_t *old_profiles = G_SetProfileRows(profile_rows);
+
+    mapinfo.num_userCreatedUnits = 1;
+    mapinfo.userCreatedUnits = &custom;
+    level.mapinfo = &mapinfo;
+
+    T_ASSERT(G_BuildCommandButton(producer, "u001", false, 0, &button));
+    T_STREQ(button.tooltip, "Train Footman");
+    T_STREQ(button.ubertip, "Versatile foot soldier.");
+    T_EQ(button.hotkey, 'F');
+
+    level.mapinfo = old_mapinfo;
+    G_SetProfileRows(old_profiles);
+}
+
 TEST(wc3_building, disabled_command_button_is_inert_and_available_button_is_clickable) {
     void (*old_write)(pfWriteType_t, void const *) = gi.Write;
     int (*old_image_index)(LPCSTR) = gi.ImageIndex;

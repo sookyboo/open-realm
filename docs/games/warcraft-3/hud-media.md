@@ -47,3 +47,4 @@ Repeat with `-tft`. Engine coverage: `make test-wc3-engine WC3_PATTERN='wc3_game
 - Leaving `hud` bindings live across `G_LoadMap` while `frames[]` was cleared.
 - Treating `GetConfigstring(CS_IMAGES + old_index)` as the name of a cached frame after the slot has been reused.
 - Preserving `CS_IMAGES` across `SV_Map` as a workaround. The table is per-level.
+- Re-copying a live font specification directly from `hud.font_spec[old]` into `hud.font_spec[new]` after `FontIndex()`. The allocator may return the same slot, so preserve the source string in a local buffer before writing the destination.

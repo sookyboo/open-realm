@@ -155,6 +155,22 @@ static LPCSTR G_UIArtPath(LPCSTR art) {
     return Theme_String(art, art);
 }
 
+static UnitProfile_t const *G_CommandUnitProfile(LPCSTR code, BOOL research, ability_t const *ability) {
+    DWORD class_id;
+    UnitProfile_t const *profile;
+
+    /* Build/train entries are unit object-data commands, not abilities.  The
+     * typed accessor also resolves map-created unit IDs to their base unit,
+     * which is the presentation fallback OpenRealm already uses for the rest
+     * of that unit's data until war3map.w3u field overlays are applied. */
+    if (research || ability || !code || strlen(code) != 4) {
+        return NULL;
+    }
+    memcpy(&class_id, code, sizeof(class_id));
+    profile = G_UnitProfile(class_id);
+    return profile && profile->id ? profile : NULL;
+}
+
 BOOL G_BuildCommandButton(LPEDICT ent, LPCSTR code, BOOL research, DWORD level, gameCommandButton_t *button) {
     char command_code[256];
     char art_level[256];
@@ -167,6 +183,7 @@ BOOL G_BuildCommandButton(LPEDICT ent, LPCSTR code, BOOL research, DWORD level, 
     LPCSTR ubertip;
     LPCSTR hotkey;
     ability_t const *ability;
+    UnitProfile_t const *unit_profile;
     DWORD ability_code = 0;
     BOOL toggle_on = false;
     BOOL upgrade_research = false;
@@ -195,16 +212,29 @@ BOOL G_BuildCommandButton(LPEDICT ent, LPCSTR code, BOOL research, DWORD level, 
     }
     art_code = G_CommandArtCode(ent, code);
     toggle_on = !research && ability && ability->is_toggle_on && ability->is_toggle_on(ent);
-    art = FindConfigValue(art_code, toggle_on ? STR_UNART :
-                         G_ResearchField(STR_ART, research && !upgrade_research));
+    unit_profile = G_CommandUnitProfile(code, research, ability);
+    art = unit_profile && unit_profile->art && *unit_profile->art
+        ? unit_profile->art
+        : FindConfigValue(art_code, toggle_on ? STR_UNART :
+                          G_ResearchField(STR_ART, research && !upgrade_research));
     buttonpos = FindConfigValue(art_code, toggle_on ? STR_UNBUTTONPOS :
                                G_ResearchField(STR_BUTTONPOS, research && !upgrade_research));
-    tip = FindConfigValue(art_code, toggle_on ? STR_UNTIP :
-                         G_ResearchField(STR_TIP, research && !upgrade_research));
-    ubertip = FindConfigValue(art_code, toggle_on ? STR_UNUBERTIP :
-                             G_ResearchField(STR_UBERTIP, research && !upgrade_research));
-    hotkey = FindConfigValue(art_code, toggle_on ? STR_UNHOTKEY :
-                            G_ResearchField(STR_HOTKEY, research && !upgrade_research));
+    if ((!buttonpos || !*buttonpos) && unit_profile &&
+        unit_profile->buttonPosX && *unit_profile->buttonPosX) {
+        buttonpos = unit_profile->buttonPosX;
+    }
+    tip = unit_profile && unit_profile->tip && *unit_profile->tip
+        ? unit_profile->tip
+        : FindConfigValue(art_code, toggle_on ? STR_UNTIP :
+                          G_ResearchField(STR_TIP, research && !upgrade_research));
+    ubertip = unit_profile && unit_profile->uberTip && *unit_profile->uberTip
+        ? unit_profile->uberTip
+        : FindConfigValue(art_code, toggle_on ? STR_UNUBERTIP :
+                          G_ResearchField(STR_UBERTIP, research && !upgrade_research));
+    hotkey = unit_profile && unit_profile->hotkey && *unit_profile->hotkey
+        ? unit_profile->hotkey
+        : FindConfigValue(art_code, toggle_on ? STR_UNHOTKEY :
+                          G_ResearchField(STR_HOTKEY, research && !upgrade_research));
     G_CopyString(art_level, sizeof(art_level), research ? G_StringForLevel(art, level) : art);
     art_path = G_UIArtPath(art_level);
 
