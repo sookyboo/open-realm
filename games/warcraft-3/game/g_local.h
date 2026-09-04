@@ -119,6 +119,8 @@ enum {
     AI_HOLD_FRAME = 1 << 0,
     AI_FLYING     = 1 << 1,  /* air-layer unit (movetp "fly"): ignores ground collision */
     AI_IMMOBILE   = 1 << 2,  /* fixed unit: may act, but never translates or changes facing */
+    AI_AUTOCAST_REPAIR = 1 << 3, /* persisted Repair-family autocast toggle */
+    AI_AUTOCAST_ACTIVE = 1 << 4, /* fast unit-wide marker: some autocast ability is enabled */
 };
 
 typedef enum {
@@ -377,6 +379,9 @@ struct client_s {
         BYTE tax[MAX_PLAYERS][PLAYERSTATE_LUMBER_GATHERED + 1];
         FLOAT handicap, handicap_xp;
         BOOL race_selectable, on_score_screen;
+        BOOL removed;
+        BYTE pending_game_result; /* 0 = none, PLAYER_GAME_RESULT_* + 1 while fallback UI is deferred */
+        DWORD pending_game_result_event; /* level.events.read must reach this write ordinal before fallback UI */
         char name[MAX_PATHLEN];
     } jass;
     playerTechState_t tech[MAX_PLAYER_TECH_STATE];
@@ -542,6 +547,13 @@ typedef struct ability_s {
      * against the previous layout; inserting a field above spell changes the
      * offsets of every existing dispatch member. */
     BOOL (*item_use)(LPEDICT); /* synchronous inventory activation; true only when gameplay effect applies */
+
+    /* Optional generic autocast hooks. Keep these append-only for the same ABI
+     * reason as item_use above. The unit scheduler owns when to try autocast;
+     * each ability owns its toggle state and target acquisition policy. */
+    BOOL (*autocast_is_on)(LPEDICT);
+    void (*autocast_set)(LPEDICT, BOOL);
+    BOOL (*autocast_acquire)(LPEDICT);
 } ability_t;
 
 typedef struct {
@@ -1180,7 +1192,7 @@ struct level_locals {
     struct {
         char name[MAX_PATHLEN], description[MAX_TRIGSTR_LENGTH];
         DWORD teams, players, game_types, game_type, map_flags;
-        DWORD placement, speed, difficulty, resource_density, creature_density;
+        DWORD placement, speed, difficulty, default_difficulty, resource_density, creature_density;
         DWORD forced_start_locations;
         struct {
             DWORD count;
@@ -1229,6 +1241,14 @@ void G_InitJassHost(void);
 LPEDICT G_GetPlayerEntityByNumber(DWORD);
 LPGAMECLIENT G_GetPlayerClientByNumber(DWORD);
 void G_SetClientConnected(LPEDICT player, BOOL connected);
+BOOL G_GameResultDebugEnabled(void);
+void G_GameResultDebug(LPCSTR format, ...);
+BOOL G_IsSinglePlayer(void);
+void G_RequestEndGame(BOOL do_score_screen);
+void G_RequestChangeLevel(LPCSTR map, BOOL do_score_screen);
+void G_RequestRestartGame(BOOL do_score_screen);
+void G_RequestLoadGameMenu(void);
+void G_RequestCampaignSelect(void);
 void G_SetScriptPaused(BOOL paused);
 void G_SetClientModal(LPEDICT player, DWORD modal, BOOL open);
 void G_SetQuestDialogOpen(LPEDICT player, BOOL open);
@@ -1452,6 +1472,12 @@ ability_t const *GetAbilityByIndex(DWORD);
 DWORD FindAbilityIndex(LPCSTR);
 void InitAbilities(void);
 void SetAbilityNames(void);
+#ifdef WC3_DEBUG_AUTOCAST
+int G_AutocastDebugLevel(void);
+#endif
+BOOL G_UnitAutocastIsOn(LPEDICT ent, ability_t const *ability);
+BOOL G_SetUnitAutocast(LPEDICT ent, ability_t const *ability, BOOL enabled);
+BOOL G_TryUnitAutocast(LPEDICT ent);
 
 // g_metadata.c
 LPCSTR FindConfigValue(LPCSTR, LPCSTR);
@@ -1491,6 +1517,7 @@ void G_UpdateConstructionAnimation(LPEDICT building);
 void G_CompleteConstruction(LPEDICT building);
 BOOL G_UnitHasHumanRepair(LPEDICT ent);
 BOOL S_OrderRepair(LPEDICT ent, LPEDICT target, DWORD preferred);
+BOOL S_SetRepairAutocast(LPEDICT ent, BOOL enabled);
 BOOL S_RepairSmart(LPEDICT ent, LPEDICT target);
 void S_CancelRepair(LPEDICT ent);
 void G_SetPlayerTechMaxAllowed(LPGAMECLIENT client, DWORD techid, LONG maximum);
@@ -1585,7 +1612,8 @@ LPCSTR UI_TestResolveTypedInfoPanelIcon(LPCSTR prefix, LPCSTR type, BOOL has_upg
 void UI_WriteLayout(LPEDICT, LPCFRAMEDEF, DWORD);
 void UI_WriteStart(DWORD);
 void UI_ClearLayer(LPEDICT, DWORD);
-void UI_ShowGameResult(LPEDICT, BOOL);
+void UI_ShowGameResult(LPEDICT, DWORD);
+void UI_FlushPendingGameResults(void);
 void UI_HideGameResult(LPEDICT);
 void UI_ShowQuests(LPEDICT);
 void UI_HideQuests(LPEDICT);
@@ -1794,6 +1822,7 @@ void jass_runevents(LPJASS);
 // g_events.c
 void G_RunEntities(void);
 void G_RunEvents(void);
+void G_DrainPausedResultEvents(void);
 
 // g_items.c
 void SP_SpawnItem(LPEDICT);

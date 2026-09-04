@@ -55,6 +55,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | WC3 research queues, upgrade costs/requirements, player tech state, Blacksmith attack/armor effects | [docs/games/warcraft-3/research-and-upgrades.md](docs/games/warcraft-3/research-and-upgrades.md) |
 | WC3 building damage fire thresholds, MDX Sprite attachments, race-specific effect families | [docs/games/warcraft-3/building-damage-rendering.md](docs/games/warcraft-3/building-damage-rendering.md) |
 | WC3 Build/Repair blocked-footprint approach routing | [docs/games/warcraft-3/build-repair-routing.md](docs/games/warcraft-3/build-repair-routing.md) |
+| WC3 generic autocast hooks, command-button right click, Auto Repair nearest-valid acquisition | [docs/games/warcraft-3/autocast.md](docs/games/warcraft-3/autocast.md) |
 | WC3 food/supply ownership, training reservations, provider lifecycle, upkeep income | [docs/games/warcraft-3/food-and-upkeep.md](docs/games/warcraft-3/food-and-upkeep.md) |
 | WC3 Hero death persistence and Altar revival lifecycle | [docs/games/warcraft-3/hero-revival.md](docs/games/warcraft-3/hero-revival.md) |
 | WC3 Rally producer state, Smart handoff, target lifetime, JASS getters | [docs/games/warcraft-3/rally-points.md](docs/games/warcraft-3/rally-points.md) |
@@ -112,7 +113,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 - Use `snake_case` for functions and variables, `ALL_CAPS` for constants and macros, matching Quake 2 conventions.
 - Use the `BZ_` prefix for project-private compile-time macros, generated binding helpers, environment toggles, and namespaced constants.
 - When fixing warnings for short, future-facing hooks (one-line static moves, extern declarations, placeholder assignments), prefer commenting them out over deleting them. Add a short comment explaining the warning and when the line should come back.
-- For WoW UI code (`games/world-of-warcraft/ui/`), do not fail silently. Emit a clear `UIWow:` log when a required script, handler, renderer resource, or fallback path is missing.
+- For WoW UI code (`games/world-of-warcraft/menu/`), do not fail silently. Emit a clear `UIWow:` log when a required script, handler, renderer resource, or fallback path is missing.
 - When a function has more than 3 parameters, group them into a dedicated input struct (`draw<Thing>_t` or `<thing>Params_t`).
 
 ## General Formatting
@@ -154,7 +155,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 
 The `fdfbindgen` tool (built at `build/bin/fdfbindgen`) reads one or more FDF files and emits a C header that maps every named frame to a typed struct field. The generated headers live in two locations:
 
-- `games/warcraft-3/ui/generated/` — screen-level frames used by the menu/glue layer (`ui/screens/*.c`).
+- `games/warcraft-3/menu/generated/` — screen-level frames used by the menu/glue layer (`ui/screens/*.c`).
 - `games/warcraft-3/game/generated/` — in-game HUD frames used by `game/hud/*.c`.
 
 **When to regenerate:** any time you add, rename, or remove a named frame in an FDF file that already has a corresponding generated header, run fdfbindgen to keep the header in sync. Do not edit generated headers by hand.
@@ -164,7 +165,7 @@ The `fdfbindgen` tool (built at `build/bin/fdfbindgen`) reads one or more FDF fi
 mpqtool -mpq War3.mpq cat UI/FrameDef/Glue/MainMenu.fdf \
   | build/bin/fdfbindgen -prefix MainMenu -root MainMenuFrame \
       -load UI\\FrameDef\\Glue\\MainMenu.fdf - \
-  > games/warcraft-3/ui/generated/main_menu.h
+  > games/warcraft-3/menu/generated/main_menu.h
 ```
 
 **How to run — in-game HUD header from MPQ:**
@@ -283,7 +284,7 @@ Follow Quake 2's pattern. Never fail silently, never crash, never log per-frame.
 - **SDL display modes are opt-in diagnostics.** Pass `-vid_modes` (or `+set vid_modes 1`) to log the available SDL display modes during renderer startup; normal startup omits the list. This works in WC3, WoW and SC2 and is not saved automatically. Plural `vid_modes` controls logging; singular `vid_mode` selects resolution. See [video modes](docs/build-and-renderer-platforms.md#video-modes).
 - The `+` prefix (e.g. `+map`, `+menu_main`) is for **command-line arguments only**. It tells `Cbuf_AddLateCommands` to strip the `+` and queue the command for startup execution.
 - In code, use the bare command name when calling `Cbuf_AddText` or `uiimport.Cmd_ExecuteText`: `"map ..."` not `"+map ..."`.
-- **Launch UI scenes directly** with a `+menu_<scene>` late command — there is no `+ui` command. Scene names come from the `menu_*` commands each game registers via `Cmd_AddCommand` in its `ui_main.c`: WC3 (`menu_main`, `menu_options`, ...) and WoW (`menu_login`, `menu_character_select`, `menu_character_create`, `menu_ingame`). Examples: `build/bin/openwarcraft3 -data 'data/Warcraft III' +menu_main`, `build/bin/openwow -data data/world-of-warcraft +menu_character_create`. See [docs/rendering-scene-workflow.md](docs/rendering-scene-workflow.md).
+- **Launch UI scenes directly** with a `+menu_<scene>` late command — there is no `+ui` command. Scene names come from the `menu_*` commands each game registers via `Cmd_AddCommand` in its `menu_main.c`: WC3 (`menu_main`, `menu_options`, ...) and WoW (`menu_login`, `menu_character_select`, `menu_character_create`, `menu_ingame`). Examples: `build/bin/openwarcraft3 -data 'data/Warcraft III' +menu_main`, `build/bin/openwow -data data/world-of-warcraft +menu_character_create`. See [docs/rendering-scene-workflow.md](docs/rendering-scene-workflow.md).
 - **Use the engine screenshot command, not desktop capture.** `screenshot` writes `screenshots/shotNNNN.jpg` (JPEG, quality 90). `screenshot N` captures the Nth fully rendered frame after the command executes. From the command line, place it after the map selector and keep `com_frame_limit` larger than the delay:
   ```
   build/bin/opensc2 -data data/StarCraft2 +map Maps/TerranTest.SC2Components +vid_hidden 1 +screenshot 5 +com_frame_limit 10

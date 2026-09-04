@@ -510,6 +510,67 @@ CLIENTCOMMAND(Button) {
     }
 }
 
+CLIENTCOMMAND(Autocast) {
+    LPGAMECLIENT client;
+    LPEDICT main;
+    ability_t const *ability;
+    LPCSTR classname;
+    BOOL enabled;
+    BOOL changed = false;
+
+    if (!clent || !clent->client || argc < 2) return;
+    client = clent->client;
+    classname = argv[1];
+    if (!classname || strlen(classname) != 4) return;
+    main = G_GetMainSelectedUnit(client);
+    ability = FindAbilityForCommand(classname);
+    if (!G_UnitCanControl(client, main) || !G_ActorHasSkill(main, classname) ||
+        !ability || !ability->autocast_set || !ability->autocast_is_on) {
+#ifdef WC3_DEBUG_AUTOCAST
+        if (G_AutocastDebugLevel() >= 1) {
+            fprintf(stderr,
+                    "WC3_AUTOCAST command_rejected unit=%ld code=%s control=%d has_skill=%d ability=%p set=%d state=%d\n",
+                    main && g_edicts ? (long)(main - g_edicts) : -1L,
+                    classname,
+                    G_UnitCanControl(client, main) ? 1 : 0,
+                    main && G_ActorHasSkill(main, classname) ? 1 : 0,
+                    (void *)ability,
+                    ability && ability->autocast_set ? 1 : 0,
+                    ability && ability->autocast_is_on ? 1 : 0);
+        }
+#endif
+        return;
+    }
+
+    enabled = !G_UnitAutocastIsOn(main, ability);
+    FOR_CONTROLLABLE_SELECTED_UNITS(client, ent) {
+        if (!G_ActorHasSkill(ent, classname)) continue;
+        if (G_SetUnitAutocast(ent, ability, enabled)) {
+            changed = true;
+            /* The toggle itself must not interrupt active work or movement, but
+             * an already-idle worker should respond immediately rather than
+             * waiting for the next staggered 300 ms acquisition slot. */
+            if (enabled && G_UnitIsIdleWorker(ent)) {
+#ifdef WC3_DEBUG_AUTOCAST
+                BOOL const acquired = G_TryUnitAutocast(ent);
+                if (G_AutocastDebugLevel() >= 1) {
+                    fprintf(stderr,
+                            "WC3_AUTOCAST toggle_acquire unit=%ld code=%s acquired=%d\n",
+                            g_edicts ? (long)(ent - g_edicts) : -1L,
+                            classname, acquired ? 1 : 0);
+                }
+#else
+                G_TryUnitAutocast(ent);
+#endif
+            }
+        }
+    }
+    if (!changed) return;
+
+    Get_Commands_f(clent);
+    G_PlayUISoundForPlayer(clent, "AutoCastButtonClick");
+}
+
 CLIENTCOMMAND(Research) {
     LPCSTR classname = argc >= 2 ? argv[1] : NULL;
     LPGAMECLIENT client = clent->client;
@@ -738,16 +799,39 @@ CLIENTCOMMAND(Log) {
 }
 
 CLIENTCOMMAND(HideGameResult) {
+    DWORD result = clent && clent->client ? clent->client->ps.stats[PLAYERSTATE_GAME_RESULT] : 3;
+    G_GameResultDebug("command hidegameresult ent=%u result=%u",
+        clent ? (unsigned)clent->s.number : 0u, (unsigned)result);
     UI_HideGameResult(clent);
+    if (result == 0 && G_IsSinglePlayer() && level.vm) {
+        /* The fallback has no copy of Blizzard.j's bj_changeLevelMapName. Let
+         * the stock continuation own EndGame vs ChangeLevel when available. */
+        /* The stock dialog-button action runs even while CustomVictoryDialogBJ
+         * has the single-player simulation paused.  Running this as a queued
+         * coroutine would strand it behind that pause, so execute the Blizzard.j
+         * continuation synchronously from the button command. */
+        G_GameResultDebug("command hidegameresult calling CustomVictoryOkBJ synchronously");
+        jass_callbyname(level.vm, "CustomVictoryOkBJ", false);
+    }
 }
 
-/* TODO: restart / quit require engine-level session teardown not yet plumbed. */
 CLIENTCOMMAND(GameResultRestart) {
     (void)clent; (void)argc; (void)argv;
+    G_GameResultDebug("command gameresult_restart");
+    G_RequestRestartGame(true);
+}
+
+CLIENTCOMMAND(GameResultLoad) {
+    (void)clent; (void)argc; (void)argv;
+    G_GameResultDebug("command gameresult_load");
+    G_RequestLoadGameMenu();
 }
 
 CLIENTCOMMAND(GameResultQuit) {
     (void)clent; (void)argc; (void)argv;
+    G_GameResultDebug("command gameresult_quit single_player=%u", (unsigned)G_IsSinglePlayer());
+    if (G_IsSinglePlayer()) level.setup.difficulty = level.setup.default_difficulty;
+    G_RequestEndGame(true);
 }
 
 /* F10 and the authored Menu button share this route. Submenu transitions
@@ -928,6 +1012,7 @@ clientCommand_t clientCommands[] = {
     { "god", CMD_God },
     { "kill", CMD_Kill },
     { "button", CMD_Button },
+    { "autocast", CMD_Autocast },
     { "research", CMD_Research },
     { "inventory", CMD_Inventory },
     { "dropitem", CMD_DropItem },
@@ -949,6 +1034,7 @@ clientCommand_t clientCommands[] = {
     { "log", CMD_Log },
     { "hidegameresult", CMD_HideGameResult },
     { "gameresult_restart", CMD_GameResultRestart },
+    { "gameresult_load", CMD_GameResultLoad },
     { "gameresult_quit", CMD_GameResultQuit },
     { "debugspawn", CMD_DebugSpawn },
     { "menu", CMD_Menu },
