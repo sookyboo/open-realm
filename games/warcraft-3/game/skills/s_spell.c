@@ -123,7 +123,7 @@ BOOL S_SpellCooldownReady(LPEDICT caster, DWORD code) {
     if (!caster) {
         return false;
     }
-    now = gi.GetTime();
+    now = G_Time();
     FOR_LOOP(i, MAX_UNIT_STATUSES) {
         heroabilitystatus_t const *status = caster->abilstatus + i;
         if (status->level && status->code == code && status->timestamp > now) {
@@ -143,7 +143,7 @@ FLOAT S_SpellCooldownFraction(LPEDICT caster, DWORD code, DWORD level) {
     if (!caster) {
         return 0.0f;
     }
-    now = gi.GetTime();
+    now = G_Time();
     FOR_LOOP(i, MAX_UNIT_STATUSES) {
         heroabilitystatus_t const *status = caster->abilstatus + i;
         if (status->level && status->code == code && status->timestamp > now) {
@@ -170,7 +170,7 @@ void S_SpellStartCooldown(LPEDICT caster, DWORD code, DWORD level) {
         return;
     }
 
-    now = gi.GetTime();
+    now = G_Time();
     FOR_LOOP(i, MAX_UNIT_STATUSES) {
         heroabilitystatus_t *status = caster->abilstatus + i;
         if (status->level && status->code == code) {
@@ -461,6 +461,23 @@ static void spell_no_target_execute(LPEDICT clent) {
 
     spell_commit(caster, code, level);
     spell->execute(caster, st, spell);
+}
+
+BOOL S_CastNoTargetSpell(LPEDICT caster, DWORD code) {
+    DWORD level;
+    spell_info_t const *spell;
+    spellTarget_t target = { .type = SPELL_TARGET_NONE };
+
+    if (!caster || !code || !G_UnitAbilityLevel(caster, code)) return false;
+    spell = S_SpellInfoForCode(code);
+    if (!spell || spell->target_type != SPELL_TARGET_NONE || !spell->execute) return false;
+    level = S_SpellLevel(caster, code);
+    if (!S_SpellCooldownReady(caster, code) || !S_SpellCanPay(caster, code, level)) return false;
+    if (spell->validate && !spell->validate(caster, target)) return false;
+
+    spell_commit(caster, code, level);
+    spell->execute(caster, target, spell);
+    return true;
 }
 
 /* Shared command entry point for all spell abilities.  Sets up the appropriate

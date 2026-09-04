@@ -15,16 +15,16 @@
 #include "sound/s_local.h"
 #include "ui_layout.h"
 
-#ifndef WOW
-/* Keep predicted camera targets inside the server-authored camera bounds. Empty bounds are a no-op. */
+/* Keep predicted camera targets inside the loaded map. Scripted WC3 camera
+ * rectangles stay server-side; the client does not get a per-player copy. */
 VECTOR2 CL_ClampCameraPosition(VECTOR2 position) {
-    if (cl.playerstate.camera_bounds.max.x > cl.playerstate.camera_bounds.min.x)
-        position.x = MAX(cl.playerstate.camera_bounds.min.x, MIN(cl.playerstate.camera_bounds.max.x, position.x));
-    if (cl.playerstate.camera_bounds.max.y > cl.playerstate.camera_bounds.min.y)
-        position.y = MAX(cl.playerstate.camera_bounds.min.y, MIN(cl.playerstate.camera_bounds.max.y, position.y));
+    BOX2 bounds = CM_GetWorldBounds();
+    if (bounds.max.x > bounds.min.x)
+        position.x = MAX(bounds.min.x, MIN(bounds.max.x, position.x));
+    if (bounds.max.y > bounds.min.y)
+        position.y = MAX(bounds.min.y, MIN(bounds.max.y, position.y));
     return position;
 }
-#endif
 
 static LPCSTR CL_LobbySlotTypeName(lobbySlotType_t type) {
     switch (type) {
@@ -255,10 +255,6 @@ void CL_ParseFrame(LPSIZEBUF msg) {
 void CL_ParsePlayerInfo(LPSIZEBUF msg) {
     DWORD bits;
     DWORD plnum = MSG_ReadPlayerBits(msg, &bits);
-    BOOL first_camera_sample = cl.viewDef.camerastate[0].znear <= 0 ||
-                               cl.viewDef.camerastate[0].zfar <= 0;
-    FLOAT znear;
-    FLOAT zfar;
     MSG_ReadDeltaPlayerState(msg, &cl.playerstate, plnum, bits);
     if (Cvar_Integer("ui_layout_debug", 0) >= 2) {
         static DWORD last_timed_status = ~0u;
@@ -275,27 +271,19 @@ void CL_ParsePlayerInfo(LPSIZEBUF msg) {
         cls.key_dest != key_console && cls.key_dest != key_menu) {
         CL_SetGameplayInput();
     }
-    znear = cl.viewDef.camerastate[0].znear > 0 ? cl.viewDef.camerastate[0].znear : 100;
-    zfar = cl.viewDef.camerastate[0].zfar > 0 ? cl.viewDef.camerastate[0].zfar : 5000;
 
     cl.viewDef.camerastate[1] = cl.viewDef.camerastate[0];
-    cl.viewDef.camerastate[0].origin = cl.playerstate.origin;
-    cl.viewDef.camerastate[0].viewquat = cl.playerstate.viewquat;
+    cl.viewDef.camerastate[0].origin = cl.playerstate.vieworigin;
     cl.viewDef.camerastate[0].viewangles = cl.playerstate.viewangles;
     cl.viewDef.camerastate[0].distance = cl.playerstate.distance;
     cl.viewDef.camerastate[0].fov = cl.playerstate.fov;
-    if (cl.playerstate.znear > 0.0f) znear = cl.playerstate.znear;
-    if (cl.playerstate.zfar > 0.0f) zfar = cl.playerstate.zfar;
-    cl.viewDef.camerastate[0].znear = znear;
-    cl.viewDef.camerastate[0].zfar = zfar;
-
-    if (first_camera_sample)
-        cl.viewDef.camerastate[1] = cl.viewDef.camerastate[0];
+    cl.viewDef.camerastate[0].znear = cl.playerstate.znear;
+    cl.viewDef.camerastate[0].zfar = cl.playerstate.zfar;
 
     if (cl.camera_prediction.active) {
         cl.camera_prediction.origin = CL_ClampCameraPosition(cl.camera_prediction.origin);
-        if (cl.playerstate.origin.x == cl.camera_prediction.origin.x &&
-            cl.playerstate.origin.y == cl.camera_prediction.origin.y) {
+        if (cl.playerstate.vieworigin.x == cl.camera_prediction.origin.x &&
+            cl.playerstate.vieworigin.y == cl.camera_prediction.origin.y) {
             cl.camera_prediction.active = false;
         } else {
             cl.viewDef.camerastate[0].origin.x = cl.camera_prediction.origin.x;

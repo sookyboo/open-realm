@@ -8,6 +8,7 @@ static struct {
 } camera_drag;
 
 static BOOL smart_click_active;
+static BOOL cam_left, cam_right, cam_north, cam_south;
 
 static BOOL CL_OrderQueueModifierDown(void) {
     return (SDL_GetModState() & (KMOD_LSHIFT | KMOD_RSHIFT)) != 0;
@@ -21,114 +22,8 @@ static BOOL CL_TracePan(float x, float y, LPVECTOR3 point) {
 #endif
 }
 
-/* --- Control groups (Ctrl+0..9 assign, 0..9 recall) ------------------------ */
-#define CL_CONTROL_GROUP_COUNT 10 // groups; Warcraft III number-key groups; used for client control-group storage
-#define CL_CONTROL_GROUP_DOUBLE_TAP_MS 500 // milliseconds; double-tap focus window; used to recenter a recalled group
-#define CL_CONTROL_GROUP_NONE CL_CONTROL_GROUP_COUNT
-
-static DWORD cg_ids[CL_CONTROL_GROUP_COUNT][MAX_SELECTED_ENTITIES];
-static DWORD cg_count[CL_CONTROL_GROUP_COUNT];
-static DWORD cg_last_recall = CL_CONTROL_GROUP_NONE;
-static DWORD cg_last_recall_ms;
-
 void CL_InputModeResetMap(void) {
-    memset(cg_ids, 0, sizeof(cg_ids));
-    memset(cg_count, 0, sizeof(cg_count));
-    cg_last_recall = CL_CONTROL_GROUP_NONE;
-    cg_last_recall_ms = 0;
-}
-
-static void CL_ResetControlGroupRecall(void) {
-    cg_last_recall = CL_CONTROL_GROUP_NONE;
-    cg_last_recall_ms = 0;
-}
-
-static BOOL CL_ControlGroupCenter(DWORD const *ids, DWORD n, LPVECTOR2 center) {
-    double x = 0.0, y = 0.0;
-    DWORD valid = 0;
-
-    if (!ids || !center) return false;
-    if (n > MAX_SELECTED_ENTITIES) n = MAX_SELECTED_ENTITIES;
-    FOR_LOOP(i, n) {
-        DWORD const number = ids[i];
-        LPCENTITYSTATE state;
-        if (!number || number >= MAX_CLIENT_ENTITIES) continue;
-        state = &cl.ents[number].current;
-        if (!state->model || state->stats[ENT_HEALTH] == 0 ||
-            (state->flags & EF_NOT_SELECTABLE)) continue;
-        x += state->origin.x;
-        y += state->origin.y;
-        valid++;
-    }
-    if (!valid) return false;
-    center->x = (FLOAT)(x / valid);
-    center->y = (FLOAT)(y / valid);
-    return true;
-}
-
-static void CL_ApplySelection(DWORD const *ids, DWORD n) {
-    char buffer[1024];
-    if (n == 0) return;
-    if (n > MAX_SELECTED_ENTITIES) n = MAX_SELECTED_ENTITIES;
-    strlcpy(buffer, "select", sizeof(buffer));
-    FOR_LOOP(i, n) {
-        size_t used = strlen(buffer);
-        snprintf(buffer + used, sizeof(buffer) - used, " %d", ids[i]);
-    }
-    MSG_WriteByte(&cls.netchan.message, clc_stringcmd);
-    SZ_Printf(&cls.netchan.message, "%s", buffer);
-    cl.selection.num_selected = n;
-    memcpy(cl.selection.entity_nums, ids, sizeof(DWORD) * n);
-    CL_RequestUnitUI(n, cl.selection.entity_nums);
-}
-
-BOOL CL_HandleGameKey(int sym, Uint16 mod, BOOL repeat) {
-    DWORD g, now;
-    BOOL center_on_group;
-    VECTOR2 center;
-
-    if (!CL_GameplayInputReady())
-        return false;
-    /* Control groups are handled before the generic binding dispatcher.
-     * Consume digit keys while a modal client window is active so they cannot
-     * change gameplay selection behind Quest/Log. Other keys fall through to
-     * Key_Event, which applies the generic modal binding block. */
-    if (CL_WindowModalActive() && sym >= SDLK_0 && sym <= SDLK_9) {
-        CL_ResetControlGroupRecall();
-        return true;
-    }
-    if (sym < SDLK_0 || sym > SDLK_9) {
-        CL_ResetControlGroupRecall();
-        return false;
-    }
-    /* SDL key-repeat from holding a number is not a deliberate second tap. */
-    if (repeat)
-        return true;
-
-    g = (DWORD)(sym - SDLK_0); /* 0..9 */
-    if (mod & KMOD_CTRL) {
-        /* Assign the current selection to this control group. */
-        DWORD n = cl.selection.num_selected;
-        if (n > MAX_SELECTED_ENTITIES) n = MAX_SELECTED_ENTITIES;
-        cg_count[g] = n;
-        memcpy(cg_ids[g], cl.selection.entity_nums, sizeof(DWORD) * n);
-        CL_ResetControlGroupRecall();
-    } else if (cg_count[g] > 0) {
-        /* Recall immediately. A deliberate rapid second press also recenters
-         * the gameplay camera; the first press is never delayed. */
-        now = SDL_GetTicks();
-        center_on_group = cg_last_recall == g &&
-            (DWORD)(now - cg_last_recall_ms) <= CL_CONTROL_GROUP_DOUBLE_TAP_MS;
-        CL_ApplySelection(cg_ids[g], cg_count[g]);
-        if (center_on_group && CL_ControlGroupCenter(cg_ids[g], cg_count[g], &center)) {
-            CL_SetCameraPosition(center);
-        }
-        cg_last_recall = g;
-        cg_last_recall_ms = now;
-    } else {
-        CL_ResetControlGroupRecall();
-    }
-    return true;
+    cam_left = cam_right = cam_north = cam_south = false;
 }
 
 static void CL_BeginPan(float x, float y) {
@@ -220,41 +115,43 @@ static void IN_SmartUp(void) {
     CL_SendSmartCommand(mouse.origin.x, mouse.origin.y);
 }
 
+static void IN_CamLeftDown(void) { cam_left = true; }
+static void IN_CamLeftUp(void) { cam_left = false; }
+static void IN_CamRightDown(void) { cam_right = true; }
+static void IN_CamRightUp(void) { cam_right = false; }
+static void IN_CamNorthDown(void) { cam_north = true; }
+static void IN_CamNorthUp(void) { cam_north = false; }
+static void IN_CamSouthDown(void) { cam_south = true; }
+static void IN_CamSouthUp(void) { cam_south = false; }
+
 void CL_InputModeInit(void) {
     Cmd_AddCommand("+pan", IN_PanDown);
     Cmd_AddCommand("-pan", IN_PanUp);
     Cmd_AddCommand("+smart", IN_SmartDown);
     Cmd_AddCommand("-smart", IN_SmartUp);
+    Cmd_AddCommand("+camleft", IN_CamLeftDown);
+    Cmd_AddCommand("-camleft", IN_CamLeftUp);
+    Cmd_AddCommand("+camright", IN_CamRightDown);
+    Cmd_AddCommand("-camright", IN_CamRightUp);
+    Cmd_AddCommand("+camnorth", IN_CamNorthDown);
+    Cmd_AddCommand("-camnorth", IN_CamNorthUp);
+    Cmd_AddCommand("+camsouth", IN_CamSouthDown);
+    Cmd_AddCommand("-camsouth", IN_CamSouthUp);
 }
 
 void CL_InputModeSetGameplay(void) {
-#ifdef SC2
-    gameCamera_t camera;
-
-    CL_GameDefaultCamera(&camera);
-    cl.viewDef.camerastate[0].zfar = camera.zfar;
-    cl.viewDef.camerastate[0].znear = camera.znear;
-    cl.viewDef.camerastate[1].zfar = camera.zfar;
-    cl.viewDef.camerastate[1].znear = camera.znear;
-#else
+#ifndef SC2
     if (!cl.moveConfirmation)
         cl.moveConfirmation = re.LoadModel("UI\\Feedback\\Confirmation\\Confirmation.mdx");
-    cl.viewDef.camerastate[0].zfar = 5000;
-    cl.viewDef.camerastate[0].znear = 100;
-    cl.viewDef.camerastate[1].zfar = 5000;
-    cl.viewDef.camerastate[1].znear = 100;
 #endif
 }
 
+BOOL CL_InputModeSelectDown(void) { return false; }
+BOOL CL_InputModeSelectUp(void) { return false; }
+
 void CL_InputModeMouseButton(SDL_MouseButtonEvent const *button, BOOL down) {
-    if (!button || button->button != SDL_BUTTON_MIDDLE) {
-        return;
-    }
-    if (down) {
-        CL_BeginPan(button->x, button->y);
-        return;
-    }
-    CL_EndPan();
+    (void)button;
+    (void)down;
 }
 
 static BOOL CL_CanHoverHealthEntity(DWORD entnum) {
@@ -305,8 +202,8 @@ BOOL CL_InputModeMouseWheel(SDL_MouseWheelEvent const *wheel) {
     return false;
 }
 
-/* WC3-style camera scrolling: arrow keys and screen-edge push. Runs every
- * client frame. World +Y is north (up on screen), +X is east (right). */
+/* Camera scrolling: +cam* binds and screen-edge push. Runs every client frame.
+ * World +Y is north (up on screen), +X is east (right). */
 #define CL_CAMERA_SCROLL_SPEED 1400.0f /* world units per second (WC3 default) */
 #ifdef SC2
 #undef  CL_CAMERA_SCROLL_SPEED
@@ -336,13 +233,10 @@ void CL_InputModeFrame(void) {
     }
 
     float dx = 0.0f, dy = 0.0f;
-    Uint8 const *keys = SDL_GetKeyboardState(NULL);
-    if (keys) {
-        if (keys[SDL_SCANCODE_LEFT])  dx -= 1.0f;
-        if (keys[SDL_SCANCODE_RIGHT]) dx += 1.0f;
-        if (keys[SDL_SCANCODE_UP])    dy += 1.0f;
-        if (keys[SDL_SCANCODE_DOWN])  dy -= 1.0f;
-    }
+    if (cam_left)  dx -= 1.0f;
+    if (cam_right) dx += 1.0f;
+    if (cam_north) dy += 1.0f;
+    if (cam_south) dy -= 1.0f;
 
     /* Screen-edge scrolling (only while the cursor is inside the window). */
 #ifndef SC2

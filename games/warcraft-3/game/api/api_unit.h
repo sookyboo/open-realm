@@ -569,11 +569,11 @@ DWORD GetUnitName(LPJASS j) {
 }
 DWORD GetUnitFoodUsed(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
-    return jass_pushinteger(j, whichUnit ? whichUnit->UnitBalance->foodUsed : 0);
+    return jass_pushinteger(j, whichUnit ? whichUnit->data.UnitBalance->foodUsed : 0);
 }
 DWORD GetUnitFoodMade(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
-    return jass_pushinteger(j, whichUnit ? whichUnit->UnitBalance->foodMade : 0);
+    return jass_pushinteger(j, whichUnit ? whichUnit->data.UnitBalance->foodMade : 0);
 }
 DWORD IsUnitInGroup(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
@@ -684,8 +684,8 @@ DWORD IsUnitHidden(LPJASS j) {
     return jass_pushboolean(j, whichUnit && (whichUnit->s.renderfx & RF_HIDDEN));
 }
 DWORD IsUnitIllusion(LPJASS j) {
-    //LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
-    return jass_pushboolean(j, 0);
+    LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
+    return jass_pushboolean(j, whichUnit && (whichUnit->aiflags & AI_ILLUSION));
 }
 DWORD IsUnitInTransport(LPJASS j) {
     //LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");

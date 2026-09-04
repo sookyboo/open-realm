@@ -84,7 +84,7 @@ static void G_PublishTimeOfDayPhase(void) {
 }
 
 static void G_CheckTimeOfDayEvents(FLOAT before, FLOAT after) {
-    FOR_EACH_LIST(EVENT, evt, level.events.handlers) {
+    FOR_EACH_EVENT(evt) {
         if (evt->type != EVENT_GAME_STATE_LIMIT || evt->state != WC3_GAME_STATE_TIME_OF_DAY)
             continue;
         if (!G_TimeLimitMatches(evt->limitop, before, evt->limitval) &&
@@ -341,9 +341,9 @@ static void G_ShutdownGame(void) {
     gi.SetPaused(false);
     G_BotShutdown();
     if (level.vm) { jass_close(level.vm); level.vm = NULL; }
+    G_JassSoundRuntimeReset();
     G_FowShutdown();
     G_FreeModels();
-    FOR_LOOP(i, globals.max_edicts) G_FreeActorSkills(g_edicts + i);
     gi.MemFree(g_edicts);
     g_edicts = NULL;
     globals.edicts = NULL;
@@ -362,10 +362,10 @@ FLOAT G_Cinefade(void) {
     if (!level.cinefilter.displayed) {
         return 0;
     }
-    if (!duration || gi.GetTime() > level.cinefilter.end.time) {
+    if (!duration || G_Time() > level.cinefilter.end.time) {
         return level.cinefilter.end.color.a / 255.0;
     } else {
-        FLOAT k = (gi.GetTime() - level.cinefilter.start.time) / (FLOAT)duration;
+        FLOAT k = (G_Time() - level.cinefilter.start.time) / (FLOAT)duration;
         return LerpNumber(level.cinefilter.start.color.a, level.cinefilter.end.color.a, k) / 255.0;
     }
 }
@@ -383,40 +383,43 @@ VECTOR3 G_MakeServerOrigin(FLOAT x, FLOAT y, FLOAT z_offset) {
 
 VECTOR2 G_ClampCameraPosition(LPGAMECLIENT client, LPCVECTOR2 position) {
     VECTOR2 clamped = position ? *position : (VECTOR2){ 0, 0 };
+    BOX2 bounds = level.camera_bounds;
 
-    if (!client || !position) {
-        return clamped;
-    }
-    if (client->ps.camera_bounds.max.x > client->ps.camera_bounds.min.x) {
-        clamped.x = MAX(client->ps.camera_bounds.min.x,
-                        MIN(client->ps.camera_bounds.max.x, clamped.x));
-    }
-    if (client->ps.camera_bounds.max.y > client->ps.camera_bounds.min.y) {
-        clamped.y = MAX(client->ps.camera_bounds.min.y,
-                        MIN(client->ps.camera_bounds.max.y, clamped.y));
-    }
+    (void)client;
+    if (!position) return clamped;
+    if (bounds.max.x > bounds.min.x)
+        clamped.x = MAX(bounds.min.x, MIN(bounds.max.x, clamped.x));
+    if (bounds.max.y > bounds.min.y)
+        clamped.y = MAX(bounds.min.y, MIN(bounds.max.y, clamped.y));
     return clamped;
 }
 
-void G_SetClientCameraBounds(LPGAMECLIENT client, FLOAT const bounds[8]) {
+static void G_ReclampClientCamera(LPGAMECLIENT client) {
     VECTOR2 position;
 
-    if (!client || !bounds) {
-        return;
-    }
-
-    client->ps.camera_bounds.min.x = MIN(MIN(bounds[0], bounds[2]), MIN(bounds[4], bounds[6]));
-    client->ps.camera_bounds.max.x = MAX(MAX(bounds[0], bounds[2]), MAX(bounds[4], bounds[6]));
-    client->ps.camera_bounds.min.y = MIN(MIN(bounds[1], bounds[3]), MIN(bounds[5], bounds[7]));
-    client->ps.camera_bounds.max.y = MAX(MAX(bounds[1], bounds[3]), MAX(bounds[5], bounds[7]));
-
-    position = (VECTOR2){ client->ps.origin.x, client->ps.origin.y };
+    if (!client) return;
+    position = (VECTOR2){ client->ps.vieworigin.x, client->ps.vieworigin.y };
     position = G_ClampCameraPosition(client, &position);
-    client->ps.origin = G_MakeServerOrigin(position.x, position.y, client->camera.state.z_offset);
+    client->ps.vieworigin = G_MakeServerOrigin(position.x, position.y, client->camera.state.z_offset);
     position = G_ClampCameraPosition(client, &client->camera.old_state.position);
     client->camera.old_state.position = position;
     position = G_ClampCameraPosition(client, &client->camera.state.position);
     client->camera.state.position = position;
+}
+
+void G_SetCameraBounds(FLOAT const bounds[8]) {
+    if (!bounds) return;
+    level.camera_bounds = MAKE(BOX2,
+        .min = {
+            MIN(MIN(bounds[0], bounds[2]), MIN(bounds[4], bounds[6])),
+            MIN(MIN(bounds[1], bounds[3]), MIN(bounds[5], bounds[7])),
+        },
+        .max = {
+            MAX(MAX(bounds[0], bounds[2]), MAX(bounds[4], bounds[6])),
+            MAX(MAX(bounds[1], bounds[3]), MAX(bounds[5], bounds[7])),
+        });
+    FOR_LOOP(i, game.max_clients)
+        G_ReclampClientCamera(game.clients + i);
 }
 
 void G_ClearCameraTarget(LPGAMECLIENT client, LPCSTR func) {
@@ -452,7 +455,7 @@ static void G_UpdateCameraTarget(LPGAMECLIENT client) {
         client->camera.old_state.viewangles.z = 90.0f - (FLOAT)RAD2DEG(target->s.angle);
         client->camera.state.viewangles.z = 90.0f - (FLOAT)RAD2DEG(target->s.angle);
     }
-    client->camera.start_time = gi.GetTime();
+    client->camera.start_time = G_Time();
     client->camera.end_time = client->camera.start_time;
 }
 
@@ -464,31 +467,32 @@ static void G_RunClients(void) {
         DWORD duration;
         G_UpdateCameraTarget(client);
         duration = client->camera.end_time - client->camera.start_time;
-        if (gi.GetTime() < client->camera.end_time && duration > 0) {
-            FLOAT k = (gi.GetTime() - client->camera.start_time) / (FLOAT)duration;
+        if (G_Time() < client->camera.end_time && duration > 0) {
+            FLOAT k = (G_Time() - client->camera.start_time) / (FLOAT)duration;
             LPCCAMERASETUP a = &client->camera.old_state;
             LPCCAMERASETUP b = &client->camera.state;
-            QUATERNION qa = Quaternion_fromEuler(&a->viewangles, ROTATE_ZYX);
-            QUATERNION qb = Quaternion_fromEuler(&b->viewangles, ROTATE_ZYX);
             VECTOR2 p = Vector2_lerp(&a->position, &b->position, k);
-            client->ps.origin = G_MakeServerOrigin(p.x, p.y, LerpNumber(a->z_offset, b->z_offset, k));
-            client->ps.viewquat = Quaternion_slerp(&qa, &qb, k);
-            client->ps.fov = LerpNumber(a->fov, b->fov, k);
+            client->ps.vieworigin = G_MakeServerOrigin(p.x, p.y, LerpNumber(a->z_offset, b->z_offset, k));
+            /* JASS interpolates camera fields independently; the client slerps the snapshot Eulers. */
+            client->ps.viewangles = Vector3_lerp(&a->viewangles, &b->viewangles, k);
             client->ps.distance = LerpNumber(a->target_distance, b->target_distance, k);
-            client->ps.znear = LerpNumber(a->near_z, b->near_z, k);
-            client->ps.zfar = LerpNumber(a->far_z, b->far_z, k);
+            player_set_lens(&client->ps, &(gameCamera_t){
+                .fov = LerpNumber(a->fov, b->fov, k),
+                .znear = LerpNumber(a->near_z, b->near_z, k),
+                .zfar = LerpNumber(a->far_z, b->far_z, k) });
         } else {
-            client->ps.origin = G_MakeServerOrigin(client->camera.state.position.x, client->camera.state.position.y, client->camera.state.z_offset);
-            client->ps.viewquat = Quaternion_fromEuler(&client->camera.state.viewangles, ROTATE_ZYX);
-            client->ps.fov = client->camera.state.fov;
+            client->ps.vieworigin = G_MakeServerOrigin(client->camera.state.position.x, client->camera.state.position.y, client->camera.state.z_offset);
+            client->ps.viewangles = client->camera.state.viewangles;
             client->ps.distance = client->camera.state.target_distance;
-            client->ps.znear = client->camera.state.near_z;
-            client->ps.zfar = client->camera.state.far_z;
+            player_set_lens(&client->ps, &(gameCamera_t){
+                .fov = client->camera.state.fov,
+                .znear = client->camera.state.near_z,
+                .zfar = client->camera.state.far_z });
         }
         /* Transmission scene and voice lifetimes are independent. Blizzard.j
          * keeps the portrait scene alive past the voice, so Portrait Talk must
          * fall back to Portrait before the entire transmission disappears. */
-        if (client->cinematic_end_time && gi.GetTime() >= client->cinematic_end_time) {
+        if (client->cinematic_end_time && G_Time() >= client->cinematic_end_time) {
             G_SetPlayerText(client, PLAYERTEXT_SPEAKER, "");
             G_SetPlayerText(client, PLAYERTEXT_DIALOGUE, "");
             client->ps.cinematic_portrait = 0;
@@ -496,11 +500,11 @@ static void G_RunClients(void) {
             client->cinematic_end_time = 0;
             client->cinematic_voice_end_time = 0;
             client->presentation_dirty = true;
-        } else if (client->cinematic_voice_end_time && gi.GetTime() >= client->cinematic_voice_end_time) {
+        } else if (client->cinematic_voice_end_time && G_Time() >= client->cinematic_voice_end_time) {
             client->cinematic_voice_end_time = 0;
             client->presentation_dirty = true;
         }
-        if (client->message.end_time && gi.GetTime() >= client->message.end_time) {
+        if (client->message.end_time && G_Time() >= client->message.end_time) {
             memset(&client->message, 0, sizeof(client->message));
             client->presentation_dirty = true;
         }
@@ -619,6 +623,7 @@ static void G_RunFrame(void) {
     if (!level.started)
         return;
 
+    level.framenum++;
     level.time = gi.GetTime();
 
     G_StartScripts();
@@ -725,6 +730,12 @@ GAMEEVENT *G_PublishEventWithSource(LPEDICT edict, EVENTTYPE type, LPEDICT sourc
 
 GAMEEVENT *G_PublishEvent(LPEDICT edict, EVENTTYPE type) {
     return G_PublishEventWithSource(edict, type, NULL);
+}
+
+void G_PublishSummonEvents(LPEDICT summoner, LPEDICT summoned) {
+    if (!summoner || !summoned) return;
+    G_PublishEventWithSource(summoner, EVENT_PLAYER_UNIT_SUMMON, summoned);
+    G_PublishEventWithSource(summoner, EVENT_UNIT_SUMMON, summoned);
 }
 
 /* Gameplay messages expose state-machine transitions without turning internal
@@ -838,10 +849,10 @@ void G_SetClientConnected(LPEDICT player, BOOL connected) {
 /* Client slots and free edicts have zero-initialized player ownership but no
  * unit row.  Only live, metadata-bound units contribute authored food values. */
 void G_AccumulatePlayerFood(LPGAMECLIENT client) {
-    FILTER_EDICTS(ent, ent->inuse && ent->UnitBalance && client->ps.number == ent->s.player) {
+    FILTER_EDICTS(ent, ent->inuse && ent->data.UnitBalance && client->ps.number == ent->s.player) {
         if (ent->svflags & SVF_DEADMONSTER || ent->training) continue;
-        G_SetUnitFoodUsed(ent, ent->UnitBalance->foodUsed);
-        if (!ent->construction.active) G_SetUnitFoodMade(ent, ent->UnitBalance->foodMade);
+        G_SetUnitFoodUsed(ent, ent->data.UnitBalance->foodUsed);
+        if (!ent->construction.active) G_SetUnitFoodMade(ent, ent->data.UnitBalance->foodMade);
     }
     G_RecomputePlayerUpkeep(client);
 }
@@ -864,7 +875,7 @@ static void G_ClientBegin(LPEDICT edict) {
     G_SetClientConnected(edict, true);
     G_InitClientUIState(client);
     if (!client->mapplayer) {
-        client->ps.origin = (VECTOR3){ 0, 0, 0 };
+        client->ps.vieworigin = (VECTOR3){ 0, 0, 0 };
     }
     fprintf(stderr,
             "G_ClientBegin: edict=%u player=%u team=%u race=%u color=%u start_location=%ld origin=(%.1f %.1f) name=\"%s\"\n",
@@ -874,8 +885,8 @@ static void G_ClientBegin(LPEDICT edict) {
             (unsigned)client->ps.race,
             (unsigned)client->ps.color,
             (long)client->ps.start_location,
-            client->ps.origin.x,
-            client->ps.origin.y,
+            client->ps.vieworigin.x,
+            client->ps.vieworigin.y,
             client->ps.name ? client->ps.name : "");
     level.started = true;
     G_StartScripts();
@@ -909,12 +920,9 @@ static void G_ClientBegin(LPEDICT edict) {
             "farms, and keep the footmen ready for the next attack. The enemy will not wait "
             "for the camp to be complete, so reinforce the walls and patrol the forest edge. "
             "When the base is secure, report back to the command tent for further orders.");
-        it = gi.MemAlloc(sizeof(QUESTITEM)); it->description = strdup("Construct a Barracks");
-        ADD_TO_LIST(it, q->items);
-        it = gi.MemAlloc(sizeof(QUESTITEM)); it->description = strdup("Construct 2 Farms");
-        ADD_TO_LIST(it, q->items);
-        it = gi.MemAlloc(sizeof(QUESTITEM)); it->description = strdup("Train 6 Footmen");
-        ADD_TO_LIST(it, q->items);
+        it = &q->items[q->num_items++]; memset(it, 0, sizeof(*it)); it->inuse = true; it->description = strdup("Construct a Barracks");
+        it = &q->items[q->num_items++]; memset(it, 0, sizeof(*it)); it->inuse = true; it->description = strdup("Construct 2 Farms");
+        it = &q->items[q->num_items++]; memset(it, 0, sizeof(*it)); it->inuse = true; it->description = strdup("Train 6 Footmen");
         q->discovered = true;
         q->required = true;
         UI_ShowQuests(edict);

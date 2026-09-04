@@ -279,20 +279,27 @@ static void SC2_SolveCollisions(void) {
 /* -------------------------------------------------------------------------
  * Galaxy callbacks — bridge between galaxy_host.c natives and SC2 game state.
  * ------------------------------------------------------------------------- */
+/* playerState.viewangles is ROTATE_ZYX {pitch, roll, yaw}; SC2CAMERA.angles is {pitch, yaw, height}. */
+static VECTOR3 SC2_ViewAngles(LPCVECTOR3 camera_angles) {
+    return SC2_EulerFromCamera(camera_angles->x, camera_angles->y);
+}
+
+static VECTOR3 SC2_CameraAnglesFromPlayer(LPCPLAYER ps) {
+    return SC2_CameraFromEuler(&ps->viewangles, ps->vieworigin.z - SC2_MapCameraHeightAtPoint(ps->vieworigin.x, ps->vieworigin.y));
+}
+
 static void SC2_WriteCamera(LPCVECTOR2 origin, LPCVECTOR3 angles, FLOAT distance, FLOAT fov) {
     gameCamera_t defaults;
 
     CL_GameDefaultCamera(&defaults);
+    defaults.fov = fov;
     FOR_LOOP(i, SC2_MAX_CLIENTS) {
-        sc2_clients[i].ps.origin = (VECTOR3){
+        sc2_clients[i].ps.vieworigin = (VECTOR3){
             origin->x, origin->y, SC2_MapCameraHeightAtPoint(origin->x, origin->y) + angles->z
         };
-        sc2_clients[i].ps.viewangles = *angles;
-        sc2_clients[i].ps.fov = (DWORD)fov;
+        sc2_clients[i].ps.viewangles = SC2_ViewAngles(angles);
         sc2_clients[i].ps.distance = distance;
-        sc2_clients[i].ps.znear = defaults.znear;
-        sc2_clients[i].ps.zfar = defaults.zfar;
-        sc2_clients[i].ps.viewquat = Quaternion_fromEuler(angles, ROTATE_ZYX);
+        player_set_lens(&sc2_clients[i].ps, &defaults);
     }
 }
 
@@ -343,8 +350,8 @@ static void SC2_GalaxySetCamera(float target_x, float target_y,
                                 float dist, float fov, float height_offset, float duration) {
     SC2_UpdateCamera();
     sc2_level.camera.old = (SC2CAMERA){
-        { sc2_clients[0].ps.origin.x, sc2_clients[0].ps.origin.y },
-        sc2_clients[0].ps.viewangles,
+        { sc2_clients[0].ps.vieworigin.x, sc2_clients[0].ps.vieworigin.y },
+        SC2_CameraAnglesFromPlayer(&sc2_clients[0].ps),
         sc2_clients[0].ps.distance, sc2_clients[0].ps.fov };
     sc2_level.camera.state = (SC2CAMERA){ { target_x, target_y }, { pitch, yaw, height_offset }, dist, fov };
     sc2_level.camera.start_time = gi.GetTime();
@@ -537,9 +544,9 @@ static void SC2_InitGalaxyHost(void) {
 }
 
 static void SC2_InitClients(void) {
-    sc2MapCamera_t camera;
+    gameCamera_t camera;
 
-    SC2_MapDefaultCamera(&camera);
+    CL_GameDefaultCamera(&camera);
     FOR_LOOP(i, SC2_MAX_CLIENTS) {
         LPEDICT ent = &sc2_edicts[i];
         ent->inuse = true;
@@ -547,20 +554,17 @@ static void SC2_InitClients(void) {
         ent->client = &sc2_clients[i];
         ent->client->ps.number = i + 1;
         ent->client->ps.client_ui_state = CLIENT_UI_GAME;
-        ent->client->ps.origin = (VECTOR3){
+        ent->client->ps.vieworigin = (VECTOR3){
             camera.target.x, camera.target.y,
             SC2_MapCameraHeightAtPoint(camera.target.x, camera.target.y) + camera.height_offset
         };
-        ent->client->ps.fov = (DWORD)camera.fov;
         ent->client->ps.distance = camera.distance;
-        ent->client->ps.znear = camera.znear;
-        ent->client->ps.zfar = camera.zfar;
         ent->client->ps.rdflags = RDF_NOFOG | RDF_NOFOGMASK;
-        ent->client->ps.viewangles = (VECTOR3){ camera.pitch, camera.yaw, camera.height_offset };
-        ent->client->ps.viewquat = Quaternion_fromEuler(&ent->client->ps.viewangles, ROTATE_ZYX);
+        ent->client->ps.viewangles = (VECTOR3){ camera.pitch, 0.0f, camera.yaw };
+        player_set_lens(&ent->client->ps, &camera);
     }
     sc2_level.camera.old = sc2_level.camera.state = (SC2CAMERA){ { camera.target.x, camera.target.y },
-        { camera.pitch, camera.yaw, camera.height_offset }, camera.distance, camera.fov };
+        SC2_CameraFromEuler(&sc2_clients[0].ps.viewangles, camera.height_offset), camera.distance, camera.fov };
     sc2_level.camera.start_time = sc2_level.camera.end_time = gi.GetTime();
     sc2_level.camera.log_stage = 2;
 }
@@ -685,8 +689,9 @@ static void SC2_RunFrame(void) {
         if (trace_frame % 5 == 0) {
             VECTOR3 const cam = sc2_clients[0].ps.viewangles;
             fprintf(stderr, "SC2 cutscene trace: frame=%u camera=(%.2f,%.2f) pitch=%.2f yaw=%.2f dist=%.2f height=%.2f",
-                    (unsigned)trace_frame, sc2_clients[0].ps.origin.x, sc2_clients[0].ps.origin.y,
-                    cam.x, cam.y, (double)sc2_clients[0].ps.distance, cam.z);
+                    (unsigned)trace_frame, sc2_clients[0].ps.vieworigin.x, sc2_clients[0].ps.vieworigin.y,
+                    cam.x, cam.z, (double)sc2_clients[0].ps.distance,
+                    sc2_clients[0].ps.vieworigin.z - SC2_MapCameraHeightAtPoint(sc2_clients[0].ps.vieworigin.x, sc2_clients[0].ps.vieworigin.y));
             if (dropship) {
                 DWORD number = SC2_EdictNumber(dropship);
                 fprintf(stderr, " dropship=(%.2f,%.2f,%.2f) moving=%d target=(%.2f,%.2f) flying=%d height=%.2f",
@@ -796,9 +801,10 @@ static void SC2_ClientSetCameraPosition(LPEDICT ent, LPCVECTOR2 position) {
     if (!ent || !ent->client || !position) {
         return;
     }
-    ent->client->ps.origin = (VECTOR3){
+    FLOAT height = ent->client->ps.vieworigin.z - SC2_MapCameraHeightAtPoint(ent->client->ps.vieworigin.x, ent->client->ps.vieworigin.y);
+    ent->client->ps.vieworigin = (VECTOR3){
         position->x, position->y,
-        SC2_MapCameraHeightAtPoint(position->x, position->y) + ent->client->ps.viewangles.z
+        SC2_MapCameraHeightAtPoint(position->x, position->y) + height
     };
 }
 

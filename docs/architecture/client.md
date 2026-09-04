@@ -88,6 +88,14 @@ Calls into the renderer API:
 4. Console overlay draws debug text.
 5. `R_EndFrame` — present the frame.
 
+## Camera samples
+
+`playerState.viewangles` is the only view orientation on the wire: Euler degrees in `ROTATE_ZYX` order `{pitch, roll, yaw}`. Do not send a parallel quaternion — Euler→quat is lossless, quat→Euler is not.
+
+`CL_ParsePlayerInfo` copies `vieworigin`, `viewangles`, `distance`, `fov`, `znear`, and `zfar` onto `viewDef.camerastate[]`. Clip planes are required camera samples, same as `fov`: every game must author them on `playerState` through `player_set_lens` so FOV and clip cannot be written apart. Zero is a real value, not a keep-previous sentinel. Gameplay defaults live in `CL_GameDefaultCamera` (`WC3_CAMERA_DEFAULT_*`, `WOW_CAMERA_FOV` plus `WOW_WORLD_*_CLIP`, SC2 map camera); `CL_InputModeSetGameplay` does not invent clip. `Matrix4_getCameraMatrix` converts both snapshots with `Quaternion_fromEuler`, slerps, and builds the orbit view with `Matrix4_fromViewQuat`. Games that previously packed a non-Euler value into a component (SC2 camera height on `z`) must put a real Euler on the snapshot; height belongs in `vieworigin.z`.
+
+WoW still replaces look-at Z from the local player entity (`WOW_CAMERA_EYE_HEIGHT`); that is not an orientation sample.
+
 ## Entity Interpolation
 
 The client keeps two snapshots per entity: `prev` and `current`. `CL_PrepRefresh` blends between them using a fraction derived from `cl.time` and the server frame interval, producing smooth motion even when the client render rate exceeds the server tick rate.
@@ -130,11 +138,17 @@ the binding generic rather than looking up game-specific entity types or rules.
 | File | Purpose |
 |------|---------|
 | `client/cl_main.c` | `CL_Frame`, `CL_Init`, `CL_ReadPackets` |
-| `client/cl_input.c` | Input sampling, `usercmd_t` construction |
+| `client/cl_input.c` | Input sampling, shared `+select` / `zoom` / `group` |
 | `client/cl_parse.c` | Server message handlers |
 | `client/cl_view.c` | Camera, `CL_PrepRefresh`, `V_AddEntity` |
 | `client/cl_tent.c` | Temporary client-side effects |
 | `client/cl_scrn.c` | Screen update and UI draw pass |
 | `client/cl_console.c` | In-game console |
-| `client/keys.c` | Key event dispatch and binding table |
+| `client/keys.c` | Key event dispatch and modifier-aware binding table (`bind SHIFT+1`) |
+| `client/cl_control_groups.c` | Numbered control groups on `cl.groups`; `group` / `group add` / `group assign` |
 | `common/net.c` | Loopback transport shared by client and server |
+
+## See Also
+
+- [Server-selected effects](server-selected-effects.md) — generic camera samples on the 32-bit player-state mask
+- [WC3 cinematics](../games/warcraft-3/cinematics.md) — server Euler lerp, client quat slerp

@@ -1,44 +1,44 @@
 #include "cl_input_local.h"
+#include "cl_control_groups.h"
 #include "ui_layout.h"
+
+#include <stdlib.h>
+#include <strings.h>
 
 mouseEvent_t mouse;
 static keyCode_t mouse_button_keys[8];
 
-/* SDL2 function keys are 0x4000003A–0x40000045 and don't fit in keyCode_t; map them to K_F1-K_F12. */
+/* SDL2 function/arrow keys are 0x40000000+ and don't fit in keyCode_t. */
 static keyCode_t CL_SDLKeyToKeyCode(int sym) {
+    static struct { int sym; keyCode_t key; } const extra[] = {
+        { SDLK_UP, K_UPARROW },
+        { SDLK_DOWN, K_DOWNARROW },
+        { SDLK_LEFT, K_LEFTARROW },
+        { SDLK_RIGHT, K_RIGHTARROW },
+    };
     if (sym >= SDLK_F1 && sym <= SDLK_F12)
         return (keyCode_t)(K_F1 + (sym - SDLK_F1));
+    FOR_LOOP(i, 4)
+        if (extra[i].sym == sym) return extra[i].key;
     return (keyCode_t)sym;
 }
 
-BOOL CL_AltModifierDown(void) {
-    SDL_Keymod const mod = SDL_GetModState();
-    return (mod & (KMOD_LALT | KMOD_RALT)) != 0;
+static DWORD CL_BindMods(SDL_Keymod m) {
+    DWORD mods = 0;
+    if (m & KMOD_CTRL) mods |= KEY_MOD_CTRL;
+    if (m & KMOD_ALT) mods |= KEY_MOD_ALT;
+    if (m & KMOD_SHIFT) mods |= KEY_MOD_SHIFT;
+    return mods;
 }
 
 static keyCode_t CL_MouseButtonKey(SDL_MouseButtonEvent const *button) {
-    keyCode_t key = 0;
-
-    if (!button) {
-        return 0;
-    }
+    if (!button) return 0;
     switch (button->button) {
-        case SDL_BUTTON_LEFT:
-            key = K_MOUSE1;
-            break;
-        case SDL_BUTTON_RIGHT:
-            key = K_MOUSE2;
-            break;
-        case SDL_BUTTON_MIDDLE:
-            key = K_MOUSE3;
-            break;
-        default:
-            return 0;
+        case SDL_BUTTON_LEFT: return K_MOUSE1;
+        case SDL_BUTTON_RIGHT: return K_MOUSE2;
+        case SDL_BUTTON_MIDDLE: return K_MOUSE3;
+        default: return 0;
     }
-    if (cls.key_dest == key_game && CL_AltModifierDown()) {
-        key = (keyCode_t)(K_ALT_MOUSE1 + key - K_MOUSE1);
-    }
-    return key;
 }
 
 BOOL CL_MouseOverGameplayUI(void) {
@@ -75,7 +75,7 @@ void CL_Input(void) {
                     }
                     if (mousevt && cls.key_dest != key_console) {
                         mouse_button_keys[event.button.button] = mousevt;
-                        Key_Event(mousevt, true, event.button.timestamp);
+                        Key_Event(mousevt, CL_BindMods(SDL_GetModState()), true, event.button.timestamp);
                     }
                 }
                 break;
@@ -90,7 +90,7 @@ void CL_Input(void) {
                         CL_InputModeMouseButton(&event.button, false);
                     }
                     if (mousevt && cls.key_dest != key_console) {
-                        Key_Event(mousevt, false, event.button.timestamp);
+                        Key_Event(mousevt, CL_BindMods(SDL_GetModState()), false, event.button.timestamp);
                         mouse_button_keys[event.button.button] = 0;
                     }
                 }
@@ -129,21 +129,21 @@ void CL_Input(void) {
                     CON_KeyEvent(event.key.keysym.sym, true);
                     break;
                 }
+                /* SDL key-repeat is not a deliberate second press; skip it for
+                 * gameplay so held number binds cannot double-tap a control group. */
+                if (cls.key_dest == key_game && event.key.repeat)
+                    break;
                 if (cls.key_dest == key_game && CL_MinimapKeyEvent(event.key.keysym.sym, event.key.repeat != 0)) {
                     break;
                 }
-                if (cls.key_dest == key_game &&
-                    CL_HandleGameKey(event.key.keysym.sym, event.key.keysym.mod, event.key.repeat != 0)) {
-                    break; /* consumed by in-game handler (e.g. control groups) */
-                }
-                Key_Event(CL_SDLKeyToKeyCode(event.key.keysym.sym), true, event.key.timestamp);
+                Key_Event(CL_SDLKeyToKeyCode(event.key.keysym.sym), CL_BindMods(event.key.keysym.mod), true, event.key.timestamp);
                 break;
             case SDL_KEYUP:
                 if (cls.key_dest == key_console || event.key.keysym.sym == SDLK_BACKQUOTE) {
                     CON_KeyEvent(event.key.keysym.sym, false);
                     break;
                 }
-                Key_Event(CL_SDLKeyToKeyCode(event.key.keysym.sym), false, event.key.timestamp);
+                Key_Event(CL_SDLKeyToKeyCode(event.key.keysym.sym), CL_BindMods(event.key.keysym.mod), false, event.key.timestamp);
                 break;
             case SDL_MOUSEBUTTONDOWN:
                 mouse.origin.x = event.button.x;
@@ -205,15 +205,24 @@ void CL_Input(void) {
                 break;
             case SDL_MOUSEWHEEL:
                 {
-                    int x, y;
+                    int x, y, n;
+                    keyCode_t wheelkey;
                     SDL_GetMouseState(&x, &y);
                     if (cls.key_dest == key_menu)
                         menu.MouseEvent(MENU_MOUSE_SCROLL, x, y, MENU_MOUSE_PARAM(event.wheel.x, event.wheel.y));
                     if (CL_WindowMouseEvent(MENU_MOUSE_SCROLL, x, y, MENU_MOUSE_PARAM(event.wheel.x, event.wheel.y))) break;
                     SCR_LayoutMouseEvent(MENU_MOUSE_SCROLL, x, y, MENU_MOUSE_PARAM(event.wheel.x, event.wheel.y));
-                }
-                if (cls.key_dest == key_game && CL_InputModeMouseWheel(&event.wheel)) {
-                    break;
+                    if (cls.key_dest == key_game && CL_InputModeMouseWheel(&event.wheel))
+                        break;
+                    /* Discrete wheel ticks are bindable keys (MWHEELUP / MWHEELDOWN). */
+                    if (cls.key_dest == key_console || event.wheel.y == 0)
+                        break;
+                    wheelkey = event.wheel.y > 0 ? K_MWHEELUP : K_MWHEELDOWN;
+                    n = event.wheel.y > 0 ? event.wheel.y : -event.wheel.y;
+                    FOR_LOOP(i, n) {
+                        Key_Event(wheelkey, CL_BindMods(SDL_GetModState()), true, event.wheel.timestamp);
+                        Key_Event(wheelkey, CL_BindMods(SDL_GetModState()), false, event.wheel.timestamp);
+                    }
                 }
                 break;
             case SDL_WINDOWEVENT:
@@ -249,6 +258,8 @@ void CL_SetGameplayBindings(void) {
 }
 
 void IN_SelectDown(void) {
+    if (CL_InputModeSelectDown())
+        return;
     if (!CL_GameplayInputReady()) {
         cl.selection.in_progress = false;
         return;
@@ -270,6 +281,8 @@ void IN_SelectDown(void) {
 }
 
 void IN_SelectUp(void) {
+    if (CL_InputModeSelectUp())
+        return;
     CL_EndMinimapDrag();
     if (!CL_GameplayInputReady()) {
         cl.selection.in_progress = false;
@@ -343,6 +356,140 @@ void IN_SelectUp(void) {
     }
 }
 
+/* Numbered control groups stored on cl.groups. Config binds `group N`. */
+#define CL_GROUP_TAP_MS 500 // milliseconds; double-tap camera recenter window
+
+static void CL_ResetGroupTap(void) {
+    cl.group_last = MAX_CONTROL_GROUPS;
+    cl.group_last_ms = 0;
+}
+
+static BOOL CL_GroupCenter(DWORD const *ids, DWORD n, LPVECTOR2 center) {
+    double x = 0.0, y = 0.0;
+    DWORD valid = 0;
+
+    if (!ids || !center) return false;
+    if (n > MAX_SELECTED_ENTITIES) n = MAX_SELECTED_ENTITIES;
+    FOR_LOOP(i, n) {
+        DWORD const number = ids[i];
+        LPCENTITYSTATE state;
+        if (!number || number >= MAX_CLIENT_ENTITIES) continue;
+        state = &cl.ents[number].current;
+        if (!state->model || state->stats[ENT_HEALTH] == 0 ||
+            (state->flags & EF_NOT_SELECTABLE)) continue;
+        x += state->origin.x;
+        y += state->origin.y;
+        valid++;
+    }
+    if (!valid) return false;
+    center->x = (FLOAT)(x / valid);
+    center->y = (FLOAT)(y / valid);
+    return true;
+}
+
+static void CL_ApplySelection(DWORD const *ids, DWORD n) {
+    char buffer[1024];
+    if (n == 0) return;
+    if (n > MAX_SELECTED_ENTITIES) n = MAX_SELECTED_ENTITIES;
+    strlcpy(buffer, "select", sizeof(buffer));
+    FOR_LOOP(i, n) {
+        size_t used = strlen(buffer);
+        snprintf(buffer + used, sizeof(buffer) - used, " %d", ids[i]);
+    }
+    MSG_WriteByte(&cls.netchan.message, clc_stringcmd);
+    SZ_Printf(&cls.netchan.message, "%s", buffer);
+    cl.selection.num_selected = n;
+    memcpy(cl.selection.entity_nums, ids, sizeof(DWORD) * n);
+    CL_RequestUnitUI(n, cl.selection.entity_nums);
+}
+
+static void CL_GroupAssign(DWORD g) {
+    DWORD n = cl.selection.num_selected;
+    if (n > MAX_SELECTED_ENTITIES) n = MAX_SELECTED_ENTITIES;
+    cl.groups[g].num_selected = n;
+    memcpy(cl.groups[g].entity_nums, cl.selection.entity_nums, sizeof(DWORD) * n);
+    CL_ResetGroupTap();
+}
+
+static void CL_GroupAdd(DWORD g) {
+    DWORD n = cl.selection.num_selected;
+    if (n > MAX_SELECTED_ENTITIES) n = MAX_SELECTED_ENTITIES;
+    cl.groups[g].num_selected = CL_ControlGroupAppendUnique(
+        cl.groups[g].entity_nums, cl.groups[g].num_selected, MAX_SELECTED_ENTITIES,
+        cl.selection.entity_nums, n);
+    CL_ResetGroupTap();
+}
+
+static void CL_GroupRecall(DWORD g) {
+    DWORD now;
+    BOOL center_on_group;
+    VECTOR2 center;
+
+    if (cl.groups[g].num_selected == 0) {
+        CL_ResetGroupTap();
+        return;
+    }
+    now = cl.time;
+    center_on_group = cl.group_last == g &&
+        (DWORD)(now - cl.group_last_ms) <= CL_GROUP_TAP_MS;
+    CL_ApplySelection(cl.groups[g].entity_nums, cl.groups[g].num_selected);
+    if (center_on_group && CL_GroupCenter(cl.groups[g].entity_nums, cl.groups[g].num_selected, &center))
+        CL_SetCameraPosition(center);
+    cl.group_last = g;
+    cl.group_last_ms = now;
+}
+
+static void CL_Group_f(void) {
+    static struct { LPCSTR name; DWORD op; } const verbs[] = {
+        { "assign", 1 },
+        { "add", 2 },
+        { NULL, 0 },
+    };
+    LPCSTR a1 = Cmd_Argv(1);
+    DWORD g, op = 0;
+
+    if (!CL_GameplayInputReady() || CL_WindowModalActive()) return;
+    if (Cmd_Argc() < 2) {
+        fprintf(stderr, "group [assign|add] <0-9>\n");
+        return;
+    }
+    for (DWORD i = 0; verbs[i].name; i++) {
+        if (!strcasecmp(a1, verbs[i].name)) {
+            op = verbs[i].op;
+            a1 = Cmd_Argv(2);
+            break;
+        }
+    }
+    g = (DWORD)atoi(a1);
+    if (!a1 || a1[0] < '0' || a1[0] > '9' || a1[1] || g >= MAX_CONTROL_GROUPS) {
+        fprintf(stderr, "group: %s is not a group number (0-9)\n", a1 ? a1 : "");
+        return;
+    }
+    if (op == 1) CL_GroupAssign(g);
+    else if (op == 2) CL_GroupAdd(g);
+    else CL_GroupRecall(g);
+}
+
+static void CL_ControlGroupsInit(void) {
+    Cmd_AddCommand("group", CL_Group_f);
+}
+
+/* `zoom <delta>` — bound to MWHEELUP/MWHEELDOWN. Negative delta zooms out.
+ * Clamps with camera_min_distance / camera_max_distance when max > min. */
+static void CL_Zoom_f(void) {
+    FLOAT steps = Cmd_Argc() > 1 ? (FLOAT)atof(Cmd_Argv(1)) : 1.0f;
+    FLOAT speed = Cvar_Value("zoom_speed", 1.0f);
+    FLOAT min_dist = Cvar_Value("camera_min_distance", 0.0f);
+    FLOAT max_dist = Cvar_Value("camera_max_distance", 0.0f);
+    FLOAT dist = cl.playerstate.distance - steps * speed;
+
+    if (max_dist > min_dist)
+        dist = MAX(min_dist, MIN(max_dist, dist));
+    cl.playerstate.distance = dist;
+    cl.viewDef.camerastate[0].distance = dist;
+    cl.viewDef.camerastate[1].distance = dist;
+}
+
 void CL_ForwardToServer_f(void) {
     extern LPCSTR current_command;
     MSG_WriteByte(&cls.netchan.message, clc_stringcmd);
@@ -357,5 +504,8 @@ void CL_InitInput(void) {
     Cmd_AddCommand("+select", IN_SelectDown);
     Cmd_AddCommand("-select", IN_SelectUp);
     Cmd_AddCommand("cmd", CL_ForwardToServer_f);
+    Cmd_AddCommand("zoom", CL_Zoom_f);
+    Cvar_Get("zoom_speed", "1.0", CVAR_ARCHIVE);
+    CL_ControlGroupsInit();
     CL_InputModeInit();
 }

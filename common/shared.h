@@ -1,6 +1,7 @@
 #ifndef shared_h
 #define shared_h
 
+#include <stddef.h>
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
@@ -447,6 +448,7 @@ typedef enum {
 #define UI_WINDOW_MODAL   (1u << 1) // flag bit; blocks input outside the topmost modal window; used by confirmation-style windows
 #define UI_WINDOW_UNIQUE  (1u << 2) // flag bit; keeps one instance per class; used by singleton inventory and journal windows
 #define UI_WINDOW_NO_PAUSE (1u << 3) // flag bit; modal input capture without acquiring the client-owned simulation pause
+#define UI_WINDOW_NO_ESCAPE (1u << 4) // flag bit; Escape is consumed without dismissing the window; used by mandatory result/decision windows
 #define UI_WINDOW_CLOSE_ACTION "close_window" // client action; closes the owning window without a server command
 #define UI_WINDOW_CLOSE_NOTIFY_ACTION "close_window_notify" // client action; closes locally and notifies server of modal release
 #define UI_WINDOW_CLOSE_COMMAND_PREFIX "close_window_command " // client action prefix; forwards suffix then closes the owning window
@@ -517,27 +519,31 @@ _Static_assert(UI_PLAYERSTAT_ENV_PHASE != UI_PLAYERSTAT_CINEMATIC_PORTRAIT_COLOR
 
 struct playerState_s {
     DWORD number;                   // client slot index
-    QUATERNION viewquat;            // canonical 3D view orientation sent to the renderer
-    VECTOR3 viewangles;             // euler pitch/yaw for orbit camera math; cannot round-trip losslessly from viewquat
-    VECTOR3 origin;                 // server-authored camera look-at in world space (XY focus + composed Z)
-    BOX2 camera_bounds;             // per-player camera target bounds; unused games leave zeros
-    FLOAT distance;                 // camera distance from origin for orbit/isometric view
-    FLOAT znear;                    // optional near clip; 0 keeps the previous sample / client default
-    FLOAT zfar;                     // optional far clip; 0 keeps the previous sample / client default
+    VECTOR3 viewangles;             // Euler degrees, ROTATE_ZYX {pitch, roll, yaw}; client converts to quat and slerps
+    VECTOR3 vieworigin;             // server-authored camera look-at in world space (XY focus + composed Z)
+    FLOAT distance;                 // camera distance from vieworigin for orbit/isometric view
+    FLOAT znear;                    // near clip; required camera sample, copied like fov
+    FLOAT zfar;                     // far clip; required camera sample, copied like fov
     DWORD fov;                      // vertical FOV in degrees; transmitted as NFT_BYTE so BYTE would suffice
     DWORD rdflags;                  // refdef flags (underwater tint, etc.)
     DWORD uiflags;                  // per-widget HUD visibility bits, set server-side via FDF/svc_layout pipeline
     DWORD client_ui_state;          // coarse UI mode: CLIENT_UI_LOADING/GAME/CINEMATIC; state machine, not a bitfield like uiflags
-    DWORD cinematic_portrait;       // WC3 only: model index of transmission talking-head portrait (set by JASS TransmissionFromUnitWithNameBJ), 0 = none
-    DWORD team;                     // alliance group (1-based, 0 = none); NOT the same as color — multiple colors can share a team
-    DWORD color;                    // cosmetic color slot (0 = red, 1 = blue, …); drives minimap dot and skin lookup, NOT the same as team
-    DWORD race;                     // map player race (playerRace_t), used to resolve WC3 race UI skins
+    BYTE cinematic_portrait;        // model index, 0 = none; packed with team/color/race as one NFT_LONG
+    BYTE team;                      // alliance group (1-based, 0 = none); not the same as color
+    BYTE color;                     // cosmetic color slot (0 = red, 1 = blue, …)
+    BYTE race;                      // playerRace_t
     LPSTR name;                     // player display name from mapplayer or JASS script; NOTE: LPSTR but no caller mutates through this — LPCSTR would be correct
     LONG  start_location;           // start location index for JASS GetStartLocationX/Y (-1 = none)
     FLOAT cinefade;                 // full-screen fade alpha [0,1]; collapsed from Q2's blend[4] since no game here uses tinted overlays
     USHORT stats[MAX_STATS];        // fast-update integer stats; USHORT (vs Q3's int) to halve wire size
     LPCSTR texts[PLAYERTEXT_COUNT]; // named player text channels used by server-authored UI
 };
+
+_Static_assert(offsetof(PLAYER, cinematic_portrait) % 4 == 0, "NFT_LONG identity pack requires 4-byte alignment");
+_Static_assert(offsetof(PLAYER, team) == offsetof(PLAYER, cinematic_portrait) + 1, "team must follow cinematic_portrait");
+_Static_assert(offsetof(PLAYER, color) == offsetof(PLAYER, cinematic_portrait) + 2, "color must follow team");
+_Static_assert(offsetof(PLAYER, race) == offsetof(PLAYER, cinematic_portrait) + 3, "race must follow color");
+_Static_assert(MAX_PLAYERS <= 256, "playerState_t.team is BYTE");
 
 /* One-shot events embedded in entityState_t.event.
  * The server sets event once; the client fires the sound and resets it.

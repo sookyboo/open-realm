@@ -85,6 +85,28 @@ After step 6, `map` and `connect` cvars are explicitly cleared, then re-populate
 
 `Cvar_LoadConfig(path)` tries `FS_ReadFileIntoString` first (MPQ/loose filesystem), then falls back to raw `fopen` for local files. It queues the text; startup calls `Cbuf_Execute()` after each config load before consuming the resulting cvars.
 
+## Key Bindings
+
+`bind <key> <command>` stores a command string in `client/keys.c`. `Key_Init` registers `bind` before configs load, so shipped `share/<game>/config.cfg` lines populate the table. The bound command does not need to exist until the key is pressed.
+
+### Modifier keys
+
+Modifiers are a stroke, not a bag of flags. Like lite's keymap (`ctrl`, `alt`, `shift`), they must be written in that order and match exactly:
+
+```
+bind 1 "group 1"
+bind SHIFT+1 "group add 1"
+bind CTRL+1 "group assign 1"
+bind CTRL+SHIFT+1 "group assign 1"
+bind ALT+MOUSE1 "+pan"
+```
+
+`SHIFT+CTRL+1` is rejected. `CTRL+SHIFT+1` is not `CTRL+1` or `SHIFT+1`. `SHIFT+Q` is not `q`. `CONTROL` is an alias for `CTRL`. Letters fold to lowercase (`SHIFT+Q` is the Q key). `writeconfig` emits `CTRL+ALT+SHIFT+<key>`.
+
+`+command` key-up reuses the modifiers captured on key-down, so releasing Alt before the mouse button still ends `ALT+MOUSE1 "+pan"`.
+
+SDL key-repeat is ignored while `key_dest == key_game`. Named keys include `TAB`, `ESCAPE`, `F1`–`F12`, `UPARROW`/`DOWNARROW`/`LEFTARROW`/`RIGHTARROW` (aliases `UP`/`DOWN`/`LEFT`/`RIGHT`), `MOUSE1`–`MOUSE3`, and `MWHEELUP`/`MWHEELDOWN`. `zoom <delta>` is a generic client command that adjusts `cl.playerstate.distance`, clamped by `camera_min_distance` / `camera_max_distance` when those cvars are set. New gameplay hotkeys belong in config `bind` lines.
+
 ## Command-Line Arguments
 
 ### `-` (dash) Prefix — set cvars immediately

@@ -15,8 +15,8 @@ native behavior, commonly followed by `PauseTimer` when resetting getter state.
 ## Baseline
 
 The registry currently contains 917 callbacks. The last conservative source
-audit snapshot now classifies 495 as implemented and 341 as clear placeholders
-across 836 callbacks (59.2% overall at that snapshot). Newer registrations,
+audit snapshot now classifies 499 as implemented and 337 as clear placeholders
+across 836 callbacks (59.7% overall at that snapshot). Newer registrations,
 including `GetUnitAbilityLevel`, are not folded into the implementation split
 below yet. This count treats a callback as a placeholder only when it ignores its
 arguments and unconditionally returns no value, zero, false, or a null handle.
@@ -26,11 +26,11 @@ raw `return 0` counts are not meaningful.
 | Module | Registered | Implemented | Placeholder |
 | --- | ---: | ---: | ---: |
 | `api_misc.h` | 317 | 190 | 127 |
-| `api_unit.h` | 144 | 82 | 62 |
+| `api_unit.h` | 144 | 83 | 61 |
 | `api_player.h` | 86 | 43 | 43 |
 | `api_trigger.h` | 48 | 26 | 22 |
 | `api_camera.h` | 42 | 39 | 3 |
-| `api_sound.h` | 35 | 7 | 28 |
+| `api_sound.h` | 35 | 10 | 25 |
 | `api_leaderboard.h` | 27 | 2 | 25 |
 | `api_math.h` | 26 | 18 | 8 |
 | `api_group.h` | 25 | 18 | 7 |
@@ -87,7 +87,7 @@ reconstructs and may override map/player setup before `main()` starts. Setup
 callbacks therefore need mutable per-level state initialized from `MAPINFO`;
 casting away `level.mapinfo` constness is not the long-term ownership model.
 
-Camera state is client-visible runtime state rather than mutable map metadata: each WC3 `PLAYER` receives `camera_bounds` initialized from W3I plus snapshot fields for target Z offset and near/far clipping planes. `SetCameraBounds` changes the per-player rectangle, while camera WithZ/setup natives change the authoritative client camera state and `G_RunClients()` publishes the interpolated render fields. `GetCameraMargin` is not a direct read of the W3I complement integers: it returns the geometric inset between the complement-derived playable rectangle and the W3I default camera rectangle. This distinction matters because World Editor generated `SetCameraBounds` calls use playable-edge constants plus/minus `GetCameraMargin`.
+Camera state is client-visible runtime state rather than mutable map metadata: `level.camera_bounds` is initialized from W3I and `SetCameraBounds` replaces that one map-global rectangle. Snapshot fields carry target Z offset and near/far clipping planes; `G_RunClients()` always writes `ps.znear`/`ps.zfar` from the current or lerped `CAMERASETUP`, and `CreateCameraSetup` defaults both clip planes so an Apply cannot send a zero far plane. The client copies those samples with no keep-previous fallback. The client clamps predicted targets with `CM_GetWorldBounds()`. `GetCameraMargin` is not a direct read of the W3I complement integers: it returns the geometric inset between the complement-derived playable rectangle and the W3I default camera rectangle. This distinction matters because World Editor generated `SetCameraBounds` calls use playable-edge constants plus/minus `GetCameraMargin`.
 
 ## Player Result / End-Game Lifecycle
 
@@ -102,10 +102,13 @@ if the player is in `CLIENT_UI_CINEMATIC`, the fallback normally waits until cin
 Blizzard.j single-player result dialogs are the exception: `CustomVictoryBJ` / `CustomDefeatBJ` call `RemovePlayer`
 and then `PauseGame(true)`. A result event published from that late JASS action must be drained before the pause can
 stop future simulation frames, and the fallback may then display over cinematic UI because the paused scheduler cannot
-advance that UI state. When this override is used, only `LAYER_GAME_RESULT` is unhidden in `playerState_t.uiflags`;
-the rest of the cinematic HUD suppression remains intact. The fallback uses `GlobalStrings.fdf` `GAMEOVER_*` labels
-where available, distinguishes the safe single-player/multiplayer button subset, and only exposes actions the current
-engine can execute.
+advance that UI state. Result presentation now uses the same client-managed `svc_window` path as the other in-game
+menus, so it draws above the still-suppressed cinematic HUD without changing `playerState_t.uiflags`. The window is
+modal/unique, does not acquire a second client-owned pause, and cannot be dismissed with Escape; its buttons close the
+window while forwarding the existing result commands. `GameResultBackdrop` reuses the loaded Esc-menu backdrop art
+for a consistent race-skinned menu panel and extends one action row below the nominal dialog bounds so the authored
+Quit button remains inside that panel. The fallback still uses `GlobalStrings.fdf`
+`GAMEOVER_*` labels where available and only exposes actions the current engine can execute.
 
 `EndGame`, `ChangeLevel`, `RestartGame`, `DisplayLoadDialog`, and `ForceCampaignSelectScreen` now cross the existing
 `gi.MenuAction` session boundary. `EndGame` returns the local client to the frontend, `ChangeLevel` loads the requested
@@ -336,12 +339,9 @@ player; global calls still broadcast. See
 [triggered-dialogue.md](triggered-dialogue.md) for the gameplay portrait/message
 layer split, independent voice/scene lifetimes, and remaining ping/indicator gaps.
 
-`StartSound`, `StopSound`, attachment, 3D position, and playing/loading queries
-must describe one coherent handle state machine. `killWhenDone` releases only
-after playback completion, while an immediate destroyed/stopped handle cannot
-remain queryable as playing. Music and thematic music are separate channels:
-ending thematic music resumes or restores map music according to the stored
-music state rather than starting an unrelated track.
+`CreateSound`, `SetSoundVolume`, `SetSoundPosition`, `AttachSoundToUnit`, and `StartSound` currently cover the one-shot subset used by campaign cinematics. Position/attachment is sampled when playback begins and transported through generic `svc_sound`; moving attached emitters, `StopSound`/fade lifecycle, playing/loading queries, pitch/cone/distance controls, volume groups, and music remain incomplete. `killWhenDone` eventually needs to release only after playback completion, while an immediate destroyed/stopped handle cannot remain queryable as playing. Music and thematic music are separate channels: ending thematic music resumes or restores map music according to the stored music state rather than starting an unrelated track. The current mixer is WAV-only, so MP3 campaign dialogue remains a separate decoder/transport gap.
+
+Summon event context uses the summoner as the trigger unit and the created unit as the event source: `GetSummoningUnit()` reads the former and `GetSummonedUnit()` the latter. Mirror Image (`AOmi`) uses the common no-target spell path, creates the data-defined number of timed copies, marks them as illusions for `IsUnitIllusion`, and publishes both player-unit and unit summon events. Damage multipliers, dispel interaction, image shuffle, and full illusion visual semantics remain separate parity work.
 
 ## Leaderboards
 

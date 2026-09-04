@@ -4,8 +4,6 @@ LPPLAYER NAME = NAME##Context && NAME##Context->unit ? G_GetPlayerByNumber(NAME#
 
 extern LPPLAYER currentplayer;
 
-#define WC3_CAMERA_DEFAULT_NEAR_Z 100.0f /* world units; default near clipping plane */
-#define WC3_CAMERA_DEFAULT_FAR_Z 5000.0f /* world units; default far clipping plane */
 #define WC3_CAMERA_ASPECT 1.66f /* Warcraft camera horizontal/vertical FOV conversion aspect */
 
 static LPGAMECLIENT G_CurrentCameraClient(LPCSTR func) {
@@ -45,7 +43,7 @@ static void G_SetCameraPositionForCurrentPlayer(LPCSTR func, FLOAT x, FLOAT y,
     if (set_z) {
         gc->camera.state.z_offset = z_offset;
     }
-    gc->camera.start_time = gi.GetTime();
+    gc->camera.start_time = G_Time();
     gc->camera.end_time = gc->camera.start_time + duration * 1000;
 }
 
@@ -69,7 +67,7 @@ DWORD SetCameraTargetController(LPJASS j) {
             gc->camera.old_state.viewangles.z = 90.0f - (FLOAT)RAD2DEG(whichUnit->s.angle);
             gc->camera.state.viewangles.z = 90.0f - (FLOAT)RAD2DEG(whichUnit->s.angle);
         }
-        gc->camera.start_time = gi.GetTime();
+        gc->camera.start_time = G_Time();
         gc->camera.end_time = gc->camera.start_time;
     } else {
         gc->camera.target_offset = (VECTOR2){ 0, 0 };
@@ -108,13 +106,7 @@ DWORD SetCameraBounds(LPJASS j) {
     FOR_LOOP(i, 8) {
         bounds[i] = jass_checknumber(j, i + 1);
     }
-    if (currentplayer) {
-        G_SetClientCameraBounds(PLAYER_CLIENT(currentplayer), bounds);
-    } else {
-        FOR_LOOP(i, game.max_clients) {
-            G_SetClientCameraBounds(game.clients + i, bounds);
-        }
-    }
+    G_SetCameraBounds(bounds);
     return 0;
 }
 DWORD StopCamera(LPJASS j) {
@@ -131,13 +123,17 @@ DWORD ResetToGameCamera(LPJASS j) {
     }
     G_ClearCameraTarget(gc, "ResetToGameCamera");
     gc->camera.old_state = gc->camera.state;
-    gc->camera.state.viewangles = (VECTOR3) { 326, 0, 0 };
-    gc->camera.state.fov = 50;
-    gc->camera.state.target_distance = 1650;
-    gc->camera.state.z_offset = 0.0f;
-    gc->camera.state.near_z = WC3_CAMERA_DEFAULT_NEAR_Z;
-    gc->camera.state.far_z = WC3_CAMERA_DEFAULT_FAR_Z;
-    gc->camera.start_time = gi.GetTime();
+    {
+        gameCamera_t cam;
+        CL_GameDefaultCamera(&cam);
+        gc->camera.state.viewangles = (VECTOR3){ cam.pitch, 0, cam.yaw };
+        gc->camera.state.fov = cam.fov;
+        gc->camera.state.target_distance = cam.distance;
+        gc->camera.state.z_offset = 0.0f;
+        gc->camera.state.near_z = cam.znear;
+        gc->camera.state.far_z = cam.zfar;
+    }
+    gc->camera.start_time = G_Time();
     gc->camera.end_time = gc->camera.start_time + (duration * 1000);
     return 0;
 }
@@ -187,7 +183,15 @@ DWORD AdjustCameraField(LPJASS j) {
 }
 DWORD CreateCameraSetup(LPJASS j) {
     API_ALLOC(CAMERASETUP, camerasetup);
-    camerasetup->near_z = WC3_CAMERA_DEFAULT_NEAR_Z;
+    {
+        gameCamera_t cam;
+        CL_GameDefaultCamera(&cam);
+        camerasetup->viewangles = (VECTOR3){ cam.pitch, 0, cam.yaw };
+        camerasetup->fov = cam.fov;
+        camerasetup->target_distance = cam.distance;
+        camerasetup->near_z = cam.znear;
+        camerasetup->far_z = cam.zfar;
+    }
     return 1;
 }
 DWORD CameraSetupSetField(LPJASS j) {
@@ -274,7 +278,7 @@ static void G_ApplyCameraSetup(LPCAMERASETUP setup, BOOL apply_position,
         gc->camera.state.z_offset = z_offset;
     }
     gc->camera.state.position = G_ClampCameraPosition(gc, &gc->camera.state.position);
-    gc->camera.start_time = gi.GetTime();
+    gc->camera.start_time = G_Time();
     gc->camera.end_time = gc->camera.start_time + duration_ms;
 }
 DWORD CameraSetupApply(LPJASS j) {
@@ -360,20 +364,16 @@ DWORD GetCameraMargin(LPJASS j) {
     return 1;
 }
 DWORD GetCameraBoundMinX(LPJASS j) {
-    LPGAMECLIENT gc = currentplayer ? PLAYER_CLIENT(currentplayer) : game.clients;
-    return jass_pushnumber(j, gc ? gc->ps.camera_bounds.min.x : 0);
+    return jass_pushnumber(j, level.camera_bounds.min.x);
 }
 DWORD GetCameraBoundMinY(LPJASS j) {
-    LPGAMECLIENT gc = currentplayer ? PLAYER_CLIENT(currentplayer) : game.clients;
-    return jass_pushnumber(j, gc ? gc->ps.camera_bounds.min.y : 0);
+    return jass_pushnumber(j, level.camera_bounds.min.y);
 }
 DWORD GetCameraBoundMaxX(LPJASS j) {
-    LPGAMECLIENT gc = currentplayer ? PLAYER_CLIENT(currentplayer) : game.clients;
-    return jass_pushnumber(j, gc ? gc->ps.camera_bounds.max.x : 0);
+    return jass_pushnumber(j, level.camera_bounds.max.x);
 }
 DWORD GetCameraBoundMaxY(LPJASS j) {
-    LPGAMECLIENT gc = currentplayer ? PLAYER_CLIENT(currentplayer) : game.clients;
-    return jass_pushnumber(j, gc ? gc->ps.camera_bounds.max.y : 0);
+    return jass_pushnumber(j, level.camera_bounds.max.y);
 }
 DWORD GetCameraField(LPJASS j) {
     //HANDLE whichField = jass_checkhandle(j, 1, "camerafield");
@@ -381,22 +381,22 @@ DWORD GetCameraField(LPJASS j) {
 }
 DWORD GetCameraTargetPositionX(LPJASS j) {
     API_PLAYERSTATE(playerstate);
-    return jass_pushnumber(j, playerstate ? playerstate->origin.x : 0);
+    return jass_pushnumber(j, playerstate ? playerstate->vieworigin.x : 0);
 }
 DWORD GetCameraTargetPositionY(LPJASS j) {
     API_PLAYERSTATE(playerstate);
-    return jass_pushnumber(j, playerstate ? playerstate->origin.y : 0);
+    return jass_pushnumber(j, playerstate ? playerstate->vieworigin.y : 0);
 }
 DWORD GetCameraTargetPositionZ(LPJASS j) {
     API_PLAYERSTATE(playerstate);
-    return jass_pushnumber(j, playerstate ? playerstate->origin.z : 0);
+    return jass_pushnumber(j, playerstate ? playerstate->vieworigin.z : 0);
 }
 
 DWORD GetCameraTargetPositionLoc(LPJASS j) {
     API_ALLOC(VECTOR2, location);
     API_PLAYERSTATE(playerstate);
     if (playerstate) {
-        *location = (VECTOR2){ playerstate->origin.x, playerstate->origin.y };
+        *location = (VECTOR2){ playerstate->vieworigin.x, playerstate->vieworigin.y };
     }
     return 1;
 }

@@ -17,7 +17,7 @@ ifeq ($(WC3_FOW_PACKED_MASK),1)
 WC3_CFLAGS += -DWC3_FOW_PACKED_MASK
 endif
 WC3_FDF_CFLAGS := $(WC3_CFLAGS) -DSTB_FDF_IMPLEMENTATION -DSTB_FDF_GLOBALS
-WC3_COMMON_SRCS := $(shell find $(WC3_DIR)/common -name '*.c' 2>/dev/null | sort)
+WC3_COMMON_SRCS := $(filter-out $(WC3_DIR)/common/routing.c,$(shell find $(WC3_DIR)/common -name '*.c' 2>/dev/null | sort))
 MENU_HEADERS := $(shell find $(WC3_DIR)/menu -name '*.h' | sort) client/menu.h
 
 JASS_LIB     := $(LIB_DIR)/libjass$(LIB_EXT)
@@ -111,9 +111,9 @@ $(eval $(call app_schema,$(WC3_TEST_BINARY),$(SHARED_LIB) $(JASS_LIB) $(SHEET_LI
 openwarcraft3-tests: $(WC3_TEST_BINARY)
 
 WC3_PATTERN ?= *
-test-wc3-engine: $(WC3_TEST_BINARY) test-assets
-	$(WC3_TEST_BINARY) -data $(TESTS_DIR) +dedicated 1 +test '$(WC3_PATTERN)'
-	$(WC3_TEST_BINARY) -data $(TESTS_DIR) -tft +dedicated 1 +test '$(WC3_PATTERN)'
+test-wc3-engine: $(WC3_TEST_BINARY) test-assets | $(TEST_JUNIT_DIR)
+	TEST_JUNIT="$(TEST_JUNIT_DIR)/test-wc3-engine-classic.xml" TEST_JUNIT_SUITE="test-wc3-engine-classic" $(WC3_TEST_BINARY) -data $(TESTS_DIR) +dedicated 1 +test '$(WC3_PATTERN)'
+	TEST_JUNIT="$(TEST_JUNIT_DIR)/test-wc3-engine-tft.xml" TEST_JUNIT_SUITE="test-wc3-engine-tft" $(WC3_TEST_BINARY) -data $(TESTS_DIR) -tft +dedicated 1 +test '$(WC3_PATTERN)'
 
 .PHONY: test-jass-build
 test-jass-build: $(JASS_LIB)
@@ -137,13 +137,14 @@ TEST_UI_SRCS := \
 
 TEST_JOBS ?= 16
 
- test: test-assets $(SHARED_LIB) $(JASS_LIB) $(SHEET_LIB) | $(BIN_DIR)
+ test: test-assets $(SHARED_LIB) $(JASS_LIB) $(SHEET_LIB) | $(BIN_DIR) $(TEST_JUNIT_DIR)
+	@rm -f $(TEST_JUNIT_DIR)/*.xml
 	@$(CC) $(TEST_CFLAGS) -DBZ_TESTS -o $(BIN_DIR)/test_openwarcraft3$(EXE_EXT) \
 		tests/test_runner.c tests/test_compat.c tests/test_net.c tests/test_tool_common.c \
-		$(WC3_TEST_DIR)/test_client_stubs.c \
-			common/net.c common/msg.c client/cl_parse.c client/cl_configstrings.c client/cl_scrn.c client/cl_minimap.c client/cl_layout.c client/cl_window.c \
+		$(WC3_TEST_DIR)/test_client_stubs.c $(WC3_TEST_DIR)/test_control_groups.c $(WC3_TEST_DIR)/test_keys.c \
+			common/net.c common/msg.c client/cl_control_groups.c client/cl_parse.c client/cl_configstrings.c client/cl_scrn.c client/cl_minimap.c client/cl_layout.c client/cl_window.c \
 		$(RPATH) $(LDFLAGS) -lsheet -lshared -lm
-	@$(BIN_DIR)/test_openwarcraft3$(EXE_EXT)
+	@TEST_JUNIT="$(TEST_JUNIT_DIR)/test-core.xml" TEST_JUNIT_SUITE="test-core" $(BIN_DIR)/test_openwarcraft3$(EXE_EXT)
 	@# Run independent suites concurrently while preserving recursive-make failure propagation.
 	@$(MAKE) -j$(TEST_JOBS) test-commands test-jass-build test-galaxy test-server-net \
 		test-renderer-model test-renderer-shadows test-sc2 test-wow-appearance \

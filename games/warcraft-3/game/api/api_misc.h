@@ -310,9 +310,9 @@ DWORD GetStartLocationLoc(LPJASS j) {
 }
 
 DWORD CreateTimer(LPJASS j) {
-    API_ALLOC(GTIMER, timer);
-    if (!G_RegisterJassTimer(timer)) jass_rterror(j, "CreateTimer: timer registry is full");
-    return 1;
+    LPGTIMER timer = G_AllocJassTimer();
+    if (!timer) { jass_rterror(j, "CreateTimer: timer registry is full"); return 0; }
+    return jass_pushlighthandle(j, timer, "timer");
 }
 DWORD DestroyTimer(LPJASS j) {
     LPGTIMER whichTimer = jass_checkhandle(j, 1, "timer");
@@ -612,7 +612,7 @@ DWORD GetSummoningUnit(LPJASS j) {
     return jass_pushlighthandle(j, jass_getcontext(j)->unit, "unit");
 }
 DWORD GetSummonedUnit(LPJASS j) {
-    return jass_pushlighthandle(j, jass_getcontext(j)->unit, "unit");
+    return jass_pushlighthandle(j, jass_getcontext(j)->source, "unit");
 }
 DWORD GetTransportUnit(LPJASS j) {
     return jass_pushlighthandle(j, jass_getcontext(j)->unit, "unit");
@@ -1196,7 +1196,11 @@ DWORD SetDayNightModels(LPJASS j) {
     return 0;
 }
 DWORD SetSkyModel(LPJASS j) {
-    //LPCSTR skyModelFile = jass_checkstring(j, 1);
+    LPCSTR skyModelFile = jass_checkstring(j, 1);
+    int sky_model = skyModelFile && *skyModelFile ? gi.ModelIndex(skyModelFile) : 0;
+    char value[16];
+    snprintf(value, sizeof(value), "%d", sky_model);
+    gi.configstring(CS_SKY, value);
     return 0;
 }
 DWORD EnableUserControl(LPJASS j) {
@@ -1380,7 +1384,7 @@ DWORD SetCinematicScene(LPJASS j) {
     if (G_SkipCutscene()) return 0;
     if (currentplayer) {
         LPGAMECLIENT gc = PLAYER_CLIENT(currentplayer);
-        DWORD now = gi.GetTime();
+        DWORD now = G_Time();
         G_SetPlayerText(gc, PLAYERTEXT_SPEAKER, G_LevelString(speakerTitle));
         G_SetPlayerText(gc, PLAYERTEXT_DIALOGUE, G_LevelString(text));
         currentplayer->cinematic_portrait = 0;

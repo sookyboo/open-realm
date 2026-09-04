@@ -173,7 +173,7 @@ void build_build(LPEDICT ent) {
      * make the entity own that accounted Food Used so death/removal can release
      * exactly the same contribution. The build-all override intentionally keeps
      * its historical no-resource-cost behavior. */
-    if (!G_BuildAllEnabled()) G_SetUnitFoodUsed(building, building->UnitBalance->foodUsed);
+    if (!G_BuildAllEnabled()) G_SetUnitFoodUsed(building, building->data.UnitBalance->foodUsed);
     ent->build_project = 0;
 
     /* The structure blocks pathing as soon as construction starts. Bake its
@@ -188,8 +188,8 @@ void build_build(LPEDICT ent) {
         building->construction.payer = client->ps.number;
         if (!G_BuildAllEnabled()) {
             building->construction.paid = true;
-            building->construction.gold = MAX(0, building->UnitBalance->goldCost);
-            building->construction.lumber = MAX(0, building->UnitBalance->lumberCost);
+            building->construction.gold = MAX(0, building->data.UnitBalance->goldCost);
+            building->construction.lumber = MAX(0, building->data.UnitBalance->lumberCost);
         }
         repair_build_primary(ent, building);
     } else {

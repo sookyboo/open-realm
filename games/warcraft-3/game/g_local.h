@@ -13,8 +13,6 @@
 #include "g_unitrow.h"
 #include "jass/jlex.h"
 
-#define EDICTFIELD(x, type, ...) { #x, FOFS(edict_s, x)-(HANDLE)NULL, type, ##__VA_ARGS__ }
-
 #define SAFE_CALL(FUNC, ...) if (FUNC) FUNC(__VA_ARGS__)
 #define ABILITY(NAME) void M_##NAME(LPEDICT ent, LPEDICT target)
 #define SEL_SCALE 72
@@ -31,6 +29,7 @@
 #define ITEM_PICKUP_RANGE 150.0f /* world units; classic contextual-pickup reach */
 #define MAX_CARGO 8
 #define MAX_HERO_ABILITIES 4
+#define MAX_ABILITIES 16 // slots; extra ability codes granted or stripped at runtime
 #define MAX_UNIT_STATUSES 8
 #define PLAYER_TEXT_BACKUP 16
 #define PLAYER_TEXT_MASK (PLAYER_TEXT_BACKUP - 1)
@@ -115,6 +114,7 @@ typedef struct {
     BOOL order_queued;         /* transient modifier for the current target callback */
     BOOL ability_off;          /* command-card separate-off variant selected for this dispatch */
 } menu_t;
+typedef menu_t clientMenu_s;
 
 enum {
     AI_HOLD_FRAME = 1 << 0,
@@ -122,29 +122,8 @@ enum {
     AI_IMMOBILE   = 1 << 2,  /* fixed unit: may act, but never translates or changes facing */
     AI_AUTOCAST_REPAIR = 1 << 3, /* persisted Repair-family autocast toggle */
     AI_AUTOCAST_ACTIVE = 1 << 4, /* fast unit-wide marker: some autocast ability is enabled */
+    AI_ILLUSION    = 1 << 5,  /* summoned copy created by illusion abilities */
 };
-
-typedef enum {
-    F_INT,
-    F_FLOAT,
-    F_LSTRING,            // string on disk, pointer in memory, TAG_LEVEL
-    F_GSTRING,            // string on disk, pointer in memory, TAG_GAME
-    F_VECTOR,
-    F_ANGLEHACK,
-    F_EDICT,            // index on disk, pointer in memory
-    F_ITEM,                // index on disk, pointer in memory
-    F_CLIENT,            // index on disk, pointer in memory
-    F_FUNCTION,
-    F_MMOVE,
-    F_IGNORE
-} fieldtype_t;
-
-typedef struct {
-    LPCSTR name;
-    DWORD ofs;
-    fieldtype_t type;
-    DWORD array_size;
-} field_t;
 
 typedef enum {
     ATK_NONE,
@@ -395,7 +374,7 @@ struct client_s {
     DWORD modal_flags;
     BOOL quest_dialog_open;
     menu_t menu;
-    struct {
+    struct clientCamera_s {
         CAMERASETUP state;
         CAMERASETUP old_state;
         DWORD start_time;
@@ -595,6 +574,16 @@ typedef struct {
     FLOAT value;
     FLOAT max_value;
 } EDICTSTAT;
+typedef EDICTSTAT edictStat_s;
+
+typedef struct edictAbilities_s {
+    DWORD added[MAX_ABILITIES];
+    DWORD added_count;
+    DWORD removed[MAX_ABILITIES];
+    DWORD removed_count;
+    DWORD permanent[MAX_ABILITIES];
+    DWORD permanent_count;
+} edictAbilities_s;
 
 typedef struct {
     float MoveSpeed;
@@ -605,7 +594,7 @@ typedef struct {
     float AcquireRange;
 } UNITINFO;
 
-typedef struct {
+typedef struct gameevent_s {
     EVENTTYPE type;
     LPEDICT edict;
     LPEDICT source;
@@ -650,39 +639,58 @@ typedef struct {
 } gitem_t;
 
 #define MAX_GROUP_SIZE 256 // entities; Warcraft III group enumeration cap used by JASS group handles
-#define MAX_JASS_GROUPS 1024 // handles; bounds deterministic per-map group save IDs
-#define MAX_JASS_TRIGGERS 4096 // handles; bounds deterministic per-map trigger save IDs
-#define MAX_JASS_TIMERS 1024 // handles; bounds deterministic per-map timer save IDs
-#define MAX_JASS_EVENTS 4096 // handlers; bounds TriggerRegister* objects created after main()
+#define MAX_GROUPS 1024 // handles; bounds deterministic per-map group registry slots
+#define MAX_TRIGGERS 4096 // handles; bounds deterministic per-map trigger registry slots
+#define MAX_TIMERS 1024 // handles; bounds deterministic per-map timer registry slots
+#define MAX_EVENTS 1024 // handlers; fixed event slots preserve stable pointers across removal
+#define MAX_QUESTS 256 // quests; fixed quest slots preserve stable pointers across removal
+#define MAX_QUESTITEMS 16 // items per quest; matches the practical quest objective display capacity
 #define MAX_WAYPOINTS 256 // entities; fixed g_edicts ring used by point-target movement
 typedef struct {
     LPEDICT units[MAX_GROUP_SIZE];
     DWORD num_units;
 } ggroup_t;
 
+typedef struct gtriggeraction_s {
+    struct jass_function const *func;
+    struct gtriggeraction_s *next;
+} TRIGGERACTION;
+
+typedef struct gtriggercondition_s {
+    struct jass_function const *expr;
+    struct gtriggercondition_s *next;
+} TRIGGERCONDITION;
+
+struct gtrigger_s {
+    TRIGGERACTION *actions;
+    TRIGGERCONDITION *conditions;
+    BOOL disabled;
+};
+
 struct gtimer_s {
     struct jass_function const *handler;
-    DWORD started, duration, timeout, remaining;
+    DWORD duration, remaining;
     BOOL periodic, paused, running;
 };
 
 struct gquestitem_s {
     LPSTR description;
-    LPQUESTITEM next;
     BOOL completed;
+    BOOL inuse;
 };
 
 struct gquest_s {
     LPSTR title;
     LPSTR description;
     LPSTR iconPath;
-    LPQUESTITEM items;
-    LPQUEST next;
+    QUESTITEM items[MAX_QUESTITEMS];
+    DWORD num_items;
     BOOL discovered;
     BOOL required;
     BOOL completed;
     BOOL failed;
     BOOL enabled;
+    BOOL inuse;
 };
 
 /* Quest rows are present in the journal only while both server visibility gates are enabled. */
@@ -780,7 +788,7 @@ struct edict_s {
     DWORD variation;
     DWORD build_project;
     BOOL rally_indicator;
-    struct {
+    struct edictConstruction_s {
         BOOL active;
         BOOL paused;
         LPEDICT primary_builder;
@@ -798,7 +806,7 @@ struct edict_s {
         FLOAT duration;    /* seconds */
         FLOAT progress;    /* seconds elapsed for the active queue head */
     } research;
-    struct {
+    struct edictRally_s {
         rallyTargetType_t type;
         VECTOR2 point;
         LPEDICT entity;
@@ -817,7 +825,7 @@ struct edict_s {
     /* Hero revival state lives on the persistent Hero edict. While reviving,
      * queue_next links the Hero into a producer's ordinary production chain
      * without borrowing hero->build, which may have independent gameplay use. */
-    struct {
+    struct edictRevival_s {
         BOOL awaiting;
         BOOL reviving;
         LPEDICT producer;
@@ -829,7 +837,7 @@ struct edict_s {
     DWORD spawn_time;
     DWORD harvested_lumber;
     DWORD harvested_gold;
-    struct {
+    struct edictMilitia_s {
         DWORD ability;          /* Amil alias that supplied Data A/B and duration */
         DWORD normal_type;      /* Data A: worker form retained across the timed morph */
         DWORD militia_type;     /* Data B: alternate combat form */
@@ -848,19 +856,19 @@ struct edict_s {
     DWORD damage;
     DWORD resources;
     DWORD freetime;
-    struct {
+    struct edictGoldMine_s {
         LPEDICT mine;
         DWORD mine_spawn_time;
         BOOL restore_invulnerable;
     } goldmine;
     LPEDICT inventory[MAX_INVENTORY];
-    struct {
+    struct edictItem_s {
         LPEDICT carrier;
         LONG inventory_slot;
         BOOL in_world;
         DWORD charges;
     } item;
-    struct {
+    struct edictDestructable_s {
         BOOL initialized;
 
         /* Set only for destructables originating from war3map.doo. */
@@ -887,7 +895,7 @@ struct edict_s {
 
         ARRAY(droppableItemSet_t const, drop_sets);
     } destructable;
-    struct {
+    struct edictCargo_s {
         LPEDICT units[MAX_CARGO];
         DWORD count;
     } cargo;
@@ -899,9 +907,7 @@ struct edict_s {
     doodadHero_t hero;
     heroability_t heroabilities[MAX_HERO_ABILITIES];
     heroabilitystatus_t abilstatus[MAX_UNIT_STATUSES];
-    ARRAY(DWORD, added_abilities);
-    ARRAY(DWORD, removed_abilities);
-    ARRAY(DWORD, permanent_abilities);
+    edictAbilities_s abilities;
     BOOL invulnerable;  // unit cannot take damage when true
     BOOL paused;        // unit AI and movement suspended when true
     BOOL stunned;       // unit AI and movement suspended by timed status
@@ -913,7 +919,7 @@ struct edict_s {
     DWORD unit_color;   // explicit per-unit color override (0 = use owner color)
     VECTOR2 old_origin;
     unitOrderQueue_t order_queue;
-    struct {
+    struct edictMovement_s {
         VECTOR2 last_origin;
         FLOAT last_distance;
         DWORD blocked_frames;
@@ -982,16 +988,30 @@ struct edict_s {
     void (*attack)(LPEDICT);
     void (*pain)(LPEDICT);
 
-    UnitProfile_t const *UnitProfile;
-    UnitBalance_t const *UnitBalance;
-    UnitData_t const *UnitData;
-    UnitUI_t const *UnitUI;
-    UnitWeapons_t const *UnitWeapons;
-    UnitAbilities_t const *UnitAbilities;
-    Doodads_t const *Doodads;
-    ItemData_t const *ItemData;
-    DestructableData_t const *DestructableData;
+    struct edictData_s {
+        UnitProfile_t const *UnitProfile;
+        UnitBalance_t const *UnitBalance;
+        UnitData_t const *UnitData;
+        UnitUI_t const *UnitUI;
+        UnitWeapons_t const *UnitWeapons;
+        UnitAbilities_t const *UnitAbilities;
+        Doodads_t const *Doodads;
+        ItemData_t const *ItemData;
+        DestructableData_t const *DestructableData;
+    } data;
 };
+
+typedef struct edictConstruction_s edictConstruction_s;
+typedef struct edictRally_s edictRally_s;
+typedef struct edictRevival_s edictRevival_s;
+typedef struct edictMilitia_s edictMilitia_s;
+typedef struct edictGoldMine_s edictGoldMine_s;
+typedef struct edictItem_s edictItem_s;
+typedef struct edictDestructable_s edictDestructable_s;
+typedef struct edictCargo_s edictCargo_s;
+typedef struct edictMovement_s edictMovement_s;
+typedef struct edictData_s edictData_s;
+typedef struct clientCamera_s clientCamera_s;
 
 /* An entity that should be ignored by collision and physics: dead, hidden, or
  * not a live model.  Shared by g_phys.c (M_CheckCollision) and g_ai.c
@@ -1041,7 +1061,6 @@ struct game_locals {
 };
 
 struct gevent_s {
-    LPEVENT next;
     LPEDICT subject;
     EVENTTYPE type;
     LPTRIGGER trigger;
@@ -1051,6 +1070,7 @@ struct gevent_s {
     DWORD state;
     DWORD limitop;
     FLOAT limitval;
+    BOOL inuse;
 };
 
 typedef struct {
@@ -1066,7 +1086,7 @@ typedef struct {
 } CINEFILTER;
 
 typedef struct {
-    LPEVENT handlers;
+    EVENT handlers[MAX_EVENTS];
     GAMEEVENT queue[MAX_EVENT_QUEUE];
     DWORD write, read;
 } LEVELEVENTS;
@@ -1198,11 +1218,11 @@ typedef struct {
 
 struct level_locals {
     LPJASS vm;
-    ggroup_t *groups[MAX_JASS_GROUPS];
+    ggroup_t groups[MAX_GROUPS];
     DWORD num_groups;
-    LPTRIGGER triggers[MAX_JASS_TRIGGERS];
+    TRIGGER triggers[MAX_TRIGGERS];
     DWORD num_triggers;
-    LPGTIMER timers[MAX_JASS_TIMERS];
+    GTIMER timers[MAX_TIMERS];
     DWORD num_timers;
     bot_t bots[MAX_PLAYERS];
     LPCMAPINFO mapinfo;
@@ -1226,7 +1246,7 @@ struct level_locals {
     struct {
         DWORD base, cursor, count;
     } waypoints;
-    LPQUEST quests;
+    QUEST quests[MAX_QUESTS];
     USHORT alliances[MAX_PLAYERS][MAX_PLAYERS];
     fowGrid_t fow;
     CINEFILTER cinefilter;
@@ -1236,9 +1256,26 @@ struct level_locals {
     BOOL quest_paused;
     BOOL modal_paused;
     TIMEOFDAY timeofday;
+    BOX2 camera_bounds; /* map-global camera target rectangle; W3I default, SetCameraBounds may replace it */
     BOOL started;
     BOOL scriptsStarted;
+    BOOL cinematic_debug_result_window; /* per-map debug latch for result-window tracing */
 };
+
+#define FOR_EACH_EVENT(property) \
+for (DWORD event_index = 0; event_index < MAX_EVENTS; ++event_index) \
+    for (LPEVENT property = &level.events.handlers[event_index]; property; property = NULL) \
+        if (property->inuse)
+
+#define FOR_EACH_QUEST(property) \
+for (DWORD quest_index = 0; quest_index < MAX_QUESTS; ++quest_index) \
+    for (LPQUEST property = &level.quests[quest_index]; property; property = NULL) \
+        if (property->inuse)
+
+#define FOR_EACH_QUESTITEM(quest, property) \
+for (DWORD questitem_index = 0; questitem_index < MAX_QUESTITEMS; ++questitem_index) \
+    for (__typeof__((quest)->items[0]) *property = &(quest)->items[questitem_index]; property; property = NULL) \
+        if (property->inuse)
 
 typedef struct {
     LPCSTR id;
@@ -1276,7 +1313,7 @@ FLOAT G_Cinefade(void);
 BOOL G_SkipCutscene(void);
 VECTOR2 G_ClampCameraPosition(LPGAMECLIENT client, LPCVECTOR2 position);
 VECTOR3 G_MakeServerOrigin(FLOAT x, FLOAT y, FLOAT z_offset);
-void G_SetClientCameraBounds(LPGAMECLIENT client, FLOAT const bounds[8]);
+void G_SetCameraBounds(FLOAT const bounds[8]);
 void G_ClearCameraTarget(LPGAMECLIENT client, LPCSTR func);
 void G_SetPlayerText(LPGAMECLIENT, PLAYERTEXT, LPCSTR);
 void G_SetAllStockSlots(BOOL, LONG);
@@ -1284,6 +1321,7 @@ void G_SetStockSlots(LPEDICT, BOOL, LONG);
 void G_InitStockSlots(LPEDICT);
 GAMEEVENT *G_PublishEvent(LPEDICT, EVENTTYPE);
 GAMEEVENT *G_PublishEventWithSource(LPEDICT, EVENTTYPE, LPEDICT);
+void G_PublishSummonEvents(LPEDICT summoner, LPEDICT summoned);
 BOOL G_SubscribeMessage(gameMsgFn, void *);
 void G_UnsubscribeMessage(gameMsgFn, void *);
 void G_PublishMessage(LPEDICT, GAMEMSGTYPE, LPEDICT);
@@ -1369,9 +1407,9 @@ BOOL WriteGame(LPCSTR filename);
 BOOL ReadGame(LPCSTR filename);
 BOOL G_SaveJassHandle(LPCSTR type, HANDLE value, DWORD *id);
 HANDLE G_LoadJassHandle(LPCSTR type, DWORD id);
-BOOL G_RegisterJassGroup(ggroup_t *group);
-BOOL G_RegisterJassTrigger(LPTRIGGER trigger);
-BOOL G_RegisterJassTimer(LPGTIMER timer);
+ggroup_t *G_AllocJassGroup(void);
+LPTRIGGER G_AllocJassTrigger(void);
+LPGTIMER G_AllocJassTimer(void);
 void G_ClearSaveRegistries(void);
 BOOL G_GetSaveMap(LPCSTR filename, LPSTR map, DWORD map_size);
 void G_RunTimers(void);
@@ -1514,6 +1552,8 @@ LPEDICT G_SpawnModelEffect(LPCSTR model, LPCVECTOR2 point, LPEDICT target, LPCST
 LPEDICT G_SpawnAbilityEffectAtPoint(DWORD ability_id, wc3EffectType_t type, DWORD index, LPCVECTOR2 point, BOOL temporary);
 LPEDICT G_SpawnAbilityEffectTarget(DWORD ability_id, wc3EffectType_t type, DWORD index, LPEDICT target, LPCSTR attach_point, BOOL temporary);
 void G_DestroyEffect(LPEDICT effect);
+void G_EffectThink(LPEDICT);
+void G_EffectValidateTarget(LPEDICT);
 
 // g_unit_ui.c (Phase 8)
 BYTE G_GetCommandButtons(LPEDICT ent, gameCommandButton_t *buttons, BYTE max_buttons);
@@ -1698,6 +1738,20 @@ slkTestData_t *G_SetProfileRows(slkTestData_t *);
 void G_RegisterSelectSounds(LPEDICT, LPCSTR);
 void G_RegisterGlobalSounds(void);  /* register world sounds (tree fall, etc.) at map init */
 void G_PlayUISoundForPlayer(LPEDICT, LPCSTR);
+
+typedef struct {
+    FLOAT volume;
+    VECTOR3 origin;
+    LPEDICT emitter;
+    BOOL positioned;
+} jassSoundPlayback_t;
+
+void G_JassSoundRuntimeReset(void);
+void G_JassSoundRuntimeInit(HANDLE sound);
+void G_JassSoundSetVolume(HANDLE sound, FLOAT volume);
+void G_JassSoundSetPosition(HANDLE sound, LPCVECTOR3 position);
+void G_JassSoundAttach(HANDLE sound, LPEDICT unit);
+void G_JassSoundPlayback(HANDLE sound, jassSoundPlayback_t *playback);
 void G_SendPointConfirmation(LPEDICT, LPCVECTOR2, BOOL attack);
 void G_QueueReadySound(LPEDICT);
 void G_QueueOwnerSoundAlias(LPEDICT, LPCSTR);
@@ -1835,6 +1889,9 @@ BOOL harvest_lumber_return_to(LPEDICT, LPEDICT);
 BOOL harvest_gold_return_to(LPEDICT, LPEDICT);
 void cargo_drop_all(LPEDICT);
 void blight_mine_think(LPEDICT);
+void blizzard_think(LPEDICT);
+void flame_strike_tick(LPEDICT);
+void siphon_mana_think(LPEDICT);
 BOOL move_selectlocation(LPEDICT, LPCVECTOR2);
 BOOL move_should_arrive(LPEDICT, FLOAT);
 BOOL move_is_blocked(LPEDICT, FLOAT, FLOAT);
@@ -1914,6 +1971,10 @@ extern struct game_export globals;
 extern struct game_import gi;
 extern struct level_locals level;
 extern struct edict_s *g_edicts;
+
+/* Simulation clock reader. Spell-rank parameters named `level` shadow the global in
+ * several skill functions, so clock reads go through this instead of `level.time`. */
+static inline DWORD G_Time(void) { return level.time; }
 
 extern unitMeta_t const UnitsMetaData[];
 

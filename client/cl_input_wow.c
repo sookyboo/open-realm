@@ -17,7 +17,6 @@ static struct {
     DWORD last_time;
     FLOAT yaw;
     FLOAT pitch;
-    FLOAT distance;
     /* Click-vs-drag tracking for LMB and RMB. */
     BOOL lmb_down;
     BOOL rmb_dragging;
@@ -31,7 +30,6 @@ static struct {
     DWORD selected_entity;
 } wow_input = {
     .pitch = 342.0f,
-    .distance = 8.0f,
 };
 
 static FLOAT CL_WowClamp(FLOAT value, FLOAT min_value, FLOAT max_value) {
@@ -45,7 +43,8 @@ static void CL_WowInitInputState(void) {
     wow_input.initialized = true;
     wow_input.last_time = SDL_GetTicks();
     wow_input.pitch = 342.0f;
-    wow_input.distance = 8.0f;
+    if (cl.playerstate.distance <= 0.0f)
+        cl.playerstate.distance = 8.0f;
     wow_input.cursor_arrow = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
     wow_input.cursor_crosshair = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_CROSSHAIR);
     wow_input.cursor_hand = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
@@ -56,9 +55,8 @@ static void CL_WowInitInputState(void) {
     Cvar_Get("wow_mouse_speed", "0.18", CVAR_ARCHIVE);
     Cvar_Get("wow_camera_min_pitch", "305.0", 0);
     Cvar_Get("wow_camera_max_pitch", "355.0", 0);
-    Cvar_Get("wow_camera_min_distance", "5.5", 0);
-    Cvar_Get("wow_camera_max_distance", "25.0", 0);
-    Cvar_Get("wow_zoom_speed", "1.0", CVAR_ARCHIVE);
+    Cvar_Get("camera_min_distance", "5.5", 0);
+    Cvar_Get("camera_max_distance", "25.0", 0);
     Cvar_Get("wow_click_threshold", "10", 0);
 }
 
@@ -130,27 +128,19 @@ static void CL_WowRmbUp(void) {
     }
 }
 
-static void IN_WowLeftDown(void) {
+BOOL CL_InputModeSelectDown(void) {
     wow_input.left_mouse = true;
     wow_input.lmb_down = true;
     wow_input.lmb_down_pos = mouse.origin;
+    return true;
 }
 
-static void IN_WowLeftUp(void) {
+BOOL CL_InputModeSelectUp(void) {
     CL_WowLmbUp();
+    return true;
 }
 
-static void IN_WowSelectDown(void) {
-    wow_input.left_mouse = true;
-    wow_input.lmb_down = true;
-    wow_input.lmb_down_pos = mouse.origin;
-}
-
-static void IN_WowSelectUp(void) {
-    CL_WowLmbUp();
-}
-
-/* +attack/-attack: Left-click attack. Bound via `bind MOUSE1 "+attack"` in config. */
+/* +attack/-attack: click-to-attack; bind in config if needed. */
 static void IN_AttackDown(void) {
     wow_input.left_mouse = true;
     wow_input.lmb_down = true;
@@ -216,10 +206,6 @@ static void IN_MoveRightUp(void) {
 }
 
 void CL_InputModeInit(void) {
-    Cmd_AddCommand("+wowleft", IN_WowLeftDown);
-    Cmd_AddCommand("-wowleft", IN_WowLeftUp);
-    Cmd_AddCommand("+wowselect", IN_WowSelectDown);
-    Cmd_AddCommand("-wowselect", IN_WowSelectUp);
     Cmd_AddCommand("+attack", IN_AttackDown);
     Cmd_AddCommand("-attack", IN_AttackUp);
     Cmd_AddCommand("+look", IN_LookDown);
@@ -234,13 +220,7 @@ void CL_InputModeInit(void) {
     Cmd_AddCommand("-moveright", IN_MoveRightUp);
 }
 
-void CL_InputModeSetGameplay(void) {
-    /* WoW's hard clip belongs just behind fully opaque fog; 16000 defeated world culling and depth precision. */
-    cl.viewDef.camerastate[0].zfar = WOW_WORLD_FAR_CLIP;
-    cl.viewDef.camerastate[0].znear = 1;
-    cl.viewDef.camerastate[1].zfar = WOW_WORLD_FAR_CLIP;
-    cl.viewDef.camerastate[1].znear = 1;
-}
+void CL_InputModeSetGameplay(void) {}
 
 void CL_InputModeMouseButton(SDL_MouseButtonEvent const *button, BOOL down) {
     (void)button;
@@ -295,18 +275,8 @@ void CL_InputModeMouseMotion(SDL_MouseMotionEvent const *motion) {
 }
 
 BOOL CL_InputModeMouseWheel(SDL_MouseWheelEvent const *wheel) {
-    if (!wheel) {
-        return false;
-    }
-    {
-        FLOAT zoom_speed = Cvar_Value("wow_zoom_speed", 1.0f);
-        FLOAT min_dist = Cvar_Value("wow_camera_min_distance", 3.0f);
-        FLOAT max_dist = Cvar_Value("wow_camera_max_distance", 35.0f);
-
-        wow_input.distance = CL_WowClamp(wow_input.distance - wheel->y * zoom_speed,
-                                         min_dist, max_dist);
-    }
-    return true;
+    (void)wheel;
+    return false;
 }
 
 void CL_InputModeFrame(void) {
@@ -345,40 +315,9 @@ void CL_InputModeFrame(void) {
               (unsigned)flags,
               (double)wow_input.yaw,
               (double)wow_input.pitch,
-              (double)wow_input.distance);
+              (double)cl.playerstate.distance);
 }
 
 
-VECTOR2 CL_ClampCameraPosition(VECTOR2 position) { return position; }
-
-/* Number keys 1-0 trigger action bar slots. Key 1 = slot 0 (Attack),
- * 2 = slot 1 (Charge), ..., 0 = slot 9 (Backpack). The action bar data
- * arrives from the server at begin/update via svc_unit_ui. */
 void CL_InputModeResetMap(void) {}
-
-BOOL CL_HandleGameKey(int sym, Uint16 mod, BOOL repeat) {
-    DWORD slot;
-    (void)mod;
-    (void)repeat;
-
-    if (!CL_GameplayInputReady())
-        return false;
-
-    if (sym == SDLK_TAB) {
-        MSG_WriteByte(&cls.netchan.message, clc_stringcmd);
-        SZ_Printf(&cls.netchan.message, "wow_cycle_target");
-        return true;
-    }
-
-    if (sym >= SDLK_1 && sym <= SDLK_9)
-        slot = (DWORD)(sym - SDLK_1); /* 1→0, 2→1, ... 9→8 */
-    else if (sym == SDLK_0)
-        slot = 9;
-    else
-        return false;
-
-    MSG_WriteByte(&cls.netchan.message, clc_stringcmd);
-    SZ_Printf(&cls.netchan.message, "wow_action %u", (unsigned)slot);
-    return true;
-}
 #endif

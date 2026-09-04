@@ -31,6 +31,7 @@
 
 void test_client_stubs_init(void);
 void test_client_stubs_set_cvar(LPCSTR name, LPCSTR value);
+void test_client_stubs_set_world_bounds(BOX2 bounds);
 void test_client_stubs_set_existing_file(LPCSTR path);
 void CL_ParseLayout(LPSIZEBUF msg);
 void SCR_LayoutDrawScrollBar(LPCUIFRAME frame, LPCRECT screen);
@@ -909,6 +910,16 @@ TEST(net, window_escape_closes_and_releases_server_modal_owner) {
     CL_WindowClear();
 }
 
+TEST(net, window_no_escape_consumes_escape_without_dismissal) {
+    test_client_stubs_init(); CL_WindowClear();
+    test_send_window(13, 103, UI_WINDOW_MODAL | UI_WINDOW_NO_PAUSE | UI_WINDOW_NO_ESCAPE,
+                     0.05f, "Choose", UI_WINDOW_CLOSE_ACTION);
+    T_ASSERT(CL_WindowModalActive());
+    T_ASSERT(CL_WindowKeyEvent(K_ESCAPE));
+    T_ASSERT(CL_WindowModalActive());
+    CL_WindowClear();
+}
+
 TEST(net, stacked_modal_windows_unpause_only_after_last_close) {
     test_client_stubs_init(); CL_WindowClear();
     test_send_window(6, 96, UI_WINDOW_MODAL, 0.05f, "First", UI_WINDOW_CLOSE_NOTIFY_ACTION);
@@ -1538,9 +1549,11 @@ TEST(net, playerinfo_game_state_preserves_open_menu_input) {
     cls.key_dest = key_menu;
     cls.netchan.remote_address.type = NA_IP;
     to.number = 1;
-    to.origin = (VECTOR3){ 128.0f, 256.0f, 0 };
+    to.vieworigin = (VECTOR3){ 128.0f, 256.0f, 0 };
     to.fov = 50;
     to.distance = 1650;
+    to.znear = 100.0f;
+    to.zfar = 5000.0f;
     to.client_ui_state = CLIENT_UI_GAME;
 
     MSG_WriteByte(&sb, svc_playerinfo);
@@ -1554,6 +1567,8 @@ TEST(net, playerinfo_game_state_preserves_open_menu_input) {
     T_EQ(cl.playerstate.number, 1);
     T_FEQ(cl.viewDef.camerastate[0].origin.x, 128.0f, 0.0001f);
     T_FEQ(cl.viewDef.camerastate[0].origin.y, 256.0f, 0.0001f);
+    T_FEQ(cl.viewDef.camerastate[0].znear, 100.0f, 0.0001f);
+    T_FEQ(cl.viewDef.camerastate[0].zfar, 5000.0f, 0.0001f);
 }
 
 TEST(net, live_selection_stats_roundtrip_and_format) {
@@ -1598,31 +1613,33 @@ TEST(net, live_selection_stats_roundtrip_and_format) {
 TEST(net, cinematic_cleanup_restores_camera_and_ui_samples) {
     BYTE buf[256];
     sizeBuf_t sb = make_msg_buf(buf, sizeof(buf));
-    PLAYER from = {0}, to = { .number = 1, .client_ui_state = CLIENT_UI_CINEMATIC, .fov = 35, .distance = 900 };
-    QUATERNION quat = Quaternion_fromEuler(&(VECTOR3){326, 0, 0}, ROTATE_ZYX);
+    PLAYER from = {0}, to = { .number = 1, .client_ui_state = CLIENT_UI_CINEMATIC, .fov = 35, .distance = 900, .znear = 55.0f, .zfar = 6500.0f };
 
     test_client_stubs_init();
-    to.viewquat = Quaternion_fromEuler(&(VECTOR3){300, 0, 120}, ROTATE_ZYX);
+    to.viewangles = (VECTOR3){300, 0, 120};
     to.uiflags = ~(1u << LAYER_CINEMATIC);
     MSG_WriteByte(&sb, svc_playerinfo); MSG_WriteDeltaPlayerState(&sb, &from, &to);
     CL_ParseServerMessage(&sb);
     T_EQ(cl.playerstate.client_ui_state, CLIENT_UI_CINEMATIC);
     from = to;
     to.client_ui_state = CLIENT_UI_GAME; to.uiflags = 1u << LAYER_CINEMATIC;
-    to.viewquat = quat; to.origin = (VECTOR3){128, 256, 0}; to.fov = 50; to.distance = 1650;
+    to.viewangles = (VECTOR3){326, 0, 0}; to.vieworigin = (VECTOR3){128, 256, 0}; to.fov = 50; to.distance = 1650;
+    to.znear = 100.0f; to.zfar = 5000.0f;
     SZ_Clear(&sb); sb.readcount = 0;
     MSG_WriteByte(&sb, svc_playerinfo); MSG_WriteDeltaPlayerState(&sb, &from, &to);
     CL_ParseServerMessage(&sb);
     T_EQ(cl.playerstate.client_ui_state, CLIENT_UI_GAME); T_EQ(cl.playerstate.uiflags, to.uiflags);
     T_FEQ(cl.viewDef.camerastate[0].origin.x, 128, 0.001f);
     T_FEQ(cl.viewDef.camerastate[0].origin.y, 256, 0.001f);
-    T_FEQ(cl.viewDef.camerastate[0].viewquat.x, quat.x, 0.001f);
-    T_FEQ(cl.viewDef.camerastate[0].viewquat.w, quat.w, 0.001f);
+    T_FEQ(cl.viewDef.camerastate[0].viewangles.x, 326, 0.001f);
+    T_FEQ(cl.viewDef.camerastate[0].viewangles.z, 0, 0.001f);
     T_FEQ(cl.viewDef.camerastate[0].distance, 1650, 0.001f);
     T_EQ(cl.viewDef.camerastate[0].fov, 50);
+    T_FEQ(cl.viewDef.camerastate[0].znear, 100.0f, 0.001f);
+    T_FEQ(cl.viewDef.camerastate[0].zfar, 5000.0f, 0.001f);
 }
 
-TEST(net, playerstate_camera_bounds_roundtrip) {
+TEST(net, playerstate_identity_bytes_roundtrip) {
     BYTE buf[256];
     sizeBuf_t sb = make_msg_buf(buf, sizeof(buf));
     PLAYER from = { 0 };
@@ -1631,20 +1648,36 @@ TEST(net, playerstate_camera_bounds_roundtrip) {
     DWORD bits;
     int number;
 
-    to.number = 3;
-    to.camera_bounds.min = (VECTOR2){ -4096.0f, -3072.0f };
-    to.camera_bounds.max = (VECTOR2){ 4096.0f, 3072.0f };
+    to.number = 2;
+    to.cinematic_portrait = 41;
+    to.team = 3;
+    to.color = 7;
+    to.race = kPlayerRaceNightElf;
 
     MSG_WriteDeltaPlayerState(&sb, &from, &to);
     sb.readcount = 0;
     number = MSG_ReadPlayerBits(&sb, &bits);
     MSG_ReadDeltaPlayerState(&sb, &out, number, bits);
 
-    T_EQ(number, 3);
-    T_FEQ(out.camera_bounds.min.x, -4096.0f, 0.001f);
-    T_FEQ(out.camera_bounds.min.y, -3072.0f, 0.001f);
-    T_FEQ(out.camera_bounds.max.x, 4096.0f, 0.001f);
-    T_FEQ(out.camera_bounds.max.y, 3072.0f, 0.001f);
+    T_EQ(number, 2);
+    T_EQ(out.cinematic_portrait, 41);
+    T_EQ(out.team, 3);
+    T_EQ(out.color, 7);
+    T_EQ(out.race, kPlayerRaceNightElf);
+    T_EQ(out.fov, 0);
+}
+
+TEST(net, camera_clamp_uses_world_bounds) {
+    VECTOR2 clamped;
+
+    test_client_stubs_init();
+    test_client_stubs_set_world_bounds((BOX2){
+        .min = { -4096.0f, -3072.0f },
+        .max = { 4096.0f, 3072.0f },
+    });
+    clamped = CL_ClampCameraPosition((VECTOR2){ 5000.0f, -4000.0f });
+    T_FEQ(clamped.x, 4096.0f, 0.001f);
+    T_FEQ(clamped.y, -3072.0f, 0.001f);
 }
 
 TEST(net, playerstate_camera_render_fields_roundtrip) {
@@ -1657,10 +1690,8 @@ TEST(net, playerstate_camera_render_fields_roundtrip) {
     int number;
 
     to.number = 4;
-    to.origin.z = 275.0f;
+    to.vieworigin.z = 275.0f;
     to.viewangles = (VECTOR3){ 12.5f, 45.0f, 90.0f };
-    to.camera_bounds.min = (VECTOR2){ -1.0f, -2.0f };
-    to.camera_bounds.max = (VECTOR2){ 3.0f, 4.0f };
     to.znear = 75.0f;
     to.zfar = 6500.0f;
     /* texts[1] is the final player-state text field; the player mask remains 32 bits. */
@@ -1672,18 +1703,39 @@ TEST(net, playerstate_camera_render_fields_roundtrip) {
     MSG_ReadDeltaPlayerState(&sb, &out, number, bits);
 
     T_EQ(number, 4);
-    T_FEQ(out.origin.z, 275.0f, 0.001f);
+    T_FEQ(out.vieworigin.z, 275.0f, 0.001f);
     T_FEQ(out.viewangles.x, 12.5f, 0.001f);
     T_FEQ(out.viewangles.y, 45.0f, 0.001f);
     T_FEQ(out.viewangles.z, 90.0f, 0.001f);
-    T_FEQ(out.camera_bounds.min.x, -1.0f, 0.001f);
-    T_FEQ(out.camera_bounds.min.y, -2.0f, 0.001f);
-    T_FEQ(out.camera_bounds.max.x, 3.0f, 0.001f);
-    T_FEQ(out.camera_bounds.max.y, 4.0f, 0.001f);
     T_FEQ(out.znear, 75.0f, 0.001f);
     T_FEQ(out.zfar, 6500.0f, 0.001f);
     T_STREQ(out.texts[1], "camera-last-field");
     MemFree((void *)out.texts[1]);
+}
+
+TEST(net, playerinfo_copies_server_clip_planes) {
+    BYTE buf[256];
+    sizeBuf_t sb = make_msg_buf(buf, sizeof(buf));
+    PLAYER from = { 0 };
+    PLAYER to = { 0 };
+
+    test_client_stubs_init();
+    cl.viewDef.camerastate[0].znear = 100.0f;
+    cl.viewDef.camerastate[0].zfar = 5000.0f;
+    to.number = 1;
+    to.fov = 50;
+    to.distance = 1650;
+    to.znear = 75.0f;
+    to.zfar = 6500.0f;
+    to.client_ui_state = CLIENT_UI_GAME;
+
+    MSG_WriteByte(&sb, svc_playerinfo);
+    MSG_WriteDeltaPlayerState(&sb, &from, &to);
+    CL_ParseServerMessage(&sb);
+
+    T_EQ(cl.viewDef.camerastate[0].fov, 50);
+    T_FEQ(cl.viewDef.camerastate[0].znear, 75.0f, 0.001f);
+    T_FEQ(cl.viewDef.camerastate[0].zfar, 6500.0f, 0.001f);
 }
 
 TEST(net, camera_prediction_reconciles_to_server_clamped_bound) {
@@ -1694,11 +1746,15 @@ TEST(net, camera_prediction_reconciles_to_server_clamped_bound) {
 
     test_client_stubs_init();
     to.number = 1;
-    to.origin = (VECTOR3){ 100.0f, -50.0f, 0 };
-    to.camera_bounds.min = (VECTOR2){ -100.0f, -50.0f };
-    to.camera_bounds.max = (VECTOR2){ 100.0f, 50.0f };
+    to.vieworigin = (VECTOR3){ 100.0f, -50.0f, 0 };
+    test_client_stubs_set_world_bounds((BOX2){
+        .min = { -100.0f, -50.0f },
+        .max = { 100.0f, 50.0f },
+    });
     to.fov = 50;
     to.distance = 1650;
+    to.znear = 100.0f;
+    to.zfar = 5000.0f;
     to.client_ui_state = CLIENT_UI_GAME;
     cl.camera_prediction.active = true;
     cl.camera_prediction.origin = (VECTOR2){ 500.0f, -500.0f };

@@ -61,6 +61,10 @@ static DWORD dnc_model_index_calls;
 static DWORD dnc_configstring_calls;
 static DWORD dnc_configstring_index[2];
 static char dnc_configstring_value[2][16];
+static DWORD sky_model_index_calls;
+static DWORD sky_configstring_calls;
+static DWORD sky_configstring_index;
+static char sky_configstring_value[16];
 
 static int capture_dnc_model_index(LPCSTR modelName) {
     (void)modelName;
@@ -75,6 +79,18 @@ static void capture_dnc_configstring(DWORD index, LPCSTR value) {
                  "%s", value ? value : "");
     }
     dnc_configstring_calls++;
+}
+
+static int capture_sky_model_index(LPCSTR modelName) {
+    (void)modelName;
+    sky_model_index_calls++;
+    return 41;
+}
+
+static void capture_sky_configstring(DWORD index, LPCSTR value) {
+    sky_configstring_calls++;
+    sky_configstring_index = index;
+    snprintf(sky_configstring_value, sizeof(sky_configstring_value), "%s", value ? value : "");
 }
 
 static void capture_pause(BOOL paused) { captured_pause = paused; }
@@ -200,12 +216,18 @@ static void capture_ui_sound(LPEDICT ent, int channel, int sound, FLOAT volume, 
     T_EQ(channel, CHAN_OWNER | CHAN_RELIABLE);
 }
 
+TEST(wc3_api, default_camera_authors_lens) {
+    gameCamera_t cam;
+    T_ASSERT(CL_GameDefaultCamera(&cam));
+    T_FEQ(cam.fov, WC3_CAMERA_DEFAULT_FOV, 0.001f);
+    T_FEQ(cam.znear, WC3_CAMERA_DEFAULT_NEAR_Z, 0.001f);
+    T_FEQ(cam.zfar, WC3_CAMERA_DEFAULT_FAR_Z, 0.001f);
+}
+
 /* Campaign human slots need not match the connection slot; exercise the real VM/edict module boundary. */
 TEST(wc3_api, escape_restores_game_camera_ui_and_control) {
     LPGAMECLIENT gc = &game.clients[0];
     LPCSTR cancel[] = { "cancel" };
-    QUATERNION quat = Quaternion_fromEuler(&(VECTOR3){326, 0, 0}, ROTATE_ZYX);
-
     game.clients[1].ps.number = 0;
     gc->ps.number = 1;
     gc->camera.state.viewangles = (VECTOR3){300, 0, 120};
@@ -244,9 +266,11 @@ TEST(wc3_api, escape_restores_game_camera_ui_and_control) {
     T_EQ(gc->ps.client_ui_state, CLIENT_UI_GAME);
     T_EQ(gc->ps.uiflags, 1u << LAYER_CINEMATIC);
     T_ASSERT(!gc->no_control);
-    T_FEQ(gc->ps.origin.x, 128, 0.001f); T_FEQ(gc->ps.origin.y, 256, 0.001f);
-    T_FEQ(gc->ps.distance, 1650, 0.001f); T_EQ(gc->ps.fov, 50);
-    T_FEQ(gc->ps.viewquat.x, quat.x, 0.001f); T_FEQ(gc->ps.viewquat.w, quat.w, 0.001f);
+    T_FEQ(gc->ps.vieworigin.x, 128, 0.001f); T_FEQ(gc->ps.vieworigin.y, 256, 0.001f);
+    T_FEQ(gc->ps.distance, WC3_CAMERA_DEFAULT_DISTANCE, 0.001f); T_EQ(gc->ps.fov, (DWORD)WC3_CAMERA_DEFAULT_FOV);
+    T_FEQ(gc->ps.znear, WC3_CAMERA_DEFAULT_NEAR_Z, 0.001f);
+    T_FEQ(gc->ps.zfar, WC3_CAMERA_DEFAULT_FAR_Z, 0.001f);
+    T_FEQ(gc->ps.viewangles.x, 326.0f, 0.001f); T_FEQ(gc->ps.viewangles.z, 0.0f, 0.001f);
 }
 
 TEST(wc3_api, entering_unit_native_returns_region_event_subject) {
@@ -283,7 +307,7 @@ TEST(wc3_api, entering_unit_native_returns_region_event_subject) {
         }
     }
     T_NOT_NULL(entering);
-    FOR_EACH_LIST(EVENT, evt, level.events.handlers) {
+    FOR_EACH_EVENT(evt) {
         if (evt->type == EVENT_GAME_ENTER_REGION) {
             handler = evt;
             break;
@@ -352,7 +376,6 @@ TEST(wc3_api, camera_margin_is_default_camera_inset_from_playable_area) {
      * the W3I default camera bounds; it is not complement * TILE_SIZE. */
     int const raw_complements[4] = { 4, 8, 6, 10 };
     LPMAPINFO mapinfo = (LPMAPINFO)level.mapinfo;
-    LPGAMECLIENT gc = &game.clients[0];
 
     CM_SetupTestWorldBounds(&MAKE(BOX2,
         .min = { -4096.0f, -3072.0f },
@@ -383,10 +406,10 @@ TEST(wc3_api, camera_margin_is_default_camera_inset_from_playable_area) {
 
     /* The generated SetCameraBounds call reconstructs the W3I default camera
      * rectangle instead of applying the complement widths a second time. */
-    T_FEQ(gc->ps.camera_bounds.min.x, -3328.0f, 0.001f);
-    T_FEQ(gc->ps.camera_bounds.max.x, 2688.0f, 0.001f);
-    T_FEQ(gc->ps.camera_bounds.min.y, -1920.0f, 0.001f);
-    T_FEQ(gc->ps.camera_bounds.max.y, 1280.0f, 0.001f);
+    T_FEQ(level.camera_bounds.min.x, -3328.0f, 0.001f);
+    T_FEQ(level.camera_bounds.max.x, 2688.0f, 0.001f);
+    T_FEQ(level.camera_bounds.min.y, -1920.0f, 0.001f);
+    T_FEQ(level.camera_bounds.max.y, 1280.0f, 0.001f);
 }
 
 TEST(wc3_api, camera_bounds_clamp_user_and_scripted_targets) {
@@ -398,13 +421,10 @@ TEST(wc3_api, camera_bounds_clamp_user_and_scripted_targets) {
         "function main takes nothing returns nothing\n"
         "  call SetCameraBounds(-100.0, -50.0, -100.0, 50.0, 100.0, 50.0, 100.0, -50.0)\n"
         "endfunction\n"));
-    T_FEQ(gc->ps.camera_bounds.min.x, -100.0f, 0.001f);
-    T_FEQ(gc->ps.camera_bounds.min.y, -50.0f, 0.001f);
-    T_FEQ(gc->ps.camera_bounds.max.x, 100.0f, 0.001f);
-    T_FEQ(gc->ps.camera_bounds.max.y, 50.0f, 0.001f);
-    if (game.max_clients > 1) {
-        T_FEQ(game.clients[1].ps.camera_bounds.max.x, 100.0f, 0.001f);
-    }
+    T_FEQ(level.camera_bounds.min.x, -100.0f, 0.001f);
+    T_FEQ(level.camera_bounds.min.y, -50.0f, 0.001f);
+    T_FEQ(level.camera_bounds.max.x, 100.0f, 0.001f);
+    T_FEQ(level.camera_bounds.max.y, 50.0f, 0.001f);
 
     G_ClientSetCameraPosition(&g_edicts[0], &requested);
     T_FEQ(gc->camera.state.position.x, 100.0f, 0.001f);
@@ -441,9 +461,9 @@ TEST(wc3_api, timed_camera_pan_with_z_interpolates_target_height) {
 
     level.time = 1100;
     G_RunClients();
-    T_FEQ(gc->ps.origin.x, 100.0f, 0.001f);
-    T_FEQ(gc->ps.origin.y, 150.0f, 0.001f);
-    T_FEQ(gc->ps.origin.z, G_MakeServerOrigin(100.0f, 150.0f, 200.0f).z, 0.001f);
+    T_FEQ(gc->ps.vieworigin.x, 100.0f, 0.001f);
+    T_FEQ(gc->ps.vieworigin.y, 150.0f, 0.001f);
+    T_FEQ(gc->ps.vieworigin.z, G_MakeServerOrigin(100.0f, 150.0f, 200.0f).z, 0.001f);
     currentplayer = NULL;
 }
 
@@ -512,6 +532,9 @@ TEST(wc3_api, camera_setup_applies_clip_planes_z_and_dopan_contract) {
     T_FEQ(gc->camera.state.near_z, 65.0f, 0.001f);
     T_FEQ(gc->camera.state.far_z, 7500.0f, 0.001f);
     T_FEQ(gc->camera.state.z_offset, 275.0f, 0.001f);
+    G_RunClients();
+    T_FEQ(gc->ps.znear, 65.0f, 0.001f);
+    T_FEQ(gc->ps.zfar, 7500.0f, 0.001f);
     currentplayer = NULL;
 }
 
@@ -536,27 +559,24 @@ TEST(wc3_api, camera_quick_position_sets_spacebar_target_without_moving_camera) 
     currentplayer = NULL;
 }
 
-TEST(wc3_api, camera_bounds_are_per_player_when_local_context_exists) {
+TEST(wc3_api, camera_bounds_are_map_global) {
     LPGAMECLIENT gc0 = &game.clients[0];
-    LPGAMECLIENT gc1 = game.max_clients > 1 ? &game.clients[1] : NULL;
 
     currentplayer = NULL;
     T_ASSERT(run_test_jass(
         "function main takes nothing returns nothing\n"
         "  call SetCameraBounds(-100.0, -100.0, -100.0, 100.0, 100.0, 100.0, 100.0, -100.0)\n"
         "endfunction\n"));
+    T_FEQ(level.camera_bounds.min.x, -100.0f, 0.001f);
+    T_FEQ(level.camera_bounds.max.y, 100.0f, 0.001f);
 
     currentplayer = &gc0->ps;
     T_ASSERT(run_test_jass(
         "function main takes nothing returns nothing\n"
         "  call SetCameraBounds(-25.0, -20.0, -25.0, 20.0, 25.0, 20.0, 25.0, -20.0)\n"
         "endfunction\n"));
-    T_FEQ(gc0->ps.camera_bounds.min.x, -25.0f, 0.001f);
-    T_FEQ(gc0->ps.camera_bounds.max.y, 20.0f, 0.001f);
-    if (gc1) {
-        T_FEQ(gc1->ps.camera_bounds.min.x, -100.0f, 0.001f);
-        T_FEQ(gc1->ps.camera_bounds.max.y, 100.0f, 0.001f);
-    }
+    T_FEQ(level.camera_bounds.min.x, -25.0f, 0.001f);
+    T_FEQ(level.camera_bounds.max.y, 20.0f, 0.001f);
     currentplayer = NULL;
 }
 
@@ -794,6 +814,39 @@ TEST(wc3_time, set_day_night_models_publishes_registered_dnc_models) {
     gi.configstring = old_configstring;
 }
 
+TEST(wc3_api, set_sky_model_publishes_registered_model) {
+    int (*old_model_index)(LPCSTR) = gi.ModelIndex;
+    void (*old_configstring)(DWORD, LPCSTR) = gi.configstring;
+
+    sky_model_index_calls = sky_configstring_calls = 0;
+    sky_configstring_index = 0;
+    sky_configstring_value[0] = '\0';
+    gi.ModelIndex = capture_sky_model_index;
+    gi.configstring = capture_sky_configstring;
+
+    T_ASSERT(run_test_jass(
+        "function main takes nothing returns nothing\n"
+        "  call SetSkyModel(\"Environment\\Sky\\Sky.mdx\")\n"
+        "endfunction\n"));
+
+    T_EQ(sky_model_index_calls, 1);
+    T_EQ(sky_configstring_calls, 1);
+    T_EQ(sky_configstring_index, CS_SKY);
+    T_STREQ(sky_configstring_value, "41");
+
+    T_ASSERT(run_test_jass(
+        "function main takes nothing returns nothing\n"
+        "  call SetSkyModel(\"\")\n"
+        "endfunction\n"));
+    T_EQ(sky_model_index_calls, 1);
+    T_EQ(sky_configstring_calls, 2);
+    T_EQ(sky_configstring_index, CS_SKY);
+    T_STREQ(sky_configstring_value, "0");
+
+    gi.ModelIndex = old_model_index;
+    gi.configstring = old_configstring;
+}
+
 TEST(wc3_time, dawn_and_dusk_use_misc_thresholds) {
     G_SetTimeOfDay(5.99f);
     G_UpdateTimeOfDay();
@@ -964,6 +1017,21 @@ TEST(wc3_api, transmission_keeps_gameplay_ui_and_separates_voice_lifetime) {
     T_STREQ(gc->ps.texts[PLAYERTEXT_DIALOGUE], "");
 }
 
+/* Blizzard's cinematic helpers may forward polymorphic JASS null into a string
+ * parameter while an ESC cancellation unwinds the active transmission. */
+TEST(wc3_api, cinematic_string_null_is_accepted) {
+    LPGAMECLIENT gc = &game.clients[0];
+
+    currentplayer = &gc->ps;
+    T_ASSERT(run_test_jass(
+        "function main takes nothing returns nothing\n"
+        "  call SetCinematicScene(0, PLAYER_COLOR_BLUE, null, null, 0.0, 0.0)\n"
+        "endfunction\n"));
+    T_STREQ(gc->ps.texts[PLAYERTEXT_SPEAKER], "");
+    T_STREQ(gc->ps.texts[PLAYERTEXT_DIALOGUE], "");
+    currentplayer = NULL;
+}
+
 TEST(wc3_api, gameplay_transmission_preserves_underlying_timed_message_state) {
     LPGAMECLIENT gc = &game.clients[0];
 
@@ -1073,6 +1141,47 @@ TEST(wc3_api, effect_natives_return_independent_handles) {
         "  call DestroyEffect(direct)\n"
         "  call DestroyEffect(spell)\n"
         "endfunction\n"));
+}
+
+TEST(wc3_api, jass_sound_runtime_tracks_one_shot_volume_and_attachment_safely) {
+    int handle_storage = 0;
+    HANDLE handle = &handle_storage;
+    jassSoundPlayback_t playback;
+    LPEDICT unit;
+
+    reset_entities();
+    unit = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 32.0f, 48.0f);
+    unit->spawn_time = 1234;
+
+    G_JassSoundRuntimeInit(handle);
+    G_JassSoundPlayback(handle, &playback);
+    T_FEQ(playback.volume, 1.0f, 0.001f);
+    T_ASSERT(!playback.positioned);
+
+    G_JassSoundSetVolume(handle, 0.5f);
+    G_JassSoundSetPosition(handle, &MAKE(VECTOR3, 10.0f, 20.0f, 30.0f));
+    G_JassSoundPlayback(handle, &playback);
+    T_FEQ(playback.volume, 0.5f, 0.001f);
+    T_ASSERT(playback.positioned);
+    T_FEQ(playback.origin.x, 10.0f, 0.001f);
+    T_FEQ(playback.origin.y, 20.0f, 0.001f);
+    T_NULL(playback.emitter);
+
+    G_JassSoundAttach(handle, unit);
+    G_JassSoundPlayback(handle, &playback);
+    T_ASSERT(playback.positioned);
+    T_ASSERT(playback.emitter == unit);
+    T_FEQ(playback.origin.x, 32.0f, 0.001f);
+    T_FEQ(playback.origin.y, 48.0f, 0.001f);
+
+    /* Reusing the edict slot after the attached unit was freed must not make a
+     * sound follow the replacement entity. */
+    unit->spawn_time++;
+    G_JassSoundPlayback(handle, &playback);
+    T_ASSERT(!playback.positioned);
+    T_NULL(playback.emitter);
+
+    G_JassSoundRuntimeReset();
 }
 
 TEST(wc3_api, ui_sound_transport_waits_for_connected_client) {
@@ -1680,7 +1789,7 @@ TEST(wc3_api, unit_ability_mutation_rejects_invalid_inputs) {
 TEST(wc3_api, unit_ability_mutation_restores_static_ability) {
     LPEDICT unit;
     static UnitAbilities_t const abilities = { .abilList = "Ahar" };
-    reset_entities(); unit = alloc_test_unit(MAKEFOURCC('h','p','e','a'), 0, 0); unit->UnitAbilities = &abilities;
+    reset_entities(); unit = alloc_test_unit(MAKEFOURCC('h','p','e','a'), 0, 0); unit->data.UnitAbilities = &abilities;
     T_ASSERT(G_ActorHasSkill(unit, "Ahar"));
     T_ASSERT(G_ActorRemoveSkill(unit, MAKEFOURCC('A','h','a','r')));
     T_ASSERT(!G_ActorHasSkill(unit, "Ahar"));
@@ -1712,6 +1821,27 @@ TEST(wc3_api, unit_ability_permanence_requires_present_ability) {
     T_ASSERT(!G_ActorSkillPermanent(unit, MAKEFOURCC('A','I','n','v')));
     T_ASSERT(G_ActorSetSkillPermanent(unit, MAKEFOURCC('A','I','n','v'), false));
     G_FreeEdict(unit); currentplayer = NULL;
+}
+
+TEST(wc3_api, unit_ability_mutation_rejects_full_lists) {
+    static UnitAbilities_t const abilities = { .abilList = "Ahar" };
+    DWORD invulnerable = MAKEFOURCC('A','I','n','v');
+    reset_entities();
+    LPEDICT unit = alloc_test_unit(MAKEFOURCC('h','p','e','a'), 0, 0);
+    FOR_LOOP(i, MAX_ABILITIES) unit->abilities.added[i] = i + 1;
+    ARRAY_COUNT(unit->abilities.added) = MAX_ABILITIES;
+    T_ASSERT(!G_ActorAddSkill(unit, invulnerable)); T_EQ(ARRAY_COUNT(unit->abilities.added), MAX_ABILITIES);
+    memset(&unit->abilities, 0, sizeof(unit->abilities)); unit->data.UnitAbilities = &abilities;
+    FOR_LOOP(i, MAX_ABILITIES) unit->abilities.removed[i] = i + 1;
+    ARRAY_COUNT(unit->abilities.removed) = MAX_ABILITIES;
+    T_ASSERT(!G_ActorRemoveSkill(unit, MAKEFOURCC('A','h','a','r'))); T_ASSERT(G_ActorHasSkill(unit, "Ahar"));
+    memset(&unit->abilities, 0, sizeof(unit->abilities));
+    unit->abilities.added[0] = invulnerable; ARRAY_COUNT(unit->abilities.added) = 1;
+    FOR_LOOP(i, MAX_ABILITIES) unit->abilities.permanent[i] = i + 1;
+    ARRAY_COUNT(unit->abilities.permanent) = MAX_ABILITIES;
+    T_ASSERT(!G_ActorSetSkillPermanent(unit, invulnerable, true));
+    T_ASSERT(!G_ActorSkillPermanent(unit, invulnerable));
+    G_FreeEdict(unit);
 }
 
 TEST(wc3_api, ai_difficulty_defaults_to_normal) {

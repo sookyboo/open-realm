@@ -35,7 +35,7 @@ static void hero_become_revivable(LPEDICT self) {
     LPGAMECLIENT owner;
 
     if (!self || !self->inuse || !G_UnitIsHero(self) ||
-        !(self->svflags & SVF_DEADMONSTER)) return;
+        (self->aiflags & AI_ILLUSION) || !(self->svflags & SVF_DEADMONSTER)) return;
     self->revival.awaiting = true;
     self->revival.reviving = false;
     self->s.renderfx |= RF_HIDDEN;
@@ -49,7 +49,8 @@ static void hero_become_revivable(LPEDICT self) {
 void unit_begin_decay(LPEDICT self) {
     unit_setmove(self, &unit_move_decay);
     self->aiflags |= AI_HOLD_FRAME;
-    self->wait = G_UnitIsHero(self) && game.constants.dissipateTime > 0.0f
+    self->wait = G_UnitIsHero(self) && !(self->aiflags & AI_ILLUSION) &&
+        game.constants.dissipateTime > 0.0f
         ? game.constants.dissipateTime
         : UNIT_DECAY_SECONDS;
 }
@@ -57,7 +58,7 @@ void unit_begin_decay(LPEDICT self) {
 /* Ordinary corpses are removed. Heroes instead finish their dissipation timer,
  * become hidden/awaiting-revive, and keep the same authoritative edict. */
 void unit_decay_think(LPEDICT self) {
-    if (G_UnitIsHero(self)) {
+    if (G_UnitIsHero(self) && !(self->aiflags & AI_ILLUSION)) {
         if (!self->revival.awaiting) unit_runwait(self, hero_become_revivable);
         return;
     }
@@ -175,7 +176,7 @@ void unit_die(LPEDICT self, LPEDICT attacker) {
 
 void unit_birth(LPEDICT self) {
     unit_setmove(self, &unit_move_birth);
-    self->wait = self->UnitBalance->buildTime;
+    self->wait = self->data.UnitBalance->buildTime;
     self->s.renderfx |= RF_NO_UBERSPLAT;
 }
 
@@ -458,6 +459,10 @@ BOOL unit_issueimmediateorder(LPEDICT self, LPCSTR order) {
         order_stop(self);
         return true;
     }
+    if (!strcmp(order, "holdposition"))
+        return S_HoldPosition(self);
+    if (!strcmp(order, "mirrorimage"))
+        return S_CastNoTargetSpell(self, MAKEFOURCC('A', 'O', 'm', 'i'));
     if (!strcmp(order, "repairon"))
         return S_SetRepairAutocast(self, true);
     if (!strcmp(order, "repairoff"))
@@ -524,7 +529,7 @@ static void unit_timed_status_log(LPCSTR stage, LPCEDICT ent, heroabilitystatus_
     {
         return;
     }
-    now = gi.GetTime();
+    now = G_Time();
     remaining = status->timestamp > now ? (LONG)(status->timestamp - now) : 0;
     memcpy(code, &status->code, 4);
     fprintf(stderr,
@@ -554,7 +559,7 @@ FLOAT unit_statusremainingfraction(heroabilitystatus_t const *status) {
     if (!status || !status->level || !status->timestamp || !status->duration_ms) {
         return 0.0f;
     }
-    now = gi.GetTime();
+    now = G_Time();
     if (now >= status->timestamp) {
         return 0.0f;
     }
@@ -566,7 +571,7 @@ heroabilitystatus_t const *unit_findtimedbarstatus(LPCEDICT ent) {
     DWORD now;
 
     if (!ent) return NULL;
-    now = gi.GetTime();
+    now = G_Time();
     FOR_LOOP(i, MAX_UNIT_STATUSES) {
         heroabilitystatus_t const *status = ent->abilstatus + i;
         if (!status->level || !status->timestamp || !status->duration_ms) continue;
@@ -611,7 +616,7 @@ static void unit_refreshstatusflags(LPEDICT ent) {
 }
 
 void unit_updatestatuses(LPEDICT ent) {
-    DWORD now = gi.GetTime();
+    DWORD now = G_Time();
     BOOL changed = false;
     BOOL kill = false;
     BOOL militia_expired = false;
@@ -660,7 +665,7 @@ void unit_addtimedstatus(LPEDICT ent, LPCSTR skill, DWORD level, FLOAT duration)
     }
 
     code = *((DWORD const *)skill);
-    now = gi.GetTime();
+    now = G_Time();
     duration_ms = duration > 0.0f ? (DWORD)(duration * 1000.0f) : 0;
     stacktype = S_SpellString(code, "BuffStackType", 0);
 
@@ -790,7 +795,7 @@ DWORD G_UnitAbilityLevel(LPCEDICT ent, DWORD abilcode) {
     if (hero_level) {
         return hero_level;
     }
-    if (ent && ent->UnitAbilities && G_FourCCListContains(ent->UnitAbilities->abilList, abilcode)) {
+    if (ent && ent->data.UnitAbilities && G_FourCCListContains(ent->data.UnitAbilities->abilList, abilcode)) {
         return 1;
     }
     return 0;
@@ -819,10 +824,10 @@ static DWORD G_HeroAbilityLevelSkip(void) {
 }
 
 BOOL G_HeroHasCandidateSkill(LPCEDICT ent, DWORD abilcode) {
-    if (!ent || !G_UnitIsHero(ent) || !ent->UnitAbilities || !abilcode) {
+    if (!ent || !G_UnitIsHero(ent) || !ent->data.UnitAbilities || !abilcode) {
         return false;
     }
-    return G_FourCCListContains(ent->UnitAbilities->heroAbilList, abilcode);
+    return G_FourCCListContains(ent->data.UnitAbilities->heroAbilList, abilcode);
 }
 
 DWORD G_HeroSkillRequiredLevel(LPEDICT ent, DWORD abilcode) {
@@ -888,7 +893,7 @@ BOOL G_HeroLearnSkill(LPEDICT ent, DWORD abilcode) {
  * cannot drop a living hero below 1 HP).  Non-heroes (no attributes) are a
  * no-op.  Call whenever a hero's str/agi/intel change. */
 void G_RecomputeHeroStats(LPEDICT ent) {
-    UnitBalance_t const *balance = ent->UnitBalance;
+    UnitBalance_t const *balance = ent->data.UnitBalance;
     LONG const baseStr = balance->strength;
     LONG const baseAgi = balance->agility;
     LONG const baseInt = balance->intelligence;
@@ -932,12 +937,12 @@ void G_RecomputeHeroStats(LPEDICT ent) {
             else if (!strcmp(prim, "INT")) primVal = ent->hero.intel;
         }
         primaryDamage = (LONG)((FLOAT)primVal * strAttackBonus);
-        if (ent->UnitWeapons) {
+        if (ent->data.UnitWeapons) {
             ent->attack1.damageBase = (DWORD)MAX(0,
-                (LONG)ent->UnitWeapons->attack1.damageBase + primaryDamage
+                (LONG)ent->data.UnitWeapons->attack1.damageBase + primaryDamage
                 + (LONG)ent->attack1.permanentDamageBonus);
             ent->attack2.damageBase = (DWORD)MAX(0,
-                (LONG)ent->UnitWeapons->attack2.damageBase + primaryDamage
+                (LONG)ent->data.UnitWeapons->attack2.damageBase + primaryDamage
                 + (LONG)ent->attack2.permanentDamageBonus);
         }
     }
@@ -977,7 +982,7 @@ DWORD G_HeroLevelForXP(DWORD xp) {
 
 /* Set a hero's level and derive its attributes + HP/mana/armor for that level. */
 void G_HeroApplyLevel(LPEDICT ent, DWORD level) {
-    UnitBalance_t const *balance = ent->UnitBalance;
+    UnitBalance_t const *balance = ent->data.UnitBalance;
     LONG const baseStr = balance->strength;
     LONG const baseAgi = balance->agility;
     LONG const baseInt = balance->intelligence;
@@ -1042,12 +1047,13 @@ static FLOAT G_MiscListNum(LPCSTR key, DWORD n, FLOAT fallback) {
 }
 
 BOOL G_UnitIsHero(LPCEDICT ent) {
-    return ent->UnitBalance->strength > 0 || ent->UnitBalance->agility > 0 || ent->UnitBalance->intelligence > 0;
+    return ent->data.UnitBalance->strength > 0 || ent->data.UnitBalance->agility > 0 || ent->data.UnitBalance->intelligence > 0;
 }
 
 static BOOL G_HeroReceivesKillXP(LPCEDICT hero, LPCEDICT victim, LPCEDICT killer, FLOAT range) {
-    if (!hero->inuse || !(hero->svflags & SVF_MONSTER) || !hero->UnitBalance ||
-        hero->health.value <= 0 || hero->hero.suspend_xp || !G_UnitIsHero(hero) ||
+    if (!hero->inuse || !(hero->svflags & SVF_MONSTER) || !hero->data.UnitBalance ||
+        hero->health.value <= 0 || hero->hero.suspend_xp || (hero->aiflags & AI_ILLUSION) ||
+        !G_UnitIsHero(hero) ||
         Vector2_distance(&hero->s.origin2, &victim->s.origin2) > range) {
         return false;
     }
@@ -1064,6 +1070,7 @@ static BOOL G_HeroReceivesKillXP(LPCEDICT hero, LPCEDICT victim, LPCEDICT killer
  * applying each receiving Hero's level factor. */
 void G_GrantKillXP(LPEDICT victim, LPEDICT killer) {
     DWORD const vcls = victim->class_id;
+    if (victim->aiflags & AI_ILLUSION) return;
     DWORD receivers = 0;
     if (victim->s.player < MAX_PLAYERS && killer->s.player < MAX_PLAYERS &&
         (level.alliances[killer->s.player][victim->s.player] & (1 << ALLIANCE_PASSIVE))) {
@@ -1074,7 +1081,7 @@ void G_GrantKillXP(LPEDICT victim, LPEDICT killer) {
     }
     BOOL const victimHero = G_UnitIsHero(victim);
     DWORD const victimLevel = victimHero ? (DWORD)MAX(1, (LONG)victim->hero.level)
-                                         : (DWORD)MAX(1, victim->UnitBalance->level);
+                                         : (DWORD)MAX(1, victim->data.UnitBalance->level);
     DWORD baseXP;
     if (victimHero) {
         baseXP = (DWORD)G_MiscListNum("GrantHeroXP", victimLevel - 1, 100.0f);
@@ -1140,7 +1147,7 @@ void G_ReviveHero(LPEDICT ent, FLOAT x, FLOAT y) {
     ent->s.renderfx &= ~RF_HIDDEN;
     ent->health.value = MIN(ent->health.max_value, MAX(1.0f, ent->health.max_value * lifeFactor));
     mana = ent->mana.max_value * manaFactor;
-    if (ent->UnitBalance) mana += ent->UnitBalance->initialMana * manaStart;
+    if (ent->data.UnitBalance) mana += ent->data.UnitBalance->initialMana * manaStart;
     ent->mana.value = MAX(0.0f, MIN(ent->mana.max_value, mana));
     ent->s.origin2.x = x;
     ent->s.origin2.y = y;
