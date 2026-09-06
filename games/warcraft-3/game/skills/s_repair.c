@@ -412,7 +412,11 @@ static void ai_repair_legacy(LPEDICT ent) {
                  ((FLOAT)building->data.UnitBalance->buildTime * 1000.0f);
     if (hp->value >= hp->max_value) {
         hp->value = hp->max_value;
-        building->stand(building);
+        /* Legacy race construction used to stop here without ever publishing
+         * EVENT_PLAYER_UNIT_CONSTRUCT_FINISH.  Route the self-linked build
+         * sentinel through the shared completion lifecycle so campaign
+         * triggers (for example Prologue02's Orc Burrow objective) fire. */
+        G_CompleteConstruction(building);
         ent->stand(ent);
     }
 }
