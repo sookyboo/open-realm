@@ -25,7 +25,9 @@ FLOAT CL_GameLerpDegrees(FLOAT a, FLOAT b, FLOAT fraction) {
     return a + delta * fraction;
 }
 FLOAT CM_GetCameraHeightOffset(void) {
-    return -TILE_SIZE; // orbit look-at sits one tile below sampled terrain
+    /* WC3 camera preset Height defaults to zero. JASS target Z offset is
+     * composed separately by the game camera path. */
+    return 0.0f;
 }
 
 #ifdef BZ_TESTS

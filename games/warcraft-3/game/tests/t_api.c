@@ -481,6 +481,16 @@ TEST(wc3_api, camera_angle_interpolation_uses_shortest_periodic_arc) {
     T_FEQ(CL_GameLerpDegrees(326.0f, -394.0f, 0.5f), 326.0f, 0.001f);
 }
 
+TEST(wc3_api, camera_target_height_uses_surface_plus_authored_offset) {
+    FLOAT const terrain_z = CM_GetHeightAtPoint(100.0f, 150.0f);
+    FLOAT const water_z = CM_GetWaterHeightAtPoint(100.0f, 150.0f);
+    VECTOR3 const target = G_MakeServerOrigin(100.0f, 150.0f, 200.0f);
+
+    T_FEQ(CM_GetCameraHeightOffset(), 0.0f, 0.001f);
+    T_FEQ(G_CameraSurfaceHeightAtPoint(100.0f, 150.0f), MAX(terrain_z, water_z), 0.001f);
+    T_FEQ(target.z, MAX(terrain_z, water_z) + 200.0f, 0.001f);
+}
+
 TEST(wc3_api, timed_camera_pan_with_z_interpolates_target_height) {
     LPGAMECLIENT gc = &game.clients[0];
 

@@ -485,8 +485,14 @@ BOOL G_SkipCutscene(void) {
     return value && *value && strcmp(value, "0");
 }
 
+FLOAT G_CameraSurfaceHeightAtPoint(FLOAT x, FLOAT y) {
+    FLOAT const terrain_z = CM_GetHeightAtPoint(x, y);
+    FLOAT const water_z = CM_GetWaterHeightAtPoint(x, y);
+    return MAX(terrain_z, water_z);
+}
+
 VECTOR3 G_MakeServerOrigin(FLOAT x, FLOAT y, FLOAT z_offset) {
-    return (VECTOR3){ x, y, CM_GetHeightAtPoint(x, y) + CM_GetCameraHeightOffset() + z_offset };
+    return (VECTOR3){ x, y, G_CameraSurfaceHeightAtPoint(x, y) + CM_GetCameraHeightOffset() + z_offset };
 }
 
 VECTOR2 G_ClampCameraPosition(LPGAMECLIENT client, LPCVECTOR2 position) {
