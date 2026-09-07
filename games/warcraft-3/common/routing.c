@@ -764,6 +764,24 @@ static bool is_pathable_node_original(int x, int y) {
     return is_valid_point(x, y) && !is_obstacle_original(x, y);
 }
 
+/* Match Warsmash's collision contract: test the nine world-space samples at
+ * +/- collisionSize, then map each sample to its authored pathing cell.  The
+ * previous cell-radius square was one cell too large for WC3's 31-unit
+ * Footman on a 32-unit pathing grid and rejected valid bridge approaches. */
+static bool is_pathable_world_for_radius(LPCVECTOR2 location, FLOAT radius) {
+    int i, j;
+
+    for (i = -1; i <= 1; i++) {
+        for (j = -1; j <= 1; j++) {
+            VECTOR2 sample = { location->x + i * radius, location->y + j * radius };
+            point2_t cell = LocationToPathMap(&sample);
+            if (!is_pathable_node_original(cell.x, cell.y))
+                return false;
+        }
+    }
+    return true;
+}
+
 static bool is_pathable_node_original_for_radius_cells(int x, int y, int radius_cells) {
     int const x0 = x - radius_cells;
     int const y0 = y - radius_cells;
@@ -836,11 +854,7 @@ BOOL CM_PointIsPathableForRadius(LPCVECTOR2 location, FLOAT radius) {
     if (!location || !pathmap.original || !pathmap.width || !pathmap.height) {
         return true;
     }
-    VECTOR2 n = CM_GetNormalizedMapPosition(location->x, location->y);
-    int tx = (int)floorf(n.x * pathmap.width);
-    int ty = (int)floorf(n.y * pathmap.height);
-    int radius_cells = (int)ceilf(MAX(0.f, radius) / pathmap_cell_world_size());
-    return is_pathable_node_original_for_radius_cells(tx, ty, radius_cells);
+    return is_pathable_world_for_radius(location, MAX(0.f, radius));
 }
 
 /* Cheap straight-line walkability test between two world points: walk the
