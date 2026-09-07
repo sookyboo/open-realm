@@ -76,6 +76,9 @@ void G_ActivateScriptedDestructable(LPEDICT ent,
     ent->health.value = ent->health.max_value;
 
     G_ApplyDestructableAlivePathing(ent);
+    /* Script activation replaces a preplaced .doo placeholder; register it
+     * here because the map-load pass may have skipped the non-solid placeholder. */
+    G_RegisterGroundSurface(ent);
     G_DestructableStartAliveAnimation(ent, false);
     if (ent->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
 
