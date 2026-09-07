@@ -75,6 +75,10 @@ static DWORD portrait_capture_text_count;
 static BOOL portrait_capture_root_widescreen;
 static BOOL portrait_capture_child_relative;
 static BOOL portrait_capture_text_relative;
+static DWORD resourcebar_unicast_count;
+
+static void resourcebar_noop_write(pfWriteType_t type, void const *data) { (void)type; (void)data; }
+static void resourcebar_capture_unicast(LPEDICT ent) { (void)ent; resourcebar_unicast_count++; }
 
 static void portrait_test_write(pfWriteType_t type, void const *data) {
     LPCUIFRAME frame;
@@ -973,20 +977,23 @@ TEST(wc3_game, hud_simple_button_serializes_button_state) {
     BYTE typedata[256];
     char textbuf[128];
     uiFrame_t out;
-    LPFRAMEDEF button, normal, pushed, disabled;
+    LPFRAMEDEF button, normal, pushed, disabled, highlight;
 
     UI_ClearTemplates();
     button = UI_Spawn(FT_SIMPLEBUTTON, NULL);
     normal = UI_Spawn(FT_TEXTURE, button);
     pushed = UI_Spawn(FT_TEXTURE, button);
     disabled = UI_Spawn(FT_TEXTURE, button);
-    T_NOT_NULL(button); T_NOT_NULL(normal); T_NOT_NULL(pushed); T_NOT_NULL(disabled);
+    highlight = UI_Spawn(FT_TEXTURE, button);
+    T_NOT_NULL(button); T_NOT_NULL(normal); T_NOT_NULL(pushed); T_NOT_NULL(disabled); T_NOT_NULL(highlight);
     snprintf(normal->Name, sizeof(normal->Name), "Normal"); normal->Texture.Image = 11;
     snprintf(pushed->Name, sizeof(pushed->Name), "Pushed"); pushed->Texture.Image = 12;
     snprintf(disabled->Name, sizeof(disabled->Name), "Disabled"); disabled->Texture.Image = 13;
+    snprintf(highlight->Name, sizeof(highlight->Name), "Highlight"); highlight->Texture.Image = 14; highlight->AlphaMode = BLEND_MODE_ADD;
     snprintf(button->Button.NormalTexture, sizeof(button->Button.NormalTexture), "Normal");
     snprintf(button->Button.PushedTexture, sizeof(button->Button.PushedTexture), "Pushed");
     snprintf(button->Button.DisabledTexture, sizeof(button->Button.DisabledTexture), "Disabled");
+    snprintf(button->Button.UseHighlight, sizeof(button->Button.UseHighlight), "Highlight");
 
     UI_ResetFrameWriteList();
     T_ASSERT(UI_BuildFrameForWrite(button, &out, typedata, sizeof(typedata), textbuf, sizeof(textbuf)));
@@ -994,6 +1001,8 @@ TEST(wc3_game, hud_simple_button_serializes_button_state) {
     T_EQ(((uiSimpleButton_t const *)out.buffer.data)->normal.texture, 11);
     T_EQ(((uiSimpleButton_t const *)out.buffer.data)->pushed.texture, 12);
     T_EQ(((uiSimpleButton_t const *)out.buffer.data)->disabled.texture, 13);
+    T_EQ(((uiSimpleButton_t const *)out.buffer.data)->highlight.texture, 14);
+    T_EQ(((uiSimpleButton_t const *)out.buffer.data)->highlightAlphaMode, BLEND_MODE_ADD);
     T_EQ(((uiSimpleButton_t const *)out.buffer.data)->normal.fontcolor.a, 255);
 
     snprintf(button->Button.NormalText.text, sizeof(button->Button.NormalText.text), "KEY_MENU");
@@ -1026,6 +1035,39 @@ static int hud_test_image_index(LPCSTR name) {
         }
     }
     return 0;
+}
+
+TEST(wc3_game, resource_bar_updater_tracks_quest_flash_for_reserved_connected_client) {
+    void (*old_write)(pfWriteType_t, void const *) = gi.Write;
+    void (*old_unicast)(LPEDICT) = gi.unicast;
+    LPGAMECLIENT client;
+
+    setup_test_world();
+    UI_ResetHud();
+    client = &game.clients[0];
+    client->connected = true;
+    g_edicts[0].inuse = false;
+    level.time = 1000;
+    client->quest_button_flash_end_time = 2000;
+    client->resourcebar.quest_flash_active = false;
+    resourcebar_unicast_count = 0;
+    gi.Write = resourcebar_noop_write; gi.unicast = resourcebar_capture_unicast;
+
+    G_UpdateClientResourceBars();
+    T_ASSERT(client->resourcebar.quest_flash_active);
+    T_EQ(resourcebar_unicast_count, 1);
+
+    level.time = 2000;
+    G_UpdateClientResourceBars();
+    T_ASSERT(!client->resourcebar.quest_flash_active);
+    T_EQ(resourcebar_unicast_count, 2);
+
+    client->connected = false;
+    client->quest_button_flash_end_time = 3000;
+    G_UpdateClientResourceBars();
+    T_ASSERT(!client->resourcebar.quest_flash_active);
+    T_EQ(resourcebar_unicast_count, 2);
+    gi.Write = old_write; gi.unicast = old_unicast;
 }
 
 TEST(wc3_game, hud_image_rebinds_after_configstring_wipe) {
@@ -2132,6 +2174,8 @@ TEST(wc3_save, round_trip_edict_and_player_state) {
     game.clients[0].camera.state.far_z = 7000.0f;
     game.clients[0].camera.target_controller = second;
     game.clients[0].camera.target_inherit_orientation = true;
+    game.clients[0].resourcebar.quest_flash_active = true;
+    game.clients[0].quest_button_flash_end_time = level.time + 1500;
     T_ASSERT(WriteGame(filename));
     PATHSTR saved_map;
     T_ASSERT(G_GetSaveMap(filename, saved_map, sizeof(saved_map)));
@@ -2159,6 +2203,8 @@ TEST(wc3_save, round_trip_edict_and_player_state) {
     game.clients[0].camera.state.far_z = 0.0f;
     game.clients[0].camera.target_controller = NULL;
     game.clients[0].camera.target_inherit_orientation = false;
+    game.clients[0].resourcebar.quest_flash_active = true;
+    game.clients[0].quest_button_flash_end_time = UINT32_MAX;
     game.clients[0].rally_indicator = NULL;
     saved_quest->discovered = saved_quest->required = saved_quest->enabled = false;
     saved_quest->completed = true;
@@ -2213,6 +2259,8 @@ TEST(wc3_save, round_trip_edict_and_player_state) {
     T_FEQ(game.clients[0].camera.state.far_z, 7000.0f, 0.001f);
     T_ASSERT(game.clients[0].camera.target_controller == &g_edicts[second - g_edicts]);
     T_ASSERT(game.clients[0].camera.target_inherit_orientation);
+    T_ASSERT(!game.clients[0].resourcebar.quest_flash_active);
+    T_EQ(game.clients[0].quest_button_flash_end_time, 0);
     T_ASSERT(game.clients[0].rally_indicator == &g_edicts[indicator - g_edicts]);
     T_ASSERT(game.clients[0].ps.name == game.clients[0].jass.name);
     T_STREQ(game.clients[0].ps.name, "Jaina");

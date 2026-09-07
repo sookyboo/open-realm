@@ -108,10 +108,8 @@ DWORD DefeatConditionSetDescription(LPJASS j) {
     return 0;
 }
 DWORD FlashQuestDialogButton(LPJASS j) {
-    /* TODO: the server-authored frame wire does not currently serialize the
-     * stock button pulse/highlight state.  Do not fake the effect with quest
-     * state or an unrelated HUD flag. */
     (void)j;
+    G_FlashQuestDialogButton();
     return 0;
 }
 DWORD ForceQuestDialogUpdate(LPJASS j) {

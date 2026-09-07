@@ -426,7 +426,11 @@ void SCR_LayoutSimpleButton(LPCUIFRAME frame, LPCRECT screen) {
     BOOL const enabled = SCR_LayoutFrameHasClickCommand(frame);
     BOOL const hovered = SCR_LayoutFrameIsHovered(frame);
     BOOL const pushed = enabled && hovered && layout_left_down;
+    BOOL const programmatic = (frame->flagsvalue & UIFLAG_PROGRAMMATIC_HIGHLIGHT) &&
+                              (((DWORD)cl.time / 250u) & 1u) == 0;
+    BOOL const highlighted = (enabled && hovered) || programmatic;
     uiSimpleButtonState_t const *state = !enabled ? &b->disabled : pushed ? &b->pushed : &b->normal;
+    uiSimpleButtonState_t const *text_state = highlighted && !pushed && b->highlight.font ? &b->highlight : state;
     LPCTEXTURE texture = SCR_LayoutPic(state->texture);
     if (!texture) {
         state = &b->normal;
@@ -439,10 +443,28 @@ void SCR_LayoutSimpleButton(LPCUIFRAME frame, LPCRECT screen) {
     }
     re.DrawText(&MAKE(drawText_t,
         .rect      = *screen,
-        .font      = cl.fonts[state->font],
+        .font      = cl.fonts[text_state->font],
         .text      = frame->text,
-        .color     = state->fontcolor,
+        .color     = text_state->fontcolor,
         .textWidth = screen->w));
+
+    /* SIMPLEBUTTON UseHighlight is authored presentation, not a replacement
+     * button state. Disabled controls do not gain mouse-over highlight; a
+     * server-selected attention pulse remains independent of clickability. */
+    if (highlighted && b->highlight.texture) {
+        RECT const uv = get_uvrect((BYTE *)&b->highlight.texcoord);
+        RECT const suv = Rect_div(&uv, 0xff);
+        LPCTEXTURE highlight = SCR_LayoutPic(b->highlight.texture);
+        if (highlight) {
+            re.DrawImageEx(&MAKE(drawImage_t,
+                .texture   = highlight,
+                .alphamode = b->highlightAlphaMode,
+                .screen    = *screen,
+                .uv        = suv,
+                .color     = COLOR32_WHITE,
+                .shader    = SHADER_UI));
+        }
+    }
 }
 
 void SCR_LayoutDrawBackdrop2(LPCUIFRAME frame, LPCRECT screen, uiBackdrop_t const *bd) {

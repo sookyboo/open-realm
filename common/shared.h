@@ -844,6 +844,7 @@ typedef enum {
 #define UIFLAG_ALTERNATE_ACTIVE (1 << 11) // flag bit; secondary command state is active (for example an autocast toggle)
 #define UIFLAG_SPRITE_STAT_SEQUENCE (1 << 12) // FT_SPRITE: frame.value names a stats[] slot selecting an explicit #N sequence
 #define UIFLAG_EXTEND_WIDESCREEN_X (1 << 13) // flag bit; client expands this frame horizontally across the full UI canvas
+#define UIFLAG_PROGRAMMATIC_HIGHLIGHT (1 << 14) // flag bit; pulse authored button highlight while server-selected state is active
 
 typedef enum {
     BACKDROP_TOP_LEFT_CORNER,
@@ -1004,6 +1005,7 @@ typedef struct {
     uiSimpleButtonState_t pushed;
     uiSimpleButtonState_t disabled;
     uiSimpleButtonState_t highlight;
+    BLEND_MODE highlightAlphaMode;
 } uiSimpleButton_t;
 
 typedef struct {

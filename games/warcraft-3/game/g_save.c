@@ -70,7 +70,7 @@ enum {
 
 static DWORD const save_magic = MAKEFOURCC('W', '3', 'S', 'V');
 static DWORD const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
-static DWORD const save_version = 12; // per-client music semantics expand the persisted GAMECLIENT snapshot
+static DWORD const save_version = 13; // GAMECLIENT layout expands for quest-button attention state
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define UMOVE_RELOC_RANGE (64 << 20) // bytes; every umove_t is static data in libgame, so a valid offset from the anchor stays well inside one module image
 
@@ -419,6 +419,8 @@ static field_t const client_fields[] = {
     F(client_s, menu, F_STRUCT, 1, client_menu_fields),
     F(client_s, camera, F_STRUCT, 1, client_camera_fields),
     F(client_s, rally_indicator, F_IGNORE, 0, FIELD_RUNTIME),
+    F(client_s, resourcebar.quest_flash_active, F_IGNORE, 0, FIELD_RUNTIME),
+    F(client_s, quest_button_flash_end_time, F_IGNORE, 0, FIELD_RUNTIME),
     { NULL, 0, 0, 0, 0, 0 }
 };
 

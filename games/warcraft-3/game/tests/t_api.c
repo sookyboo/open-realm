@@ -114,6 +114,31 @@ TEST(wc3_api, pause_game_forwards_authoritative_pause_state) {
     gi.SetPaused = old_set_paused;
 }
 
+TEST(wc3_api, flash_quest_dialog_button_targets_connected_clients_and_extends) {
+    setup_test_world();
+    level.time = 1200;
+    FOR_LOOP(i, game.max_clients) game.clients[i].quest_button_flash_end_time = 0;
+    game.clients[0].connected = true;
+    game.clients[2].connected = true;
+
+    T_ASSERT(run_test_jass(
+        "function main takes nothing returns nothing\n"
+        "  call FlashQuestDialogButton()\n"
+        "endfunction\n"));
+
+    T_EQ(game.clients[0].quest_button_flash_end_time, 3200);
+    T_EQ(game.clients[1].quest_button_flash_end_time, 0);
+    T_EQ(game.clients[2].quest_button_flash_end_time, 3200);
+    level.time = 2000;
+    T_ASSERT(run_test_jass(
+        "function main takes nothing returns nothing\n"
+        "  call FlashQuestDialogButton()\n"
+        "endfunction\n"));
+    T_EQ(game.clients[0].quest_button_flash_end_time, 4000);
+    T_EQ(game.clients[1].quest_button_flash_end_time, 0);
+    T_EQ(game.clients[2].quest_button_flash_end_time, 4000);
+}
+
 TEST(wc3_api, quest_pause_is_single_client_only) {
     void (*old_set_paused)(BOOL) = gi.SetPaused;
 

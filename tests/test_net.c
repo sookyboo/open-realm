@@ -39,6 +39,7 @@ void SCR_LayoutDrawScrollBar(LPCUIFRAME frame, LPCRECT screen);
 void SCR_LayoutDrawStatusbar(LPCUIFRAME frame, LPCRECT screen);
 void SCR_LayoutDrawTextArea(LPCUIFRAME frame, LPCRECT screen);
 void SCR_LayoutDrawSprite(LPCUIFRAME frame, LPCRECT screen);
+void SCR_LayoutSimpleButton(LPCUIFRAME frame, LPCRECT screen);
 void SCR_LayoutClampSelectionRect(LPRECT rect);
 BOOL SCR_LayoutModalActive(void);
 void SCR_UpdateScreen(DWORD msec);
@@ -68,6 +69,8 @@ static DWORD test_fade_draws;
 static PATHSTR test_model_load_paths[4];
 static char test_sprite_anim[96];
 static DWORD test_sprite_draws;
+static DWORD test_button_highlight_draws;
+static BLEND_MODE test_button_highlight_blend;
 
 static LPMODEL capture_load_model(LPCSTR filename) {
     DWORD slot = test_model_loads;
@@ -114,6 +117,10 @@ static void capture_sprite(LPCMODEL model, LPCSTR anim, float x, float y) {
     (void)model; (void)x; (void)y;
     test_sprite_draws++;
     snprintf(test_sprite_anim, sizeof(test_sprite_anim), "%s", anim ? anim : "");
+}
+static void capture_button_highlight(LPCDRAWIMAGE image) {
+    test_button_highlight_draws++;
+    test_button_highlight_blend = image->alphamode;
 }
 
 TEST(client_layout, context_name_resolves_hover_entity_configstring) {
@@ -1049,6 +1056,62 @@ TEST(net, ui_frame_delta_preserves_widescreen_extension_flag) {
     T_EQ(number, 8);
     T_EQ(out.flags.type, FT_BACKDROP);
     T_ASSERT(out.flagsvalue & UIFLAG_EXTEND_WIDESCREEN_X);
+}
+
+TEST(net, ui_frame_delta_preserves_programmatic_highlight_flag) {
+    BYTE buf[128];
+    sizeBuf_t sb = make_msg_buf(buf, sizeof(buf));
+    uiFrame_t from = {0}, to = { .number = 9 }, out = {0};
+    DWORD bits = 0;
+    int number;
+
+    to.flags.type = FT_SIMPLEBUTTON;
+    to.flagsvalue |= UIFLAG_PROGRAMMATIC_HIGHLIGHT;
+    MSG_WriteDeltaUIFrame(&sb, &from, &to, true);
+    sb.readcount = 0;
+    number = MSG_ReadEntityBits(&sb, &bits);
+    MSG_ReadDeltaUIFrame(&sb, &out, number, bits);
+
+    T_EQ(number, 9);
+    T_EQ(out.flags.type, FT_SIMPLEBUTTON);
+    T_ASSERT(out.flagsvalue & UIFLAG_PROGRAMMATIC_HIGHLIGHT);
+
+    sb = make_msg_buf(buf, sizeof(buf));
+    from = out; to.flagsvalue &= ~UIFLAG_PROGRAMMATIC_HIGHLIGHT; out = (uiFrame_t){0}; bits = 0;
+    MSG_WriteDeltaUIFrame(&sb, &from, &to, true);
+    sb.readcount = 0;
+    number = MSG_ReadEntityBits(&sb, &bits);
+    MSG_ReadDeltaUIFrame(&sb, &out, number, bits);
+    T_EQ(number, 9);
+    T_ASSERT(!(out.flagsvalue & UIFLAG_PROGRAMMATIC_HIGHLIGHT));
+}
+
+TEST(client_layout, simple_button_programmatic_highlight_pulses_authored_blend_mode) {
+    uiSimpleButton_t button = {
+        .normal = { .texture = 1, .fontcolor = COLOR32_WHITE },
+        .highlight = { .texture = 2, .fontcolor = COLOR32_WHITE },
+        .highlightAlphaMode = BLEND_MODE_ADD,
+    };
+    uiFrame_t frame = {
+        .number = 1, .flags.type = FT_SIMPLEBUTTON,
+        .flagsvalue = UIFLAG_PROGRAMMATIC_HIGHLIGHT,
+        .buffer = { .data = &button, .size = sizeof(button) },
+    };
+    RECT screen = { 0, 0, 100, 20 };
+
+    test_client_stubs_init();
+    cl.pics[1] = (LPTEXTURE)(uintptr_t)1; cl.pics[2] = (LPTEXTURE)(uintptr_t)2;
+    test_button_highlight_draws = 0; test_button_highlight_blend = BLEND_MODE_NONE;
+    re.DrawImageEx = capture_button_highlight;
+
+    cl.time = 0;
+    SCR_LayoutSimpleButton(&frame, &screen);
+    T_EQ(test_button_highlight_draws, 1);
+    T_EQ(test_button_highlight_blend, BLEND_MODE_ADD);
+
+    cl.time = 250;
+    SCR_LayoutSimpleButton(&frame, &screen);
+    T_EQ(test_button_highlight_draws, 1);
 }
 
 TEST(net, ui_frame_delta_preserves_timed_status_binding) {

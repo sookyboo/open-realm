@@ -94,10 +94,21 @@ windows are send-once snapshots:
 any state -> no UI write
 ```
 
-`FlashQuestDialogButton` remains intentionally unimplemented. The current
-server-authored `uiFrame_t` wire does not carry the stock button pulse/highlight
-state, so using `ps.uiflags` or quest state as a substitute would encode the
-wrong contract.
+`FlashQuestDialogButton` drives the authored `UseHighlight` state of
+`UpperButtonBarQuestsButton`; it does not mutate quest discovery/completion
+state. `UIFLAG_PROGRAMMATIC_HIGHLIGHT` is a generic retained-layout flag carried
+in `uiFrame_t.flagsvalue`. While the flag is active, the client pulses the same
+`uiSimpleButton_t.highlight` texture used for ordinary mouse-over. The button
+payload also preserves the highlight texture's FDF `AlphaMode`, so Warcraft's
+additive upper-button highlight is rendered as authored.
+
+The server keeps the quest attention state active for 2 seconds and re-sends
+`LAYER_CONSOLE` on the inactive->active and active->inactive transitions. The
+client alternates the highlight every 250 ms while that state is active. This
+cadence is an OpenRealm compatibility approximation: the authored FDF establishes
+which highlight art/blend mode to use, but does not encode retail's engine-side
+flash count or cadence. Repeated native calls while already active extend the
+end time rather than inventing quest-state changes.
 
 FDF simple-button normal/pushed/disabled states are serialized explicitly.
 When Quest or Log owns the modal UI, the server temporarily clears the saved
@@ -251,8 +262,9 @@ Menu route opens the separate modal Esc-menu window documented in
   and is hidden automatically when the wrapped history fits without scrolling.
 - Message history is bounded by 128 logical entries. Retail's FDF expresses a
   128-line text-area limit; wrapped-line-equivalent eviction is not yet modeled.
-- `FlashQuestDialogButton` is still unimplemented; modal disabled-button art is
-  supported, but the stock quest-attention pulse/highlight is separate state.
+- `FlashQuestDialogButton` uses the authored simple-button highlight. The exact
+  retail pulse cadence/count is not yet observationally verified; OpenRealm uses
+  a documented 250 ms phase over a 2 second attention window.
 - `PauseGame` JASS remains a separate unimplemented native. Quest/Log currently
   do not pause the simulation; pause must be implemented without disturbing the
   server/network frame cadence.

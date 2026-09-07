@@ -278,6 +278,14 @@ void UI_WriteMinimapFrame(void) {
     UI_WriteProxyFrame(&frame, NULL, 0);
 }
 
+#define WC3_QUEST_BUTTON_FLASH_DURATION_MS 2000u
+
+void G_FlashQuestDialogButton(void) {
+    DWORD const end_time = level.time + WC3_QUEST_BUTTON_FLASH_DURATION_MS;
+    FOR_LOOP(i, game.max_clients)
+        if (game.clients[i].connected) game.clients[i].quest_button_flash_end_time = end_time;
+}
+
 void UI_WriteConsoleBackdrop(LPGAMECLIENT client, LONG food_used, LONG food_cap) {
     DWORD upkeep_tier;
     LPCSTR upkeep_text;
@@ -300,6 +308,9 @@ void UI_WriteConsoleBackdrop(LPGAMECLIENT client, LONG food_used, LONG food_cap)
             hud.upper.UpperButtonBarChatButton,
         };
         FOR_LOOP(i, 4) UI_SetOnClick(buttons[i], "%s", hud.upper_cmds[i]);
+        SET_FLAG(hud.upper.UpperButtonBarQuestsButton->ui_flags,
+                 UIFLAG_PROGRAMMATIC_HIGHLIGHT,
+                 client && client->quest_button_flash_end_time > level.time);
     }
 
     gold_rate = (LONG)client->ps.stats[PLAYERSTATE_GOLD_UPKEEP_RATE];

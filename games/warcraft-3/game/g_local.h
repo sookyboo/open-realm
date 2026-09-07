@@ -431,6 +431,7 @@ struct client_s {
         LONG food_cap;
         LONG gold_rate;
         LONG lumber_rate;
+        BOOL quest_flash_active;
     } resourcebar;
     /* Persistent Hero/idle-worker HUD is rebuilt only after gameplay marks it
      * dirty. last_idle_worker is the cycling cursor, not a per-frame cache. */
@@ -452,6 +453,7 @@ struct client_s {
     wc3MusicState_t music; /* client-local Warcraft music semantics; synced on ClientBegin */
     DWORD cinematic_end_time;       /* game time (ms) when current SetCinematicScene expires, 0 = none */
     DWORD cinematic_voice_end_time; /* game time (ms) when Portrait Talk becomes Portrait, 0 = not talking */
+    DWORD quest_button_flash_end_time; /* game time (ms); drives authored UpperButtonBarQuestsButton UseHighlight */
 };
 
 typedef struct {
@@ -1700,6 +1702,7 @@ void G_RefreshInfoPanel(LPEDICT);
 void G_UpdateClientInfoPanels(void);
 void UI_WriteSelectedPortraitLayer(LPEDICT);
 void G_RefreshResourceBar(LPEDICT);
+void G_FlashQuestDialogButton(void);
 void G_AccumulatePlayerFood(LPGAMECLIENT client);
 void G_InitClientUIState(LPGAMECLIENT client);
 void G_UpdateClientResourceBars(void);

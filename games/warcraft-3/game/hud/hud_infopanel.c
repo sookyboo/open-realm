@@ -1282,10 +1282,11 @@ void G_UpdateClientInfoPanels(void) {
     }
 }
 
-/* Re-send LAYER_CONSOLE only when resource display/tooltip state changed. */
+/* Re-send LAYER_CONSOLE only when cached console presentation state changed. */
 void G_RefreshResourceBar(LPEDICT ent) {
     LPPLAYER ps;
     LONG gold, lumber, food_u, food_c, gold_rate, lumber_rate;
+    BOOL quest_flash_active;
 
     if (!ent || !ent->client) return;
     ps          = &ent->client->ps;
@@ -1295,13 +1296,15 @@ void G_RefreshResourceBar(LPEDICT ent) {
     food_c      = G_GetEffectiveFoodCap(ent->client);
     gold_rate   = (LONG)ps->stats[PLAYERSTATE_GOLD_UPKEEP_RATE];
     lumber_rate = (LONG)ps->stats[PLAYERSTATE_LUMBER_UPKEEP_RATE];
+    quest_flash_active = ent->client->quest_button_flash_end_time > level.time;
 
     if (gold        == ent->client->resourcebar.gold        &&
         lumber      == ent->client->resourcebar.lumber      &&
         food_u      == ent->client->resourcebar.food_used   &&
         food_c      == ent->client->resourcebar.food_cap    &&
         gold_rate   == ent->client->resourcebar.gold_rate   &&
-        lumber_rate == ent->client->resourcebar.lumber_rate)
+        lumber_rate == ent->client->resourcebar.lumber_rate &&
+        quest_flash_active == ent->client->resourcebar.quest_flash_active)
         return;
 
     UI_WriteStart(LAYER_CONSOLE);
@@ -1315,13 +1318,20 @@ void G_RefreshResourceBar(LPEDICT ent) {
     ent->client->resourcebar.food_cap    = food_c;
     ent->client->resourcebar.gold_rate   = gold_rate;
     ent->client->resourcebar.lumber_rate = lumber_rate;
+    ent->client->resourcebar.quest_flash_active = quest_flash_active;
 }
 
-/* Once per server frame, keep every player's resource bar in sync. */
+/* Once per server frame, keep every connected player's resource bar in sync.
+ * Client edicts live in the reserved [0, max_clients) range and are not normal
+ * in-use world entities, so do not gate this on edict->inuse. Keep this in
+ * lockstep with G_UpdateClientInfoPanels() above. */
 void G_UpdateClientResourceBars(void) {
-    FOR_LOOP(i, globals.num_edicts) {
-        LPEDICT ent = g_edicts + i;
-        if (ent->inuse && ent->client)
-            G_RefreshResourceBar(ent);
+    FOR_LOOP(i, game.max_clients) {
+        LPGAMECLIENT client = game.clients + i;
+        LPEDICT ent;
+
+        if (!client->connected) continue;
+        ent = G_GetPlayerEntityByNumber(client->ps.number);
+        if (ent && ent->client == client) G_RefreshResourceBar(ent);
     }
 }
