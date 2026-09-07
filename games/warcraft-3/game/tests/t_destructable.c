@@ -119,6 +119,42 @@ TEST(wc3_destructable, generated_script_reuses_and_activates_hidden_placement) {
     T_FEQ(dest->s.origin2.y, 96.0f, 0.01f);
 }
 
+TEST(wc3_destructable, lt05_uses_authored_model_sequences_for_death_birth_stand) {
+    LPEDICT dest = make_test_destructable(2500.0f, 0.0f, 0.0f);
+
+    dest->s.model = G_RegisterModel("Doodads\\Terrain\\WoodBridgeLarge45\\WoodBridgeLarge45.mdx");
+    T_NOT_NULL(G_GetAnimation(dest->s.model, "death"));
+    T_NOT_NULL(G_GetAnimation(dest->s.model, "birth"));
+    T_NOT_NULL(G_GetAnimation(dest->s.model, "stand"));
+
+    G_DestructableStartDeathAnimation(dest);
+    T_NOT_NULL(dest->animation);
+    T_STREQ(dest->animation->name, "death");
+    G_DestructableStartAliveAnimation(dest, true);
+    T_NOT_NULL(dest->animation);
+    T_STREQ(dest->animation->name, "birth");
+    G_DestructableStartAliveAnimation(dest, false);
+    T_NOT_NULL(dest->animation);
+    T_STREQ(dest->animation->name, "stand");
+}
+
+TEST(wc3_destructable, dead_bridge_blocks_route_until_restored) {
+    BYTE cells[5] = {0};
+    struct { WORD width, height; COLOR32 map[1]; } blocked = { .width = 1, .height = 1, .map = {{0, 0, 255, 255}} };
+    struct { WORD width, height; COLOR32 map[1]; } clear = { .width = 1, .height = 1, .map = {{0, 0, 0, 255}} };
+    VECTOR2 from = { 0.5f, 0.5f }, to = { 4.5f, 0.5f };
+    LPEDICT dest;
+
+    setup_test_pathmap(5, 1, cells);
+    dest = make_test_destructable(2500.0f, 2.5f, 0.5f);
+    dest->destructable.alive_pathtex = (pathTex_t *)&clear;
+    dest->destructable.death_pathtex = (pathTex_t *)&blocked;
+    T_ASSERT(G_SetDestructableDeadState(dest, false));
+    T_ASSERT(!CM_LineIsWalkable(&from, &to));
+    T_ASSERT(G_RestoreDestructable(dest, 2500.0f, true));
+    T_ASSERT(CM_LineIsWalkable(&from, &to));
+}
+
 TEST(wc3_destructable, lethal_damage_does_not_require_die_callback) {
     LPEDICT dest = make_test_destructable(25.0f, 0.0f, 0.0f);
     LPEDICT attacker = make_destructable_test_attacker(10.0f, 0.0f);

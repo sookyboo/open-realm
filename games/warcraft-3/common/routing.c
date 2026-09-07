@@ -383,13 +383,29 @@ static void stamp_entity_obstacle(edict_t const *ent, pathMapCell_t *target) {
     point2_t p = LocationToPathMap(&ent->s.origin2);
     if (ent->pathtex) {
         pathTex_t *pt = ent->pathtex;
+        int angle = (int)(ent->s.angle * 180.0f / M_PI);
+        int rotation = (angle + 450) % 360;
+        DWORD div_w = rotation % 180 ? pt->height : pt->width;
+        DWORD div_h = rotation % 180 ? pt->width : pt->height;
+
+        if (rotation < 0) rotation += 360;
         FOR_LOOP(x, pt->width) {
             FOR_LOOP(y, pt->height) {
-                int px = (int)x + p.x - (int)pt->width / 2;
-                int py = (int)y + p.y - (int)pt->height / 2;
+                int tx = (int)x, ty = (int)y;
+                int px, py;
+
+                /* Match Warsmash: rotate the image in 90-degree steps, sample its vertically flipped
+                 * image, and OR restrictions into WPM instead of clearing terrain restrictions. */
+                switch (rotation) {
+                    case 90: tx = (int)pt->height - 1 - (int)y; ty = (int)x; break;
+                    case 180: tx = (int)pt->width - 1 - (int)x; ty = (int)pt->height - 1 - (int)y; break;
+                    case 270: tx = (int)y; ty = (int)pt->width - 1 - (int)x; break;
+                }
+                px = tx + p.x - (int)div_w / 2;
+                py = ty + p.y - (int)div_h / 2;
                 if (is_valid_point(px, py)) {
                     target[px + py * pathmap.width].nowalk |=
-                        pt->map[x + y * pt->width].b;
+                        pt->map[x + (pt->height - 1 - y) * pt->width].b > 127;
                 }
             }
         }
