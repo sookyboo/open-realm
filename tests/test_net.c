@@ -871,20 +871,15 @@ TEST(net, screen_layout_draws_client_windows) {
 }
 
 TEST(net, window_click_raises_and_moves_keyboard_focus) {
-    char command_buf[128]; BYTE message_buf[256];
-
     test_client_stubs_init(); CL_WindowClear();
     re.GetTextSize = text_length_mock_size; re.DrawText = capture_textarea;
-    SZ_Init(&cls.netchan.message, message_buf, sizeof(message_buf));
     test_send_window(1, 91, UI_WINDOW_UNIQUE, 0.05f, "First", "first");
     test_send_window(2, 92, UI_WINDOW_UNIQUE, 0.45f, "Second", "second");
     T_ASSERT(CL_WindowMouseEvent(MENU_MOUSE_DOWN, 128, 256, 1));
-    SZ_Clear(&cls.netchan.message);
+    test_forwarded_command[0] = '\0';
     T_ASSERT(CL_WindowKeyEvent('Z'));
-    cls.netchan.message.readcount = 0;
-    T_EQ(MSG_ReadByte(&cls.netchan.message), clc_stringcmd);
-    MSG_ReadString(&cls.netchan.message, command_buf);
-    T_STREQ(command_buf, "first");
+    /* Window control substitution now forwards through the typed command boundary instead of writing netchan bytes. */
+    T_STREQ(test_forwarded_command, "first");
     test_textarea_draws = 0; CL_WindowDraw();
     T_EQ(test_textarea_draws, 2);
     T_STREQ(test_textarea_draw.text, "First");

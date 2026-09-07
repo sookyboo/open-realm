@@ -22,6 +22,10 @@ RECT Rect_div(LPCRECT rect, int res) {
     return Rect_scale(rect, 1.0 / res);
 }
 
+RECT Rect_inset(LPCRECT rect, float inset) {
+    return (RECT){ rect->x + inset, rect->y + inset, rect->w - inset * 2, rect->h - inset * 2 };
+}
+
 VECTOR2 Rect_center(LPCRECT rect) {
     VECTOR2 const center = {
         rect->x + rect->w * 0.5f,

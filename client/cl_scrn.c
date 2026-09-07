@@ -303,10 +303,6 @@ BOOL SCR_LayoutWorldHoverRoot(LPRECT root) {
     return false;
 }
 
-static RECT Rect_inset(LPCRECT r, FLOAT inset) {
-    return MAKE(RECT, r->x+inset, r->y+inset, r->w-inset*2, r->h-inset*2);
-}
-
 static RECT get_uvrect(uint8_t const *tc) {
     return (RECT){ tc[0], tc[2], tc[1]-tc[0], tc[3]-tc[2] };
 }

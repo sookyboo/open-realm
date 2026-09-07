@@ -480,6 +480,7 @@ static int CL_WindowListMaxScroll(LPCUIFRAME frame) {
     if (!frame || frame->flags.type != FT_LISTBOX || !frame->buffer.data ||
         frame->buffer.size < sizeof(uiListBox_t)) return 0;
     lb = frame->buffer.data;
+    /* Share the renderer's inset math so list hit-testing uses the exact same viewport. */
     view = Rect_inset(SCR_LayoutRect(frame), lb->border);
     item_height = lb->itemHeight > 0.0f ? lb->itemHeight : 0.018f;
     if (frame->text && *frame->text) {
