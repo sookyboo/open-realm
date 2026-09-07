@@ -703,7 +703,7 @@ static BOOL M_UnitUsesWaterSurface(LPCEDICT self, LPCSTR movetp) {
 
 /* Keep the bridge support-surface trace bounded while diagnosing units that
  * visually travel below LT05 instead of receiving its deck height. */
-static void M_DebugBridgeGround(LPCEDICT self, LPCEDICT surface, BOOL inside, FLOAT before, FLOAT after) {
+static void M_DebugBridgeGround(LPCEDICT self, LPCEDICT surface, BOOL inside, FLOAT support, FLOAT before, FLOAT after) {
     static DWORD count;
     if (G_BridgeDebugLevel() < 3 || count >= 128 || !self || !surface || surface->destructable.dead ||
         surface->class_id != MAKEFOURCC('L', 'T', '0', '5') ||
@@ -713,8 +713,26 @@ static void M_DebugBridgeGround(LPCEDICT self, LPCEDICT surface, BOOL inside, FL
     fprintf(stderr, "WC3_BRIDGE_GROUND unit=%08x pos=(%.1f,%.1f,%.1f) inside=%d dead=%d solid=%d pathtex=%d surface_z=%.1f before=%.1f after=%.1f\n",
             self->class_id, self->s.origin.x, self->s.origin.y, self->s.origin.z, inside,
             surface->destructable.dead, surface->destructable.placement_solid, surface->pathtex != NULL,
-            surface->s.origin.z, before, after);
+            support, before, after);
     count++;
+}
+
+/* Walkable MDX objects store their deck in model-local sequence bounds; the
+ * destructable Z is the model origin, so using it directly leaves bridges
+ * below the terrain even though their rendered deck is above it. */
+static FLOAT M_WalkableSurfaceHeight(LPCEDICT surface) {
+    LPCANIMATION stand;
+    FLOAT scale;
+
+    if (!surface->s.model) return surface->s.origin.z;
+    stand = G_GetAnimation(surface->s.model, "stand");
+    if (!stand) {
+        fprintf(stderr, "M_WalkableSurfaceHeight: model %d has no Stand sequence for walkable destructable\n",
+                surface->s.model);
+        return surface->s.origin.z;
+    }
+    scale = surface->s.scale > 0.0f ? surface->s.scale : 1.0f;
+    return surface->s.origin.z + stand->max.z * scale;
 }
 
 /* Resolve the visual/support surface, then apply the unit's mutable fly height.
@@ -734,16 +752,18 @@ void M_CheckGround(LPEDICT self) {
         for (LPEDICT surface = level.ground_surfaces; surface; surface = surface->ground_next) {
             pathTex_t const *pathtex = surface->pathtex;
             FLOAT const before = height;
+            FLOAT support = surface->s.origin.z;
             BOOL inside;
             if (!surface->inuse || surface->destructable.dead ||
                 !surface->destructable.placement_solid || !pathtex) {
-                M_DebugBridgeGround(self, surface, false, before, height);
+                M_DebugBridgeGround(self, surface, false, support, before, height);
                 continue;
             }
+            support = M_WalkableSurfaceHeight(surface);
             inside = fabsf(self->s.origin.x - surface->s.origin.x) <= pathtex->width * cell * 0.5f &&
                      fabsf(self->s.origin.y - surface->s.origin.y) <= pathtex->height * cell * 0.5f;
-            if (inside) height = MAX(height, surface->s.origin.z);
-            M_DebugBridgeGround(self, surface, inside, before, height);
+            if (inside) height = MAX(height, support);
+            M_DebugBridgeGround(self, surface, inside, support, before, height);
         }
     }
     self->s.origin.z = height + self->unitinfo.FlyHeight;
