@@ -1111,10 +1111,30 @@ TEST(wc3_game, hud_reset_drops_save_panel_bindings) {
     FRAMEDEF frame = {0};
 
     hud.save_menu.EscMenuSaveGamePanel = &frame;
+    UI_InitFrame(&hud.save_list, FT_LISTBOX);
 
     UI_ResetHud();
 
     T_NULL(hud.save_menu.EscMenuSaveGamePanel);
+    T_ASSERT(!hud.save_list.inuse);
+}
+
+TEST(wc3_game, hud_save_panel_accepts_native_list_in_authored_frame_slot) {
+    FRAMEDEF frame = {0};
+
+    UI_ResetHud();
+    hud.save_menu.EscMenuSaveGamePanel = &frame;
+    hud.save_menu.FileListFrame = &frame;
+    hud.save_menu.SaveOnly = hud.save_menu.LoadOnly = &frame;
+    hud.save_menu.SaveGameFileEditBox = hud.save_menu.SaveGameFileEditBoxText = &frame;
+    hud.save_menu.SaveGameSaveButton = hud.save_menu.SaveGameCancelButton = &frame;
+    hud.save_menu.LoadGameLoadButton = hud.save_menu.LoadGameCancelButton = &frame;
+    UI_InitFrame(&hud.save_list, FT_LISTBOX);
+    UI_SetParent(&hud.save_list, hud.save_menu.FileListFrame);
+
+    T_EQ(MenuSaveListBox(), &hud.save_list);
+    T_ASSERT(MenuSavePanelReady());
+    UI_ResetHud();
 }
 
 TEST(wc3_game, hud_reset_drops_cached_image_names) {

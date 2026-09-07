@@ -51,6 +51,7 @@ typedef struct {
     char log_text[WC3_MESSAGE_LOG_TEXT_SIZE];
     EscMenuMainPanelGame_t menu;
     EscMenuSaveGamePanel_t save_menu;
+    FRAMEDEF save_list;
     AllianceDialog_t allies;
     GameResultDialog_t result;
     CinematicPanel_t cinematic;

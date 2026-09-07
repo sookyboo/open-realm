@@ -37,13 +37,7 @@ static LPFRAMEDEF MenuPanel(menuPanel_t panel) {
 }
 
 static LPFRAMEDEF MenuSaveListBox(void) {
-    LPFRAMEDEF list = hud.save_menu.FileListFrame;
-    /* Blizzard's authored FileListFrame owns the chooser geometry; the old ChatDialog conversion patched layout in C. */
-    if (list && list->Type != FT_LISTBOX) {
-        fprintf(stderr, "WC3 menu: FileListFrame has type %d, expected LISTBOX\n", list->Type);
-        return NULL;
-    }
-    return list;
+    return hud.save_list.inuse && hud.save_list.Parent == hud.save_menu.FileListFrame ? &hud.save_list : NULL;
 }
 
 static void MenuDefaultSaveName(LPSTR out, DWORD out_size) {
@@ -204,6 +198,16 @@ void UI_LoadHudMenu(void) {
     /* Save/load is optional at bind time so reduced test/UI data can still use
      * the rest of the pause menu. Retail Warcraft data provides this panel. */
     EscMenuSaveGamePanel_Load(&hud.save_menu);
+    if (hud.save_menu.FileListFrame) {
+        /* Retail creates the chooser in this FRAME placeholder; treating the placeholder itself as a list disabled the panel. */
+        UI_InitFrame(&hud.save_list, FT_LISTBOX);
+        snprintf(hud.save_list.Name, sizeof(hud.save_list.Name), "SaveFileList");
+        UI_SetParent(&hud.save_list, hud.save_menu.FileListFrame);
+        UI_SetPoint(&hud.save_list, FRAMEPOINT_TOPLEFT, hud.save_menu.FileListFrame, FRAMEPOINT_TOPLEFT, 0.0f, 0.0f);
+        UI_SetPoint(&hud.save_list, FRAMEPOINT_BOTTOMRIGHT, hud.save_menu.FileListFrame, FRAMEPOINT_BOTTOMRIGHT, 0.0f, 0.0f);
+        if (hud.save_menu.SaveGameFileEditBoxText)
+            hud.save_list.Font = hud.save_menu.SaveGameFileEditBoxText->Font;
+    }
 
     UI_SetParent(hud.menu.EscMenuBackdrop, hud.menu.EscMenuMainPanel);
     /* The separate backdrop root loads after the panels. Nest all Esc-menu
@@ -333,9 +337,10 @@ static void MenuWriteSavePanel(LPEDICT ent, menuSavePanel_t panel) {
     MenuSelectSavePanel(panel);
     /* Reuse the same unique menu identity as MainPanel. Replacing the window
      * preserves modal ownership while Main <-> Save/Load transitions occur. */
-    UI_WriteWindow(ent, hud.save_menu.EscMenuSaveGamePanel, &MAKE(uiWindowDef_t,
-        .id = BZ_WC3_WINDOW_MENU, .class_id = BZ_WC3_WINDOW_MENU,
-        .flags = UI_WINDOW_MODAL | UI_WINDOW_UNIQUE));
+    UI_WriteWindowStart(&MAKE(uiWindowDef_t, .id = BZ_WC3_WINDOW_MENU, .class_id = BZ_WC3_WINDOW_MENU, .flags = UI_WINDOW_MODAL | UI_WINDOW_UNIQUE));
+    UI_WriteFrameWithChildren(hud.save_menu.EscMenuSaveGamePanel, NULL);
+    UI_WriteFrameWithChildren(&hud.save_list, hud.save_menu.FileListFrame);
+    UI_WriteWindowEnd(ent);
     UI_SetCurrentClient(NULL);
 }
 
