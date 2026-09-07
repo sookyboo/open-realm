@@ -270,6 +270,116 @@ void UI_LoadHudConsole(void) {
     hud.res.ResourceBarSupplyText->Stat = PLAYERSTATE_RESOURCE_FOOD_USED;
 }
 
+#define WC3_DEFAULT_QUEST_CHANGED_PARTICLES "UI\\Feedback\\QuestButton\\UI-QuestButtonOn.mdl"
+#define WC3_UI_AUTHORED_PIXEL 0.001f
+
+static FLOAT UI_QuestSparklePixelOffset(LPCSTR name, LPCSTR default_value) {
+    LPCSTR value;
+
+    if (!name || !*name || !gi.CvarString) return 0.0f;
+    value = gi.CvarString(name, default_value ? default_value : "0");
+    return value ? (FLOAT)atof(value) * WC3_UI_AUTHORED_PIXEL : 0.0f;
+}
+
+/* Quest attention is a separate animated model, not SIMPLEBUTTON UseHighlight.
+ * Drawing it as a SPRITE makes the authored particles animate continuously while
+ * leaving the Quest button's normal/pushed/disabled/hover states untouched. */
+static void UI_WriteQuestChangedParticles(LPGAMECLIENT client) {
+    uiFrame_t frame;
+    LPCSTR model;
+    DWORD parent;
+    FLOAT offset_x;
+    FLOAT offset_y;
+
+    if (!client || !(client->quest_ui_flags & WC3_QUEST_UI_ATTENTION)) return;
+
+    model = Theme_PlayerString(client, "QuestChangedParticles", WC3_DEFAULT_QUEST_CHANGED_PARTICLES);
+    parent = UI_GetWrittenFrameNumber(hud.upper.UpperButtonBarQuestsButton);
+    if (!model || !*model || !parent) return;
+
+    memset(&frame, 0, sizeof(frame));
+    frame.flags.type = FT_SPRITE;
+    frame.color = COLOR32_WHITE;
+    frame.tex.index = gi.ModelIndex(model);
+    if (!frame.tex.index) return;
+
+    /* UI-QuestButtonOn uses the Quest button's authored dimensions, but its
+     * particle origin belongs one full button cell to the right of the Quest
+     * frame and one cell below its top edge.  Anchor this frame's left edge to
+     * the parent's right edge instead of baking in the measured button width;
+     * SCR_LayoutDrawSprite then contributes the frame height when converting
+     * the top-down UI rect to the model's bottom-left origin. */
+    frame.size.width = hud.upper.UpperButtonBarQuestsButton->Width;
+    frame.size.height = hud.upper.UpperButtonBarQuestsButton->Height;
+
+    /* Temporary authored-pixel tuning controls. Warcraft FDF uses an 800x600
+     * virtual canvas, so one authored pixel is 0.001 UI units on either axis.
+     * Positive X moves right; positive Y moves up. Read them when the console
+     * frame is serialized so a developer can tune the stock sparkle without
+     * rebuilding. */
+    offset_x = UI_QuestSparklePixelOffset("wc3_quest_sparkle_x_px", "-4");
+    offset_y = UI_QuestSparklePixelOffset("wc3_quest_sparkle_y_px", "4");
+    UI_SetFramePoint(&frame.points.x[FPP_MIN], FPP_MAX, UI_PARENT, offset_x, false);
+    UI_SetFramePoint(&frame.points.y[FPP_MIN], FPP_MIN, UI_PARENT, -offset_y, true);
+
+    /* The sparkle is foreground decoration: draw it after the parent button's
+     * normal/pushed/hover art instead of in the generic sprite underlay pass. */
+    frame.flagsvalue |= UIFLAG_DRAW_AFTER_PARENT;
+#ifdef WC3_DEBUG_QUEST_FLASH
+    {
+        static DWORD trace_count;
+        if (trace_count++ < 8)
+            fprintf(stderr, "WC3_QUEST_FLASH sprite player=%u parent=%u model=%u path=\"%s\"\n",
+                    (unsigned)client->ps.number, (unsigned)parent, (unsigned)frame.tex.index, model);
+    }
+#endif
+    UI_WriteProxyFrameToParent(&frame, NULL, 0, parent);
+}
+
+/* Re-send the static console tree when quest-attention state changes. */
+static void G_ResendQuestButtonConsole(LPGAMECLIENT client) {
+    LPEDICT ent;
+    LONG food_used, food_cap;
+
+    if (!client || !client->connected) return;
+    ent = G_GetPlayerEntityByNumber(client->ps.number);
+    if (!ent || ent->client != client) return;
+
+    food_used = (LONG)client->ps.stats[PLAYERSTATE_RESOURCE_FOOD_USED];
+    food_cap = G_GetEffectiveFoodCap(client);
+    UI_WriteStart(LAYER_CONSOLE);
+    UI_WriteConsoleBackdrop(client, food_used, food_cap);
+    UI_WriteMinimapFrame();
+    UI_WriteEnd(ent);
+}
+
+/* FlashQuestDialogButton persists until that player's Quest command is used. */
+void G_FlashQuestDialogButton(void) {
+    FOR_LOOP(i, game.max_clients) {
+        LPGAMECLIENT client = game.clients + i;
+        if (!client->connected || (client->quest_ui_flags & WC3_QUEST_UI_ATTENTION)) continue;
+        client->quest_ui_flags |= WC3_QUEST_UI_ATTENTION;
+#ifdef WC3_DEBUG_QUEST_FLASH
+        {
+            static DWORD trace_count;
+            if (trace_count++ < 8)
+                fprintf(stderr, "WC3_QUEST_FLASH attention player=%u time=%u flags=0x%02x\n",
+                        (unsigned)client->ps.number, (unsigned)level.time, (unsigned)client->quest_ui_flags);
+        }
+#endif
+        G_ResendQuestButtonConsole(client);
+    }
+}
+
+/* Activating the Quest command acknowledges and clears its attention effect. */
+void G_ClearQuestDialogButton(LPEDICT ent) {
+    LPGAMECLIENT client;
+
+    if (!ent || !(client = ent->client) || !(client->quest_ui_flags & WC3_QUEST_UI_ATTENTION)) return;
+    client->quest_ui_flags &= (BYTE)~WC3_QUEST_UI_ATTENTION;
+    G_ResendQuestButtonConsole(client);
+}
+
 static void UI_WriteTimeOfDayIndicator(LPGAMECLIENT client) {
     uiFrame_t frame;
     uiFrame_t listener;
@@ -377,6 +487,7 @@ void UI_WriteConsoleBackdrop(LPGAMECLIENT client, LONG food_used, LONG food_cap)
                         upkeep_tier, gold_rate);
 
     UI_WriteFrameWithChildren(hud.console.ConsoleUI, NULL);
+    UI_WriteQuestChangedParticles(client);
     UI_WriteTimeOfDayIndicator(client);
     /* Resource-bar fields are present even with no unit selected, so the
      * console layer must carry its own standard tooltip presentation frame. */

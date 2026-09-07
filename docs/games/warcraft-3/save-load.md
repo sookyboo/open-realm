@@ -263,8 +263,9 @@ client resolves the saved map and calls `SV_LoadGame()` on the following frame, 
 not call `ReadGame()` directly from an in-game button callback.
 
 The client forwards a `close_window_command` suffix before releasing the modal window, so a save request can execute while
-`client_s.modal_flags` still contains the ESC-menu owner. Treat `modal_flags` and `quest_dialog_open` as `FIELD_RUNTIME`: they describe
-live client-window ownership, not simulation state. Persisting them can reload a game as paused even though no transient window exists.
+`client_s.modal_flags` still contains the ESC-menu owner. Treat `modal_flags` and `quest_ui_flags` as `FIELD_RUNTIME`: they describe
+live client-window/presentation state, not simulation state. `WC3_QUEST_UI_OPEN` owns the Quest modal while
+`WC3_QUEST_UI_ATTENTION` owns its transient button sparkle; persisting either can restore stale UI state with no live window.
 The serializer round-trip test asserts that both fields clear on load.
 
 ## Console Usage

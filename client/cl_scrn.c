@@ -931,7 +931,27 @@ void SCR_LayoutDrawSprite(LPCUIFRAME frame, LPCRECT screen) {
         snprintf(phased_anim, sizeof(phased_anim), "%.*s@%.6f", (int)base_len, anim, phase);
         anim = phased_anim;
     }
-    re.DrawSprite(model, anim, screen->x, screen->y);
+    /* Sprite model origins are frame bottom-lefts (matching FDF/Warsmash
+     * SpriteFrame). Layout rectangles use top-left Y, so pass the bottom edge
+     * and let the WC3 renderer perform its existing Y-axis conversion. */
+#ifdef WC3_DEBUG_QUEST_FLASH
+    if (frame->flagsvalue & UIFLAG_DRAW_AFTER_PARENT) {
+        static DWORD trace_count;
+        if (trace_count++ < 8) {
+            LPCUIFRAME parent = frame->parent < SCR_NumFrames() ? SCR_Frame(frame->parent) : NULL;
+            LPCRECT parent_rect = parent ? SCR_LayoutRect(parent) : NULL;
+            fprintf(stderr,
+                    "WC3_UI_SPRITE_RECT frame=%u parent=%u sprite=(%.6f,%.6f,%.6f,%.6f) "
+                    "parentRect=(%.6f,%.6f,%.6f,%.6f) drawOrigin=(%.6f,%.6f)\n",
+                    (unsigned)frame->number, (unsigned)frame->parent,
+                    screen->x, screen->y, screen->w, screen->h,
+                    parent_rect ? parent_rect->x : 0.0f, parent_rect ? parent_rect->y : 0.0f,
+                    parent_rect ? parent_rect->w : 0.0f, parent_rect ? parent_rect->h : 0.0f,
+                    screen->x, screen->y + screen->h);
+        }
+    }
+#endif
+    re.DrawSprite(model, anim, screen->x, screen->y + screen->h);
 }
 
 void SCR_LayoutDrawCommandButton(LPCUIFRAME frame, LPCRECT screen) {
@@ -1276,16 +1296,54 @@ void SCR_LayoutUpdateTooltip(HANDLE layout) {
     SCR_LayoutRunFrames(layout, SCR_LayoutUpdateFrame);
 }
 
+static BOOL SCR_LayoutSpriteDrawAfterParent(LPCUIFRAME frame) {
+    return frame && frame->flags.type == FT_SPRITE &&
+           (frame->flagsvalue & UIFLAG_DRAW_AFTER_PARENT);
+}
+
+static BOOL SCR_LayoutFrameNumberExists(DWORD number) {
+    LPCUIFRAME frame;
+    if (number >= SCR_NumFrames()) return false;
+    frame = SCR_Frame(number);
+    return frame && (number == 0 || frame->number == number);
+}
+
+static void SCR_LayoutDrawSpritesAfterParent(DWORD parent) {
+    FOR_LOOP(i, SCR_NumFrames()) {
+        LPCUIFRAME frame = SCR_Frame(i);
+        if (SCR_LayoutSpriteDrawAfterParent(frame) && frame->parent == parent)
+            SCR_LayoutDrawFrame(frame);
+    }
+}
+
 void SCR_LayoutDrawOverlay(HANDLE layout) {
     layout_current = layout;
+
+    /* Legacy model sprites are an underlay.  Foreground sprites opt out and
+     * are composited immediately after their parent so authored button art is
+     * already present underneath the effect. */
     FOR_LOOP(i, SCR_NumFrames()) {
-        LPCUIFRAME f = SCR_Frame(i);
-        if (f && f->flags.type == FT_SPRITE) SCR_LayoutDrawFrame(f);
+        LPCUIFRAME frame = SCR_Frame(i);
+        if (frame && frame->flags.type == FT_SPRITE &&
+            !SCR_LayoutSpriteDrawAfterParent(frame))
+            SCR_LayoutDrawFrame(frame);
     }
     FOR_LOOP(i, SCR_NumFrames()) {
-        LPCUIFRAME f = SCR_Frame(i);
-        if (f && f->flags.type != FT_SPRITE) SCR_LayoutDrawFrame(f);
+        LPCUIFRAME frame = SCR_Frame(i);
+        if (!frame || frame->flags.type == FT_SPRITE) continue;
+        SCR_LayoutDrawFrame(frame);
+        SCR_LayoutDrawSpritesAfterParent(frame->number);
     }
+
+    /* A malformed/standalone foreground sprite should still be visible rather
+     * than silently disappearing because its requested parent was absent. */
+    FOR_LOOP(i, SCR_NumFrames()) {
+        LPCUIFRAME frame = SCR_Frame(i);
+        if (SCR_LayoutSpriteDrawAfterParent(frame) &&
+            !SCR_LayoutFrameNumberExists(frame->parent))
+            SCR_LayoutDrawFrame(frame);
+    }
+
     FOR_LOOP(i, SCR_NumFrames()) {
         LPCUIFRAME f = SCR_Frame(i);
         if (f && (f->flags.type == FT_GLUETEXTBUTTON || f->flags.type == FT_GLUEBUTTON))

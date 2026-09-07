@@ -108,10 +108,14 @@ DWORD DefeatConditionSetDescription(LPJASS j) {
     return 0;
 }
 DWORD FlashQuestDialogButton(LPJASS j) {
-    /* TODO: the server-authored frame wire does not currently serialize the
-     * stock button pulse/highlight state.  Do not fake the effect with quest
-     * state or an unrelated HUD flag. */
+#ifdef WC3_DEBUG_QUEST_FLASH
+    static DWORD trace_count;
+    if (trace_count++ < 8)
+        fprintf(stderr, "WC3_QUEST_FLASH native time=%u max_clients=%u\n",
+                (unsigned)level.time, (unsigned)game.max_clients);
+#endif
     (void)j;
+    G_FlashQuestDialogButton();
     return 0;
 }
 DWORD ForceQuestDialogUpdate(LPJASS j) {

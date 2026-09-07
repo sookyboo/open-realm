@@ -1137,6 +1137,9 @@ CLIENTCOMMAND(Cancel) {
 void UI_ShowQuest(LPEDICT ent, LPCQUEST quest);
 
 CLIENTCOMMAND(Quests) {
+    /* Retail clears the quest-change particles when the Quest button is
+     * activated.  This is separate from opening/closing the modal window. */
+    G_ClearQuestDialogButton(clent);
     UI_ShowQuests(clent);
 }
 

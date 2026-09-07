@@ -90,7 +90,7 @@ script_paused || quest_paused
 
 Quest pause is intentionally single-client-only. A local campaign Quest dialog may freeze its simulation, but one player's F9/Quest UI must not globally stop a multi-client match.
 
-Each WC3 client tracks `quest_dialog_open`. Disconnect clears that ownership and recomputes pause state, preventing an abandoned modal from leaving the server paused.
+Each WC3 client tracks Quest presentation bits in `quest_ui_flags`; `WC3_QUEST_UI_OPEN` preserves the previous quest-dialog ownership state while `WC3_QUEST_UI_ATTENTION` is the independent quest-button sparkle. Disconnect clears both and recomputes pause state, preventing an abandoned modal from leaving the server paused.
 
 ## Modal Window Input
 

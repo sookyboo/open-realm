@@ -20,6 +20,7 @@ typedef struct PARTICLESTATE {
     VECTOR3 eye;
     int texture;
     int fogOfWar;
+    bool useFogOfWar;
     bool alphaKey;
     FLOAT alphaCutoff;
 } PARTICLESTATE;
@@ -43,6 +44,13 @@ static struct {
 cparticle_t *active_particles, *free_particles;
 cparticle_t particles[MAX_PARTICLES];
 int cl_numparticles = MAX_PARTICLES;
+static DWORD particle_scope;
+
+DWORD R_SetParticleScope(DWORD scope) {
+    DWORD const previous = particle_scope;
+    particle_scope = scope;
+    return previous;
+}
 
 void R_ClearParticles(void) {
     free_particles = &particles[0];
@@ -62,6 +70,7 @@ cparticle_t *R_SpawnParticle(void) {
     p->next = active_particles;
     active_particles = p;
     p->blend_mode = BLEND_MODE_ADD;
+    p->render_scope = particle_scope;
     p->tail = (VECTOR3){0};
     p->size_value_scale = p->size_time_scale = 1.0f;
     return p;
@@ -77,6 +86,7 @@ static const shader_desc_t sd_particle = {
         UNIFORM(eye,            UT_FLOAT_VEC3, PRECISION_HIGH),
         UNIFORM(texture,        UT_SAMPLER_2D, PRECISION_LOW),
         UNIFORM(fogOfWar,       UT_SAMPLER_2D, PRECISION_LOW),
+        UNIFORM(useFogOfWar,    UT_BOOL,       PRECISION_LOW),
         UNIFORM(alphaKey,       UT_BOOL,       PRECISION_LOW),
         UNIFORM(alphaCutoff,    UT_FLOAT,      PRECISION_LOW),
     },
@@ -120,7 +130,7 @@ static const shader_desc_t sd_particle = {
         "vec4 frag() {\n"
         "  vec4 col = texture(u_texture, v_texcoord) * v_color;\n"
         "#ifdef USE_FOGOFWAR\n"
-        "  col.rgb *= texture(u_fogOfWar, v_texcoord2).r;\n"
+        "  if (u_useFogOfWar) col.rgb *= texture(u_fogOfWar, v_texcoord2).r;\n"
         "#endif\n"
         "  if (u_alphaKey) {\n"
         "#ifndef BZ_USE_MSAA\n"
@@ -218,6 +228,8 @@ static void R_FlushParticles(LPCTEXTURE texture, LPCMATRIX4 matrix, particleVert
     particles_resources.shader.state.viewProjection = tr.viewDef.viewProjectionMatrix;
     particles_resources.shader.state.eye = tr.viewDef.camerastate[0].eye;
     particles_resources.shader.state.textureMatrix = tr.viewDef.textureMatrix;
+    particles_resources.shader.state.useFogOfWar =
+        !(tr.viewDef.rdflags & (RDF_NOFOG | RDF_NOWORLDMODEL));
     R_Call(glActiveTexture, GL_TEXTURE0);
     R_Call(glBindTexture, GL_TEXTURE_2D, (texture?texture:particles_resources.texture)->texid);
     particles_resources.shader.state.alphaKey = blend_mode == BLEND_MODE_ALPHAKEY;
@@ -285,16 +297,22 @@ static COLOR32 FX_GetFrame(const cparticle_t *p) {
 void R_DrawParticles(void) {
     MATRIX4 matrix;
     particleVertex_t *pv = particles_resources.vertices;
+    cparticle_t const *first = NULL;
     LPCTEXTURE texture;
     BLEND_MODE blend_mode;
 
     if (!R_CvarEnabled("r_particles", "1") || !active_particles) return;
-    texture = active_particles->texture; blend_mode = active_particles->blend_mode;
-    
-    Matrix4_identity(&matrix);
-    R_UpdateParticles();
-    
     FOR_EACH_LIST(cparticle_t const, p, active_particles) {
+        if (p->render_scope == particle_scope) { first = p; break; }
+    }
+    if (!first) return;
+
+    texture = first->texture;
+    blend_mode = first->blend_mode;
+    Matrix4_identity(&matrix);
+
+    FOR_EACH_LIST(cparticle_t const, p, active_particles) {
+        if (p->render_scope != particle_scope) continue;
         if (p->texture != texture || p->blend_mode != blend_mode) {
             R_FlushParticles(texture, &matrix, pv, blend_mode);
             pv = particles_resources.vertices;
@@ -313,10 +331,11 @@ void R_DrawParticles(void) {
         texture = p->texture;
         blend_mode = p->blend_mode;
     }
-    
+
     R_FlushParticles(texture, &matrix, pv, blend_mode);
     R_SetAlphaKeyState(false);
 }
+
 
 /* Draw a single camera-facing (billboarded) sprite at a world position, reusing the particle
  * billboard pipeline. BLP textures are stored top-down and the particle shader maps a quad's top
@@ -395,6 +414,7 @@ void R_InitParticles(void) {
     /* The scene contract reserves unit 2 for FOW; particles omit the shadow sampler that normally occupies unit 1. */
     particles_resources.shader.state.fogOfWar = 2;
     particles_resources.particles = R_MakeParticlesVertexArrayObject();
+    particle_scope = 0;
     R_ClearParticles();
 }
 

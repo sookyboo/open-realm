@@ -119,6 +119,33 @@ TEST(wc3_api, pause_game_forwards_authoritative_pause_state) {
     gi.SetPaused = old_set_paused;
 }
 
+TEST(wc3_api, flash_quest_dialog_button_sets_attention_until_cleared) {
+    setup_test_world();
+    FOR_LOOP(i, game.max_clients) game.clients[i].quest_ui_flags = 0;
+    game.clients[0].connected = true;
+    game.clients[2].connected = true;
+
+    T_ASSERT(run_test_jass(
+        "function main takes nothing returns nothing\n"
+        "  call FlashQuestDialogButton()\n"
+        "endfunction\n"));
+
+    T_ASSERT(game.clients[0].quest_ui_flags & WC3_QUEST_UI_ATTENTION);
+    T_ASSERT(!(game.clients[1].quest_ui_flags & WC3_QUEST_UI_ATTENTION));
+    T_ASSERT(game.clients[2].quest_ui_flags & WC3_QUEST_UI_ATTENTION);
+
+    /* Repeated calls keep the effect active rather than introducing a timer. */
+    T_ASSERT(run_test_jass(
+        "function main takes nothing returns nothing\n"
+        "  call FlashQuestDialogButton()\n"
+        "endfunction\n"));
+    T_ASSERT(game.clients[0].quest_ui_flags & WC3_QUEST_UI_ATTENTION);
+
+    G_ClearQuestDialogButton(&g_edicts[0]);
+    T_ASSERT(!(game.clients[0].quest_ui_flags & WC3_QUEST_UI_ATTENTION));
+    T_ASSERT(game.clients[2].quest_ui_flags & WC3_QUEST_UI_ATTENTION);
+}
+
 TEST(wc3_api, quest_pause_is_single_client_only) {
     void (*old_set_paused)(BOOL) = gi.SetPaused;
 

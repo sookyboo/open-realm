@@ -14,6 +14,9 @@ WC3_TEST_DIR := $(WC3_DIR)/tests
 
 WC3_CFLAGS := $(CFLAGS) -I$(WC3_DIR) -I$(WC3_DIR)/common -DWC3 -DUSE_FOGOFWAR -DBZ_GAME=\"warcraft-3\"
 
+# Temporary bounded quest-attention diagnostic; remove after the 5.1s trigger path is confirmed.
+WC3_CFLAGS += -DWC3_DEBUG_QUEST_FLASH
+
 # Optional long-form media support (pre-rendered movies and background music).
 # Keep the dependency surface to the five FFmpeg libraries required for container
 # demux, decode, pixel conversion and audio resampling; the default build has no

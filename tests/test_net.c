@@ -40,6 +40,7 @@ void SCR_LayoutDrawStatusbar(LPCUIFRAME frame, LPCRECT screen);
 void SCR_LayoutDrawTextArea(LPCUIFRAME frame, LPCRECT screen);
 void SCR_LayoutDrawListBox(LPCUIFRAME frame, LPCRECT screen);
 void SCR_LayoutDrawSprite(LPCUIFRAME frame, LPCRECT screen);
+void SCR_LayoutDrawOverlay(HANDLE layout);
 void SCR_LayoutClampSelectionRect(LPRECT rect);
 BOOL SCR_LayoutModalActive(void);
 void SCR_UpdateScreen(DWORD msec);
@@ -71,6 +72,9 @@ static DWORD test_fade_draws;
 static PATHSTR test_model_load_paths[4];
 static char test_sprite_anim[96];
 static DWORD test_sprite_draws;
+static VECTOR2 test_sprite_pos;
+static char test_ui_draw_order[8];
+static DWORD test_ui_draw_order_count;
 
 static LPMODEL capture_load_model(LPCSTR filename) {
     DWORD slot = test_model_loads;
@@ -119,9 +123,22 @@ static LPTEXTURE capture_load_texture(LPCSTR name) {
 }
 static void capture_release_texture(LPTEXTURE texture) { (void)texture; test_tex_releases++; }
 static void capture_sprite(LPCMODEL model, LPCSTR anim, float x, float y) {
-    (void)model; (void)x; (void)y;
+    (void)model;
     test_sprite_draws++;
+    test_sprite_pos = (VECTOR2){ x, y };
     snprintf(test_sprite_anim, sizeof(test_sprite_anim), "%s", anim ? anim : "");
+}
+
+static void capture_order_image(LPCTEXTURE texture, LPCRECT screen, LPCRECT uv, COLOR32 color) {
+    (void)texture; (void)screen; (void)uv; (void)color;
+    if (test_ui_draw_order_count < sizeof(test_ui_draw_order))
+        test_ui_draw_order[test_ui_draw_order_count++] = 'P';
+}
+
+static void capture_order_sprite(LPCMODEL model, LPCSTR anim, float x, float y) {
+    (void)model; (void)anim; (void)x; (void)y;
+    if (test_ui_draw_order_count < sizeof(test_ui_draw_order))
+        test_ui_draw_order[test_ui_draw_order_count++] = 'S';
 }
 
 TEST(client_layout, context_name_resolves_hover_entity_configstring) {
@@ -1755,6 +1772,66 @@ TEST(client_layout, sprite_numeric_stat_drives_normalized_animation_phase) {
     T_EQ(test_sprite_draws, 1);
     T_EQ(sscanf(test_sprite_anim, "#0@%f", &ratio), 1);
     T_FEQ(ratio, 32768.0f / (FLOAT)UINT16_MAX, 0.00001f);
+}
+
+TEST(client_layout, sprite_draw_after_parent_is_foreground_without_reordering_legacy_sprites) {
+    BYTE buf[512];
+    sizeBuf_t sb = make_msg_buf(buf, sizeof(buf));
+    uiFrame_t empty = {0};
+    uiFrame_t parent = { .number = 1, .flags = { .type = FT_TEXTURE }, .tex = { .index = 1 }, .color = COLOR32_WHITE };
+    uiFrame_t sprite = { .number = 2, .parent = 1, .flags = { .type = FT_SPRITE }, .tex = { .index = 1 }, .text = "Stand" };
+
+    parent.size.width = 0.085f;
+    parent.size.height = 0.022f;
+    sprite.flagsvalue = UIFLAG_DRAW_AFTER_PARENT;
+
+    test_client_stubs_init();
+    cl.pics[1] = (LPTEXTURE)(uintptr_t)1;
+    cl.models[1] = (LPMODEL)(uintptr_t)1;
+    re.DrawImage = capture_order_image;
+    re.DrawSprite = capture_order_sprite;
+
+    MSG_WriteByte(&sb, LAYER_CONSOLE);
+    MSG_WriteDeltaUIFrame(&sb, &empty, &parent, true);
+    MSG_WriteByte(&sb, 0);
+    MSG_WriteDeltaUIFrame(&sb, &empty, &sprite, true);
+    MSG_WriteByte(&sb, 0);
+    MSG_WriteLong(&sb, 0);
+    MSG_WriteShort(&sb, 0);
+    sb.readcount = 0;
+    CL_ParseLayout(&sb);
+    T_NOT_NULL(cl.layout[LAYER_CONSOLE]);
+    SCR_Clear(cl.layout[LAYER_CONSOLE]);
+
+    test_ui_draw_order_count = 0;
+    memset(test_ui_draw_order, 0, sizeof(test_ui_draw_order));
+    SCR_LayoutDrawOverlay(cl.layout[LAYER_CONSOLE]);
+    T_EQ(test_ui_draw_order_count, 2);
+    T_EQ(test_ui_draw_order[0], 'P');
+    T_EQ(test_ui_draw_order[1], 'S');
+
+    ((LPUIFRAME)SCR_Frame(2))->flagsvalue &= ~UIFLAG_DRAW_AFTER_PARENT;
+    test_ui_draw_order_count = 0;
+    memset(test_ui_draw_order, 0, sizeof(test_ui_draw_order));
+    SCR_LayoutDrawOverlay(cl.layout[LAYER_CONSOLE]);
+    T_EQ(test_ui_draw_order_count, 2);
+    T_EQ(test_ui_draw_order[0], 'S');
+    T_EQ(test_ui_draw_order[1], 'P');
+}
+
+TEST(client_layout, sprite_draw_uses_frame_bottom_left_origin) {
+    uiFrame_t frame = { .flags = { .type = FT_SPRITE }, .tex = { .index = 1 }, .text = "Stand" };
+    RECT screen = MAKE(RECT, 0.135f, 0.010f, 0.085f, 0.022f);
+
+    test_client_stubs_init();
+    cl.models[1] = (LPMODEL)(uintptr_t)1;
+    test_sprite_draws = 0; test_sprite_pos = (VECTOR2){ 0 };
+    re.DrawSprite = capture_sprite;
+
+    SCR_LayoutDrawSprite(&frame, &screen);
+    T_EQ(test_sprite_draws, 1);
+    T_FEQ(test_sprite_pos.x, screen.x, 0.00001f);
+    T_FEQ(test_sprite_pos.y, screen.y + screen.h, 0.00001f);
 }
 
 TEST(client_layout, sprite_sequence_can_be_selected_by_second_stat) {

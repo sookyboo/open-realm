@@ -466,7 +466,9 @@ DWORD R_GetMinimapFogOfWarTexture(void);
 // r_particles.c
 void R_InitParticles(void);
 void R_ShutdownParticles(void);
+void R_UpdateParticles(void);
 void R_DrawParticles(void);
+DWORD R_SetParticleScope(DWORD scope);
 cparticle_t *R_SpawnParticle(void);
 void R_DrawBillboardSprite(LPCTEXTURE texture, LPCVECTOR3 origin, float size, COLOR32 color);
 

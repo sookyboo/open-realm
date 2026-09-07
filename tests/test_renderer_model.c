@@ -398,6 +398,38 @@ TEST(renderer_model, animated_mdx_light_colors_follow_warsmash_rgb_order) {
     T_FEQ(sampled.ambient.z, authored_bgr.x, 0.001f);
 }
 
+TEST(renderer_model, mdx_particle_scale_preserves_fractional_ui_values) {
+    FLOAT values[3] = { 0.006f, 0.012f, 0.003f };
+    cparticle_t particle = { .lifespan = 2.0f };
+
+    MDLX_EncodeParticleScale(&particle, values, 0.5f);
+
+    T_ASSERT(particle.size[0] > 0);
+    T_EQ(particle.size[1], 255);
+    T_ASSERT(particle.size[2] > 0);
+    T_FEQ(particle.size[0] * particle.size_value_scale, values[0], 0.0001f);
+    T_FEQ(particle.size[1] * particle.size_value_scale, values[1], 0.0001f);
+    T_FEQ(particle.size[2] * particle.size_value_scale, values[2], 0.0001f);
+    T_FEQ(particle.size_time_scale, 0.5f, 0.0001f);
+    T_EQ(particle.midtime, 128);
+}
+
+TEST(renderer_model, mdx_particle_emitter_draw_masks_follow_authored_head_tail_modes) {
+    T_EQ(MDLX_ParticleEmitterDrawMask(0), MODEL_EMITTER_HEAD);
+    T_EQ(MDLX_ParticleEmitterDrawMask(1), MODEL_EMITTER_TAIL);
+    T_EQ(MDLX_ParticleEmitterDrawMask(2), MODEL_EMITTER_HEAD | MODEL_EMITTER_TAIL);
+    T_EQ(MDLX_ParticleEmitterDrawMask(6), MODEL_EMITTER_HEAD | MODEL_EMITTER_TAIL);
+}
+
+TEST(renderer_model, mdx_ui_emitter_selector_uses_one_based_ordinals) {
+    T_ASSERT(MDLX_UIEmitterSelected(0, 1));
+    T_ASSERT(MDLX_UIEmitterSelected(0, 2));
+    T_ASSERT(MDLX_UIEmitterSelected(1, 1));
+    T_ASSERT(!MDLX_UIEmitterSelected(1, 2));
+    T_ASSERT(!MDLX_UIEmitterSelected(2, 1));
+    T_ASSERT(MDLX_UIEmitterSelected(2, 2));
+}
+
 TEST(renderer_model, mdx_particle_filter_modes_preserve_authored_blending) {
     T_EQ(MDLX_ParticleBlendMode(MDX_PRE2_FILTER_BLEND), BLEND_MODE_BLEND);
     T_EQ(MDLX_ParticleBlendMode(MDX_PRE2_FILTER_ADDITIVE), BLEND_MODE_ADD);

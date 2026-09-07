@@ -863,6 +863,7 @@ typedef enum {
 #define UIFLAG_ALTERNATE_ACTIVE (1 << 11) // flag bit; secondary command state is active (for example an autocast toggle)
 #define UIFLAG_SPRITE_STAT_SEQUENCE (1 << 12) // FT_SPRITE: frame.value names a stats[] slot selecting an explicit #N sequence
 #define UIFLAG_EXTEND_WIDESCREEN_X (1 << 13) // flag bit; client expands this frame horizontally across the full UI canvas
+#define UIFLAG_DRAW_AFTER_PARENT   (1 << 14) // FT_SPRITE: composite immediately after its parent frame instead of in the sprite underlay pass
 
 typedef enum {
     BACKDROP_TOP_LEFT_CORNER,
@@ -1212,6 +1213,7 @@ typedef struct particle_s {
     BYTE columns;
     BYTE rows;
     BYTE blend_mode;
+    DWORD render_scope; /* 0 = main scene; nonzero isolates auxiliary/UI particle views */
     FLOAT size_value_scale;
     FLOAT size_time_scale;
     FLOAT time;

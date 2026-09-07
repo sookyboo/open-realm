@@ -38,9 +38,27 @@ typedef enum {
 } mdxGeoFlags_t;
 
 enum {
-    MODEL_EMITTER_HEAD = 1,
-    MODEL_EMITTER_TAIL = 2
+    MODEL_EMITTER_HEAD = 1 << 0,
+    MODEL_EMITTER_TAIL = 1 << 1
 };
+
+/* Warcraft III stores ParticleEmitter2 head/tail mode as 0=Head, 1=Tail,
+ * 2=Both.  Convert that authored mode into the draw-mask bits used by the
+ * runtime emitter renderer. */
+static inline DWORD MDLX_ParticleEmitterDrawMask(DWORD head_or_tail) {
+    switch (head_or_tail & 0x3u) {
+        case 1: return MODEL_EMITTER_TAIL;
+        case 2: return MODEL_EMITTER_HEAD | MODEL_EMITTER_TAIL;
+        default: return MODEL_EMITTER_HEAD;
+    }
+}
+
+/* Diagnostic selector for nested UI PRE2 emitters. Selector 0 draws every
+ * emitter; positive selectors are one-based list ordinals. Keep this generic
+ * so a particle-only UI model can be isolated without matching asset names. */
+static inline bool MDLX_UIEmitterSelected(int selector, int ordinal) {
+    return selector <= 0 || selector == ordinal;
+}
 
 enum { BZ_MDX_VERTEX_BUFFER, BZ_MDX_INDEX_BUFFER, BZ_MDX_BUFFER_COUNT };
 
@@ -328,9 +346,30 @@ typedef struct mdxParticleEmitter_s {
 
     /* Frame-persistent state — zeroed at load time, survives across frames */
     float accumulator;          /* emission rate accumulator for R_EmitParticles */
-    int emitter_type;           /* MODEL_EMITTER_HEAD (1) or MODEL_EMITTER_TAIL (2), set at load */
+    DWORD emitter_type;         /* MODEL_EMITTER_* draw-mask bits, derived from authored head/tail mode */
     trailEmitter_t trail;       /* ring buffer for MODEL_EMITTER_TAIL */
 } mdxParticleEmitter_t;
+
+/* Preserve PRE2 particle sizes authored as floats when storing them in the
+ * shared byte curve. UI models use very small FDF-space values that would
+ * otherwise truncate to zero. Lifetimes are normalized so the three MDX
+ * ParticleScaling keys cover the full particle lifespan. */
+static inline void MDLX_EncodeParticleScale(cparticle_t *particle,
+                                             FLOAT const values[3],
+                                             FLOAT midpoint)
+{
+    FLOAT const max_value = MAX(values[0], MAX(values[1], values[2]));
+
+    if (!particle) return;
+    particle->size_value_scale = max_value > 0.0f ? max_value / 255.0f : 1.0f;
+    FOR_LOOP(i, 3) {
+        particle->size[i] = max_value > 0.0f
+            ? (BYTE)MIN(255, MAX(0, (int)(values[i] / max_value * 255.0f + 0.5f)))
+            : 0;
+    }
+    particle->size_time_scale = 1.0f / MAX(particle->lifespan, 0.001f);
+    particle->midtime = (BYTE)MIN(254, MAX(1, (int)(midpoint * 255.0f + 0.5f)));
+}
 
 typedef struct mdxGeoset_s {
     VECTOR3 *vertices;

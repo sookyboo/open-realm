@@ -197,10 +197,25 @@ bool MDLX_SetEntityAnimationFrame(LPCMODEL model, LPCSTR anim, renderEntity_t *e
     return true;
 }
 
+
+static DWORD MDLX_UISpriteParticleScope(LPCMODEL model, FLOAT x, FLOAT y) {
+    union { FLOAT f; DWORD u; } xb = { x }, yb = { y };
+    DWORD scope = (DWORD)(size_t)model;
+
+    /* Scope 0 belongs to the main scene. Mix the stable model identity with
+     * the authored UI anchor so separate instances of the same particle model
+     * do not draw each other's particles in nested sprite views. */
+    scope ^= xb.u * 0x9e3779b1u;
+    scope = (scope << 13) | (scope >> 19);
+    scope ^= yb.u * 0x85ebca6bu;
+    return scope ? scope : 1u;
+}
+
 void MDLX_DrawSpriteTinted(LPCMODEL model, LPCSTR anim, float x, float y, COLOR32 tint) {
     renderEntity_t entity;
     viewDef_t viewdef;
     viewDef_t saved_viewdef;
+    DWORD saved_particle_scope;
     bool const fdf_sprite_coords = anim && anim[0] == '#' && anim[1] == '!';
 
     if (!model || !model->mdx) {
@@ -209,24 +224,53 @@ void MDLX_DrawSpriteTinted(LPCMODEL model, LPCSTR anim, float x, float y, COLOR3
     mdxModel_t const *mdx = model->mdx;
     mdxSequence_t const *seq = R_SelectUISequence(mdx, anim);
 
-    if (!model || !model->mdx || !seq) {
+    if (!seq) {
         return;
     }
 
+    saved_viewdef = tr.viewDef;
     memset(&entity, 0, sizeof(entity));
     memset(&viewdef, 0, sizeof(viewdef));
+    viewdef.time = saved_viewdef.time ? saved_viewdef.time : SDL_GetTicks();
+    viewdef.deltaTime = saved_viewdef.deltaTime;
     entity.scale = 1;
     entity.model = model;
     entity.tint = tint.a ? tint : COLOR32_WHITE;
-    entity.frame = R_UISequenceFrame(seq, anim, tr.viewDef.time);
+    entity.frame = R_UISequenceFrame(seq, anim, viewdef.time);
     entity.oldframe = entity.frame;
     viewdef.scissor = (RECT) { 0, 0, 1, 1 };
     viewdef.num_entities = 1;
     viewdef.entities = &entity;
-    viewdef.rdflags |= RDF_NOWORLDMODEL | RDF_NOFRUSTUMCULL;
+    viewdef.rdflags |= RDF_NOWORLDMODEL | RDF_NOFRUSTUMCULL | RDF_NOFOG;
     viewdef.viewport = (struct rect) {0,0,1,1};
 
     entity.flags |= RF_NO_FOGOFWAR | RF_NO_SHADOW | RF_NO_LIGHTING;
+#ifdef WC3_DEBUG_QUEST_FLASH
+    if (mdx->emitters) {
+        static DWORD trace_count;
+        if (trace_count < 32) {
+            int const ui_parts = atoi(ri.CvarString ?
+                ri.CvarString("r_mdx_ui_pre2_parts", "3") : "3");
+            int const ui_emitter = atoi(ri.CvarString ?
+                ri.CvarString("r_mdx_ui_pre2_emitter", "0") : "0");
+            fprintf(stderr, "WC3_UI_PRE2 sprite model=%p pos=(%.4f,%.4f) frame=%u parts=%d emitter=%d\n",
+                    (void *)model, x, y, (unsigned)entity.frame, ui_parts, ui_emitter);
+            FOR_EACH_LIST(mdxParticleEmitter_t, emitter, mdx->emitters) {
+                VECTOR3 pivot = {0};
+                if (emitter->node.node_id < (DWORD)mdx->num_pivots)
+                    pivot = mdx->pivots[emitter->node.node_id];
+                if (trace_count++ >= 32) break;
+                fprintf(stderr,
+                        "WC3_UI_PRE2 emitter name=\"%s\" node=%u pivot=(%.4f,%.4f,%.4f) flags=%u mask=0x%x tail=%.4f rate=%.3f speed=%.3f var=%.3f lat=%.3f life=%.3f size=(%.5f,%.5f,%.5f)\n",
+                        emitter->node.name, (unsigned)emitter->node.node_id, pivot.x, pivot.y, pivot.z,
+                        (unsigned)emitter->FrameFlags, (unsigned)emitter->emitter_type,
+                        emitter->TailLength, emitter->EmissionRate, emitter->Speed, emitter->Variation,
+                        emitter->Latitude, emitter->LifeSpan,
+                        emitter->ParticleScaling[0], emitter->ParticleScaling[1], emitter->ParticleScaling[2]);
+            }
+        }
+    }
+#endif
 
     RECT screen = R_UISceneRect();
     entity.origin = fdf_sprite_coords
@@ -234,8 +278,9 @@ void MDLX_DrawSpriteTinted(LPCMODEL model, LPCSTR anim, float x, float y, COLOR3
         : (VECTOR3){x, screen.y + screen.h - y, 0};
     Matrix4_ortho(&viewdef.viewProjectionMatrix, screen.x, screen.x + screen.w, screen.y, screen.y + screen.h, 0.0f, 100.0f);
     Matrix4_scale(&viewdef.viewProjectionMatrix, &(VECTOR3){1, 1, 0});
+    Matrix4_identity(&viewdef.textureMatrix);
 
-    saved_viewdef = tr.viewDef;
+    saved_particle_scope = R_SetParticleScope(MDLX_UISpriteParticleScope(model, x, y));
     tr.viewDef = viewdef;
 
 #ifdef USE_SHADOWMAPS
@@ -243,7 +288,9 @@ void MDLX_DrawSpriteTinted(LPCMODEL model, LPCSTR anim, float x, float y, COLOR3
 #endif
     R_RenderView();
     tr.viewDef = saved_viewdef;
+    R_SetParticleScope(saved_particle_scope);
 }
+
 
 void MDLX_DrawSprite(LPCMODEL model, LPCSTR anim, float x, float y) {
     MDLX_DrawSpriteTinted(model, anim, x, y, COLOR32_WHITE);

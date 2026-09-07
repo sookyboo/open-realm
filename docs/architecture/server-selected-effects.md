@@ -80,3 +80,24 @@ The owning game client keeps the marker edict pointer so selection changes updat
 Short-lived world text follows the same ownership rule as model effects. `TE_FLOATING_TEXT` is a generic temporary event: it carries an already-resolved string, RGBA colour, font index, lifetime/fade timings, screen-space velocity, and world anchor. The owning game must resolve semantic identity such as Warcraft gold/lumber before writing the event. Shared/client code must not grow `TE_GOLD_TEXT`, race/resource tables, or game-data lookups.
 
 The client captures the event anchor and projects it through the active camera each draw. It does not create a persistent network entity and does not attach the text to the source after spawn. This is appropriate for one-shot feedback such as a committed resource gain; persistent/script-addressable text belongs to a separate handle/entity contract. See [WC3 Resource-Gain Floating Text](../games/warcraft-3/resource-gain-text.md).
+
+## Particle-only models in auxiliary/UI views
+
+Particle models rendered through nested UI sprite views must not share the main
+scene's draw scope. The renderer assigns spawned particles a generic render-scope
+ID: scope `0` is the ordinary scene, while auxiliary sprite views use a stable
+nonzero scope derived by the game renderer. `R_RenderFrame()` advances particle
+ages once per top-level frame; nested `R_RenderView()` calls only emit/draw the
+particles belonging to their current scope. This prevents a HUD particle model
+from re-drawing or double-aging world particles, while particles from a HUD effect
+continue to expire when the effect frame is no longer submitted.
+
+Auxiliary views that set `RDF_NOWORLDMODEL` or `RDF_NOFOG` also bypass the
+fog-of-war sample in the shared particle shader. Content identity remains owned by
+the game: shared renderer code knows only the generic scope and view flags.
+
+Sprite layout rectangles use the client's top-down UI coordinate system, while
+model sprite origins are bottom-left coordinates. `SCR_LayoutDrawSprite` therefore
+submits the rectangle's bottom edge (`y + h`) to a game renderer that performs the
+Y-axis conversion. A zero-height authored sprite is unchanged; sized overlays now
+match the same bottom-left placement used by FDF sprite implementations.

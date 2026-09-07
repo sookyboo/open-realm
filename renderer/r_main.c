@@ -921,6 +921,12 @@ void R_RenderFrame(viewDef_t const *viewDef) {
     if (tr.viewDef.time == 0) {
         tr.viewDef.time = SDL_GetTicks();
     }
+
+    /* Particle simulation advances once per top-level renderer frame. Nested
+     * sprite/portrait views may render their own scoped particles, but must not
+     * age the shared pool again. Scope 0 is the ordinary world/default scene. */
+    R_SetParticleScope(0);
+    R_UpdateParticles();
     R_SetupEnvironmentLighting();
 
     if (!tr.viewDef.scissor.w && !tr.viewDef.scissor.h) {

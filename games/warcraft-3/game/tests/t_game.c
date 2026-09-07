@@ -2237,7 +2237,7 @@ TEST(wc3_save, round_trip_edict_and_player_state) {
     game.clients[0].camera.target_controller = second;
     game.clients[0].camera.target_inherit_orientation = true;
     game.clients[0].modal_flags = WC3_MODAL_CLIENT | WC3_MODAL_QUEST;
-    game.clients[0].quest_dialog_open = true;
+    game.clients[0].quest_ui_flags = WC3_QUEST_UI_OPEN | WC3_QUEST_UI_ATTENTION;
     T_ASSERT(WriteGame(filename));
     PATHSTR saved_map;
     T_ASSERT(G_GetSaveMap(filename, saved_map, sizeof(saved_map)));
@@ -2320,7 +2320,7 @@ TEST(wc3_save, round_trip_edict_and_player_state) {
     T_ASSERT(game.clients[0].camera.target_controller == &g_edicts[second - g_edicts]);
     T_ASSERT(game.clients[0].camera.target_inherit_orientation);
     T_EQ(game.clients[0].modal_flags, 0);
-    T_ASSERT(!game.clients[0].quest_dialog_open);
+    T_EQ(game.clients[0].quest_ui_flags, 0);
     T_ASSERT(game.clients[0].rally_indicator == &g_edicts[indicator - g_edicts]);
     T_ASSERT(game.clients[0].ps.name == game.clients[0].jass.name);
     T_STREQ(game.clients[0].ps.name, "Jaina");

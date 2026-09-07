@@ -94,10 +94,59 @@ windows are send-once snapshots:
 any state -> no UI write
 ```
 
-`FlashQuestDialogButton` remains intentionally unimplemented. The current
-server-authored `uiFrame_t` wire does not carry the stock button pulse/highlight
-state, so using `ps.uiflags` or quest state as a substitute would encode the
-wrong contract.
+`FlashQuestDialogButton` uses Warcraft's separate quest-change particle art; it
+does **not** pulse the `SIMPLEBUTTON` normal/hover texture. The active player's
+skin resolves `QuestChangedParticles` (stock data points to
+`UI\Feedback\QuestButton\UI-QuestButtonOn.mdl`), and the console writer emits
+that model as an `FT_SPRITE` parented to `UpperButtonBarQuestsButton`. The
+sprite carries the button's authored width/height, with its left edge anchored
+to the Quest button's right edge. `SCR_LayoutDrawSprite` submits the sprite's
+bottom-left model origin, so the parent-edge anchor contributes exactly one
+button width to X while retaining the button height contributes exactly one
+button height below the top edge. This uses the live FDF dimensions rather than
+hard-coded UI offsets. For temporary alignment tuning, the console writer also
+accepts authored-pixel offsets through `wc3_quest_sparkle_x_px` and
+`wc3_quest_sparkle_y_px`; one pixel is `0.001` FDF units, negative X moves
+left, and positive Y moves up. Defaults are `-4` X and `+4` Y. These values are sampled when the Quest
+sparkle frame is written, so set them before the flash is triggered (or
+force the console layer to be re-sent). The quest
+effect opts into the generic `UIFLAG_DRAW_AFTER_PARENT` compositor path, so the
+normal/pushed/hover button art is drawn first and the animated particles are
+then layered on top. Other `FT_SPRITE` frames retain the legacy underlay pass.
+
+The stock effect uses PRE2 particle emitters. During the current bounded Quest
+attention diagnostic, the renderer preserves all authored Head/Tail content and
+can isolate either the head/tail part (`r_mdx_ui_pre2_parts`) or one authored
+emitter by one-based ordinal (`r_mdx_ui_pre2_emitter`, with 0 meaning all).
+Runtime A/B testing established that head-only produces no visible Quest effect
+while tail-only still contains both the desired sweep and the unwanted mirrored
+copy. The remaining diagnostic therefore isolates the two authored emitters; do
+not blanket-disable PRE2 tails because that also removes the visible Quest effect.
+
+Quest attention remains active until the Quest button command is activated.
+Opening Quest through that button clears the particle state and re-sends
+`LAYER_CONSOLE`; repeated `FlashQuestDialogButton` calls while already active do
+not invent a timer or toggle the button art. The state reuses the legacy
+quest-dialog presentation byte as a bitfield and is cleared as transient runtime
+state when loading a save.
+
+The quest-change model is particle-only in the stock data. UI sprite rendering
+therefore preserves the main frame's elapsed time for emitter accumulation while
+using a separate particle render scope. Particle simulation itself advances once
+per top-level renderer frame, so nested HUD sprite views do not age or re-draw
+world particles through the UI camera. `RDF_NOWORLDMODEL`/`RDF_NOFOG` also keeps
+these HUD particles independent of the world fog-of-war texture.
+
+`ParticleScaling` in PRE2 is floating-point model data. The shared particle list
+keeps a compact byte curve plus a value scale, so MDX emission quantizes the
+three authored values relative to their maximum instead of casting each float
+directly to `BYTE`; direct casts erase the very small values used by UI models.
+The curve time is normalized across the particle lifespan. `UI-QuestButtonOn`
+is positioned as a Quest-button-sized sprite whose left edge is anchored to the
+button's right edge. The parent edge supplies one button width of X displacement,
+and the client's normal top-down-rectangle to bottom-left model-origin conversion
+contributes exactly one button height to Y. Both offsets therefore follow the
+authored button dimensions rather than fixed numbers.
 
 FDF simple-button normal/pushed/disabled states are serialized explicitly.
 When Quest or Log owns the modal UI, the server temporarily clears the saved
@@ -251,8 +300,12 @@ Menu route opens the separate modal Esc-menu window documented in
   and is hidden automatically when the wrapped history fits without scrolling.
 - Message history is bounded by 128 logical entries. Retail's FDF expresses a
   128-line text-area limit; wrapped-line-equivalent eviction is not yet modeled.
-- `FlashQuestDialogButton` is still unimplemented; modal disabled-button art is
-  supported, but the stock quest-attention pulse/highlight is separate state.
+- `FlashQuestDialogButton` renders the skin-authored `QuestChangedParticles`
+  sprite one Quest-button cell to the right, sized to the button so the model
+  origin resolves one button height down at its bottom-left, after the button
+  art is drawn
+  and clears it when that button is activated; the button's own
+  normal/pushed/disabled/hover presentation is not flashed.
 - `PauseGame` JASS remains a separate unimplemented native. Quest/Log currently
   do not pause the simulation; pause must be implemented without disturbing the
   server/network frame cadence.
@@ -316,3 +369,5 @@ carry `uiGlueTextButton_t` state. The client renderer rejects a short or missing
 button payload rather than dereferencing it. This preserves Blizzard's
 normal/pushed/disabled artwork and prevents malformed control frames from
 crashing the client.
+
+Diagnostic note: raw PRE2 pivots cannot be applied directly to UI trail origins; compare working zero-origin and pivot-transformed positions before converting model coordinates to FDF space.

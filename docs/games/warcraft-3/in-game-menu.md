@@ -111,8 +111,8 @@ Use ordinary `onclick` strings for server-owned state transitions such as `menu_
 buttons use `close_window_command ...` plus control placeholders such as `{SaveGameFileEditBox}` and the resolved inner save-list
 control. The client expands those from its local edit/list state, escapes quotes/backslashes, forwards the command, and then closes
 the menu. `modal_flags` and
-`quest_dialog_open` are runtime-only save fields, so a save requested while the modal still owns pause cannot restore that ownership
-without a live client window.
+`quest_ui_flags` are runtime-only save fields, so a save requested while the modal still owns pause cannot restore Quest-window ownership
+or a stale quest-attention sparkle without live client UI state.
 
 ## Save/Load Scope
 

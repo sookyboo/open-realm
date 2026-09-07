@@ -35,6 +35,19 @@ game UI authoring
 including `-1` sentinels. Code reading an unsigned wire field must cast its
 result to `BYTE`; do not globally change `MSG_ReadByte` semantics.
 
+## Parent-Relative Sprite Compositing
+
+`FT_SPRITE` is historically rendered in a model underlay pass before ordinary
+UI frames.  A server-authored sprite that is intended as foreground decoration
+can set `UIFLAG_DRAW_AFTER_PARENT`.  The client then skips it in the underlay
+pass and draws it immediately after the referenced `frame.parent`.  This keeps
+the ordering contract generic: games choose the parent/effect, while shared
+client code only implements parent-relative compositing.
+
+Use this only for sprites that must visibly sit on top of their parent control.
+Do not globally move the sprite pass after all UI frames; time indicators and
+other model-backed UI can rely on the existing underlay ordering.
+
 ## What Went Wrong
 
 In the first textured WoW quest scrollbar implementation, I made the mistake of

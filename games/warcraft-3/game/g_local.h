@@ -377,6 +377,9 @@ typedef struct {
     LONG thematic_volume;
 } wc3MusicState_t;
 
+#define WC3_QUEST_UI_OPEN      (1u << 0)
+#define WC3_QUEST_UI_ATTENTION (1u << 1)
+
 struct client_s {
     PLAYER ps;
     BOOL connected; /* ClientBegin completed for this reserved player edict. */
@@ -400,7 +403,9 @@ struct client_s {
     BOOL no_control, no_ui;
     BOOL cheat_instant_build; /* developer cheat: owner construction/training completes on next work tick */
     DWORD modal_flags;
-    BOOL quest_dialog_open;
+    /* Bitfield retained in the legacy quest-dialog byte so adding transient
+     * quest attention does not change the raw GAMECLIENT save layout. */
+    BYTE quest_ui_flags;
     menu_t menu;
     struct clientCamera_s {
         CAMERASETUP state;
@@ -1747,6 +1752,8 @@ void G_RefreshInfoPanel(LPEDICT);
 void G_UpdateClientInfoPanels(void);
 void UI_WriteSelectedPortraitLayer(LPEDICT);
 void G_RefreshResourceBar(LPEDICT);
+void G_FlashQuestDialogButton(void);
+void G_ClearQuestDialogButton(LPEDICT);
 void G_AccumulatePlayerFood(LPGAMECLIENT client);
 void G_InitClientUIState(LPGAMECLIENT client);
 void G_UpdateClientResourceBars(void);

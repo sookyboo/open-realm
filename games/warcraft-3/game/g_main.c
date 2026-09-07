@@ -957,7 +957,8 @@ void G_SetClientModal(LPEDICT player, DWORD modal, BOOL open) {
 /* Track Quest ownership per connected client before recomputing global policy. */
 void G_SetQuestDialogOpen(LPEDICT player, BOOL open) {
     if (!player || !player->client || !player->client->connected) return;
-    player->client->quest_dialog_open = !!open;
+    if (open) player->client->quest_ui_flags |= WC3_QUEST_UI_OPEN;
+    else player->client->quest_ui_flags &= (BYTE)~WC3_QUEST_UI_OPEN;
     if (open) player->client->modal_flags |= WC3_MODAL_QUEST;
     else player->client->modal_flags &= ~WC3_MODAL_QUEST;
     G_RefreshQuestPause();
@@ -967,7 +968,7 @@ void G_SetQuestDialogOpen(LPEDICT player, BOOL open) {
 void G_SetClientConnected(LPEDICT player, BOOL connected) {
     if (!player || !player->client) return;
     player->client->connected = connected;
-    if (!connected) player->client->quest_dialog_open = false, player->client->modal_flags = 0;
+    if (!connected) player->client->quest_ui_flags = 0, player->client->modal_flags = 0;
     G_RefreshQuestPause();
 }
 
