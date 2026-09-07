@@ -1143,6 +1143,9 @@ void SCR_LayoutDrawListBox(LPCUIFRAME frame, LPCRECT screen) {
             .icons      = cl.pics,
             .lineHeight = 1.33,
             .textWidth  = row.w,
+            /* Clip rows to the viewport; long entries previously escaped the dialog as a second filename column. */
+            .flags      = DRAW_CLIP,
+            .clip       = list_rect,
             .rect       = row));
         item_y += item_height;
         line = strtok_r(NULL, "\n", &save);
