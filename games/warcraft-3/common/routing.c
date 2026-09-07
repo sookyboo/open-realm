@@ -423,6 +423,96 @@ static void stamp_entity_obstacle(edict_t const *ent, pathMapCell_t *target) {
     }
 }
 
+/* Walkable destructables are authored support surfaces over terrain that may
+ * be unwalkable (bridges over water). Clear only the alive texture's open
+ * cells before ordinary overlays are stamped, preserving its rails and every
+ * other static blocker. */
+static void clear_walkable_surface(edict_t const *ent, pathMapCell_t *target) {
+    point2_t p;
+    pathTex_t const *pt;
+    int angle, rotation;
+    DWORD div_w, div_h;
+
+    if (!ent->destructable.walkable || ent->destructable.dead || !ent->pathtex)
+        return;
+    pt = ent->pathtex;
+    p = LocationToPathMap(&ent->s.origin2);
+    angle = (int)(ent->s.angle * 180.0f / M_PI);
+    rotation = (angle + 450) % 360;
+    if (rotation < 0) rotation += 360;
+    div_w = rotation % 180 ? pt->height : pt->width;
+    div_h = rotation % 180 ? pt->width : pt->height;
+    FOR_LOOP(x, pt->width) FOR_LOOP(y, pt->height) {
+        int tx = (int)x, ty = (int)y, px, py;
+        BOOL blocked = pt->map[x + (pt->height - 1 - y) * pt->width].b > 127;
+        switch (rotation) {
+            case 90: tx = (int)pt->height - 1 - (int)y; ty = (int)x; break;
+            case 180: tx = (int)pt->width - 1 - (int)x; ty = (int)pt->height - 1 - (int)y; break;
+            case 270: tx = (int)y; ty = (int)pt->width - 1 - (int)x; break;
+        }
+        px = tx + p.x - (int)div_w / 2;
+        py = ty + p.y - (int)div_h / 2;
+        if (!blocked && is_valid_point(px, py)) target[px + py * pathmap.width].nowalk = 0;
+    }
+}
+
+/* Dump the exact LT05 footprint after the static bake so terrain, texture, and
+ * radius-independent results can be compared from one bounded run. */
+void CM_DebugPathingFootprint(struct edict_s const *ent, LPCSTR phase, int level) {
+    point2_t p;
+    pathTex_t const *pt;
+    int angle, rotation, min_x, min_y, max_x, max_y;
+    DWORD div_w, div_h, source_blocked = 0, placed_blocked = 0;
+    DWORD terrain_open = 0, baked_open = 0;
+
+    if (!ent || !ent->pathtex || !pathmap.original || !pathmap.terrain || level < 1)
+        return;
+    pt = ent->pathtex;
+    p = LocationToPathMap(&ent->s.origin2);
+    angle = (int)(ent->s.angle * 180.0f / M_PI);
+    rotation = (angle + 450) % 360;
+    if (rotation < 0) rotation += 360;
+    div_w = rotation % 180 ? pt->height : pt->width;
+    div_h = rotation % 180 ? pt->width : pt->height;
+    min_x = p.x - (int)div_w / 2;
+    min_y = p.y - (int)div_h / 2;
+    max_x = min_x + (int)div_w - 1;
+    max_y = min_y + (int)div_h - 1;
+    FOR_LOOP(x, pt->width) FOR_LOOP(y, pt->height) {
+        int tx = (int)x, ty = (int)y, px, py;
+        BOOL blocked = pt->map[x + (pt->height - 1 - y) * pt->width].b > 127;
+        switch (rotation) {
+            case 90: tx = (int)pt->height - 1 - (int)y; ty = (int)x; break;
+            case 180: tx = (int)pt->width - 1 - (int)x; ty = (int)pt->height - 1 - (int)y; break;
+            case 270: tx = (int)y; ty = (int)pt->width - 1 - (int)x; break;
+        }
+        px = tx + p.x - (int)div_w / 2;
+        py = ty + p.y - (int)div_h / 2;
+        source_blocked += blocked;
+        if (blocked && is_valid_point(px, py)) placed_blocked++;
+    }
+    for (int y = min_y; y <= max_y; y++) for (int x = min_x; x <= max_x; x++) {
+        if (!is_valid_point(x, y)) continue;
+        terrain_open += !pathmap.terrain[x + y * pathmap.width].nowalk;
+        baked_open += !pathmap.original[x + y * pathmap.width].nowalk;
+    }
+    fprintf(stderr, "WC3_BRIDGE phase=%s center_cell=(%d,%d) source=%ux%u placed=%ux%u angle=%d rotation=%d source_blocked=%u placed_blocked=%u terrain_open=%u baked_open=%u radius_cell=%0.2f\n",
+            phase, p.x, p.y, pt->width, pt->height, div_w, div_h, angle, rotation,
+            source_blocked, placed_blocked, terrain_open, baked_open, CM_PathCellWorldSize());
+    if (level < 3) return;
+    for (int y = min_y; y <= max_y; y++) {
+        char row[129];
+        int n = 0;
+        for (int x = min_x; x <= max_x && n < (int)sizeof(row) - 1; x++) {
+            BOOL terrain = !is_valid_point(x, y) || pathmap.terrain[x + y * pathmap.width].nowalk;
+            BOOL baked = !is_valid_point(x, y) || pathmap.original[x + y * pathmap.width].nowalk;
+            row[n++] = terrain ? (baked ? 'X' : 't') : (baked ? 'b' : '.');
+        }
+        row[n] = '\0';
+        fprintf(stderr, "WC3_BRIDGE_GRID phase=%s y=%d %s\n", phase, y, row);
+    }
+}
+
 static BOOL entity_blocks_static_pathing(edict_t const *ent) {
     if (!ent || !ent->inuse || (ent->s.renderfx & RF_HIDDEN)) return false;
     /* Unit buildings keep their authored path texture after death for entity
@@ -444,6 +534,10 @@ void CM_BakeStaticObstacles(void) {
     if (!pathmap.terrain || !pathmap.original)
         return;
     memcpy(pathmap.original, pathmap.terrain, cells);
+    FOR_LOOP(i, ge->num_edicts) {
+        edict_t *ent = EDICT_NUM(i);
+        if (ent->inuse) clear_walkable_surface(ent, pathmap.original);
+    }
     FOR_LOOP(i, ge->num_edicts) {
         edict_t *ent = EDICT_NUM(i);
         if (!entity_blocks_static_pathing(ent))

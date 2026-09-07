@@ -323,6 +323,7 @@ static void SP_SpawnDestructable(LPEDICT edict) {
     edict->destructable.alive_collision = edict->collision;
     edict->destructable.initialized = true;
     edict->destructable.dead = false;
+    edict->destructable.walkable = row->walkable;
     edict->destructable.item_table = (DWORD)-1;
     edict->destructable.placement_solid = true;
     edict->destructable.pathing_active = edict->pathtex || edict->collision > 0.0f;
@@ -628,6 +629,7 @@ void G_SpawnEntities(void) {
 
     UI_Init();
     CM_BakeStaticObstacles();
+    if (G_BridgeDebugLevel()) FOR_LOOP(i, globals.num_edicts) G_DebugBridgePathing(&globals.edicts[i], "map_load");
     /* Start simulation from the map load itself so dedicated and listen-server restores share one lifecycle. */
     level.started = true;
 }

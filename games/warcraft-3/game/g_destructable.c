@@ -4,6 +4,17 @@
 #define NO_RANDOM_ITEM_TABLE ((DWORD)-1) // table index; war3map.doo sentinel meaning no random-item table
 #define RANDOM_ITEM_PREFIX_MASK 0x00ffffff // bits; compare the YYI prefix while ignoring its encoded selector byte
 
+/* Read the opt-in bridge diagnostic level without making normal map runs noisy. */
+int G_BridgeDebugLevel(void) {
+    LPCSTR value = gi.CvarString("wc3_bridge_debug", "0");
+    return value ? atoi(value) : 0;
+}
+
+void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase) {
+    if (ent && ent->class_id == MAKEFOURCC('L', 'T', '0', '5') && G_BridgeDebugLevel())
+        CM_DebugPathingFootprint(ent, phase, G_BridgeDebugLevel());
+}
+
 static void G_ApplyDestructableAlivePathing(LPEDICT ent) {
     ent->pathtex = ent->destructable.placement_solid
         ? ent->destructable.alive_pathtex
@@ -256,6 +267,7 @@ static BOOL G_EnterDestructableDeathState(LPEDICT ent,
     G_DestructableStartDeathAnimation(ent);
     if (rebuild_pathing) {
         CM_BakeStaticObstacles();
+        G_DebugBridgePathing(ent, "dead");
     }
     if (publish_event) {
         G_SpawnDestructableLoot(ent);
@@ -362,6 +374,7 @@ BOOL G_RestoreDestructable(LPEDICT ent, FLOAT life, BOOL birth) {
     if (ent->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
     G_DestructableStartAliveAnimation(ent, birth);
     CM_BakeStaticObstacles();
+    G_DebugBridgePathing(ent, birth ? "restored_birth" : "restored_stand");
     return true;
 }
 

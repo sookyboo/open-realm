@@ -249,6 +249,30 @@ TEST(wc3_destructable, death_replacement_pathing_remains_blocking) {
     T_ASSERT(!CM_PointIsPathableForRadius(&center, 0.0f));
 }
 
+TEST(wc3_destructable, walkable_surface_clears_alive_terrain_but_dead_pathing_blocks) {
+    BYTE cells[8 * 8];
+    struct { WORD width, height; COLOR32 map[4]; } alive = { .width = 2, .height = 2 };
+    static one_cell_pathtex_t const dead = { .width = 1, .height = 1, .map = { { 0, 0, 255, 255 } } };
+    static DestructableData_t const data = { .walkable = true };
+    VECTOR2 center = { 4.0f, 4.0f };
+    LPEDICT dest;
+
+    FOR_LOOP(i, sizeof(cells) / sizeof(cells[0])) cells[i] = 2;
+    setup_test_pathmap(8, 8, cells);
+    dest = make_test_destructable(10.0f, center.x, center.y);
+    dest->data.DestructableData = &data;
+    dest->destructable.walkable = true;
+    dest->destructable.alive_pathtex = (pathTex_t *)&alive;
+    dest->destructable.death_pathtex = (pathTex_t *)&dead;
+    dest->pathtex = (pathTex_t *)&alive;
+    CM_BakeStaticObstacles();
+    T_ASSERT(CM_PointIsPathableForRadius(&center, 0.0f));
+    G_KillDestructable(dest, NULL);
+    T_ASSERT(!CM_PointIsPathableForRadius(&center, 0.0f));
+    G_RestoreDestructable(dest, 10.0f, true);
+    T_ASSERT(CM_PointIsPathableForRadius(&center, 0.0f));
+}
+
 TEST(wc3_destructable, placement_retains_inline_drop_sets) {
     droppableItem_t entries[] = {
         { MAKEFOURCC('r', 'a', 't', 'f'), 100 },

@@ -267,6 +267,7 @@ BOOL  CM_FlowReachedGoal(DWORD generation, FLOAT x, FLOAT y);
 BOOL  CM_FlowCanReach(DWORD generation, FLOAT x, FLOAT y);
 VECTOR2 get_flow_direction(DWORD heatmapindex, float fnx, float fny);
 void CM_BakeStaticObstacles(void);
+void CM_DebugPathingFootprint(struct edict_s const *ent, LPCSTR phase, int level);
 void CM_InvalidatePathCache(void);
 void CM_SetupPathMap(DWORD width, DWORD height, BYTE const *cells);
 BOOL CM_IsMapLoaded(LPCSTR mapFilename);
