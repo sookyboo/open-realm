@@ -705,7 +705,7 @@ static BOOL M_UnitUsesWaterSurface(LPCEDICT self, LPCSTR movetp) {
  * visually travel below LT05 instead of receiving its deck height. */
 static void M_DebugBridgeGround(LPCEDICT self, LPCEDICT surface, BOOL inside, FLOAT before, FLOAT after) {
     static DWORD count;
-    if (G_BridgeDebugLevel() < 3 || count >= 128 || !self || !surface ||
+    if (G_BridgeDebugLevel() < 3 || count >= 128 || !self || !surface || surface->destructable.dead ||
         surface->class_id != MAKEFOURCC('L', 'T', '0', '5') ||
         fabsf(self->s.origin.x - surface->s.origin.x) > 768.0f ||
         fabsf(self->s.origin.y - surface->s.origin.y) > 768.0f)
