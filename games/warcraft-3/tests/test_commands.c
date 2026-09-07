@@ -187,6 +187,19 @@ TEST(commands, save_list_returns_newest_sav_basenames_first) {
     remove(ignored);
 }
 
+TEST(commands, delete_save_removes_named_save_file) {
+    PATHSTR path;
+    FILE *file;
+
+    setup_command_tests();
+    FS_SetHomeDirectory("/tmp/openwarcraft3-save-delete-test");
+    FS_SavePath("manual", path, sizeof(path));
+    remove(path);
+    file = fopen(path, "wb"); T_NOT_NULL(file); if (file) fclose(file);
+    T_ASSERT(FS_DeleteSave("manual"));
+    T_ASSERT(!FS_FileExists(path));
+}
+
 TEST(commands, config_path_uses_home_game_directory) {
     PATHSTR path;
 

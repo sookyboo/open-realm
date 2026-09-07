@@ -125,7 +125,8 @@ before committing. The transient-window client owns editing while
 the modal lives; text is not round-tripped to the server on every keypress. The Save command submits the final value once. Menu save
 names are trimmed, may optionally end in `.sav`, are limited to `CMDARG_LEN - 1`, and reject control characters plus
 `\ / : * ? " < > |`. `Quick Save` normalizes to the existing `quick` basename. Saving the same name currently replaces that file
-directly; the authored overwrite-confirm panel remains disabled.
+directly; the authored overwrite-confirm panel remains disabled. Delete removes the selected row and refreshes the Save panel without
+closing the modal.
 
 Named loads use `G_RequestLoadGameNamed()` -> `MenuAction("load", name)`. This keeps the same Quake-II-style session boundary as the
 console `load` command: the selected save is captured while the window callback is active, then `SV_GetSaveMap` / `SV_LoadGame` run
@@ -133,7 +134,7 @@ from the following client frame after the callback has returned.
 
 ## Known Gaps
 
-- Delete and overwrite-confirm panels are still disabled. Saving an existing name overwrites it immediately.
+- The overwrite-confirm panel remains disabled. Saving an existing name overwrites it immediately.
 - Save-list ordering is alphabetical by basename rather than retail timestamp/metadata ordering.
 - Options, Help, Tips, and Restart remain disabled.
 - The in-game pause button is an OpenRealm extension over the cited current Warsmash behavior: both Pause and Return resume/close.

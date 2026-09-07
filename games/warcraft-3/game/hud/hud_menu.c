@@ -214,6 +214,9 @@ void UI_LoadHudMenu(void) {
             UI_SetPoint(&hud.save_list, FRAMEPOINT_BOTTOMRIGHT, root, FRAMEPOINT_BOTTOMRIGHT, 0.0f, 0.0f);
             /* CONTROL art is embedded during serialization, so copy its authored backdrop onto the native list payload. */
             hud.save_list.Texture = hud.save_list_art.MapListBoxBackdrop->Texture;
+            FOR_LOOP(i, 4)
+                hud.save_list.ListBox.Border = MAX(hud.save_list.ListBox.Border,
+                                                   hud.save_list_art.MapListBoxBackdrop->Backdrop.BackgroundInsets[i]);
             UI_SetParent(hud.save_list_art.MapListScrollBar, &hud.save_list);
             /* MapListBox.fdf supplies only TOPRIGHT; retail list setup stretches the scrollbar to the chooser height. */
             UI_SetPoint(hud.save_list_art.MapListScrollBar, FRAMEPOINT_TOPRIGHT, &hud.save_list, FRAMEPOINT_TOPRIGHT, 0.0f, 0.0f);
@@ -347,6 +350,8 @@ static void MenuSelectSavePanel(menuSavePanel_t panel) {
                  list->Name);
     }
     MenuSetButton(hud.save_menu.LoadGameLoadButton, !saving && can_load, can_load ? load_command : NULL);
+    MenuSetButton(hud.save_menu.SaveGameDeleteButton, saving && saves > 0,
+                  saving && saves > 0 ? "menu_delete_named \"{SaveFileList}\"" : NULL);
 
     if (MenuSaveDebugLevel())
         fprintf(stderr,

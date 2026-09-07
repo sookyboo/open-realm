@@ -2,6 +2,7 @@
 
 #include "mpq.h"
 #include "test.h"
+#include <errno.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -446,6 +447,21 @@ void FS_SavePath(LPCSTR rel, LPSTR out, DWORD out_size) {
     if (!rel || !FS_EnsureSaveDirectory()) return;
     extension = FS_PathHasExtension(rel, ".sav") ? "" : ".sav";
     snprintf(out, out_size, "%s/%s%s", fs_save_dir, rel, extension);
+}
+
+/* Delete one resolved save slot without exposing unrestricted filesystem removal to game modules. */
+BOOL FS_DeleteSave(LPCSTR rel) {
+    PATHSTR path;
+
+    if (!rel || !*rel || !strcmp(rel, ".") || !strcmp(rel, "..") || strpbrk(rel, "/\\")) {
+        fprintf(stderr, "FS_DeleteSave: invalid save basename\n");
+        return false;
+    }
+    FS_SavePath(rel, path, sizeof(path));
+    if (!path[0]) return false;
+    if (remove(path) == 0) return true;
+    fprintf(stderr, "FS_DeleteSave: cannot remove %s: %s\n", path, strerror(errno));
+    return false;
 }
 
 static BOOL FS_HasExtension(LPCSTR filename, LPCSTR extension) {

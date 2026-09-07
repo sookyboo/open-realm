@@ -253,8 +253,9 @@ The list is exposed to game modules through `gi.ListSaves`. The WC3 menu only pu
 The basename `quick` is rendered as `Quick Save`, preserving the F6/console quick slot alongside named files.
 
 Menu-entered names are trimmed, optional `.sav` is removed, length is capped to `CMDARG_LEN - 1`, and path/control characters are
-rejected. `Quick Save` normalizes back to `quick`. Saving an existing basename currently overwrites it immediately; Delete and the
-authored overwrite-confirm panel are intentionally still disabled.
+rejected. `Quick Save` normalizes back to `quick`. Saving an existing basename currently overwrites it immediately. Delete removes the
+selected basename through the filesystem import and replaces the same unique Save window, preserving modal ownership while refreshing
+the rows. The authored overwrite-confirm panel remains disabled.
 
 Loading remains a session boundary. `menu_load_named` calls `G_RequestLoadGameNamed()`, which queues `MenuAction("load", name)`. The
 client resolves the saved map and calls `SV_LoadGame()` on the following frame, after the gameplay-window callback has returned. Do

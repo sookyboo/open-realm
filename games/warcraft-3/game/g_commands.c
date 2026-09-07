@@ -1136,7 +1136,7 @@ CLIENTCOMMAND(MenuSaveNamed) {
     char name[CMDARG_LEN] = { 0 };
 
     (void)clent;
-    if (!G_IsSinglePlayer() || !gi.SavePath || argc < 2 ||
+    if (!G_IsSinglePlayer() || argc < 2 ||
         !MenuNormalizeSaveName(argv[1], name, sizeof(name))) {
         fprintf(stderr, "WC3 menu: invalid save name\n");
         return;
@@ -1153,6 +1153,21 @@ CLIENTCOMMAND(MenuLoadNamed) {
     if (!G_IsSinglePlayer() || argc < 2 ||
         !MenuNormalizeSaveName(argv[1], name, sizeof(name))) return;
     G_RequestLoadGameNamed(name);
+}
+
+CLIENTCOMMAND(MenuDeleteNamed) {
+    char name[CMDARG_LEN] = { 0 };
+
+    if (!G_IsSinglePlayer() || argc < 2 || !MenuNormalizeSaveName(argv[1], name, sizeof(name))) {
+        fprintf(stderr, "WC3 menu: invalid save name for deletion\n");
+        return;
+    }
+    if (!gi.DeleteSave(name)) {
+        fprintf(stderr, "WC3 menu: failed to delete save %s\n", name);
+        return;
+    }
+    /* Replacing the unique window refreshes its rows without releasing modal pause ownership. */
+    UI_ShowGameMenuSave(clent);
 }
 
 CLIENTCOMMAND(MenuSaveQuick) {
@@ -1797,6 +1812,7 @@ clientCommand_t clientCommands[] = {
     { "menu_load_game", CMD_MenuLoadGame },
     { "menu_save_named", CMD_MenuSaveNamed },
     { "menu_load_named", CMD_MenuLoadNamed },
+    { "menu_delete_named", CMD_MenuDeleteNamed },
     { "menu_save_quick", CMD_MenuSaveQuick },
     { "menu_load_quick", CMD_MenuLoadQuick },
     { "resume", CMD_Resume },

@@ -89,6 +89,8 @@ struct game_import {
     void (*SavePath)(LPCSTR rel, LPSTR out, DWORD out_size);
     /* Enumerate save basenames as a double-NUL-terminated list. */
     DWORD (*ListSaves)(LPSTR out, DWORD out_size);
+    /* Delete one save basename from the writable save directory. */
+    BOOL (*DeleteSave)(LPCSTR rel);
 };
 
 struct client;

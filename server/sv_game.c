@@ -213,6 +213,7 @@ void SV_InitGameProgs(void) {
     import.UserPath = FS_UserPath;
     import.SavePath = FS_SavePath;
     import.ListSaves = FS_ListSaves;
+    import.DeleteSave = FS_DeleteSave;
 
     ge = GetGameAPI(&import);
     ge->Init();
