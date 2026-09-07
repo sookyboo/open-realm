@@ -212,7 +212,12 @@ void UI_LoadHudMenu(void) {
             UI_SetParent(&hud.save_list, root);
             UI_SetPoint(&hud.save_list, FRAMEPOINT_TOPLEFT, root, FRAMEPOINT_TOPLEFT, 0.0f, 0.0f);
             UI_SetPoint(&hud.save_list, FRAMEPOINT_BOTTOMRIGHT, root, FRAMEPOINT_BOTTOMRIGHT, 0.0f, 0.0f);
+            /* CONTROL art is embedded during serialization, so copy its authored backdrop onto the native list payload. */
+            hud.save_list.Texture = hud.save_list_art.MapListBoxBackdrop->Texture;
             UI_SetParent(hud.save_list_art.MapListScrollBar, &hud.save_list);
+            /* MapListBox.fdf supplies only TOPRIGHT; retail list setup stretches the scrollbar to the chooser height. */
+            UI_SetPoint(hud.save_list_art.MapListScrollBar, FRAMEPOINT_TOPRIGHT, &hud.save_list, FRAMEPOINT_TOPRIGHT, 0.0f, 0.0f);
+            UI_SetPoint(hud.save_list_art.MapListScrollBar, FRAMEPOINT_BOTTOMRIGHT, &hud.save_list, FRAMEPOINT_BOTTOMRIGHT, 0.0f, 0.0f);
             if (hud.save_menu.SaveGameFileEditBoxText)
                 hud.save_list.Font = hud.save_menu.SaveGameFileEditBoxText->Font;
         }
@@ -320,6 +325,9 @@ static void MenuSelectSavePanel(menuSavePanel_t panel) {
     UI_SetHidden(hud.menu.TipsPanel, true);
     UI_SetHidden(hud.save_menu.SaveOnly, !saving);
     UI_SetHidden(hud.save_menu.LoadOnly, saving);
+    /* Retail switches these mutually exclusive controller containers; leaving them visible overlaps their controls. */
+    UI_SetHidden(hud.save_menu.EscMenuOverwriteContainer, true);
+    UI_SetHidden(hud.save_menu.EscMenuDeleteContainer, true);
     UI_SetSize(hud.menu.EscMenuMainPanel, hud.save_menu.EscMenuSaveLoadContainer->Width,
                hud.save_menu.EscMenuSaveLoadContainer->Height);
     UI_SetSize(hud.menu.EscMenuBackdrop, hud.save_menu.EscMenuSaveLoadContainer->Width,
