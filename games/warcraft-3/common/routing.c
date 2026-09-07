@@ -770,6 +770,13 @@ static bool is_pathable_node_original(int x, int y) {
  * Footman on a 32-unit pathing grid and rejected valid bridge approaches. */
 static bool is_pathable_world_for_radius(LPCVECTOR2 location, FLOAT radius) {
     int i, j;
+    point2_t center = LocationToPathMap(location);
+
+    /* A walkable bridge is a support lane, not a square terrain opening. Once
+     * the mover's centre is on that lane, its radius samples may touch the
+     * diagonal rails without making the deck itself unwalkable. */
+    if (walkable_surface_cell(center.x, center.y))
+        return is_pathable_node_original(center.x, center.y);
 
     for (i = -1; i <= 1; i++) {
         for (j = -1; j <= 1; j++) {
@@ -802,7 +809,11 @@ static bool is_pathable_node_original_for_radius_cells(int x, int y, int radius_
             - pathmap.obstacle_prefix[x0 + (y1 + 1) * stride]
             - pathmap.obstacle_prefix[(x1 + 1) + y0 * stride]
             + pathmap.obstacle_prefix[x0 + y0 * stride];
-    return blocked == 0;
+    if (blocked == 0) return true;
+    /* The bridge deck already cleared its authored centre cells from the
+     * terrain baseline. Do not reject a radius-expanded centre solely because
+     * the diagonal rail cells surround that support lane. */
+    return walkable_surface_cell(x, y) && is_pathable_node_original(x, y);
 }
 
 static bool closest_pathable_node_original(LPCVECTOR2 location, FLOAT radius, point2_t *out) {

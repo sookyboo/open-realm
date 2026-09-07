@@ -267,6 +267,9 @@ TEST(wc3_destructable, walkable_surface_clears_alive_terrain_but_dead_pathing_bl
     dest->pathtex = (pathTex_t *)&alive;
     CM_BakeStaticObstacles();
     T_ASSERT(CM_PointIsPathableForRadius(&center, 0.0f));
+    /* A bridge lane remains valid for a full-size mover even when the radius
+     * samples reach the diagonal rail cells around the deck. */
+    T_ASSERT(CM_PointIsPathableForRadius(&center, 32.0f));
     G_KillDestructable(dest, NULL);
     T_ASSERT(!CM_PointIsPathableForRadius(&center, 0.0f));
     G_RestoreDestructable(dest, 10.0f, true);
