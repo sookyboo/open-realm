@@ -114,14 +114,9 @@ effect opts into the generic `UIFLAG_DRAW_AFTER_PARENT` compositor path, so the
 normal/pushed/hover button art is drawn first and the animated particles are
 then layered on top. Other `FT_SPRITE` frames retain the legacy underlay pass.
 
-The stock effect uses PRE2 particle emitters. During the current bounded Quest
-attention diagnostic, the renderer preserves all authored Head/Tail content and
-can isolate either the head/tail part (`r_mdx_ui_pre2_parts`) or one authored
-emitter by one-based ordinal (`r_mdx_ui_pre2_emitter`, with 0 meaning all).
-Runtime A/B testing established that head-only produces no visible Quest effect
-while tail-only still contains both the desired sweep and the unwanted mirrored
-copy. The remaining diagnostic therefore isolates the two authored emitters; do
-not blanket-disable PRE2 tails because that also removes the visible Quest effect.
+The stock effect uses PRE2 particle emitters. The renderer preserves all
+authored Head/Tail content and maps the authored mode to the corresponding
+runtime draw mask, including the `Both` mode.
 
 Quest attention remains active until the Quest button command is activated.
 Opening Quest through that button clears the particle state and re-sends

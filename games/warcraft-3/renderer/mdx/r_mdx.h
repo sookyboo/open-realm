@@ -53,13 +53,6 @@ static inline DWORD MDLX_ParticleEmitterDrawMask(DWORD head_or_tail) {
     }
 }
 
-/* Diagnostic selector for nested UI PRE2 emitters. Selector 0 draws every
- * emitter; positive selectors are one-based list ordinals. Keep this generic
- * so a particle-only UI model can be isolated without matching asset names. */
-static inline bool MDLX_UIEmitterSelected(int selector, int ordinal) {
-    return selector <= 0 || selector == ordinal;
-}
-
 enum { BZ_MDX_VERTEX_BUFFER, BZ_MDX_INDEX_BUFFER, BZ_MDX_BUFFER_COUNT };
 
 #define MDLXNODE_Helper 0

@@ -377,8 +377,8 @@ typedef struct {
     LONG thematic_volume;
 } wc3MusicState_t;
 
-#define WC3_QUEST_UI_OPEN      (1u << 0)
-#define WC3_QUEST_UI_ATTENTION (1u << 1)
+#define WC3_QUEST_UI_OPEN      (1u << 0) // bit; owns the player's Quest modal state; used in quest_ui_flags
+#define WC3_QUEST_UI_ATTENTION (1u << 1) // bit; keeps the Quest button sparkle active; used in quest_ui_flags
 
 struct client_s {
     PLAYER ps;

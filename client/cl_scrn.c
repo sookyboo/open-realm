@@ -934,23 +934,6 @@ void SCR_LayoutDrawSprite(LPCUIFRAME frame, LPCRECT screen) {
     /* Sprite model origins are frame bottom-lefts (matching FDF/Warsmash
      * SpriteFrame). Layout rectangles use top-left Y, so pass the bottom edge
      * and let the WC3 renderer perform its existing Y-axis conversion. */
-#ifdef WC3_DEBUG_QUEST_FLASH
-    if (frame->flagsvalue & UIFLAG_DRAW_AFTER_PARENT) {
-        static DWORD trace_count;
-        if (trace_count++ < 8) {
-            LPCUIFRAME parent = frame->parent < SCR_NumFrames() ? SCR_Frame(frame->parent) : NULL;
-            LPCRECT parent_rect = parent ? SCR_LayoutRect(parent) : NULL;
-            fprintf(stderr,
-                    "WC3_UI_SPRITE_RECT frame=%u parent=%u sprite=(%.6f,%.6f,%.6f,%.6f) "
-                    "parentRect=(%.6f,%.6f,%.6f,%.6f) drawOrigin=(%.6f,%.6f)\n",
-                    (unsigned)frame->number, (unsigned)frame->parent,
-                    screen->x, screen->y, screen->w, screen->h,
-                    parent_rect ? parent_rect->x : 0.0f, parent_rect ? parent_rect->y : 0.0f,
-                    parent_rect ? parent_rect->w : 0.0f, parent_rect ? parent_rect->h : 0.0f,
-                    screen->x, screen->y + screen->h);
-        }
-    }
-#endif
     re.DrawSprite(model, anim, screen->x, screen->y + screen->h);
 }
 

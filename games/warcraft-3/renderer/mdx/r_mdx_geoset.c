@@ -122,25 +122,6 @@ static void MDLX_RenderTailEmitter(mdxModel_t const *model,
     VECTOR3 pivot = { 0, 0, 0 };
     Matrix4_multiply(modelMatrix, &node_matrices[emitter->node.node_id], &matrix);
     VECTOR3 spine = Matrix4_multiply_vector3(&matrix, &zero);
-#ifdef WC3_DEBUG_QUEST_FLASH
-    if (tr.viewDef.rdflags & RDF_NOWORLDMODEL) {
-        static DWORD trace_count;
-        if (trace_count++ < 16) {
-            VECTOR3 pivot_spine;
-            if (emitter->node.node_id < (DWORD)model->num_pivots)
-                pivot = model->pivots[emitter->node.node_id];
-            pivot_spine = Matrix4_multiply_vector3(&matrix, &pivot);
-            fprintf(stderr,
-                    "WC3_UI_PRE2_ORIGIN emitter=\"%s\" node=%u pivot=(%.6f,%.6f,%.6f) "
-                    "zero=(%.6f,%.6f,%.6f) pivoted=(%.6f,%.6f,%.6f) delta=(%.6f,%.6f,%.6f)\n",
-                    emitter->node.name, (unsigned)emitter->node.node_id,
-                    pivot.x, pivot.y, pivot.z,
-                    spine.x, spine.y, spine.z,
-                    pivot_spine.x, pivot_spine.y, pivot_spine.z,
-                    pivot_spine.x - spine.x, pivot_spine.y - spine.y, pivot_spine.z - spine.z);
-        }
-    }
-#endif
     FLOAT dt = (FLOAT)tr.viewDef.deltaTime / 1000.0f;
     COLOR32 c0 = MDLX_GetEmitterColor(emitter, 0);
     VECTOR3 col = { c0.r / 255.0f, c0.g / 255.0f, c0.b / 255.0f };
@@ -776,19 +757,8 @@ static void MDLX_RenderParticleEmitters(const renderEntity_t *entity, const mdxM
     }
     float const frame = LerpNumber(entity->oldframe, entity->frame, tr.viewDef.lerpfrac);
 
-    int emitter_ordinal = 0;
     FOR_EACH_LIST(mdxParticleEmitter_t, emitter, model->emitters) {
         float visibility = 1.0f, rate = emitter->EmissionRate;
-        int const ordinal = ++emitter_ordinal;
-
-        if (tr.viewDef.rdflags & RDF_NOWORLDMODEL) {
-            /* Diagnostic-only one-based emitter selector for nested UI PRE2
-             * models. 0=all (default), 1=first emitter, 2=second, ... */
-            int const ui_emitter = atoi(ri.CvarString ?
-                ri.CvarString("r_mdx_ui_pre2_emitter", "0") : "0");
-            if (!MDLX_UIEmitterSelected(ui_emitter, ordinal))
-                continue;
-        }
 
         if (emitter->keytracks.Visibility) {
             MDLX_GetModelKeytrackValue(model, emitter->keytracks.Visibility, entity->frame, &visibility);
@@ -799,15 +769,6 @@ static void MDLX_RenderParticleEmitters(const renderEntity_t *entity, const mdxM
             MDLX_GetModelKeytrackValue(model, emitter->keytracks.EmissionRate, frame, &rate);
 
         DWORD draw_mask = emitter->emitter_type;
-        if (tr.viewDef.rdflags & RDF_NOWORLDMODEL) {
-            /* Diagnostic-only A/B switch for nested UI-model PRE2 rendering:
-             * 0=none, 1=head, 2=tail, 3=both (default).  Keep world-model
-             * particle behavior untouched. */
-            int const ui_parts = atoi(ri.CvarString ?
-                ri.CvarString("r_mdx_ui_pre2_parts", "3") : "3");
-            if (ui_parts >= 0 && ui_parts <= 3)
-                draw_mask &= (DWORD)ui_parts;
-        }
         if (draw_mask & MODEL_EMITTER_HEAD)
             MDLX_RenderHeadEmitter(model, emitter, model_matrix, frame, entity->team&TEAM_MASK);
         if (draw_mask & MODEL_EMITTER_TAIL)

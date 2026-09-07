@@ -245,33 +245,6 @@ void MDLX_DrawSpriteTinted(LPCMODEL model, LPCSTR anim, float x, float y, COLOR3
     viewdef.viewport = (struct rect) {0,0,1,1};
 
     entity.flags |= RF_NO_FOGOFWAR | RF_NO_SHADOW | RF_NO_LIGHTING;
-#ifdef WC3_DEBUG_QUEST_FLASH
-    if (mdx->emitters) {
-        static DWORD trace_count;
-        if (trace_count < 32) {
-            int const ui_parts = atoi(ri.CvarString ?
-                ri.CvarString("r_mdx_ui_pre2_parts", "3") : "3");
-            int const ui_emitter = atoi(ri.CvarString ?
-                ri.CvarString("r_mdx_ui_pre2_emitter", "0") : "0");
-            fprintf(stderr, "WC3_UI_PRE2 sprite model=%p pos=(%.4f,%.4f) frame=%u parts=%d emitter=%d\n",
-                    (void *)model, x, y, (unsigned)entity.frame, ui_parts, ui_emitter);
-            FOR_EACH_LIST(mdxParticleEmitter_t, emitter, mdx->emitters) {
-                VECTOR3 pivot = {0};
-                if (emitter->node.node_id < (DWORD)mdx->num_pivots)
-                    pivot = mdx->pivots[emitter->node.node_id];
-                if (trace_count++ >= 32) break;
-                fprintf(stderr,
-                        "WC3_UI_PRE2 emitter name=\"%s\" node=%u pivot=(%.4f,%.4f,%.4f) flags=%u mask=0x%x tail=%.4f rate=%.3f speed=%.3f var=%.3f lat=%.3f life=%.3f size=(%.5f,%.5f,%.5f)\n",
-                        emitter->node.name, (unsigned)emitter->node.node_id, pivot.x, pivot.y, pivot.z,
-                        (unsigned)emitter->FrameFlags, (unsigned)emitter->emitter_type,
-                        emitter->TailLength, emitter->EmissionRate, emitter->Speed, emitter->Variation,
-                        emitter->Latitude, emitter->LifeSpan,
-                        emitter->ParticleScaling[0], emitter->ParticleScaling[1], emitter->ParticleScaling[2]);
-            }
-        }
-    }
-#endif
-
     RECT screen = R_UISceneRect();
     entity.origin = fdf_sprite_coords
         ? (VECTOR3){x, y, 0}

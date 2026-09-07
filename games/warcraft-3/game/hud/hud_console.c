@@ -271,14 +271,14 @@ void UI_LoadHudConsole(void) {
 }
 
 #define WC3_DEFAULT_QUEST_CHANGED_PARTICLES "UI\\Feedback\\QuestButton\\UI-QuestButtonOn.mdl"
-#define WC3_UI_AUTHORED_PIXEL 0.001f
+#define WC3_UI_AUTHORED_PIXEL 0.001f // FDF units/pixel; maps the 800x600 authored canvas; used for sparkle tuning
 
 static FLOAT UI_QuestSparklePixelOffset(LPCSTR name, LPCSTR default_value) {
     LPCSTR value;
 
-    if (!name || !*name || !gi.CvarString) return 0.0f;
+    if (!name || !*name) return 0.0f;
     value = gi.CvarString(name, default_value ? default_value : "0");
-    return value ? (FLOAT)atof(value) * WC3_UI_AUTHORED_PIXEL : 0.0f;
+    return (FLOAT)atof(value) * WC3_UI_AUTHORED_PIXEL;
 }
 
 /* Quest attention is a separate animated model, not SIMPLEBUTTON UseHighlight.
@@ -325,14 +325,6 @@ static void UI_WriteQuestChangedParticles(LPGAMECLIENT client) {
     /* The sparkle is foreground decoration: draw it after the parent button's
      * normal/pushed/hover art instead of in the generic sprite underlay pass. */
     frame.flagsvalue |= UIFLAG_DRAW_AFTER_PARENT;
-#ifdef WC3_DEBUG_QUEST_FLASH
-    {
-        static DWORD trace_count;
-        if (trace_count++ < 8)
-            fprintf(stderr, "WC3_QUEST_FLASH sprite player=%u parent=%u model=%u path=\"%s\"\n",
-                    (unsigned)client->ps.number, (unsigned)parent, (unsigned)frame.tex.index, model);
-    }
-#endif
     UI_WriteProxyFrameToParent(&frame, NULL, 0, parent);
 }
 
@@ -359,14 +351,6 @@ void G_FlashQuestDialogButton(void) {
         LPGAMECLIENT client = game.clients + i;
         if (!client->connected || (client->quest_ui_flags & WC3_QUEST_UI_ATTENTION)) continue;
         client->quest_ui_flags |= WC3_QUEST_UI_ATTENTION;
-#ifdef WC3_DEBUG_QUEST_FLASH
-        {
-            static DWORD trace_count;
-            if (trace_count++ < 8)
-                fprintf(stderr, "WC3_QUEST_FLASH attention player=%u time=%u flags=0x%02x\n",
-                        (unsigned)client->ps.number, (unsigned)level.time, (unsigned)client->quest_ui_flags);
-        }
-#endif
         G_ResendQuestButtonConsole(client);
     }
 }
