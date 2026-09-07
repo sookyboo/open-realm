@@ -1102,7 +1102,8 @@ TEST(client_layout, simple_button_programmatic_highlight_pulses_authored_blend_m
     test_client_stubs_init();
     cl.pics[1] = (LPTEXTURE)(uintptr_t)1; cl.pics[2] = (LPTEXTURE)(uintptr_t)2;
     test_button_highlight_draws = 0; test_button_highlight_blend = BLEND_MODE_NONE;
-    re.DrawImageEx = capture_button_highlight;
+    /* SIMPLEBUTTON submits its normal image and text before the highlight, so mock the complete renderer contract. */
+    re.DrawImage = capture_status_image; re.DrawText = capture_textarea; re.DrawImageEx = capture_button_highlight;
 
     cl.time = 0;
     SCR_LayoutSimpleButton(&frame, &screen);
