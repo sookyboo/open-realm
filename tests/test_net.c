@@ -1783,7 +1783,7 @@ TEST(client_layout, sprite_draw_after_parent_is_foreground_without_reordering_le
 
     parent.size.width = 0.085f;
     parent.size.height = 0.022f;
-    sprite.flagsvalue = UIFLAG_DRAW_AFTER_PARENT;
+    sprite.flagsvalue |= UIFLAG_DRAW_AFTER_PARENT;
 
     test_client_stubs_init();
     cl.pics[1] = (LPTEXTURE)(uintptr_t)1;
