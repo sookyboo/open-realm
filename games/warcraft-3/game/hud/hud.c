@@ -542,7 +542,7 @@ BOOL UI_BuildFrameForWrite(LPCFRAMEDEF frame,
             LPCFRAMEDEF text_frame = frame->Edit.TextFrame[0]
                 ? UI_FindFrameNear(frame, frame->Edit.TextFrame)
                 : NULL;
-            LPCSTR save_debug = gi.CvarString ? gi.CvarString("wc3_save_menu_debug", "0") : "0";
+            LPCSTR save_debug = gi.CvarString("wc3_save_menu_debug", "0");
             if (save_debug && atoi(save_debug) >= 2 &&
                 !strcmp(frame->Name, "SaveGameFileEditBox")) {
                 fprintf(stderr,

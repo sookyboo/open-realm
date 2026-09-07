@@ -51,12 +51,6 @@ typedef struct {
     char log_text[WC3_MESSAGE_LOG_TEXT_SIZE];
     EscMenuMainPanelGame_t menu;
     EscMenuSaveGamePanel_t save_menu;
-    ChatDialog_t save_dialog;
-    /* Runtime clones inserted into save_dialog. These must live with hud so
-     * UI_ResetHud() invalidates them together with the FDF frame arena. */
-    LPFRAMEDEF save_edit, save_edit_text;
-    LPFRAMEDEF save_button, save_cancel_button;
-    LPFRAMEDEF load_button, load_cancel_button;
     AllianceDialog_t allies;
     GameResultDialog_t result;
     CinematicPanel_t cinematic;

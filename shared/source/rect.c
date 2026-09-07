@@ -23,7 +23,10 @@ RECT Rect_div(LPCRECT rect, int res) {
 }
 
 RECT Rect_inset(LPCRECT rect, float inset) {
-    return (RECT){ rect->x + inset, rect->y + inset, rect->w - inset * 2, rect->h - inset * 2 };
+    return (RECT){
+        .x = rect->x + inset, .y = rect->y + inset,
+        .w = rect->w - inset * 2, .h = rect->h - inset * 2,
+    };
 }
 
 VECTOR2 Rect_center(LPCRECT rect) {

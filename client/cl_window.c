@@ -2,9 +2,9 @@
 #include "menu_text_input.h"
 #include <ctype.h>
 
-#define MAX_WINDOW_SCROLL_VALUES 32
-#define MAX_WINDOW_EDIT_VALUES 8
-#define MAX_WINDOW_LIST_VALUES 16
+#define MAX_WINDOW_SCROLL_VALUES 32 // entries; bounds retained scroll state; used per transient window
+#define MAX_WINDOW_EDIT_VALUES 8 // entries; bounds retained edit state; used per transient window
+#define MAX_WINDOW_LIST_VALUES 16 // entries; bounds retained list state; used per transient window
 
 typedef struct {
     DWORD frame;
@@ -23,6 +23,11 @@ typedef struct {
     DWORD frame;
     SHORT selected;
 } clientWindowList_t;
+
+typedef struct {
+    LPSTR data;
+    DWORD size;
+} windowTextOut_t;
 
 typedef struct clientWindow_s {
     DWORD id, class_id, flags;
@@ -363,27 +368,27 @@ static void CL_WindowFocusEdit(clientWindow_t *window, LPCUIFRAME edit) {
     CL_SetTransientTextInput(true);
 }
 
-static LPCSTR CL_WindowListSelectedText(LPCUIFRAME frame, SHORT selected, LPSTR out, DWORD out_size) {
+static LPCSTR CL_WindowListSelectedText(LPCUIFRAME frame, SHORT selected, windowTextOut_t *out) {
     char items[2048];
     char *save = NULL, *line;
     int index = 0;
 
-    if (!out || out_size == 0) return "";
-    out[0] = '\0';
-    if (!frame || !frame->text || selected < 0) return out;
+    if (!out || !out->data || out->size == 0) return "";
+    out->data[0] = '\0';
+    if (!frame || !frame->text || selected < 0) return out->data;
     snprintf(items, sizeof(items), "%s", frame->text);
     for (line = strtok_r(items, "\n", &save); line; line = strtok_r(NULL, "\n", &save), index++) {
         char *hidden;
         if (index != selected) continue;
         hidden = strchr(line, '\t');
-        snprintf(out, out_size, "%s", hidden && hidden[1] ? hidden + 1 : line);
-        return out;
+        snprintf(out->data, out->size, "%s", hidden && hidden[1] ? hidden + 1 : line);
+        return out->data;
     }
-    return out;
+    return out->data;
 }
 
-static BOOL CL_WindowControlValue(clientWindow_t *window, LPCSTR id, LPSTR out, DWORD out_size) {
-    if (!window || !id || !*id || !out || out_size == 0) return false;
+static BOOL CL_WindowControlValue(clientWindow_t *window, LPCSTR id, windowTextOut_t *out) {
+    if (!window || !id || !*id || !out || !out->data || out->size == 0) return false;
     FOR_LOOP(i, SCR_NumFrames()) {
         LPCUIFRAME frame = SCR_Frame(i);
         if (!frame || !frame->buffer.data) continue;
@@ -393,7 +398,7 @@ static BOOL CL_WindowControlValue(clientWindow_t *window, LPCSTR id, LPSTR out, 
             if (strcmp(edit->id, id)) continue;
             value = CL_WindowEditValue(window, frame, true);
             if (!value) return false;
-            snprintf(out, out_size, "%s", value->text);
+            snprintf(out->data, out->size, "%s", value->text);
             return true;
         }
         if (frame->flags.type == FT_LISTBOX && frame->buffer.size >= sizeof(uiListBox_t)) {
@@ -402,40 +407,45 @@ static BOOL CL_WindowControlValue(clientWindow_t *window, LPCSTR id, LPSTR out, 
             if (strcmp(list->id, id)) continue;
             value = CL_WindowListValue(window, frame, true);
             if (!value) return false;
-            CL_WindowListSelectedText(frame, value->selected, out, out_size);
-            return out[0] != '\0';
+            CL_WindowListSelectedText(frame, value->selected, out);
+            return out->data[0] != '\0';
         }
     }
     return false;
 }
 
-static void CL_WindowFormatCommand(clientWindow_t *window, LPCSTR src, LPSTR dst, DWORD dsz) {
+static BOOL CL_WindowFormatCommand(clientWindow_t *window, LPCSTR src, windowTextOut_t *dst) {
     DWORD out = 0;
 
-    if (!dst || dsz == 0) return;
-    dst[0] = '\0';
-    if (!src) return;
-    for (DWORD i = 0; src[i] && out + 1 < dsz; i++) {
+    if (!dst || !dst->data || dst->size == 0) return false;
+    dst->data[0] = '\0';
+    if (!src) return false;
+    for (DWORD i = 0; src[i] && out + 1 < dst->size; i++) {
         if (src[i] == '{') {
             char id[80], value[256];
             DWORD n = 0, j = i + 1;
             while (src[j] && src[j] != '}' && n + 1 < sizeof(id)) id[n++] = src[j++];
             if (src[j] == '}') {
                 id[n] = '\0';
-                if (!CL_WindowControlValue(window, id, value, sizeof(value)))
-                    snprintf(value, sizeof(value), "0");
-                for (DWORD k = 0; value[k] && out + 1 < dsz; k++) {
-                    if ((value[k] == '"' || value[k] == '\\') && out + 2 < dsz)
-                        dst[out++] = '\\';
-                    dst[out++] = value[k];
+                /* An unresolved control means the authored command is invalid; the old "0" substitution could target the wrong save. */
+                if (!CL_WindowControlValue(window, id, &MAKE(windowTextOut_t, .data = value, .size = sizeof(value)))) {
+                    fprintf(stderr, "CL_WindowFormatCommand: unresolved control {%s}\n", id);
+                    dst->data[0] = '\0';
+                    return false;
+                }
+                for (DWORD k = 0; value[k] && out + 1 < dst->size; k++) {
+                    if ((value[k] == '"' || value[k] == '\\') && out + 2 < dst->size)
+                        dst->data[out++] = '\\';
+                    dst->data[out++] = value[k];
                 }
                 i = j;
                 continue;
             }
         }
-        dst[out++] = src[i];
+        dst->data[out++] = src[i];
     }
-    dst[out] = '\0';
+    dst->data[out] = '\0';
+    return true;
 }
 
 static void CL_WindowPrepareState(clientWindow_t *window, LPCRECT root) {
@@ -599,8 +609,8 @@ static void CL_WindowActivateFrame(clientWindow_t *window, LPCUIFRAME frame) {
     } else if (!strncmp(frame->onclick, UI_WINDOW_CLOSE_COMMAND_PREFIX, close_command_len)) {
         LPCSTR source = frame->onclick + close_command_len;
         char command[CMDARG_LEN * 4];
-        CL_WindowFormatCommand(window, source, command, sizeof(command));
-        if (*command) Cmd_ForwardToServer(command);
+        if (CL_WindowFormatCommand(window, source, &MAKE(windowTextOut_t, .data = command, .size = sizeof(command))))
+            Cmd_ForwardToServer(command);
         CL_WindowClose(window->id);
     } else if (!strcmp(frame->onclick, UI_WINDOW_DISCONNECT_ACTION)) {
         /* A gameplay leave is a full world-to-front-end boundary.  Defer it
@@ -613,8 +623,8 @@ static void CL_WindowActivateFrame(clientWindow_t *window, LPCUIFRAME frame) {
         Cbuf_AddText("quit\n");
     } else {
         char command[CMDARG_LEN * 4];
-        CL_WindowFormatCommand(window, frame->onclick, command, sizeof(command));
-        if (*command) Cmd_ForwardToServer(command);
+        if (CL_WindowFormatCommand(window, frame->onclick, &MAKE(windowTextOut_t, .data = command, .size = sizeof(command))))
+            Cmd_ForwardToServer(command);
     }
 }
 

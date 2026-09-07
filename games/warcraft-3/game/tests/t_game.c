@@ -1107,24 +1107,14 @@ TEST(wc3_game, hud_image_rebinds_after_configstring_wipe) {
     gi.GetConfigstring = old_get;
 }
 
-TEST(wc3_game, hud_reset_drops_save_dialog_runtime_clones) {
-    FRAMEDEF frames[6] = {0};
+TEST(wc3_game, hud_reset_drops_save_panel_bindings) {
+    FRAMEDEF frame = {0};
 
-    hud.save_edit = &frames[0];
-    hud.save_edit_text = &frames[1];
-    hud.save_button = &frames[2];
-    hud.save_cancel_button = &frames[3];
-    hud.load_button = &frames[4];
-    hud.load_cancel_button = &frames[5];
+    hud.save_menu.EscMenuSaveGamePanel = &frame;
 
     UI_ResetHud();
 
-    T_NULL(hud.save_edit);
-    T_NULL(hud.save_edit_text);
-    T_NULL(hud.save_button);
-    T_NULL(hud.save_cancel_button);
-    T_NULL(hud.load_button);
-    T_NULL(hud.load_cancel_button);
+    T_NULL(hud.save_menu.EscMenuSaveGamePanel);
 }
 
 TEST(wc3_game, hud_reset_drops_cached_image_names) {

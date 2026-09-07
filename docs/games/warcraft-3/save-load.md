@@ -233,26 +233,14 @@ Esc -> Save Game -> type name -> menu_save_named "{SaveGameFileEditBox}"
 Esc -> Load Game -> select row -> menu_load_named "{<transient list control name>}"
 ```
 
-The gameplay Save/Load dialog uses Warcraft's `ChatDialog.fdf` shell for the window chrome, but its saved-game chooser follows the
-front-end cinematic/mission `MapListBox` interaction model: a bounded clipped viewport, top-to-bottom rows, one selected row, and a
-scrollbar whose value selects the first visible row. The authored `ChatHistoryDisplay` / `ChatHistoryScrollBar` provide the reliable
-backdrop and scrollbar art; the gameplay copy promotes `ChatHistoryDisplay` to `FT_LISTBOX` so the transient client can own selection.
-Drawing and hit-testing intentionally share the same top-down row geometry, matching the cinematic chooser rather than chat-history
-flow.
-
-The active Save edit box and Save/Load/Cancel clone bindings are owned by `hud_t`, not file-static state. `UI_ResetHud()` clears those bindings together with the FDF frame arena on map changes and `LoadGame`, so a rebuilt `ChatDialog` always receives a fresh set of late clones. `MenuPrepareSaveDialogLayout()` also validates that every cached clone is still `inuse` and parented to the current `ChatDialog`; an incomplete/stale set is discarded and rebuilt atomically. This prevents a second Save/Load dialog after a load from serializing only the list/scrollbar while silently omitting the edit box and action buttons.
-
-The Save edit box and Save/Load/Cancel buttons are cloned into the dialog after the backdrop tree is loaded, then explicitly anchored
-inside the chooser. This is a z-order requirement: merely changing the parent of the original Esc-menu controls keeps their older frame
-order and can draw them behind the chat window. The chooser also re-anchors the chat backdrop and history viewport rather than relying
-on the original recipient/message layout.
+The gameplay Save/Load dialog serializes Blizzard's `EscMenuSaveGamePanel` directly. Its authored `FileListFrame`, edit box, action
+buttons, hierarchy, and anchors remain the single layout source of truth. The transient client owns list selection, scrolling, and edit
+state while the modal is open; gameplay code only fills data, visibility, enable state, and click handlers.
 
 New saves are prefilled with a filesystem/command-safe local timestamp (`YYYY-MM-DD_HH-MM-SS`). The value remains an ordinary
 editable transient edit box, so the player can replace or amend it before saving.
 
-This avoids depending on `DecoratedMapListBox` / `StandardScrollBarTemplate`, which are incomplete in some classic data sets.
-
-The existing `SaveGameFileEditBox` and Save/Load action buttons are reparented into that chat-style shell. Each time Save Game opens,
+Each time Save Game opens, the authored `SaveGameFileEditBox`
 the edit box is initialized from local wall-clock time as `YYYY-MM-DD_HH-MM-SS`; the value is only a default and remains editable before
 submission. The timestamp avoids characters rejected by the save-path validator.
 
@@ -318,8 +306,6 @@ The load succeeded when the log contains `WC3 LoadGame: restored` and a later `C
 
 
 
-The cloned Save edit box also explicitly unhides its `SaveGameFileEditBoxText` child. Classic Esc-menu data can leave that child hidden because the retail edit-box controller owns its visibility; the transient window bridge serializes only non-hidden children, so leaving it hidden produces a working edit control with no drawable text frame. At `wc3_save_menu_debug 1` the clone logs both root/text visibility, and level `2` logs the edit control's text-frame resolution during serialization.
-
 ### Save/Load menu diagnostics
 
 For targeted diagnostics without changing normal behavior, use:
@@ -332,8 +318,7 @@ For targeted diagnostics without changing normal behavior, use:
 `wc3_save_menu_debug 1` logs each `.sav` basename discovered for the in-game
 Save/Load dialog, the resolved path/map header, filtering reasons, the final
 list payload, timestamp default, and Save/Load button enable state. Level `2`
-additionally logs the promoted chat-history list control, font metrics, and
-dimensions.
+additionally logs the authored list control, font metrics, and dimensions.
 
 `ui_window_debug 1` logs the transient client payload for edit boxes and
 listboxes, including control IDs, screen rectangles, font resources, item
@@ -344,13 +329,12 @@ For the two current presentation failures, capture both sets of lines beginning
 with `WC3_SAVE_MENU` and `UI_WINDOW_DEBUG` after opening Save, typing a few
 characters, then opening Load.
 
-### Chat-style Save/Load presentation
+### Authored Save/Load presentation
 
-The gameplay Save/Load dialog intentionally reuses `ChatDialog.fdf` and its history scrollbar. This keeps save selection on the same
-window/scroll machinery already used by chat and avoids the incomplete classic `MapListBox` template chain. The save-name edit field
-is transplanted into that shell and receives a fresh editable date/time default whenever Save Game opens.
+The gameplay Save/Load dialog uses `EscMenuSaveGamePanel.fdf` without C-side geometry overrides. Its save-name edit field receives a
+fresh editable date/time default whenever Save Game opens.
 
 Transient edit-box text is client-local while the modal is open. Rendering of the authored edit-box text child must therefore read the
 live client edit value, not only the server-supplied initial `STRING` text, so edits remain visible before submission.
 
-The chat-history scrollbar is retained on the selectable save list. It is re-anchored to the list viewport, hidden when all rows fit, and supports wheel, arrow, track, and thumb-drag scrolling by saved-game row.
+The authored selectable list supports wheel, arrow, track, and thumb-drag scrolling by saved-game row.

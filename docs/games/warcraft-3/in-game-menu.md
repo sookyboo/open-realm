@@ -112,13 +112,13 @@ without a live client window.
 ## Save/Load Scope
 
 The in-game panel now supports persistent named saves. `FS_ListSaves()` enumerates `.sav` basenames from the same directory used by
-`FS_SavePath()`, sorts them case-insensitively, and the game module filters out entries whose save header no longer resolves to a map.
-The Save/Load presentation deliberately reuses Warcraft's `ChatDialog.fdf` shell rather than the brittle retail `MapListBox` path.
-`ChatHistoryDisplay` supplies the authored scrolling viewport and `ChatHistoryScrollBar`; the gameplay copy promotes that scrolling
-control to the transient `uiListBox_t` transport so rows remain selectable as well as scrollable. Rows use `display\thidden-value`;
-the renderer shows only the display text while the selected hidden basename is submitted. `quick` is shown as `Quick Save`.
+`FS_SavePath()`, sorts them newest-first with a case-insensitive tie-break, and the game module filters out entries whose save header no longer resolves to a map.
+The Save/Load presentation uses Blizzard's authored `EscMenuSaveGamePanel` and its `FileListFrame`; gameplay code does not reparent,
+resize, or otherwise patch that FDF layout. The list uses the transient `uiListBox_t` transport so rows remain selectable and
+scrollable. Rows use `display\thidden-value`; the renderer shows only the display text while the selected hidden basename is
+submitted. `quick` is shown as `Quick Save`.
 
-`SaveGameFileEditBox` is reparented into the chat-style dialog and serialized as `uiEditBox_t` with its FDF name and max length. Each
+`SaveGameFileEditBox` is serialized from its authored panel as `uiEditBox_t` with its FDF name and max length. Each
 new Save dialog opens with a filesystem-safe local timestamp such as `2026-09-07 01-42-30`; the player may freely edit that default
 before committing. The transient-window client owns editing while
 the modal lives; text is not round-tripped to the server on every keypress. The Save command submits the final value once. Menu save
@@ -145,8 +145,8 @@ Do not validate this from the front-end menu: `svc_window` requires an active ga
 
 1. Mouse Menu and F10 both open MainPanel.
 2. The first modal acquires pause only after the client receives the window; transport and UI remain responsive.
-3. Save Game opens the chat-style Save dialog with the filename prefilled from local date/time, allows that value to be edited, and Save writes `<name>.sav` before closing the modal. `Quick Save` still targets `quick.sav`.
-4. Save and Load both show readable saves in the chat history-style scrolling list; row selection/scrolling stays local, and Load rebuilds from the selected save through the
+3. Save Game opens the authored Save dialog with the filename prefilled from local date/time, allows that value to be edited, and Save writes `<name>.sav` before closing the modal. `Quick Save` still targets `quick.sav`.
+4. Save and Load both show readable saves in the authored scrolling list; row selection/scrolling stays local, and Load rebuilds from the selected save through the
    deferred named-load session action. A corrupt/unreadable save is not offered.
 5. Cancel from Save/Load replaces the same unique window with MainPanel without releasing/reacquiring modal pause.
 6. Pause and Return close the window and release the modal pause owner.
@@ -165,6 +165,5 @@ The ESC-panel **Load Game** entry is enabled when the writable save directory co
 
 ### Save/Load chooser layout
 
-Named Save/Load uses `ChatDialog` for Warcraft window chrome, but the selectable save rows use the same top-down geometry as the
-front-end cinematic/mission `MapListBox`. The history viewport is explicitly positioned inside the dialog and the action controls are
-late clones anchored inside the panel so they draw above the backdrop. Save starts with an editable `YYYY-MM-DD_HH-MM-SS` name.
+Named Save/Load uses the geometry, controls, and hierarchy from Blizzard's `EscMenuSaveGamePanel.fdf`. The selectable
+`FileListFrame` retains client-local row and scroll state. Save starts with an editable `YYYY-MM-DD_HH-MM-SS` name.

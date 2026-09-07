@@ -424,6 +424,8 @@ static BOOL FS_EnsureSaveDirectory(void) {
 #endif
     }
     if (!fs_save_dir[0]) {
+        /* HACK: Portable builds lack a configured per-user directory; keep saves writable beside the data tree. */
+        fprintf(stderr, "FS_EnsureSaveDirectory: no writable home path, using the portable game directory\n");
         snprintf(fs_save_dir, sizeof(fs_save_dir), "%s/%s/saves", FS_BasePath(), BZ_GAME);
 #ifdef _WIN32
         _mkdir(fs_save_dir);
@@ -601,6 +603,7 @@ typedef struct {
     DWORD count;
 } fsSaveListCollect_t;
 
+/* FS_EnumerateDiskDirectory owns this five-argument callback ABI, so it cannot use a local parameter struct. */
 static void FS_CollectSaveEntry(LPCSTR name, LPCSTR path, BOOL isDirectory, BOOL isFile, void *userData) {
     fsSaveListCollect_t *collect = userData;
     fsSaveListEntry_t *next;
@@ -611,7 +614,10 @@ static void FS_CollectSaveEntry(LPCSTR name, LPCSTR path, BOOL isDirectory, BOOL
     len = strlen(name);
     if (len <= 4) return;
     next = realloc(collect->entries, (collect->count + 1) * sizeof(*next));
-    if (!next) return;
+    if (!next) {
+        fprintf(stderr, "FS_ListSaves: cannot grow save-entry list for %s\n", name);
+        return;
+    }
     collect->entries = next;
     snprintf(collect->entries[collect->count].name, sizeof(PATHSTR),
              "%.*s", (int)(len - 4), name);
