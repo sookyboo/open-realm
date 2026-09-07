@@ -456,6 +456,42 @@ static void clear_walkable_surface(edict_t const *ent, pathMapCell_t *target) {
     }
 }
 
+/* Walkable bridge decks may legitimately cross a blocked diagonal corner: the
+ * rails are outside the unit's support lane, not a terrain wall to squeeze
+ * between. Keep ordinary corner rejection unchanged elsewhere. */
+static BOOL walkable_surface_cell(int x, int y) {
+    FOR_LOOP(i, ge->num_edicts) {
+        edict_t const *ent = EDICT_NUM(i);
+        point2_t p;
+        pathTex_t const *pt;
+        int angle, rotation;
+        DWORD div_w, div_h;
+
+        if (!ent->inuse || !ent->destructable.walkable || ent->destructable.dead || !ent->pathtex)
+            continue;
+        pt = ent->pathtex;
+        p = LocationToPathMap(&ent->s.origin2);
+        angle = (int)(ent->s.angle * 180.0f / M_PI);
+        rotation = (angle + 450) % 360;
+        if (rotation < 0) rotation += 360;
+        div_w = rotation % 180 ? pt->height : pt->width;
+        div_h = rotation % 180 ? pt->width : pt->height;
+        FOR_LOOP(px, pt->width) FOR_LOOP(py, pt->height) {
+            int tx = (int)px, ty = (int)py, cx, cy;
+            BOOL blocked = pt->map[px + (pt->height - 1 - py) * pt->width].b > 127;
+            switch (rotation) {
+                case 90: tx = (int)pt->height - 1 - (int)py; ty = (int)px; break;
+                case 180: tx = (int)pt->width - 1 - (int)px; ty = (int)pt->height - 1 - (int)py; break;
+                case 270: tx = (int)py; ty = (int)pt->width - 1 - (int)px; break;
+            }
+            cx = tx + p.x - (int)div_w / 2;
+            cy = ty + p.y - (int)div_h / 2;
+            if (!blocked && cx == x && cy == y) return true;
+        }
+    }
+    return false;
+}
+
 /* Dump the exact LT05 footprint after the static bake so terrain, texture, and
  * radius-independent results can be compared from one bounded run. */
 void CM_DebugPathingFootprint(struct edict_s const *ent, LPCSTR phase, int level) {
@@ -881,7 +917,8 @@ BOOL CM_LineIsWalkableForRadius(LPCVECTOR2 a, LPCVECTOR2 b, FLOAT radius) {
          * flow-field rule and steer through touching obstacle corners. */
         if (step_x && step_y &&
             !(is_pathable_node_original_for_radius_cells(x + sx, y, radius_cells) &&
-              is_pathable_node_original_for_radius_cells(x, y + sy, radius_cells)))
+              is_pathable_node_original_for_radius_cells(x, y + sy, radius_cells)) &&
+            !(walkable_surface_cell(x, y) && walkable_surface_cell(x + sx, y + sy)))
             return false;
         if (step_x) { err -= dy; x += sx; }
         if (step_y) { err += dx; y += sy; }

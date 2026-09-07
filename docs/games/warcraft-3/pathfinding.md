@@ -226,6 +226,8 @@ make test-wc3-engine WC3_PATTERN='wc3_movement.lumber_*'
 
 Generic radius-0 point fields are still used for mine entry, resource return, attack, and other behaviors whose real target centre may be blocked. Their flow vectors nevertheless strictly descend to the adjusted legal route endpoint. Once that endpoint is reached, `unit_changeangle()` exposes `flow_goal_reached` and steers toward the real entity target. The owning behavior decides what that means: attack/range behaviors continue using their range test, while Gold Mine entry/return may hand off immediately at the route goal or after Move's bounded near-goal settle detector proves a crowded worker has stopped making progress at the interaction edge. This keeps routing monotonic without turning a distant blocked route into a successful interaction.
 
+Walkable destructable decks retain the ordinary no-corner-cut rule for terrain, but allow a diagonal transition between two open cells on the same alive `walkable=1` surface. Bridge pathing textures encode the deck rails as blocked cells; rejecting that transition makes the collision-sized mover stop on the diagonal rail even though both endpoint cells are valid deck cells.
+
 ## See Also
 
 - [Unit Altitude And Support Surfaces](unit-altitude.md) — vertical support surfaces share the WPM terrain classification but are independent of horizontal routing.
