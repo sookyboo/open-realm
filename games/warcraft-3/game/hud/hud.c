@@ -587,6 +587,7 @@ BOOL UI_BuildFrameForWrite(LPCFRAMEDEF frame,
             };
             strlcpy(data.id, frame->Name, sizeof(data.id));
             strlcpy(data.fetchCommand, frame->ListBox.FetchCommand, sizeof(data.fetchCommand));
+            data.editTarget = FindFrameNumber(frame->ListBox.EditTarget, 0);
             if (buf.cursize + sizeof(data) <= buf.maxsize) {
                 memcpy(buf.data + buf.cursize, &data, sizeof(data));
                 buf.cursize += sizeof(data);

@@ -211,12 +211,14 @@ void UI_LoadHudMenu(void) {
             snprintf(hud.save_list.Name, sizeof(hud.save_list.Name), "SaveFileList");
             UI_SetParent(&hud.save_list, root);
             UI_SetPoint(&hud.save_list, FRAMEPOINT_TOPLEFT, root, FRAMEPOINT_TOPLEFT, 0.0f, 0.0f);
-            UI_SetPoint(&hud.save_list, FRAMEPOINT_BOTTOMRIGHT, root, FRAMEPOINT_BOTTOMRIGHT, 0.0f, 0.0f);
+            /* The native chooser stops above the adjacent filename box; the old full-height child left only a 0.002 gap. */
+            UI_SetPoint(&hud.save_list, FRAMEPOINT_BOTTOMRIGHT, root, FRAMEPOINT_BOTTOMRIGHT, 0.0f, 0.010f);
             /* CONTROL art is embedded during serialization, so copy its authored backdrop onto the native list payload. */
             hud.save_list.Texture = hud.save_list_art.MapListBoxBackdrop->Texture;
             FOR_LOOP(i, 4)
                 hud.save_list.ListBox.Border = MAX(hud.save_list.ListBox.Border,
                                                    hud.save_list_art.MapListBoxBackdrop->Backdrop.BackgroundInsets[i]);
+            hud.save_list.ListBox.EditTarget = hud.save_menu.SaveGameFileEditBox;
             UI_SetParent(hud.save_list_art.MapListScrollBar, &hud.save_list);
             /* MapListBox.fdf supplies only TOPRIGHT; retail list setup stretches the scrollbar to the chooser height. */
             UI_SetPoint(hud.save_list_art.MapListScrollBar, FRAMEPOINT_TOPRIGHT, &hud.save_list, FRAMEPOINT_TOPRIGHT, 0.0f, 0.0f);

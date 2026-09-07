@@ -117,7 +117,8 @@ The Save/Load presentation uses Blizzard's authored `EscMenuSaveGamePanel` and i
 reparent, resize, or otherwise patch that FDF layout. Retail code creates the chooser control in this placeholder, so OpenRealm loads
 the authored `MapListBox` backdrop and scrollbar and adds a native `FT_LISTBOX` state child. The transient `uiListBox_t` transport keeps rows selectable and
 scrollable. Rows use `display\thidden-value`; the renderer shows only the display text while the selected hidden basename is
-submitted. `quick` is shown as `Quick Save`.
+submitted. Selecting a row copies that basename into the Save edit box so it can be overwritten or amended. `quick` is shown as
+`Quick Save`.
 
 `SaveGameFileEditBox` is serialized from its authored panel as `uiEditBox_t` with its FDF name and max length. Each
 new Save dialog opens with a filesystem-safe local timestamp such as `2026-09-07 01-42-30`; the player may freely edit that default

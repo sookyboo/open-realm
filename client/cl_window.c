@@ -387,6 +387,28 @@ static LPCSTR CL_WindowListSelectedText(LPCUIFRAME frame, SHORT selected, window
     return out->data;
 }
 
+/* A chooser may bind its selected hidden value to an edit control so an existing name can be amended or overwritten. */
+static void CL_WindowListApplyEdit(clientWindow_t *window, LPCUIFRAME frame, SHORT selected) {
+    uiListBox_t const *wire;
+    char selected_text[CMDARG_LEN];
+
+    if (!window || !frame || !frame->buffer.data || frame->buffer.size < sizeof(uiListBox_t)) return;
+    wire = frame->buffer.data;
+    if (!wire->editTarget || !CL_WindowListSelectedText(frame, selected, &MAKE(windowTextOut_t, .data = selected_text, .size = sizeof(selected_text)))) return;
+    FOR_LOOP(i, SCR_NumFrames()) {
+        LPUIFRAME edit = SCR_Frame(i);
+        clientWindowEdit_t *value;
+        if (!CL_WindowIsEditBox(edit) || !edit->buffer.data || edit->buffer.size < sizeof(uiEditBox_t)) continue;
+        if (edit->number != wire->editTarget) continue;
+        value = CL_WindowEditValue(window, edit, true);
+        if (!value) return;
+        snprintf(value->text, sizeof(value->text), "%.*s", (int)value->max_chars, selected_text);
+        value->cursor = (DWORD)strlen(value->text);
+        return;
+    }
+    fprintf(stderr, "CL_WindowListApplyEdit: unresolved edit frame %u\n", (unsigned)wire->editTarget);
+}
+
 static BOOL CL_WindowControlValue(clientWindow_t *window, LPCSTR id, windowTextOut_t *out) {
     if (!window || !id || !*id || !out || !out->data || out->size == 0) return false;
     FOR_LOOP(i, SCR_NumFrames()) {
@@ -778,7 +800,10 @@ BOOL CL_WindowMouseEvent(menuMouseEvent_t event, int x, int y, int32_t param) {
                         ? (int)lroundf(MIN(MAX(list->value, 0.0f), 1.0f) * max_scroll)
                         : 0;
                     row += scroll_offset;
-                    if (row >= 0 && row < count) value->selected = (SHORT)row;
+                    if (row >= 0 && row < count) {
+                        value->selected = (SHORT)row;
+                        CL_WindowListApplyEdit(window, list, value->selected);
+                    }
                 }
                 SCR_LayoutSetPointer(window->layout, 0, true);
                 return true;

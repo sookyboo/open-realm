@@ -274,6 +274,7 @@ struct uiFrameDef_s {
         FLOAT Border;
         UINAME ScrollBar;
         UINAME FetchCommand;
+        LPCFRAMEDEF EditTarget;
     } ListBox;
     uiMapListControl_t MapListControl;
     struct {

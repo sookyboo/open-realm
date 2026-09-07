@@ -233,6 +233,9 @@ Esc -> Save Game -> type name -> menu_save_named "{SaveGameFileEditBox}"
 Esc -> Load Game -> select row -> menu_load_named "{<transient list control name>}"
 ```
 
+The list payload may name an edit target. Selecting a saved-game row copies its hidden basename into `SaveGameFileEditBox`, allowing
+the same Save action to overwrite that slot or save an amended name.
+
 The gameplay Save/Load dialog serializes Blizzard's `EscMenuSaveGamePanel` directly. Its `FileListFrame` is an intentionally empty
 placeholder populated by retail code, so OpenRealm instantiates the authored `MapListBox` backdrop and scrollbar there and adds a
 native `FT_LISTBOX` state child constrained by its anchors. The panel is hosted inside the shared Esc-menu backdrop, and the FDF remains

@@ -951,6 +951,7 @@ TEST(wc3_game, hud_listbox_serializes_static_selected_row) {
     T_FEQ(list->itemHeight, 0.012f * 1.33f, 0.0001f);
     T_STREQ(list->id, "SaveFileList");
     T_STREQ(list->fetchCommand, "fetch_saves");
+    T_EQ(list->editTarget, 0);
 }
 
 TEST(wc3_game, hud_passive_string_serializes_tooltip) {

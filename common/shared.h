@@ -1044,6 +1044,7 @@ typedef struct {
     SHORT selectedIndex;
     UINAME id;
     UINAME fetchCommand;
+    DWORD editTarget;
 } uiListBox_t;
 
 typedef struct {
