@@ -1159,6 +1159,7 @@ refExport_t R_GetAPI(refImport_t imp) {
         .GetModelInfo = R_GetModelInfo,
         .GetEntityOverheadPosition = R_GetEntityOverheadPosition,
         .GetEntityAttachmentPosition = R_GetEntityAttachmentPosition,
+        .TraceModel = R_TraceModel,
         .DrawBoundingBox = R_DrawBoundingBox,
         .GetHeightAtPoint = R_GetHeightAtPoint,
         .TraceEntity = R_TraceEntity,

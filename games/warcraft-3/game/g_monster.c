@@ -717,22 +717,27 @@ static void M_DebugBridgeGround(LPCEDICT self, LPCEDICT surface, BOOL inside, FL
     count++;
 }
 
-/* Walkable MDX objects store their deck in model-local sequence bounds; the
- * destructable Z is the model origin, so using it directly leaves bridges
- * below the terrain even though their rendered deck is above it. */
+/* Walkable MDX objects expose their actual deck through the renderer's model
+ * trace; sequence bounds include rails and are not a support surface. */
 static FLOAT M_WalkableSurfaceHeight(LPCEDICT surface) {
-    LPCANIMATION stand;
-    FLOAT scale;
+    walkableSurfaceQuery_t query = {
+        .model = surface->s.model,
+        .frame = surface->s.frame,
+        .origin = surface->s.origin,
+        .angle = surface->s.angle,
+        .scale = surface->s.scale,
+        .point = surface->s.origin2,
+    };
 
     if (!surface->s.model) return surface->s.origin.z;
-    stand = G_GetAnimation(surface->s.model, "stand");
-    if (!stand) {
-        fprintf(stderr, "M_WalkableSurfaceHeight: model %d has no Stand sequence for walkable destructable\n",
-                surface->s.model);
+    if (!gi.GetWalkableSurfaceHeight(&query)) {
+        fprintf(stderr, "M_WalkableSurfaceHeight: model=%d trace failed at (%.1f,%.1f)\n",
+                surface->s.model, query.point.x, query.point.y);
+        /* HACK: preserve movement when a renderer model cannot be queried; the
+         * explicit diagnostic keeps this data/runtime boundary visible. */
         return surface->s.origin.z;
     }
-    scale = surface->s.scale > 0.0f ? surface->s.scale : 1.0f;
-    return surface->s.origin.z + stand->max.z * scale;
+    return query.height;
 }
 
 /* Resolve the visual/support surface, then apply the unit's mutable fly height.
