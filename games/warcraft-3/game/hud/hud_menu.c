@@ -37,7 +37,7 @@ static LPFRAMEDEF MenuPanel(menuPanel_t panel) {
 }
 
 static LPFRAMEDEF MenuSaveListBox(void) {
-    return hud.save_list.inuse && hud.save_list.Parent == hud.save_menu.FileListFrame ? &hud.save_list : NULL;
+    return hud.save_list.inuse && hud.save_list.Parent == hud.save_list_art.MapListBox ? &hud.save_list : NULL;
 }
 
 static void MenuDefaultSaveName(LPSTR out, DWORD out_size) {
@@ -54,7 +54,8 @@ static void MenuDefaultSaveName(LPSTR out, DWORD out_size) {
 }
 
 static BOOL MenuSavePanelReady(void) {
-    return hud.save_menu.EscMenuSaveGamePanel && MenuSaveListBox() &&
+    return hud.save_menu.EscMenuSaveGamePanel && hud.save_menu.EscMenuSaveLoadContainer && MenuSaveListBox() &&
+           hud.save_list_art.MapListBoxBackdrop && hud.save_list_art.MapListScrollBar &&
            hud.save_menu.SaveOnly && hud.save_menu.LoadOnly &&
            hud.save_menu.SaveGameFileEditBox && hud.save_menu.SaveGameFileEditBoxText &&
            hud.save_menu.SaveGameSaveButton && hud.save_menu.SaveGameCancelButton &&
@@ -198,15 +199,23 @@ void UI_LoadHudMenu(void) {
     /* Save/load is optional at bind time so reduced test/UI data can still use
      * the rest of the pause menu. Retail Warcraft data provides this panel. */
     EscMenuSaveGamePanel_Load(&hud.save_menu);
-    if (hud.save_menu.FileListFrame) {
-        /* Retail creates the chooser in this FRAME placeholder; treating the placeholder itself as a list disabled the panel. */
-        UI_InitFrame(&hud.save_list, FT_LISTBOX);
-        snprintf(hud.save_list.Name, sizeof(hud.save_list.Name), "SaveFileList");
-        UI_SetParent(&hud.save_list, hud.save_menu.FileListFrame);
-        UI_SetPoint(&hud.save_list, FRAMEPOINT_TOPLEFT, hud.save_menu.FileListFrame, FRAMEPOINT_TOPLEFT, 0.0f, 0.0f);
-        UI_SetPoint(&hud.save_list, FRAMEPOINT_BOTTOMRIGHT, hud.save_menu.FileListFrame, FRAMEPOINT_BOTTOMRIGHT, 0.0f, 0.0f);
-        if (hud.save_menu.SaveGameFileEditBoxText)
-            hud.save_list.Font = hud.save_menu.SaveGameFileEditBoxText->Font;
+    if (hud.save_menu.FileListFrame && MapListBox_Load(&hud.save_list_art)) {
+        LPFRAMEDEF root = UI_CloneFrameTree(hud.save_list_art.MapListBox, hud.save_menu.FileListFrame);
+        if (!root || !MapListBox_Bind(&hud.save_list_art, root)) {
+            fprintf(stderr, "WC3 menu: failed to instantiate MapListBox in FileListFrame\n");
+        } else {
+            UI_SetPoint(root, FRAMEPOINT_TOPLEFT, hud.save_menu.FileListFrame, FRAMEPOINT_TOPLEFT, 0.0f, 0.0f);
+            UI_SetPoint(root, FRAMEPOINT_BOTTOMRIGHT, hud.save_menu.FileListFrame, FRAMEPOINT_BOTTOMRIGHT, 0.0f, 0.0f);
+            /* Retail supplies list state inside this chooser; using only the empty slot lost its backdrop and scrollbar. */
+            UI_InitFrame(&hud.save_list, FT_LISTBOX);
+            snprintf(hud.save_list.Name, sizeof(hud.save_list.Name), "SaveFileList");
+            UI_SetParent(&hud.save_list, root);
+            UI_SetPoint(&hud.save_list, FRAMEPOINT_TOPLEFT, root, FRAMEPOINT_TOPLEFT, 0.0f, 0.0f);
+            UI_SetPoint(&hud.save_list, FRAMEPOINT_BOTTOMRIGHT, root, FRAMEPOINT_BOTTOMRIGHT, 0.0f, 0.0f);
+            UI_SetParent(hud.save_list_art.MapListScrollBar, &hud.save_list);
+            if (hud.save_menu.SaveGameFileEditBoxText)
+                hud.save_list.Font = hud.save_menu.SaveGameFileEditBoxText->Font;
+        }
     }
 
     UI_SetParent(hud.menu.EscMenuBackdrop, hud.menu.EscMenuMainPanel);
@@ -218,6 +227,8 @@ void UI_LoadHudMenu(void) {
     UI_SetParent(hud.menu.ConfirmQuitPanel, hud.menu.EscMenuBackdrop);
     UI_SetParent(hud.menu.HelpPanel, hud.menu.EscMenuBackdrop);
     UI_SetParent(hud.menu.TipsPanel, hud.menu.EscMenuBackdrop);
+    UI_SetParent(hud.save_menu.EscMenuSaveGamePanel, hud.menu.EscMenuBackdrop);
+    UI_SetHidden(hud.save_menu.EscMenuSaveGamePanel, true);
 
     /* Warsmash leaves these authored controls present but disabled. OpenRealm
      * wires the retail Save/Load panel to the existing serializer while keeping
@@ -263,6 +274,7 @@ static void MenuSelectPanel(menuPanel_t panel) {
     UI_SetHidden(hud.menu.ConfirmQuitPanel, panel != MENU_PANEL_CONFIRM_QUIT);
     UI_SetHidden(hud.menu.HelpPanel, true);
     UI_SetHidden(hud.menu.TipsPanel, true);
+    UI_SetHidden(hud.save_menu.EscMenuSaveGamePanel, true);
 
     /* Warsmash sizes both the wrapper and backdrop from the active authored
      * panel. Keep the latest OpenRealm centering policy while updating those
@@ -301,8 +313,19 @@ static void MenuSelectSavePanel(menuSavePanel_t panel) {
     char default_name[CMDARG_LEN] = { 0 };
 
     UI_SetHidden(root, false);
+    UI_SetHidden(hud.menu.MainPanel, true);
+    UI_SetHidden(hud.menu.EndGamePanel, true);
+    UI_SetHidden(hud.menu.ConfirmQuitPanel, true);
+    UI_SetHidden(hud.menu.HelpPanel, true);
+    UI_SetHidden(hud.menu.TipsPanel, true);
     UI_SetHidden(hud.save_menu.SaveOnly, !saving);
     UI_SetHidden(hud.save_menu.LoadOnly, saving);
+    UI_SetSize(hud.menu.EscMenuMainPanel, hud.save_menu.EscMenuSaveLoadContainer->Width,
+               hud.save_menu.EscMenuSaveLoadContainer->Height);
+    UI_SetSize(hud.menu.EscMenuBackdrop, hud.save_menu.EscMenuSaveLoadContainer->Width,
+               hud.save_menu.EscMenuSaveLoadContainer->Height);
+    UI_CenterFrame(hud.menu.EscMenuMainPanel);
+    UI_CenterFrame(hud.menu.EscMenuBackdrop);
 
     if (saving) {
         MenuDefaultSaveName(default_name, sizeof(default_name));
@@ -338,8 +361,9 @@ static void MenuWriteSavePanel(LPEDICT ent, menuSavePanel_t panel) {
     /* Reuse the same unique menu identity as MainPanel. Replacing the window
      * preserves modal ownership while Main <-> Save/Load transitions occur. */
     UI_WriteWindowStart(&MAKE(uiWindowDef_t, .id = BZ_WC3_WINDOW_MENU, .class_id = BZ_WC3_WINDOW_MENU, .flags = UI_WINDOW_MODAL | UI_WINDOW_UNIQUE));
-    UI_WriteFrameWithChildren(hud.save_menu.EscMenuSaveGamePanel, NULL);
-    UI_WriteFrameWithChildren(&hud.save_list, hud.save_menu.FileListFrame);
+    UI_WriteFrameWithChildren(hud.menu.EscMenuMainPanel, NULL);
+    UI_WriteFrame(&hud.save_list);
+    UI_WriteFrameWithChildren(hud.save_list_art.MapListScrollBar, &hud.save_list);
     UI_WriteWindowEnd(ent);
     UI_SetCurrentClient(NULL);
 }

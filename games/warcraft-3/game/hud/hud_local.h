@@ -13,6 +13,7 @@
 #include "../generated/log_dialog.h"
 #include "../generated/esc_menu_main_panel.h"
 #include "../generated/esc_menu_save_game_panel.h"
+#include "../generated/map_list_box.h"
 #include "../generated/chat_dialog.h"
 #include "../generated/alliance_dialog.h"
 #include "../generated/game_result_dialog.h"
@@ -51,6 +52,7 @@ typedef struct {
     char log_text[WC3_MESSAGE_LOG_TEXT_SIZE];
     EscMenuMainPanelGame_t menu;
     EscMenuSaveGamePanel_t save_menu;
+    MapListBox_t save_list_art;
     FRAMEDEF save_list;
     AllianceDialog_t allies;
     GameResultDialog_t result;

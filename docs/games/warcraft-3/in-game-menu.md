@@ -114,8 +114,8 @@ without a live client window.
 The in-game panel now supports persistent named saves. `FS_ListSaves()` enumerates `.sav` basenames from the same directory used by
 `FS_SavePath()`, sorts them newest-first with a case-insensitive tie-break, and the game module filters out entries whose save header no longer resolves to a map.
 The Save/Load presentation uses Blizzard's authored `EscMenuSaveGamePanel` and its `FileListFrame` placeholder; gameplay code does not
-reparent, resize, or otherwise patch that FDF layout. Retail code creates the chooser control in this placeholder, so OpenRealm adds a
-native `FT_LISTBOX` child which uses the transient `uiListBox_t` transport to keep rows selectable and
+reparent, resize, or otherwise patch that FDF layout. Retail code creates the chooser control in this placeholder, so OpenRealm loads
+the authored `MapListBox` backdrop and scrollbar and adds a native `FT_LISTBOX` state child. The transient `uiListBox_t` transport keeps rows selectable and
 scrollable. Rows use `display\thidden-value`; the renderer shows only the display text while the selected hidden basename is
 submitted. `quick` is shown as `Quick Save`.
 
@@ -166,6 +166,6 @@ The ESC-panel **Load Game** entry is enabled when the writable save directory co
 
 ### Save/Load chooser layout
 
-Named Save/Load uses the geometry, controls, and hierarchy from Blizzard's `EscMenuSaveGamePanel.fdf`. A native selectable list fills
-the authored `FileListFrame` placeholder and retains client-local row and scroll state. Save starts with an editable
+Named Save/Load uses the shared Esc-menu backdrop and the geometry, controls, and hierarchy from Blizzard's FDF files. An authored
+`MapListBox` fills `FileListFrame`; its native state child retains client-local row and scroll state. Save starts with an editable
 `YYYY-MM-DD_HH-MM-SS` name.

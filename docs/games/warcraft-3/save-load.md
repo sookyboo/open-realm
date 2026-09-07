@@ -234,8 +234,9 @@ Esc -> Load Game -> select row -> menu_load_named "{<transient list control name
 ```
 
 The gameplay Save/Load dialog serializes Blizzard's `EscMenuSaveGamePanel` directly. Its `FileListFrame` is an intentionally empty
-placeholder populated by retail code, so OpenRealm creates a native `FT_LISTBOX` child constrained by the placeholder's authored
-anchors. The FDF remains the geometry source of truth. The transient client owns list selection, scrolling, and edit state while the
+placeholder populated by retail code, so OpenRealm instantiates the authored `MapListBox` backdrop and scrollbar there and adds a
+native `FT_LISTBOX` state child constrained by its anchors. The panel is hosted inside the shared Esc-menu backdrop, and the FDF remains
+the geometry source of truth. The transient client owns list selection, scrolling, and edit state while the
 modal is open; gameplay code only fills data, visibility, enable state, and click handlers.
 
 New saves are prefilled with a filesystem/command-safe local timestamp (`YYYY-MM-DD_HH-MM-SS`). The value remains an ordinary
