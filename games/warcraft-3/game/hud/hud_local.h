@@ -12,6 +12,8 @@
 #include "../generated/quest_dialog.h"
 #include "../generated/log_dialog.h"
 #include "../generated/esc_menu_main_panel.h"
+#include "../generated/esc_menu_save_game_panel.h"
+#include "../generated/chat_dialog.h"
 #include "../generated/alliance_dialog.h"
 #include "../generated/game_result_dialog.h"
 #include "../generated/cinematic_panel.h"
@@ -48,6 +50,13 @@ typedef struct {
     LogDialog_t log;
     char log_text[WC3_MESSAGE_LOG_TEXT_SIZE];
     EscMenuMainPanelGame_t menu;
+    EscMenuSaveGamePanel_t save_menu;
+    ChatDialog_t save_dialog;
+    /* Runtime clones inserted into save_dialog. These must live with hud so
+     * UI_ResetHud() invalidates them together with the FDF frame arena. */
+    LPFRAMEDEF save_edit, save_edit_text;
+    LPFRAMEDEF save_button, save_cancel_button;
+    LPFRAMEDEF load_button, load_cancel_button;
     AllianceDialog_t allies;
     GameResultDialog_t result;
     CinematicPanel_t cinematic;
@@ -151,6 +160,8 @@ void UI_AlliesCancel(LPEDICT ent);
 void UI_ShowMainMenu(LPEDICT ent);
 void UI_ShowGameMenuEndGame(LPEDICT ent);
 void UI_ShowGameMenuConfirmExit(LPEDICT ent);
+void UI_ShowGameMenuSave(LPEDICT ent);
+void UI_ShowGameMenuLoad(LPEDICT ent);
 
 /* Game result dialog (hud_game_result.c) */
 void UI_ShowGameResult(LPEDICT ent, DWORD result);

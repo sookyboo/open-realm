@@ -1033,6 +1033,7 @@ typedef struct {
     COLOR32 textColor;
     COLOR32 cursorColor;
     DWORD maxChars;
+    UINAME id;
 } uiEditBox_t;
 
 typedef struct {

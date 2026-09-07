@@ -3,6 +3,7 @@
 #include "mpq.h"
 #include "test.h"
 #include <stdlib.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include <io.h>
@@ -286,6 +287,22 @@ static BOOL FS_StatPath(LPCSTR filename, BOOL *isDirectory, BOOL *isFile) {
     return true;
 }
 
+static BOOL FS_FileModifiedTime(LPCSTR filename, time_t *modified) {
+#ifdef _WIN32
+    struct _stat st;
+
+    if (!filename || !*filename || !modified || _stat(filename, &st) != 0)
+        return false;
+#else
+    struct stat st;
+
+    if (!filename || !*filename || !modified || stat(filename, &st) != 0)
+        return false;
+#endif
+    *modified = st.st_mtime;
+    return true;
+}
+
 static BOOL FS_DirectoryExists(LPCSTR filename) {
     BOOL isDirectory = false;
 
@@ -359,6 +376,9 @@ void FS_SetHomeDirectory(LPCSTR dir) {
         return;
     }
     snprintf(fs_home_dir, sizeof(fs_home_dir), "%s", dir);
+    /* Save paths are cached after first use. A runtime/test home-directory
+     * change must invalidate that derived directory as well. */
+    fs_save_dir[0] = '\0';
 }
 
 LPCSTR FS_BasePath(void) {
@@ -387,25 +407,21 @@ void FS_ConfigPath(LPCSTR rel, LPSTR out, DWORD out_size) {
     }
 }
 
-/* Resolve a writable save file under the platform's per-user data directory;
- * this keeps gameplay saves separate from configuration files. */
-void FS_SavePath(LPCSTR rel, LPSTR out, DWORD out_size) {
+static BOOL FS_EnsureSaveDirectory(void) {
     PATHSTR game_dir;
-    LPCSTR extension = FS_PathHasExtension(rel, ".sav") ? "" : ".sav";
 
-    if (!fs_save_dir[0]) {
-        if (fs_home_dir[0]) {
-            snprintf(game_dir, sizeof(game_dir), "%s", fs_home_dir);
+    if (fs_save_dir[0]) return true;
+    if (fs_home_dir[0]) {
+        snprintf(game_dir, sizeof(game_dir), "%s", fs_home_dir);
 #ifdef _WIN32
-            snprintf(fs_save_dir, sizeof(fs_save_dir), "%s/saves", game_dir);
-            _mkdir(fs_save_dir);
-            if (_access(fs_save_dir, 2) != 0) fs_save_dir[0] = '\0';
+        snprintf(fs_save_dir, sizeof(fs_save_dir), "%s/saves", game_dir);
+        _mkdir(fs_save_dir);
+        if (_access(fs_save_dir, 2) != 0) fs_save_dir[0] = '\0';
 #else
-            snprintf(fs_save_dir, sizeof(fs_save_dir), "%s/saves", game_dir);
-            mkdir(fs_save_dir, 0755);
-            if (access(fs_save_dir, W_OK) != 0) fs_save_dir[0] = '\0';
+        snprintf(fs_save_dir, sizeof(fs_save_dir), "%s/saves", game_dir);
+        mkdir(fs_save_dir, 0755);
+        if (access(fs_save_dir, W_OK) != 0) fs_save_dir[0] = '\0';
 #endif
-        }
     }
     if (!fs_save_dir[0]) {
         snprintf(fs_save_dir, sizeof(fs_save_dir), "%s/%s/saves", FS_BasePath(), BZ_GAME);
@@ -415,7 +431,19 @@ void FS_SavePath(LPCSTR rel, LPSTR out, DWORD out_size) {
         mkdir(fs_save_dir, 0755);
 #endif
     }
-    if (fs_save_dir[0]) snprintf(out, out_size, "%s/%s%s", fs_save_dir, rel, extension);
+    return fs_save_dir[0] != '\0';
+}
+
+/* Resolve a writable save file under the platform's per-user data directory;
+ * this keeps gameplay saves separate from configuration files. */
+void FS_SavePath(LPCSTR rel, LPSTR out, DWORD out_size) {
+    LPCSTR extension;
+
+    if (!out || out_size == 0) return;
+    out[0] = '\0';
+    if (!rel || !FS_EnsureSaveDirectory()) return;
+    extension = FS_PathHasExtension(rel, ".sav") ? "" : ".sav";
+    snprintf(out, out_size, "%s/%s%s", fs_save_dir, rel, extension);
 }
 
 static BOOL FS_HasExtension(LPCSTR filename, LPCSTR extension) {
@@ -561,6 +589,69 @@ static void FS_ForEachDiskEntry(LPCSTR dirname, fsDiskEntryFunc_t func, void *us
     }
     closedir(dir);
 #endif
+}
+
+typedef struct {
+    PATHSTR name;
+    time_t modified;
+} fsSaveListEntry_t;
+
+typedef struct {
+    fsSaveListEntry_t *entries;
+    DWORD count;
+} fsSaveListCollect_t;
+
+static void FS_CollectSaveEntry(LPCSTR name, LPCSTR path, BOOL isDirectory, BOOL isFile, void *userData) {
+    fsSaveListCollect_t *collect = userData;
+    fsSaveListEntry_t *next;
+    size_t len;
+
+    (void)isDirectory;
+    if (!collect || !name || !path || !isFile || !FS_HasExtension(name, ".sav")) return;
+    len = strlen(name);
+    if (len <= 4) return;
+    next = realloc(collect->entries, (collect->count + 1) * sizeof(*next));
+    if (!next) return;
+    collect->entries = next;
+    snprintf(collect->entries[collect->count].name, sizeof(PATHSTR),
+             "%.*s", (int)(len - 4), name);
+    collect->entries[collect->count].modified = 0;
+    FS_FileModifiedTime(path, &collect->entries[collect->count].modified);
+    collect->count++;
+}
+
+static int FS_CompareSaveEntries(const void *a, const void *b) {
+    fsSaveListEntry_t const *left = a;
+    fsSaveListEntry_t const *right = b;
+
+    if (left->modified > right->modified) return -1;
+    if (left->modified < right->modified) return 1;
+    return strcasecmp(left->name, right->name);
+}
+
+/* Return save basenames as a double-NUL-terminated list. Newest files come
+ * first; equal mtimes fall back to a case-insensitive name sort so callers
+ * still get deterministic ordering across hosts. */
+DWORD FS_ListSaves(LPSTR out, DWORD out_size) {
+    fsSaveListCollect_t collect = { 0 };
+    DWORD written = 0, used = 0;
+
+    if (!out || out_size == 0) return 0;
+    out[0] = '\0';
+    if (!FS_EnsureSaveDirectory()) return 0;
+    FS_ForEachDiskEntry(fs_save_dir, FS_CollectSaveEntry, &collect);
+    if (collect.count > 1)
+        qsort(collect.entries, collect.count, sizeof(*collect.entries), FS_CompareSaveEntries);
+    FOR_LOOP(i, collect.count) {
+        DWORD len = (DWORD)strlen(collect.entries[i].name) + 1;
+        if (used + len + 1 > out_size) break;
+        memcpy(out + used, collect.entries[i].name, len);
+        used += len;
+        written++;
+    }
+    if (used < out_size) out[used] = '\0';
+    free(collect.entries);
+    return written;
 }
 
 static void FS_AddGameDirectory(LPCSTR dirname) {

@@ -212,6 +212,7 @@ void SV_InitGameProgs(void) {
     import.CvarString = Cvar_String;
     import.UserPath = FS_UserPath;
     import.SavePath = FS_SavePath;
+    import.ListSaves = FS_ListSaves;
 
     ge = GetGameAPI(&import);
     ge->Init();

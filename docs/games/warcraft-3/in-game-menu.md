@@ -11,6 +11,8 @@ The current reachable flow is:
 
 ```text
 Menu/F10 -> MainPanel
+  Save Game    -> EscMenuSaveGamePanel / editable name -> menu_save_named <name>
+  Load Game    -> EscMenuSaveGamePanel / selectable save list -> menu_load_named <name>
   Pause/Return -> close menu / resume
   End Game     -> EndGamePanel
     Previous   -> MainPanel
@@ -20,9 +22,12 @@ Menu/F10 -> MainPanel
       Confirm  -> exit application
 ```
 
-Save, Load, Options, Help, Tips, and Restart remain visibly disabled until their underlying behavior exists. Current Warsmash also
-disables `PauseButton`; OpenRealm deliberately retains its newer pause-menu behavior and labels that button `Resume Game`, with the
-same close action as Return.
+Save and Load are enabled in single-player when Blizzard's authored `EscMenuSaveGamePanel` is available. The Save panel accepts a
+name in `SaveGameFileEditBox`; the Load panel enumerates `.sav` files from the writable save directory and enables Load when at least
+one file has a readable OpenRealm map header. The legacy `quick.sav` row is displayed as `Quick Save`. Options, Help, Tips, and
+Restart remain visibly disabled.
+Current Warsmash also disables `PauseButton`; OpenRealm deliberately retains its newer pause-menu behavior and labels that button
+`Resume Game`, with the same close action as Return.
 
 ## OpenRealm Data Flow
 
@@ -37,21 +42,31 @@ G_ClientCommand
   menu              -> UI_ShowMainMenu
   menu_endgame      -> UI_ShowGameMenuEndGame
   menu_confirm_exit -> UI_ShowGameMenuConfirmExit
+  menu_save_game    -> UI_ShowGameMenuSave
+  menu_load_game    -> UI_ShowGameMenuLoad
+  menu_save_named <name> -> WriteGame(<save-dir>/<name>.sav)
+  menu_load_named <name> -> G_RequestLoadGameNamed -> deferred MenuAction("load", name)
+  menu_save_quick        -> compatibility wrapper for `Quick Save` / `quick`
+  menu_load_quick        -> existing quick-load/front-end compatibility path
 
 hud/hud_menu.c
   EscMenuMainPanelGame_Load()
+  EscMenuSaveGamePanel_Load()
   -> bind EscMenuMainPanel + EscMenuBackdrop + child panels
   -> select visible panel
   -> size controller and backdrop to active panel
   -> svc_window(BZ_WC3_WINDOW_MENU, MODAL|UNIQUE)
 
 client/cl_window.c
-  first modal window            -> pause 1
-  ordinary onclick              -> server command
-  close_window[_notify]         -> close local window
-  disconnect_game               -> CL_Disconnect(..., false)
-  quit_application              -> queue normal `quit` command
-  last modal closes/disconnects -> modal ownership released
+  first modal window                 -> pause 1
+  transient EDITBOX                  -> client-owned text/cursor state
+  transient LISTBOX                  -> client-owned selected row/scroll state
+  `{ControlName}` onclick placeholder -> escaped current control value
+  ordinary onclick                   -> server command
+  close_window[_notify]              -> close local window
+  disconnect_game                    -> deferred front-end transition
+  quit_application                   -> queue normal `quit` command
+  last modal closes/disconnects      -> modal ownership released
 ```
 
 Submenu changes replace the existing unique menu window. `CL_WindowOpen()` therefore preserves local window identity and the client
@@ -87,11 +102,39 @@ and application-exit only happen after explicit local activation. `disconnect_ga
 "menu_main")` session boundary; it must not call `CL_Disconnect()` and immediately show the menu while the campaign server/game module
 is still alive, because game teardown owns FDF/template state that the front-end must rebuild afterward.
 
-Use ordinary `onclick` strings for server-owned state transitions such as `menu_endgame` and `menu_confirm_exit`.
+Use ordinary `onclick` strings for server-owned state transitions such as `menu_endgame` and `menu_confirm_exit`. Save/Load commit
+buttons use `close_window_command ...` plus control placeholders such as `{SaveGameFileEditBox}` and the resolved inner save-list
+control. The client expands those from its local edit/list state, escapes quotes/backslashes, forwards the command, and then closes
+the menu. `modal_flags` and
+`quest_dialog_open` are runtime-only save fields, so a save requested while the modal still owns pause cannot restore that ownership
+without a live client window.
+
+## Save/Load Scope
+
+The in-game panel now supports persistent named saves. `FS_ListSaves()` enumerates `.sav` basenames from the same directory used by
+`FS_SavePath()`, sorts them case-insensitively, and the game module filters out entries whose save header no longer resolves to a map.
+The Save/Load presentation deliberately reuses Warcraft's `ChatDialog.fdf` shell rather than the brittle retail `MapListBox` path.
+`ChatHistoryDisplay` supplies the authored scrolling viewport and `ChatHistoryScrollBar`; the gameplay copy promotes that scrolling
+control to the transient `uiListBox_t` transport so rows remain selectable as well as scrollable. Rows use `display\thidden-value`;
+the renderer shows only the display text while the selected hidden basename is submitted. `quick` is shown as `Quick Save`.
+
+`SaveGameFileEditBox` is reparented into the chat-style dialog and serialized as `uiEditBox_t` with its FDF name and max length. Each
+new Save dialog opens with a filesystem-safe local timestamp such as `2026-09-07 01-42-30`; the player may freely edit that default
+before committing. The transient-window client owns editing while
+the modal lives; text is not round-tripped to the server on every keypress. The Save command submits the final value once. Menu save
+names are trimmed, may optionally end in `.sav`, are limited to `CMDARG_LEN - 1`, and reject control characters plus
+`\ / : * ? " < > |`. `Quick Save` normalizes to the existing `quick` basename. Saving the same name currently replaces that file
+directly; the authored overwrite-confirm panel remains disabled.
+
+Named loads use `G_RequestLoadGameNamed()` -> `MenuAction("load", name)`. This keeps the same Quake-II-style session boundary as the
+console `load` command: the selected save is captured while the window callback is active, then `SV_GetSaveMap` / `SV_LoadGame` run
+from the following client frame after the callback has returned.
 
 ## Known Gaps
 
-- Save, Load, Options, Help, Tips, and Restart remain disabled.
+- Delete and overwrite-confirm panels are still disabled. Saving an existing name overwrites it immediately.
+- Save-list ordering is alphabetical by basename rather than retail timestamp/metadata ordering.
+- Options, Help, Tips, and Restart remain disabled.
 - The in-game pause button is an OpenRealm extension over the cited current Warsmash behavior: both Pause and Return resume/close.
 - F10 opens the menu through the established OpenRealm binding. Current Warsmash Java itself wires the upper menu button but not its
   keyboard F10 route.
@@ -102,12 +145,26 @@ Do not validate this from the front-end menu: `svc_window` requires an active ga
 
 1. Mouse Menu and F10 both open MainPanel.
 2. The first modal acquires pause only after the client receives the window; transport and UI remain responsive.
-3. Save/Load/Options/Help/Tips render disabled and do nothing.
-4. Pause and Return close the window and release the modal pause owner.
-5. End Game opens EndGamePanel; Restart is disabled and pause remains owned continuously.
-6. Quit Game leaves the world through the deferred session boundary and returns to a freshly rebuilt main menu with valid FDF bindings.
-7. Previous returns to MainPanel without closing/reopening the modal lifecycle.
-8. Quit leaves the map and returns to the Warcraft front-end.
-9. Exit opens ConfirmQuitPanel; Cancel returns to EndGamePanel.
-10. Confirm exits the application.
-11. Leaving the menu open beyond the client timeout interval does not disconnect or advance paused simulation.
+3. Save Game opens the chat-style Save dialog with the filename prefilled from local date/time, allows that value to be edited, and Save writes `<name>.sav` before closing the modal. `Quick Save` still targets `quick.sav`.
+4. Save and Load both show readable saves in the chat history-style scrolling list; row selection/scrolling stays local, and Load rebuilds from the selected save through the
+   deferred named-load session action. A corrupt/unreadable save is not offered.
+5. Cancel from Save/Load replaces the same unique window with MainPanel without releasing/reacquiring modal pause.
+6. Pause and Return close the window and release the modal pause owner.
+7. End Game opens EndGamePanel; Restart is disabled and pause remains owned continuously.
+8. Quit Game leaves the world through the deferred session boundary and returns to a freshly rebuilt main menu with valid FDF bindings.
+9. Previous returns to MainPanel without closing/reopening the modal lifecycle.
+10. Quit leaves the map and returns to the Warcraft front-end.
+11. Exit opens ConfirmQuitPanel; Cancel returns to EndGamePanel.
+12. Confirm exits the application.
+13. Leaving the menu open beyond the client timeout interval does not disconnect or advance paused simulation.
+
+### Load availability
+
+The ESC-panel **Load Game** entry is enabled when the writable save directory contains at least one safe `.sav` basename. This top-level availability check deliberately does not depend on rendering the authored save list or parsing a save header. The Load panel performs the stricter readable-save filtering before enabling its inner **Load** action, so a UI-layout or save-version mismatch cannot incorrectly disable the top-level menu entry.
+
+
+### Save/Load chooser layout
+
+Named Save/Load uses `ChatDialog` for Warcraft window chrome, but the selectable save rows use the same top-down geometry as the
+front-end cinematic/mission `MapListBox`. The history viewport is explicitly positioned inside the dialog and the action controls are
+late clones anchored inside the panel so they draw above the backdrop. Save starts with an editable `YYYY-MM-DD_HH-MM-SS` name.
