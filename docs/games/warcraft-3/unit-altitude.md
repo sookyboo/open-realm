@@ -52,9 +52,10 @@ Water height comes from the W3E `waterlevel` field using the same bilinear inter
 `WATER_HEIGHT_COR` decode as the renderer. Amphibious swimming classification uses the immutable terrain WPM, not
 baked/static building obstacles; `CM_TerrainPointIsWalkable` and `CM_TerrainPointIsSwimmable` expose that distinction.
 
-Walkable destructables currently use their authored entity Z over the rectangular pathing-texture footprint. This is an
-OpenRealm approximation of Warsmash's rendered-model collision/raycast. Keep that distinction explicit if bridge
-collision is upgraded later.
+Walkable destructables use the authored pathing-texture footprint for horizontal coverage and a downward trace against
+the rendered MDX model for support height. This follows Warsmash's rendered walkable-model raycast and avoids using
+whole-model sequence bounds, which can include bridge rails above the deck. If the model trace fails, the game emits an
+explicit diagnostic and retains the authored entity Z only for that failed query.
 
 ## Projectile Height
 

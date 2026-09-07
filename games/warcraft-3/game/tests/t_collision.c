@@ -483,6 +483,31 @@ TEST(wc3_collision, load_tga_unsupported_type_returns_null) {
     T_NULL(tex);
 }
 
+/* The Warsmash overlay contract rotates by facing+90 degrees, flips the TGA's vertical image axis,
+ * and treats channel values <=127 as clear. A non-square fixture catches placement mistakes. */
+TEST(wc3_collision, destructable_pathing_overlay_uses_warsmash_rotation_and_flip) {
+    BYTE cells[16 * 16] = {0};
+    struct { WORD width, height; COLOR32 map[8]; } tex = { .width = 2, .height = 4 };
+    LPEDICT bridge = G_Spawn();
+    VECTOR2 blocked = { 6.5f, 8.5f }, clear = { 8.5f, 8.5f }, threshold = { 6.5f, 9.5f };
+    BYTE flags;
+
+    setup_test_pathmap(16, 16, cells);
+    bridge->s.origin = MAKE(VECTOR3, 8.0f, 8.0f, 0.0f);
+    bridge->s.angle = 0.0f;
+    tex.map[0].b = 255;
+    tex.map[1].b = 127;
+    bridge->pathtex = (pathTex_t *)&tex;
+    CM_BakeStaticObstacles();
+
+    T_ASSERT(CM_GetPathingFlagsAt(&blocked, &flags));
+    T_ASSERT(flags & 2);
+    T_ASSERT(CM_GetPathingFlagsAt(&clear, &flags));
+    T_ASSERT(!(flags & 2));
+    T_ASSERT(CM_GetPathingFlagsAt(&threshold, &flags));
+    T_ASSERT(!(flags & 2));
+}
+
 /* -----------------------------------------------------------------------
  * Suite runner
  * --------------------------------------------------------------------- */

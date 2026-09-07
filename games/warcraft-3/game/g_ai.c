@@ -86,6 +86,32 @@ static BOOL unit_is_flying(LPCEDICT ent) {
     return (ent->aiflags & AI_FLYING) != 0;
 }
 
+static BOOL bridge_debug_near(LPCVECTOR2 point) {
+    static FLOAT const range = 768.0f; /* world units; bounded LT05 movement diagnostic radius */
+    FOR_LOOP(i, globals.num_edicts) {
+        LPCEDICT ent = &globals.edicts[i];
+        if (!ent->inuse || ent->class_id != MAKEFOURCC('L', 'T', '0', '5')) continue;
+        if (fabsf(point->x - ent->s.origin2.x) <= range && fabsf(point->y - ent->s.origin2.y) <= range) return true;
+    }
+    return false;
+}
+
+static void bridge_debug_move_reject(LPCEDICT self, LPCVECTOR2 cand, LPCSTR reason) {
+    static DWORD count;
+    BYTE flags = 0;
+    if (G_BridgeDebugLevel() < 3 || count >= 256 || !bridge_debug_near(cand)) return;
+    CM_GetPathingFlagsAt(cand, &flags);
+    fprintf(stderr, "WC3_BRIDGE_MOVE reject=%s unit=%08x from=(%.1f,%.1f) cand=(%.1f,%.1f) radius=%.1f flags=0x%02x\n",
+            reason, self->class_id, self->s.origin2.x, self->s.origin2.y, cand->x, cand->y, self->collision, flags);
+    count++;
+}
+
+static void bridge_debug_route_failure(LPCEDICT self, LPCVECTOR2 target, LPCSTR reason) {
+    if (G_BridgeDebugLevel() < 2 || (!bridge_debug_near(&self->s.origin2) && !bridge_debug_near(target))) return;
+    fprintf(stderr, "WC3_BRIDGE_ROUTE result=fail reason=%s unit=%08x from=(%.1f,%.1f) target=(%.1f,%.1f) radius=%.1f\n",
+            reason, self->class_id, self->s.origin2.x, self->s.origin2.y, target->x, target->y, self->collision);
+}
+
 /* BoxEdicts predicate: solid units/buildings sharing this mover's collision
  * layer.  Excludes self, hollow entities, zero-collision entities (waypoints,
  * effects, missiles), and the opposite air/ground layer (flyers and ground
@@ -125,14 +151,18 @@ static BOOL move_is_valid_policy(LPEDICT self, LPCVECTOR2 cand,
         return true;
 
     /* Static world: terrain + baked building footprints (pathmap.original). */
-    if (!CM_PointIsPathableForRadius(cand, self->collision))
+    if (!CM_PointIsPathableForRadius(cand, self->collision)) {
+        bridge_debug_move_reject(self, cand, "point");
         return false;
+    }
     /* WC3's pathing grid rejects a swept step that cuts a diagonal corner. Keep
      * the escape case for units spawned inside stale/changed pathing, where the
      * endpoint remains the authoritative legal position. */
     if (CM_PointIsPathableForRadius(&self->s.origin2, self->collision) &&
-        !CM_LineIsWalkableForRadius(&self->s.origin2, cand, self->collision))
+        !CM_LineIsWalkableForRadius(&self->s.origin2, cand, self->collision)) {
+        bridge_debug_move_reject(self, cand, "line");
         return false;
+    }
 
     if (collision_policy == MOVE_IGNORE_UNITS)
         return true;
@@ -439,7 +469,10 @@ static BOOL unit_accel_direction_to_point(LPEDICT self, LPCVECTOR2 target,
         self->movement.path_valid = false;
     if (!self->movement.path_valid) {
         pathAccelParams_t params = { &self->s.origin2, target, radius };
-        if (!CM_FindPathWaypoint(&params, &self->movement.path_waypoint)) return false;
+        if (!CM_FindPathWaypoint(&params, &self->movement.path_waypoint)) {
+            bridge_debug_route_failure(self, target, "waypoint");
+            return false;
+        }
         self->movement.path_target = *target;
         self->movement.path_radius = radius;
         self->movement.path_valid = true;

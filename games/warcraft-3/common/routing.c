@@ -381,15 +381,35 @@ static DWORD collision_radius_cells(FLOAT collision) {
 /* Stamp a single entity's footprint into a pathmap byte array. */
 static void stamp_entity_obstacle(edict_t const *ent, pathMapCell_t *target) {
     point2_t p = LocationToPathMap(&ent->s.origin2);
+    /* HACK: alive walkable destructables behave like ordinary bridge terrain
+     * for now; their visual rail pixels must not reintroduce blockers after the
+     * alive footprint has been opened below. Dead pathing remains stamped. */
+    if (ent->destructable.walkable && !ent->destructable.dead) return;
     if (ent->pathtex) {
         pathTex_t *pt = ent->pathtex;
+        int angle = (int)(ent->s.angle * 180.0f / M_PI);
+        int rotation = (angle + 450) % 360;
+        DWORD div_w = rotation % 180 ? pt->height : pt->width;
+        DWORD div_h = rotation % 180 ? pt->width : pt->height;
+
+        if (rotation < 0) rotation += 360;
         FOR_LOOP(x, pt->width) {
             FOR_LOOP(y, pt->height) {
-                int px = (int)x + p.x - (int)pt->width / 2;
-                int py = (int)y + p.y - (int)pt->height / 2;
+                int tx = (int)x, ty = (int)y;
+                int px, py;
+
+                /* Match Warsmash: rotate the image in 90-degree steps, sample its vertically flipped
+                 * image, and OR restrictions into WPM instead of clearing terrain restrictions. */
+                switch (rotation) {
+                    case 90: tx = (int)pt->height - 1 - (int)y; ty = (int)x; break;
+                    case 180: tx = (int)pt->width - 1 - (int)x; ty = (int)pt->height - 1 - (int)y; break;
+                    case 270: tx = (int)y; ty = (int)pt->width - 1 - (int)x; break;
+                }
+                px = tx + p.x - (int)div_w / 2;
+                py = ty + p.y - (int)div_h / 2;
                 if (is_valid_point(px, py)) {
                     target[px + py * pathmap.width].nowalk |=
-                        pt->map[x + y * pt->width].b;
+                        pt->map[x + (pt->height - 1 - y) * pt->width].b > 127;
                 }
             }
         }
@@ -404,6 +424,129 @@ static void stamp_entity_obstacle(edict_t const *ent, pathMapCell_t *target) {
                 }
             }
         }
+    }
+}
+
+/* Walkable destructables are authored support surfaces over terrain that may
+ * be unwalkable (bridges over water). Open the complete alive footprint so
+ * routing sees the same continuous surface as an ordinary terrain bridge. */
+static void clear_walkable_surface(edict_t const *ent, pathMapCell_t *target) {
+    point2_t p;
+    pathTex_t const *pt;
+    int angle, rotation;
+    DWORD div_w, div_h;
+
+    if (!ent->destructable.walkable || ent->destructable.dead || !ent->pathtex)
+        return;
+    pt = ent->pathtex;
+    p = LocationToPathMap(&ent->s.origin2);
+    angle = (int)(ent->s.angle * 180.0f / M_PI);
+    rotation = (angle + 450) % 360;
+    if (rotation < 0) rotation += 360;
+    div_w = rotation % 180 ? pt->height : pt->width;
+    div_h = rotation % 180 ? pt->width : pt->height;
+    FOR_LOOP(x, pt->width) FOR_LOOP(y, pt->height) {
+        int tx = (int)x, ty = (int)y, px, py;
+        switch (rotation) {
+            case 90: tx = (int)pt->height - 1 - (int)y; ty = (int)x; break;
+            case 180: tx = (int)pt->width - 1 - (int)x; ty = (int)pt->height - 1 - (int)y; break;
+            case 270: tx = (int)y; ty = (int)pt->width - 1 - (int)x; break;
+        }
+        px = tx + p.x - (int)div_w / 2;
+        py = ty + p.y - (int)div_h / 2;
+        if (is_valid_point(px, py)) target[px + py * pathmap.width].nowalk = 0;
+    }
+}
+
+/* Walkable bridge decks may legitimately cross a blocked diagonal corner: the
+ * rails are outside the unit's support lane, not a terrain wall to squeeze
+ * between. Keep ordinary corner rejection unchanged elsewhere. */
+static BOOL walkable_surface_cell(int x, int y) {
+    FOR_LOOP(i, ge->num_edicts) {
+        edict_t const *ent = EDICT_NUM(i);
+        point2_t p;
+        pathTex_t const *pt;
+        int angle, rotation;
+        DWORD div_w, div_h;
+
+        if (!ent->inuse || !ent->destructable.walkable || ent->destructable.dead || !ent->pathtex)
+            continue;
+        pt = ent->pathtex;
+        p = LocationToPathMap(&ent->s.origin2);
+        angle = (int)(ent->s.angle * 180.0f / M_PI);
+        rotation = (angle + 450) % 360;
+        if (rotation < 0) rotation += 360;
+        div_w = rotation % 180 ? pt->height : pt->width;
+        div_h = rotation % 180 ? pt->width : pt->height;
+        FOR_LOOP(px, pt->width) FOR_LOOP(py, pt->height) {
+            int tx = (int)px, ty = (int)py, cx, cy;
+            switch (rotation) {
+                case 90: tx = (int)pt->height - 1 - (int)py; ty = (int)px; break;
+                case 180: tx = (int)pt->width - 1 - (int)px; ty = (int)pt->height - 1 - (int)py; break;
+                case 270: tx = (int)py; ty = (int)pt->width - 1 - (int)px; break;
+            }
+            cx = tx + p.x - (int)div_w / 2;
+            cy = ty + p.y - (int)div_h / 2;
+            if (cx == x && cy == y) return true;
+        }
+    }
+    return false;
+}
+
+/* Dump the exact LT05 footprint after the static bake so terrain, texture, and
+ * radius-independent results can be compared from one bounded run. */
+void CM_DebugPathingFootprint(struct edict_s const *ent, LPCSTR phase, int level) {
+    point2_t p;
+    pathTex_t const *pt;
+    int angle, rotation, min_x, min_y, max_x, max_y;
+    DWORD div_w, div_h, source_blocked = 0, placed_blocked = 0;
+    DWORD terrain_open = 0, baked_open = 0;
+
+    if (!ent || !ent->pathtex || !pathmap.original || !pathmap.terrain || level < 1)
+        return;
+    pt = ent->pathtex;
+    p = LocationToPathMap(&ent->s.origin2);
+    angle = (int)(ent->s.angle * 180.0f / M_PI);
+    rotation = (angle + 450) % 360;
+    if (rotation < 0) rotation += 360;
+    div_w = rotation % 180 ? pt->height : pt->width;
+    div_h = rotation % 180 ? pt->width : pt->height;
+    min_x = p.x - (int)div_w / 2;
+    min_y = p.y - (int)div_h / 2;
+    max_x = min_x + (int)div_w - 1;
+    max_y = min_y + (int)div_h - 1;
+    FOR_LOOP(x, pt->width) FOR_LOOP(y, pt->height) {
+        int tx = (int)x, ty = (int)y, px, py;
+        BOOL blocked = pt->map[x + (pt->height - 1 - y) * pt->width].b > 127;
+        switch (rotation) {
+            case 90: tx = (int)pt->height - 1 - (int)y; ty = (int)x; break;
+            case 180: tx = (int)pt->width - 1 - (int)x; ty = (int)pt->height - 1 - (int)y; break;
+            case 270: tx = (int)y; ty = (int)pt->width - 1 - (int)x; break;
+        }
+        px = tx + p.x - (int)div_w / 2;
+        py = ty + p.y - (int)div_h / 2;
+        source_blocked += blocked;
+        if (blocked && is_valid_point(px, py)) placed_blocked++;
+    }
+    for (int y = min_y; y <= max_y; y++) for (int x = min_x; x <= max_x; x++) {
+        if (!is_valid_point(x, y)) continue;
+        terrain_open += !pathmap.terrain[x + y * pathmap.width].nowalk;
+        baked_open += !pathmap.original[x + y * pathmap.width].nowalk;
+    }
+    fprintf(stderr, "WC3_BRIDGE phase=%s center_cell=(%d,%d) source=%ux%u placed=%ux%u angle=%d rotation=%d source_blocked=%u placed_blocked=%u terrain_open=%u baked_open=%u radius_cell=%0.2f\n",
+            phase, p.x, p.y, pt->width, pt->height, div_w, div_h, angle, rotation,
+            source_blocked, placed_blocked, terrain_open, baked_open, CM_PathCellWorldSize());
+    if (level < 3) return;
+    for (int y = min_y; y <= max_y; y++) {
+        char row[129];
+        int n = 0;
+        for (int x = min_x; x <= max_x && n < (int)sizeof(row) - 1; x++) {
+            BOOL terrain = !is_valid_point(x, y) || pathmap.terrain[x + y * pathmap.width].nowalk;
+            BOOL baked = !is_valid_point(x, y) || pathmap.original[x + y * pathmap.width].nowalk;
+            row[n++] = terrain ? (baked ? 'X' : 't') : (baked ? 'b' : '.');
+        }
+        row[n] = '\0';
+        fprintf(stderr, "WC3_BRIDGE_GRID phase=%s y=%d %s\n", phase, y, row);
     }
 }
 
@@ -428,6 +571,10 @@ void CM_BakeStaticObstacles(void) {
     if (!pathmap.terrain || !pathmap.original)
         return;
     memcpy(pathmap.original, pathmap.terrain, cells);
+    FOR_LOOP(i, ge->num_edicts) {
+        edict_t *ent = EDICT_NUM(i);
+        if (ent->inuse) clear_walkable_surface(ent, pathmap.original);
+    }
     FOR_LOOP(i, ge->num_edicts) {
         edict_t *ent = EDICT_NUM(i);
         if (!entity_blocks_static_pathing(ent))
@@ -618,6 +765,31 @@ static bool is_pathable_node_original(int x, int y) {
     return is_valid_point(x, y) && !is_obstacle_original(x, y);
 }
 
+/* Match Warsmash's collision contract: test the nine world-space samples at
+ * +/- collisionSize, then map each sample to its authored pathing cell.  The
+ * previous cell-radius square was one cell too large for WC3's 31-unit
+ * Footman on a 32-unit pathing grid and rejected valid bridge approaches. */
+static bool is_pathable_world_for_radius(LPCVECTOR2 location, FLOAT radius) {
+    int i, j;
+    point2_t center = LocationToPathMap(location);
+
+    /* A walkable bridge is a support lane, not a square terrain opening. Once
+     * the mover's centre is on that lane, its radius samples may touch the
+     * diagonal rails without making the deck itself unwalkable. */
+    if (walkable_surface_cell(center.x, center.y))
+        return is_pathable_node_original(center.x, center.y);
+
+    for (i = -1; i <= 1; i++) {
+        for (j = -1; j <= 1; j++) {
+            VECTOR2 sample = { location->x + i * radius, location->y + j * radius };
+            point2_t cell = LocationToPathMap(&sample);
+            if (!is_pathable_node_original(cell.x, cell.y))
+                return false;
+        }
+    }
+    return true;
+}
+
 static bool is_pathable_node_original_for_radius_cells(int x, int y, int radius_cells) {
     int const x0 = x - radius_cells;
     int const y0 = y - radius_cells;
@@ -638,7 +810,11 @@ static bool is_pathable_node_original_for_radius_cells(int x, int y, int radius_
             - pathmap.obstacle_prefix[x0 + (y1 + 1) * stride]
             - pathmap.obstacle_prefix[(x1 + 1) + y0 * stride]
             + pathmap.obstacle_prefix[x0 + y0 * stride];
-    return blocked == 0;
+    if (blocked == 0) return true;
+    /* The bridge deck already cleared its authored centre cells from the
+     * terrain baseline. Do not reject a radius-expanded centre solely because
+     * the diagonal rail cells surround that support lane. */
+    return walkable_surface_cell(x, y) && is_pathable_node_original(x, y);
 }
 
 static bool closest_pathable_node_original(LPCVECTOR2 location, FLOAT radius, point2_t *out) {
@@ -690,11 +866,7 @@ BOOL CM_PointIsPathableForRadius(LPCVECTOR2 location, FLOAT radius) {
     if (!location || !pathmap.original || !pathmap.width || !pathmap.height) {
         return true;
     }
-    VECTOR2 n = CM_GetNormalizedMapPosition(location->x, location->y);
-    int tx = (int)floorf(n.x * pathmap.width);
-    int ty = (int)floorf(n.y * pathmap.height);
-    int radius_cells = (int)ceilf(MAX(0.f, radius) / pathmap_cell_world_size());
-    return is_pathable_node_original_for_radius_cells(tx, ty, radius_cells);
+    return is_pathable_world_for_radius(location, MAX(0.f, radius));
 }
 
 /* Cheap straight-line walkability test between two world points: walk the
@@ -771,7 +943,8 @@ BOOL CM_LineIsWalkableForRadius(LPCVECTOR2 a, LPCVECTOR2 b, FLOAT radius) {
          * flow-field rule and steer through touching obstacle corners. */
         if (step_x && step_y &&
             !(is_pathable_node_original_for_radius_cells(x + sx, y, radius_cells) &&
-              is_pathable_node_original_for_radius_cells(x, y + sy, radius_cells)))
+              is_pathable_node_original_for_radius_cells(x, y + sy, radius_cells)) &&
+            !(walkable_surface_cell(x, y) && walkable_surface_cell(x + sx, y + sy)))
             return false;
         if (step_x) { err -= dy; x += sx; }
         if (step_y) { err += dx; y += sy; }
@@ -874,7 +1047,8 @@ BOOL CM_FindPathWaypoint(pathAccelParams_t const *params, LPVECTOR2 out) {
             int const nx = cx + dx[dir], ny = cy + dy[dir];
             if (!is_pathable_node_original_for_radius_cells(nx, ny, radius_cells) ||
                 (dir >= 4 && !(is_pathable_node_original_for_radius_cells(nx, cy, radius_cells) &&
-                              is_pathable_node_original_for_radius_cells(cx, ny, radius_cells)))) continue;
+                              is_pathable_node_original_for_radius_cells(cx, ny, radius_cells)) &&
+                 !(walkable_surface_cell(cx, cy) && walkable_surface_cell(nx, ny)))) continue;
             DWORD const next = (DWORD)nx + (DWORD)ny * pathmap.width;
             pathNode_t *next_node = &pathmap.pathnodes[next];
             int const next_g = node->g + gv[dir];

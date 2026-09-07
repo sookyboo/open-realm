@@ -254,6 +254,7 @@ typedef struct {
     bool (*GetModelInfo)(LPMODEL model, LPMODELINFO info);
     bool (*GetEntityOverheadPosition)(renderEntity_t const *entity, LPVECTOR3 out);
     bool (*GetEntityAttachmentPosition)(renderEntity_t const *entity, LPCSTR prefix, LPVECTOR3 out);
+    bool (*TraceModel)(renderEntity_t const *entity, LPCLINE3 line, LPFLOAT distance);
 
     void (*DrawBoundingBox)(LPCBOX3 box, LPCMATRIX4 modelMatrix, LPCMATRIX4 vpMatrix, COLOR32 color);
     FLOAT (*GetHeightAtPoint)(float x, float y);

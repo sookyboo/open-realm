@@ -286,6 +286,19 @@ static void SP_SpawnDoodad(LPEDICT edict) {
     edict->svflags |= SVF_STATIC_SCENERY;
 }
 
+/* Destructable rows already include orientation digits in bridge/wall model stems; tree rows use variation suffixes. */
+static void G_DestructableModelPath(LPCSTR dir, LPCSTR file, DWORD variation, LPSTR out, size_t out_size) {
+    LPCSTR base = strrchr(file, '\\');
+    LPCSTR end = file + strlen(file);
+    BOOL numeric = end > (base ? base + 1 : file) && isdigit((unsigned char)end[-1]);
+
+    if (dir) {
+        if (numeric) snprintf(out, out_size, "%s\\%s\\%s.mdx", dir, file, file);
+        else snprintf(out, out_size, "%s\\%s\\%s%d.mdx", dir, file, file, variation);
+    } else if (numeric) snprintf(out, out_size, "%s.mdx", file);
+    else snprintf(out, out_size, "%s%d.mdx", file, variation);
+}
+
 static void SP_SpawnDestructable(LPEDICT edict) {
     DestructableData_t const *row = edict->data.DestructableData;
     LPCSTR dir = row->dir;
@@ -296,11 +309,7 @@ static void SP_SpawnDestructable(LPEDICT edict) {
     LPCSTR tex = row->textureFile;
     /* texFile may include an extension; "_" means the model has no replacement texture. */
     edict->s.image = tex && *tex && strcmp(tex, "_") ? gi.ImageIndex(tex) : 0;
-    if (dir) {
-        snprintf(buffer, sizeof(buffer), "%s\\%s\\%s%d.mdx", dir, file, file, edict->variation);
-    } else {
-        snprintf(buffer, sizeof(buffer), "%s%d.mdx", file, edict->variation);
-    }
+    G_DestructableModelPath(dir, file, edict->variation, buffer, sizeof(buffer));
     edict->s.model = G_RegisterModel(buffer);
     edict->destructable.alive_pathtex = M_LoadPathTex(path_tex);
     edict->destructable.death_pathtex = M_LoadPathTex(row->deathPathingTexture);
@@ -314,6 +323,7 @@ static void SP_SpawnDestructable(LPEDICT edict) {
     edict->destructable.alive_collision = edict->collision;
     edict->destructable.initialized = true;
     edict->destructable.dead = false;
+    edict->destructable.walkable = row->walkable;
     edict->destructable.item_table = (DWORD)-1;
     edict->destructable.placement_solid = true;
     edict->destructable.pathing_active = edict->pathtex || edict->collision > 0.0f;
@@ -619,6 +629,7 @@ void G_SpawnEntities(void) {
 
     UI_Init();
     CM_BakeStaticObstacles();
+    if (G_BridgeDebugLevel()) FOR_LOOP(i, globals.num_edicts) G_DebugBridgePathing(&globals.edicts[i], "map_load");
     /* Start simulation from the map load itself so dedicated and listen-server restores share one lifecycle. */
     level.started = true;
 }

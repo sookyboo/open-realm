@@ -701,6 +701,45 @@ static BOOL M_UnitUsesWaterSurface(LPCEDICT self, LPCSTR movetp) {
     return false;
 }
 
+/* Keep the bridge support-surface trace bounded while diagnosing units that
+ * visually travel below LT05 instead of receiving its deck height. */
+static void M_DebugBridgeGround(LPCEDICT self, LPCEDICT surface, BOOL inside, FLOAT support, FLOAT before, FLOAT after) {
+    static DWORD count;
+    if (G_BridgeDebugLevel() < 3 || count >= 128 || !self || !surface || surface->destructable.dead ||
+        surface->class_id != MAKEFOURCC('L', 'T', '0', '5') ||
+        fabsf(self->s.origin.x - surface->s.origin.x) > 768.0f ||
+        fabsf(self->s.origin.y - surface->s.origin.y) > 768.0f)
+        return;
+    fprintf(stderr, "WC3_BRIDGE_GROUND unit=%08x pos=(%.1f,%.1f,%.1f) inside=%d dead=%d solid=%d pathtex=%d surface_z=%.1f before=%.1f after=%.1f\n",
+            self->class_id, self->s.origin.x, self->s.origin.y, self->s.origin.z, inside,
+            surface->destructable.dead, surface->destructable.placement_solid, surface->pathtex != NULL,
+            support, before, after);
+    count++;
+}
+
+/* Walkable MDX objects expose their actual deck through the renderer's model
+ * trace; sequence bounds include rails and are not a support surface. */
+static FLOAT M_WalkableSurfaceHeight(LPCEDICT surface) {
+    walkableSurfaceQuery_t query = {
+        .model = surface->s.model,
+        .frame = surface->s.frame,
+        .origin = surface->s.origin,
+        .angle = surface->s.angle,
+        .scale = surface->s.scale,
+        .point = surface->s.origin2,
+    };
+
+    if (!surface->s.model) return surface->s.origin.z;
+    if (!gi.GetWalkableSurfaceHeight(&query)) {
+        fprintf(stderr, "M_WalkableSurfaceHeight: model=%d trace failed at (%.1f,%.1f)\n",
+                surface->s.model, query.point.x, query.point.y);
+        /* HACK: preserve movement when a renderer model cannot be queried; the
+         * explicit diagnostic keeps this data/runtime boundary visible. */
+        return surface->s.origin.z;
+    }
+    return query.height;
+}
+
 /* Resolve the visual/support surface, then apply the unit's mutable fly height.
  * FOOT/HORSE stay terrain-based; FLY/HOVER/FLOAT and swimming AMPH units use
  * max(terrain, water).  Walkable destructables can raise every movement type
@@ -717,11 +756,19 @@ void M_CheckGround(LPEDICT self) {
     if (!floating) {
         for (LPEDICT surface = level.ground_surfaces; surface; surface = surface->ground_next) {
             pathTex_t const *pathtex = surface->pathtex;
+            FLOAT const before = height;
+            FLOAT support = surface->s.origin.z;
+            BOOL inside;
             if (!surface->inuse || surface->destructable.dead ||
-                !surface->destructable.placement_solid || !pathtex) continue;
-            if (fabsf(self->s.origin.x - surface->s.origin.x) > pathtex->width * cell * 0.5f ||
-                fabsf(self->s.origin.y - surface->s.origin.y) > pathtex->height * cell * 0.5f) continue;
-            height = MAX(height, surface->s.origin.z);
+                !surface->destructable.placement_solid || !pathtex) {
+                M_DebugBridgeGround(self, surface, false, support, before, height);
+                continue;
+            }
+            support = M_WalkableSurfaceHeight(surface);
+            inside = fabsf(self->s.origin.x - surface->s.origin.x) <= pathtex->width * cell * 0.5f &&
+                     fabsf(self->s.origin.y - surface->s.origin.y) <= pathtex->height * cell * 0.5f;
+            if (inside) height = MAX(height, support);
+            M_DebugBridgeGround(self, surface, inside, support, before, height);
         }
     }
     self->s.origin.z = height + self->unitinfo.FlyHeight;

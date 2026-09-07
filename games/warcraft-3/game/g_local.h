@@ -945,6 +945,7 @@ struct edict_s {
         BOOL dead;
         BOOL pathing_active;
         BOOL placement_solid;
+        BOOL walkable;
         BOOL loot_processed;
 
         DWORD editor_id;
@@ -1381,6 +1382,8 @@ typedef struct {
 } uiTrigger_t;
 
 // g_main.c
+int G_BridgeDebugLevel(void);
+void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase);
 LPPLAYER G_GetPlayerByNumber(DWORD);
 void G_InitJassHost(void);
 LPEDICT G_GetPlayerEntityByNumber(DWORD);

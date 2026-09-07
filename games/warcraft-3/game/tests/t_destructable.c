@@ -119,6 +119,42 @@ TEST(wc3_destructable, generated_script_reuses_and_activates_hidden_placement) {
     T_FEQ(dest->s.origin2.y, 96.0f, 0.01f);
 }
 
+TEST(wc3_destructable, lt05_uses_authored_model_sequences_for_death_birth_stand) {
+    LPEDICT dest = make_test_destructable(2500.0f, 0.0f, 0.0f);
+
+    dest->s.model = G_RegisterModel("Doodads\\Terrain\\WoodBridgeLarge45\\WoodBridgeLarge45.mdx");
+    T_NOT_NULL(G_GetAnimation(dest->s.model, "death"));
+    T_NOT_NULL(G_GetAnimation(dest->s.model, "birth"));
+    T_NOT_NULL(G_GetAnimation(dest->s.model, "stand"));
+
+    G_DestructableStartDeathAnimation(dest);
+    T_NOT_NULL(dest->animation);
+    T_STREQ(dest->animation->name, "death");
+    G_DestructableStartAliveAnimation(dest, true);
+    T_NOT_NULL(dest->animation);
+    T_STREQ(dest->animation->name, "birth");
+    G_DestructableStartAliveAnimation(dest, false);
+    T_NOT_NULL(dest->animation);
+    T_STREQ(dest->animation->name, "stand");
+}
+
+TEST(wc3_destructable, dead_bridge_blocks_route_until_restored) {
+    BYTE cells[5] = {0};
+    struct { WORD width, height; COLOR32 map[1]; } blocked = { .width = 1, .height = 1, .map = {{0, 0, 255, 255}} };
+    struct { WORD width, height; COLOR32 map[1]; } clear = { .width = 1, .height = 1, .map = {{0, 0, 0, 255}} };
+    VECTOR2 from = { 0.5f, 0.5f }, to = { 4.5f, 0.5f };
+    LPEDICT dest;
+
+    setup_test_pathmap(5, 1, cells);
+    dest = make_test_destructable(2500.0f, 2.5f, 0.5f);
+    dest->destructable.alive_pathtex = (pathTex_t *)&clear;
+    dest->destructable.death_pathtex = (pathTex_t *)&blocked;
+    T_ASSERT(G_SetDestructableDeadState(dest, false));
+    T_ASSERT(!CM_LineIsWalkable(&from, &to));
+    T_ASSERT(G_RestoreDestructable(dest, 2500.0f, true));
+    T_ASSERT(CM_LineIsWalkable(&from, &to));
+}
+
 TEST(wc3_destructable, lethal_damage_does_not_require_die_callback) {
     LPEDICT dest = make_test_destructable(25.0f, 0.0f, 0.0f);
     LPEDICT attacker = make_destructable_test_attacker(10.0f, 0.0f);
@@ -211,6 +247,33 @@ TEST(wc3_destructable, death_replacement_pathing_remains_blocking) {
     T_ASSERT(dest->destructable.pathing_active);
     T_ASSERT(dest->pathtex == (pathTex_t *)&destructable_blocked_death_pathtex);
     T_ASSERT(!CM_PointIsPathableForRadius(&center, 0.0f));
+}
+
+TEST(wc3_destructable, walkable_surface_clears_alive_terrain_but_dead_pathing_blocks) {
+    BYTE cells[8 * 8];
+    struct { WORD width, height; COLOR32 map[4]; } alive = { .width = 2, .height = 2 };
+    static one_cell_pathtex_t const dead = { .width = 1, .height = 1, .map = { { 0, 0, 255, 255 } } };
+    static DestructableData_t const data = { .walkable = true };
+    VECTOR2 center = { 4.0f, 4.0f };
+    LPEDICT dest;
+
+    FOR_LOOP(i, sizeof(cells) / sizeof(cells[0])) cells[i] = 2;
+    setup_test_pathmap(8, 8, cells);
+    dest = make_test_destructable(10.0f, center.x, center.y);
+    dest->data.DestructableData = &data;
+    dest->destructable.walkable = true;
+    dest->destructable.alive_pathtex = (pathTex_t *)&alive;
+    dest->destructable.death_pathtex = (pathTex_t *)&dead;
+    dest->pathtex = (pathTex_t *)&alive;
+    CM_BakeStaticObstacles();
+    T_ASSERT(CM_PointIsPathableForRadius(&center, 0.0f));
+    /* A bridge lane remains valid for a full-size mover even when the radius
+     * samples reach the diagonal rail cells around the deck. */
+    T_ASSERT(CM_PointIsPathableForRadius(&center, 32.0f));
+    G_KillDestructable(dest, NULL);
+    T_ASSERT(!CM_PointIsPathableForRadius(&center, 0.0f));
+    G_RestoreDestructable(dest, 10.0f, true);
+    T_ASSERT(CM_PointIsPathableForRadius(&center, 0.0f));
 }
 
 TEST(wc3_destructable, placement_retains_inline_drop_sets) {
