@@ -55,10 +55,7 @@ baked/static building obstacles; `CM_TerrainPointIsWalkable` and `CM_TerrainPoin
 Walkable destructables use the authored pathing-texture footprint for horizontal coverage and a downward trace against
 the rendered MDX model at the unit's current XY for support height. The walkable query forces visible mesh geometry and
 ignores coarse MDX CollisionShapes, matching Warsmash's walkable-surface raycast and preventing rails/collision volumes
-from flattening an entire bridge to one high support plane. Point results are cached in 4-world-unit buckets keyed by
-destructable animation/frame, so nearby units can share work while long or sloped bridge decks retain their local Z.
-`Birth` frame changes invalidate naturally, allowing a restored bridge to move into position. If a real model has no mesh
-hit at the queried point, terrain/water remains authoritative for that unit rather than reusing a distant bridge height.
+from flattening an entire bridge to one high support plane. Before tracing, ground resolution first checks the baked `walkable_surface_mask`; units merely inside a bridge's large rectangular bounds but on a non-deck path cell never invoke the renderer. Point results are cached in 16-world-unit buckets, with cache reuse constrained to the same 32-unit pathing cell. `Stand` entries remain valid while the looping stand frame advances, while `Birth` and other moving poses remain frame-sensitive so restored geometry can move into position. If a real model has no mesh hit at the queried point, terrain/water remains authoritative for that unit rather than reusing a distant bridge height.
 
 ## Projectile Height
 

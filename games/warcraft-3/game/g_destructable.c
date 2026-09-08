@@ -39,9 +39,9 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     FOR_LOOP(y, tex->height) FOR_LOOP(x, tex->width) {
         BOOL clear = mode == 1 || mode == 6;
         if (mode == 2) {
-            /* The normal stamp flips source Y and rotates by facing+90.  At
-             * angle 0, source x+y=w-1 becomes world x-y=0; angle 90 turns
-             * that into the perpendicular world x+y constant lane. */
+            /* The normal stamp flips source Y and uses the destructable facing
+             * directly. Diagnostic angle rotates only this synthetic source lane;
+             * it does not alter the destructable's authored facing. */
             int const line = angle % 180
                 ? (int)x - (int)y
                 : (int)x + (int)y - ((int)tex->width - 1);

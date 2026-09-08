@@ -53,6 +53,7 @@ DWORD  CM_RequestHeatmapForRadius(edict_t *goalentity, FLOAT radius);
 void   CM_ProcessPathJobs(DWORD work_budget);
 BOOL   CM_ClosestPathablePointForRadius(LPCVECTOR2 location, FLOAT radius, LPVECTOR2 out);
 BOOL   CM_ClosestReachablePointForRadius(LPCVECTOR2 from, LPCVECTOR2 target, FLOAT radius, LPVECTOR2 out);
+DWORD  CM_TestClosestReachableLastExpansions(void);
 BOOL   CM_LineIsWalkableForRadius(LPCVECTOR2 a, LPCVECTOR2 b, FLOAT radius);
 BOOL   CM_FindDirectApproachPointForRadius(LPCVECTOR2 from, LPCVECTOR2 target, FLOAT range, FLOAT radius, LPVECTOR2 out);
 BOOL   CM_FindApproachPointToFootprintForRadius(LPCEDICT target, LPCVECTOR2 from, FLOAT range, FLOAT radius, LPVECTOR2 out);
@@ -893,6 +894,21 @@ TEST(wc3_pathfinding, closest_reachable_respects_collision_radius) {
     T_ASSERT(CM_ClosestReachablePointForRadius(&from, &target, 1.0f, &out));
     T_FEQ(out.x, 3.5f, 0.001f);
     T_FEQ(out.y, 5.5f, 0.001f);
+}
+
+TEST(wc3_pathfinding, closest_reachable_large_disconnected_component_is_bounded) {
+    enum { W = 128, H = 128, WALL_X = 64 };
+    BYTE cells[W * H];
+    VECTOR2 from = { 1.5f, 64.5f }, target = { 126.5f, 64.5f }, out = {0};
+
+    memset(cells, 0, sizeof(cells));
+    for (int y = 0; y < H; y++) cells[WALL_X + y * W] = 2;
+    setup_test_pathmap(W, H, cells);
+
+    T_ASSERT(CM_ClosestReachablePointForRadius(&from, &target, 0.0f, &out));
+    T_ASSERT(out.x < WALL_X);
+    T_ASSERT(CM_TestClosestReachableLastExpansions() <= 4096);
+    T_ASSERT(CM_TestClosestReachableLastExpansions() > 0);
 }
 
 /* The flood and the flow must not cut diagonally through a wall corner: with

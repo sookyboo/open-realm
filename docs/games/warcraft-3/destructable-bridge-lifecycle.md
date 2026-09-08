@@ -60,6 +60,8 @@ Horizontal support/pathing and vertical ground height are separate contracts. Op
 
 The same-cell fallback is therefore compatibility behavior rather than established retail semantics. It must never sample across a 32-unit path-cell boundary.
 
+For performance, horizontal bridge baking never asks the renderer to validate individual TGA cells. The authored alive/death path texture owns horizontal membership. Vertical MDX tracing runs only for units whose current cell is already in the baked walkable-surface mask, and steady `Stand` results use a 16-world-unit cache constrained to the same pathing cell; non-steady poses such as `Birth` remain frame-sensitive.
+
 ## Probe
 
 Enable the bounded movement probe with:

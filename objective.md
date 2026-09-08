@@ -507,3 +507,16 @@ evidence. The process was stopped. The focused code tests remain the accepted
 verification for this change; a future runtime retry must first prevent that
 campaign route computation or use a bounded setup path before issuing the
 bridge commands.
+
+
+## Incremental performance/correctness cleanup
+
+The bridge transform fix is retained, but the follow-up implementation now separates the expensive layers explicitly:
+
+- horizontal TGA baking is renderer-independent; the abandoned per-pixel rendered-support filter and its dead common/game callback are removed rather than reintroduced;
+- `M_CheckGround()` only considers MDX support when the mover is already on an O(1) baked walkable-surface cell;
+- steady `Stand` support uses 16-world-unit cache buckets (without crossing path-cell boundaries) and ignores looping Stand frame advancement, while `Birth`/other moving poses stay frame-sensitive;
+- `CM_ClosestReachablePointForRadius()` no longer starts an unbounded synchronous heatmap or scans the entire path map. It performs a target-directed connected-component search with a 4096-node cap and returns the best legal point seen when the cap is reached;
+- the current authored TGA transform uses the destructable facing directly. The old `+90 degree` documentation/comments were stale and are corrected without changing the current transform.
+
+This cleanup is intentionally incremental on top of the authored-TGA bridge patch. It does not change the alive/death TGA lifecycle, the vertical image flip, the shared path-texture cell mapping, or the existing bridge radius/diagonal compatibility rules. Automated tests were added/updated but not run locally; the developer will compile and test.

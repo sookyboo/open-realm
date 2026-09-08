@@ -676,23 +676,32 @@ void SP_SpawnUnit(LPEDICT self) {
 typedef struct {
     BOOL valid;
     int surface_index;
-    DWORD frame;
+    DWORD pose_frame;
     void const *animation;
     int qx, qy;
+    VECTOR2 point;
     BOOL hit;
     FLOAT height;
 } walkableSupportCache_t;
 
-/* A point-specific bridge support query is required because long/sloped bridge
- * decks do not share one Z.  Cache 4-world-unit buckets so multiple units and
- * repeated simulation ticks can share renderer traces without flattening the
- * whole bridge to its centre height. */
+/* Renderer mesh traces are substantially more expensive than terrain/path-cell
+ * lookups. Quantize steady walkable surfaces to 16-world-unit buckets and keep
+ * those entries stable while their Stand animation advances. Birth/other moving
+ * poses retain frame-sensitive entries so restoration geometry can still move. */
 #define WALKABLE_SUPPORT_CACHE_SIZE 1024
+#define WALKABLE_SUPPORT_BUCKET_SIZE 16.0f
 static walkableSupportCache_t walkable_support_cache[WALKABLE_SUPPORT_CACHE_SIZE];
 
-static DWORD M_WalkableSupportCacheSlot(int surface_index, DWORD frame, int qx, int qy) {
+static DWORD M_WalkableSupportPoseFrame(LPCEDICT surface) {
+    if (!surface || !surface->animation) return 0;
+    if (!strcasecmp(surface->animation->name, "stand"))
+        return surface->animation->interval[0];
+    return surface->s.frame;
+}
+
+static DWORD M_WalkableSupportCacheSlot(int surface_index, DWORD pose_frame, int qx, int qy) {
     DWORD h = (DWORD)surface_index * 2654435761u;
-    h ^= frame * 2246822519u;
+    h ^= pose_frame * 2246822519u;
     h ^= (DWORD)qx * 3266489917u;
     h ^= (DWORD)qy * 668265263u;
     return h & (WALKABLE_SUPPORT_CACHE_SIZE - 1);
@@ -810,7 +819,7 @@ static void M_DebugBridgeGround(LPCEDICT self, LPCEDICT surface, BOOL inside, FL
  * 472.9 even where the actual traced deck was tens of units lower. */
 static BOOL M_WalkableSurfaceHeight(LPCEDICT surface, LPCVECTOR2 point, LPFLOAT height, BOOL *cached) {
     int surface_index, qx, qy;
-    DWORD slot;
+    DWORD pose_frame, slot;
     walkableSupportCache_t *cache;
     FLOAT result = 0.0f;
     BOOL hit;
@@ -822,13 +831,14 @@ static BOOL M_WalkableSurfaceHeight(LPCEDICT surface, LPCVECTOR2 point, LPFLOAT 
         return true;
     }
     surface_index = globals.edicts ? (int)(surface - globals.edicts) : -1;
-    qx = (int)floorf(point->x * 0.25f);
-    qy = (int)floorf(point->y * 0.25f);
-    slot = M_WalkableSupportCacheSlot(surface_index, surface->s.frame, qx, qy);
+    pose_frame = M_WalkableSupportPoseFrame(surface);
+    qx = (int)floorf(point->x / WALKABLE_SUPPORT_BUCKET_SIZE);
+    qy = (int)floorf(point->y / WALKABLE_SUPPORT_BUCKET_SIZE);
+    slot = M_WalkableSupportCacheSlot(surface_index, pose_frame, qx, qy);
     cache = &walkable_support_cache[slot];
     if (cache->valid && cache->surface_index == surface_index &&
-        cache->frame == surface->s.frame && cache->animation == surface->animation &&
-        cache->qx == qx && cache->qy == qy) {
+        cache->pose_frame == pose_frame && cache->animation == surface->animation &&
+        cache->qx == qx && cache->qy == qy && CM_SamePathCell(&cache->point, point)) {
         if (cached) *cached = true;
         if (cache->hit) *height = cache->height;
         return cache->hit;
@@ -883,23 +893,16 @@ static BOOL M_WalkableSurfaceHeight(LPCEDICT surface, LPCVECTOR2 point, LPFLOAT 
     *cache = (walkableSupportCache_t) {
         .valid = true,
         .surface_index = surface_index,
-        .frame = surface->s.frame,
+        .pose_frame = pose_frame,
         .animation = surface->animation,
         .qx = qx,
         .qy = qy,
+        .point = *point,
         .hit = hit,
         .height = result,
     };
     if (hit) *height = result;
     return hit;
-}
-
-/* Adapt the same-cell support resolver used by movement to the common routing
- * bake, so path cells do not depend on a single seam-sensitive ray. */
-BOOL G_WalkableSurfaceQuery(LPCEDICT surface, LPCVECTOR2 point) {
-    FLOAT height;
-    BOOL cached;
-    return M_WalkableSurfaceHeight(surface, point, &height, &cached);
 }
 
 #ifdef BZ_TESTS
@@ -921,7 +924,10 @@ void M_CheckGround(LPEDICT self) {
     if (M_UnitUsesWaterSurface(self, movetp))
         height = MAX(height, CM_GetWaterHeightAtPoint(self->s.origin.x, self->s.origin.y));
 
-    if (!floating) {
+    /* Horizontal pathing already bakes alive walkable-deck membership in O(1).
+     * Do not invoke renderer mesh tracing for units merely inside a bridge's
+     * large rectangular bounds when their current path cell is not on the deck. */
+    if (!floating && CM_WalkableSurfaceAt(&self->s.origin2)) {
         for (LPEDICT surface = level.ground_surfaces; surface; surface = surface->ground_next) {
             pathTex_t const *pathtex = surface->pathtex;
             FLOAT const before = height;

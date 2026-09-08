@@ -158,41 +158,66 @@ TEST(wc3_destructable, walkable_bridge_support_fallback_never_crosses_path_cell_
     T_ASSERT(calls < 9); /* probes that cross x/y=96 are filtered before tracing */
 }
 
-TEST(wc3_destructable, walkable_bridge_support_cache_reuses_bucket_until_frame_changes) {
+TEST(wc3_destructable, walkable_bridge_support_cache_keeps_stand_pose_across_frames) {
     BOOL (*old_query)(LPWALKABLESURFACEQUERY) = gi.GetWalkableSurfaceHeight;
+    static animation_t const stand = { .name = "Stand", .interval = { 1000, 2000 } };
     LPEDICT bridge;
     VECTOR2 point = { 76.0f, 76.0f };
-    FLOAT first_height = 0.0f, second_height = 0.0f, third_height = 0.0f;
-    BOOL first_cached = false, second_cached = false, third_cached = false;
-    BOOL first_hit, second_hit, third_hit;
-    int after_first, after_second, after_third;
+    FLOAT first_height = 0.0f, second_height = 0.0f;
+    BOOL first_cached = false, second_cached = false;
+    int after_first, after_second;
 
     setup_test_world();
     bridge = make_test_walkable_bridge();
+    bridge->animation = &stand;
     bridge_support_query_mode = 1;
     bridge_support_query_count = 0;
     gi.GetWalkableSurfaceHeight = test_bridge_support_query;
 
-    first_hit = M_TestWalkableSurfaceHeight(bridge, &point, &first_height, &first_cached);
+    T_ASSERT(M_TestWalkableSurfaceHeight(bridge, &point, &first_height, &first_cached));
     after_first = bridge_support_query_count;
-    second_hit = M_TestWalkableSurfaceHeight(bridge, &point, &second_height, &second_cached);
-    after_second = bridge_support_query_count;
     bridge->s.frame++;
-    third_hit = M_TestWalkableSurfaceHeight(bridge, &point, &third_height, &third_cached);
-    after_third = bridge_support_query_count;
+    T_ASSERT(M_TestWalkableSurfaceHeight(bridge, &point, &second_height, &second_cached));
+    after_second = bridge_support_query_count;
 
     gi.GetWalkableSurfaceHeight = old_query;
 
-    T_ASSERT(first_hit && second_hit && third_hit);
     T_ASSERT(!first_cached);
     T_ASSERT(second_cached);
-    T_ASSERT(!third_cached);
     T_FEQ(first_height, 152.0f, 0.01f);
     T_FEQ(second_height, first_height, 0.01f);
-    T_FEQ(third_height, first_height, 0.01f);
     T_EQ(after_first, 9);
     T_EQ(after_second, after_first);
-    T_EQ(after_third, after_first + 9);
+}
+
+TEST(wc3_destructable, walkable_bridge_support_cache_tracks_birth_frame_changes) {
+    BOOL (*old_query)(LPWALKABLESURFACEQUERY) = gi.GetWalkableSurfaceHeight;
+    static animation_t const birth = { .name = "Birth", .interval = { 1000, 2000 } };
+    LPEDICT bridge;
+    VECTOR2 point = { 76.0f, 76.0f };
+    FLOAT first_height = 0.0f, second_height = 0.0f;
+    BOOL first_cached = false, second_cached = false;
+    int after_first, after_second;
+
+    setup_test_world();
+    bridge = make_test_walkable_bridge();
+    bridge->animation = &birth;
+    bridge_support_query_mode = 1;
+    bridge_support_query_count = 0;
+    gi.GetWalkableSurfaceHeight = test_bridge_support_query;
+
+    T_ASSERT(M_TestWalkableSurfaceHeight(bridge, &point, &first_height, &first_cached));
+    after_first = bridge_support_query_count;
+    bridge->s.frame++;
+    T_ASSERT(M_TestWalkableSurfaceHeight(bridge, &point, &second_height, &second_cached));
+    after_second = bridge_support_query_count;
+
+    gi.GetWalkableSurfaceHeight = old_query;
+
+    T_ASSERT(!first_cached);
+    T_ASSERT(!second_cached);
+    T_EQ(after_first, 9);
+    T_EQ(after_second, after_first + 9);
 }
 
 TEST(wc3_destructable, placement_applies_life_flags_and_editor_id) {

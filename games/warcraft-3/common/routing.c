@@ -89,9 +89,9 @@ typedef struct {
  * expensive relaxation work is bounded per simulation frame. */
 static heatmapJob_t heatmap_job = { 0 };
 static DWORD path_search_stamp = 0;
-static cmWalkableSurfaceQuery_t walkable_surface_query;
 
 #define PATH_ACCEL_MAX_EXPANSIONS 2048 // nodes/request; bounds immediate point-route work before shared-field fallback
+#define CLOSEST_REACHABLE_MAX_EXPANSIONS 4096 // nodes/request; prevents unreachable point orders from flooding the whole map synchronously
 #define PATH_ACCEL_MAX_DISTANCE 48 // pathing cells/axis; limits the accelerator to nearby obstacle detours
 
 static void heatmap_job_cancel(void) {
@@ -465,12 +465,6 @@ static void clear_walkable_surface(edict_t const *ent, pathMapCell_t *target) {
             }
         }
     }
-}
-
-/* Let the game provide rendered-deck membership without coupling common
- * routing to the renderer; the query is used only during static bakes. */
-void CM_SetWalkableSurfaceQuery(cmWalkableSurfaceQuery_t query) {
-    walkable_surface_query = query;
 }
 
 /* Walkable bridge membership is baked together with static pathing.  The first
@@ -1597,53 +1591,115 @@ static BOOL resolve_heatmap_request(edict_t *goalentity, FLOAT radius,
     return true;
 }
 
-/* Resolve a click to the closest legal point in the mover's static connected
- * component.  This is used only after destination-rooted routing proves the
- * mover cannot reach that component, so the whole-component flood is paid once
- * for an exceptional order rather than on every ordinary right click. */
+#ifdef BZ_TESTS
+static DWORD closest_reachable_last_expansions;
+DWORD CM_TestClosestReachableLastExpansions(void) { return closest_reachable_last_expansions; }
+#endif
+
+/* Resolve an unreachable location click to a legal point in the mover's static
+ * connected component without synchronously flooding the entire map. Production
+ * calls this only after the destination-rooted flow has already proven that the
+ * mover cannot reach the requested component. A bounded best-first flood therefore
+ * only needs to find a useful closest point in the mover's component; on very large
+ * components it may return the closest point seen within the budget rather than
+ * monopolizing one simulation frame to prove the global optimum. */
 BOOL CM_ClosestReachablePointForRadius(LPCVECTOR2 from, LPCVECTOR2 target, FLOAT radius, LPVECTOR2 out) {
     VECTOR2 n;
     point2_t start;
-    heatmapJob_t job = { 0 };
+    DWORD heap_count = 0, expanded = 0, cells = pathmap.width * pathmap.height;
     FLOAT tx, ty, best_dist = FLT_MAX;
     int radius_cells, target_x, target_y, best_x = -1, best_y = -1;
+    BOOL target_valid;
 
-    if (!from || !target || !out || !pathmap.original || !pathmap.heatmap)
+#ifdef BZ_TESTS
+    closest_reachable_last_expansions = 0;
+#endif
+    if (!from || !target || !out || !pathmap.original || !pathmap.pathnodes ||
+        !pathmap.pathheap || !cells)
         return false;
     radius_cells = (int)ceilf(MAX(0.f, radius) / pathmap_cell_world_size());
     if (!closest_pathable_node_original(from, radius, &start))
         return false;
 
-    begin_heatmap_build(&job, start, radius_cells);
-    while (!step_heatmap_build(&job, UINT_MAX)) {
-        /* UINT_MAX is already effectively unbounded for WC3 pathmap sizes. */
-    }
     n = CM_GetNormalizedMapPosition(target->x, target->y);
     tx = n.x * pathmap.width;
     ty = n.y * pathmap.height;
     target_x = (int)floorf(tx);
     target_y = (int)floorf(ty);
-    if (is_valid_point(target_x, target_y) &&
-        pathmap.heatmap[target_x + target_y * pathmap.width].price != INT_MAX &&
-        is_pathable_node_original_for_radius_cells(target_x, target_y, radius_cells)) {
-        *out = *target;
-        return true;
+    target_valid = is_valid_point(target_x, target_y) &&
+        is_pathable_node_original_for_radius_cells(target_x, target_y, radius_cells);
+
+    if (++path_search_stamp == 0) {
+        FOR_LOOP(i, cells) pathmap.pathnodes[i].stamp = 0;
+        path_search_stamp = 1;
     }
-    FOR_LOOP(y, pathmap.height) {
-        FOR_LOOP(x, pathmap.width) {
-            FLOAT dxw, dyw, dist;
-            if (pathmap.heatmap[x + y * pathmap.width].price == INT_MAX)
+
+    {
+        DWORD const start_index = (DWORD)start.x + (DWORD)start.y * pathmap.width;
+        pathNode_t *node = &pathmap.pathnodes[start_index];
+        *node = (pathNode_t){
+            .parent = -1,
+            .f = path_octile(start.x, start.y, target_x, target_y),
+            .g = 0,
+            .heap_pos = 0,
+            .stamp = path_search_stamp,
+        };
+        pathmap.pathheap[heap_count++] = start_index;
+    }
+
+    while (heap_count && expanded < CLOSEST_REACHABLE_MAX_EXPANSIONS) {
+        DWORD const current = path_heap_pop(&heap_count);
+        int const cx = (int)(current % pathmap.width);
+        int const cy = (int)(current / pathmap.width);
+        pathNode_t *node = &pathmap.pathnodes[current];
+        FLOAT const dxw = (FLOAT)cx + 0.5f - tx;
+        FLOAT const dyw = (FLOAT)cy + 0.5f - ty;
+        FLOAT const dist = dxw * dxw + dyw * dyw;
+
+        node->closed = true;
+        expanded++;
+        if (dist < best_dist) {
+            best_dist = dist;
+            best_x = cx;
+            best_y = cy;
+        }
+        if (target_valid && cx == target_x && cy == target_y) {
+            *out = *target;
+#ifdef BZ_TESTS
+            closest_reachable_last_expansions = expanded;
+#endif
+            return true;
+        }
+
+        FOR_LOOP(dir, 8) {
+            int const nx = cx + dx[dir], ny = cy + dy[dir];
+            DWORD next;
+            pathNode_t *next_node;
+
+            if (!is_pathable_node_original_for_radius_cells(nx, ny, radius_cells) ||
+                (dir >= 4 && !(is_pathable_node_original_for_radius_cells(nx, cy, radius_cells) &&
+                              is_pathable_node_original_for_radius_cells(cx, ny, radius_cells)) &&
+                 !(walkable_surface_cell(cx, cy) && walkable_surface_cell(nx, ny))))
                 continue;
-            dxw = (FLOAT)x + 0.5f - tx;
-            dyw = (FLOAT)y + 0.5f - ty;
-            dist = dxw * dxw + dyw * dyw;
-            if (dist < best_dist) {
-                best_dist = dist;
-                best_x = x;
-                best_y = y;
-            }
+            next = (DWORD)nx + (DWORD)ny * pathmap.width;
+            next_node = &pathmap.pathnodes[next];
+            if (next_node->stamp == path_search_stamp)
+                continue;
+            *next_node = (pathNode_t){
+                .parent = (int)current,
+                .f = path_octile(nx, ny, target_x, target_y),
+                .g = node->g + gv[dir],
+                .heap_pos = (int)heap_count,
+                .stamp = path_search_stamp,
+            };
+            pathmap.pathheap[heap_count++] = next;
+            path_heap_up(heap_count - 1);
         }
     }
+
+#ifdef BZ_TESTS
+    closest_reachable_last_expansions = expanded;
+#endif
     if (best_x < 0)
         return false;
     *out = CM_GetDenormalizedMapPosition(((FLOAT)best_x + 0.5f) / pathmap.width,
