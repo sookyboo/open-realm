@@ -123,3 +123,14 @@ Captures were `shot0009.jpg` (baseline), `shot0010.jpg` (~2 seconds),
 baseline and observation screenshots are valid camera-framed evidence. This
 proves the 0-degree thin-edge run and camera protocol; the 90, 180, and 270
 degree cases remain outstanding.
+
+The corrected 90-degree rerun used the same procedure with
+`+set wc3_bridge_synthetic_line_angle 90`. The Peasant was edict `337` and the
+Footman was edict `4390`; explicit selection and delayed camera centering were
+verified. LT05 again logged `source_clear=992`, `source_blocked=32`,
+`placed_blocked=32`, and `baked_open=992`. The Footman crossed to
+`(6150.1,-3614.2)` with `flow_direct=1`, `blocked_frames=0`, and rendered-deck
+support during the crossing. Captures were `shot0013.jpg` (baseline),
+`shot0014.jpg` (~2 seconds), `shot0015.jpg` (~5 seconds), and
+`shot0016.jpg` (~8 seconds/far side). The 90-degree transformed edge also did
+not block the route; the 180 and 270 degree cases remain outstanding.

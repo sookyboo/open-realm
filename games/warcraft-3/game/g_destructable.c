@@ -4,6 +4,8 @@
 #define NO_RANDOM_ITEM_TABLE ((DWORD)-1) // table index; war3map.doo sentinel meaning no random-item table
 #define RANDOM_ITEM_PREFIX_MASK 0x00ffffff // bits; compare the YYI prefix while ignoring its encoded selector byte
 
+static LPCSTR const synthetic_edge_names[] = { "top", "right", "bottom", "left" };
+
 /* Read the opt-in bridge diagnostic level without making normal map runs noisy. */
 int G_BridgeDebugLevel(void) {
     LPCSTR value = gi.CvarString("wc3_bridge_debug", "0");
@@ -13,11 +15,11 @@ int G_BridgeDebugLevel(void) {
 /* Temporary route isolation: replace only alive walkable bridge blocker data
  * with synthetic in-memory texture data while preserving its authored dimensions.
  * Mode 1 is all-clear; mode 2 is a bounded diagonal lane with blocked edges;
- * mode 3 is clear except for one thin source edge used to verify transforms.
+ * mode 3 is clear except for one thin source edge rotated by the diagnostic angle.
  * The death texture and source files remain unchanged. */
 void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     pathTex_t *tex;
-    int mode, angle, clear_count = 0, min_x, min_y;
+    int mode, angle, edge, clear_count = 0, min_x, min_y;
     if (!ent || !ent->destructable.walkable || !ent->destructable.alive_pathtex ||
         (mode = atoi(gi.CvarString("wc3_bridge_clear_alive_pathtex", "0"))) == 0)
         return;
@@ -25,6 +27,13 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     min_x = tex->width;
     min_y = tex->height;
     angle = atoi(gi.CvarString("wc3_bridge_synthetic_line_angle", "0"));
+    angle %= 360;
+    if (angle < 0) angle += 360;
+    if (mode == 3 && angle % 90) {
+        fprintf(stderr, "WC3_BRIDGE_SYNTH_EDGE invalid angle=%d; expected a multiple of 90\n", angle);
+        return;
+    }
+    edge = angle / 90;
     FOR_LOOP(y, tex->height) FOR_LOOP(x, tex->width) {
         BOOL clear = mode == 1;
         if (mode == 2) {
@@ -36,9 +45,10 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
                 : (int)x + (int)y - ((int)tex->width - 1);
             clear = abs(line) <= 3;
         } else if (mode == 3) {
-            /* Keep one source edge blocked; the normal transform reveals its
-             * world orientation and the exact one-cell authored thickness. */
-            clear = y != 0;
+            /* Rotate the blocked top source edge so cardinal diagnostic angles
+             * test distinct source edges while the normal stamp remains intact. */
+            clear = edge == 0 ? y != 0 : edge == 1 ? x != tex->width - 1
+                : edge == 2 ? y != tex->height - 1 : x != 0;
         }
         tex->map[x + y * tex->width].b = clear ? 0 : 255;
         if (clear) {
@@ -54,8 +64,8 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
         fprintf(stderr, "WC3_BRIDGE_SYNTH_LINE source_clear=%d source_min=(%d,%d) source_axis=%s\n",
                 clear_count, min_x, min_y, angle % 180 ? "anti_diagonal" : "diagonal");
     if (mode == 3)
-        fprintf(stderr, "WC3_BRIDGE_SYNTH_EDGE source_clear=%d source_blocked=%u source_edge=top thickness=1 angle=%d\n",
-                clear_count, tex->width, angle);
+        fprintf(stderr, "WC3_BRIDGE_SYNTH_EDGE source_clear=%d source_blocked=%u source_edge=%s thickness=1 angle=%d\n",
+                clear_count, tex->width, synthetic_edge_names[edge], angle);
 }
 
 void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase) {
