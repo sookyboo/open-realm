@@ -124,6 +124,16 @@ static void IN_CamNorthUp(void) { cam_north = false; }
 static void IN_CamSouthDown(void) { cam_south = true; }
 static void IN_CamSouthUp(void) { cam_south = false; }
 
+/* Toggle Warcraft III screen-edge camera scrolling without affecting keyboard
+ * camera binds or drag-pan input. */
+static void CL_CameraEdge_f(void) {
+    if (Cmd_Argc() != 2 || (strcmp(Cmd_Argv(1), "0") && strcmp(Cmd_Argv(1), "1"))) {
+        fprintf(stderr, "usage: cameraedge <0|1>\n");
+        return;
+    }
+    Cvar_Set("wc3_camera_edge_scroll", Cmd_Argv(1));
+}
+
 void CL_InputModeInit(void) {
     Cmd_AddCommand("+pan", IN_PanDown);
     Cmd_AddCommand("-pan", IN_PanUp);
@@ -137,6 +147,8 @@ void CL_InputModeInit(void) {
     Cmd_AddCommand("-camnorth", IN_CamNorthUp);
     Cmd_AddCommand("+camsouth", IN_CamSouthDown);
     Cmd_AddCommand("-camsouth", IN_CamSouthUp);
+    Cmd_AddCommand("cameraedge", CL_CameraEdge_f);
+    Cvar_Get("wc3_camera_edge_scroll", "1", 0);
 }
 
 void CL_InputModeSetGameplay(void) {
@@ -242,7 +254,7 @@ void CL_InputModeFrame(void) {
 #ifndef SC2
     size2_t win = re.GetWindowSize();
     float mx = mouse.origin.x, my = mouse.origin.y;
-    if (win.width > 0 && win.height > 0 &&
+    if (Cvar_Value("wc3_camera_edge_scroll", 1.0f) != 0.0f && win.width > 0 && win.height > 0 &&
         mx >= 0 && my >= 0 && mx < win.width && my < win.height) {
         if (mx <= CL_CAMERA_EDGE_MARGIN)               dx -= 1.0f;
         if (mx >= (float)win.width - 1 - CL_CAMERA_EDGE_MARGIN)  dx += 1.0f;

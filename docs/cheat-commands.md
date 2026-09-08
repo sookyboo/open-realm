@@ -236,6 +236,18 @@ god                    # toggle selected player unit invulnerability
 kill                   # kill the player unit
 ```
 
+Warcraft III camera controls for deterministic runtime tests are:
+
+```
+cameraedge 0           # disable screen-edge camera scrolling
+cameraedge 1           # re-enable screen-edge camera scrolling
+cameraselected         # focus and follow the primary selected unit
+```
+
+`cameraselected` uses the same persistent camera target used by clicking a
+selected unit's portrait. `cameraedge` changes only mouse-edge scrolling;
+keyboard camera binds, drag-pan, and portrait focusing remain available.
+
 `give item` uses the normal item spawn and pickup path, so inventory capacity and passive item effects remain authoritative. `research <rawcode>` remains available for the existing non-cheat research/debug path.
 
 ## World of Warcraft

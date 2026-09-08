@@ -1820,6 +1820,17 @@ static void CMD_PortraitCameraDown(LPEDICT clent, DWORD argc, LPCSTR argv[]) {
     clent->client->camera.target_offset = (VECTOR2){ 0, 0 };
 }
 
+/* Focus the camera on the main selected unit using the same persistent target
+ * controller as clicking that unit's portrait. */
+CLIENTCOMMAND(CameraSelected) {
+    LPEDICT target;
+    if (!clent || !clent->client || clent->client->no_control ||
+        clent->client->camera.target_controller || !(target = G_GetMainSelectedUnit(clent->client))) return;
+    G_ClientSetCameraPosition(clent, &target->s.origin2);
+    clent->client->camera.target_controller = target;
+    clent->client->camera.target_offset = (VECTOR2){ 0, 0 };
+}
+
 static void CMD_QuickCamera(LPEDICT clent, DWORD argc, LPCSTR argv[]) {
     (void)argc;
     (void)argv;
@@ -1983,6 +1994,7 @@ clientCommand_t clientCommands[] = {
     { "haltai", CMD_HaltAI },
     { "bridgeorder", CMD_BridgeOrder },
     { "bridgecamera", CMD_BridgeCamera },
+    { "cameraselected", CMD_CameraSelected },
     { "menu", CMD_Menu },
     { "menu_endgame", CMD_MenuEndGame },
     { "menu_restart", CMD_MenuRestart },
