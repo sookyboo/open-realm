@@ -427,6 +427,8 @@ static void ai_move_walk(LPEDICT ent) {
     FLOAT const settle_distance = move_distance + ent->collision + MOVE_SLOT_MARGIN;
     BOOL blocked;
 
+    G_BridgeDebugMoveState(ent);
+
     if (G_UnitStatusLevel(ent, MAKEFOURCC('B', 'E', 'e', 'r'))) {
         ent->stand(ent);
         return;

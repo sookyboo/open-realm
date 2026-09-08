@@ -1581,6 +1581,7 @@ void unit_updatestatuses(LPEDICT);
 // g_monster.c
 void unit_moveindirection(LPEDICT);
 void unit_moveindirection_ignore_units(LPEDICT);
+void G_BridgeDebugMoveState(LPEDICT);
 BOOL unit_snap_to_point_ignore_units(LPEDICT, LPCVECTOR2);
 void unit_changeangle(LPEDICT);
 void unit_changeangle_worker(LPEDICT);

@@ -1898,15 +1898,15 @@ CLIENTCOMMAND(DebugSpawn) {
     Get_Commands_f(clent);
 }
 
-/* Toggle diagnostic AI suppression for non-player-owned units without
- * changing their positions, collision, or authored map state. */
+/* Toggle diagnostic AI suppression for unselected units without changing their
+ * positions, collision, or authored map state; the selected probe remains live. */
 CLIENTCOMMAND(HaltAI) {
     if (argc < 2 || (atoi(argv[1]) != 0 && atoi(argv[1]) != 1)) {
         fprintf(stderr, "usage: haltai <0|1>\n");
         return;
     }
     wc3_halt_ai = atoi(argv[1]) != 0;
-    fprintf(stderr, "WC3: haltai=%d non-player-owned unit AI\n", atoi(argv[1]));
+    fprintf(stderr, "WC3: haltai=%d unselected unit AI; selected probe remains active\n", atoi(argv[1]));
 }
 
 /* Issue a point order to one explicit debug unit, bypassing selection and
@@ -1932,6 +1932,10 @@ CLIENTCOMMAND(BridgeOrder) {
         fprintf(stderr, "WC3_BRIDGE_DEBUGORDER unit=%u rawcode=%08x from=(%.1f,%.1f) target=(%.1f,%.1f) radius=%.1f\n",
                 (unsigned)(unit - globals.edicts), unit->class_id, unit->s.origin2.x, unit->s.origin2.y,
                 point.x, point.y, unit->collision);
+    else
+        fprintf(stderr, "WC3_BRIDGE_DEBUGORDER result=rejected unit=%u rawcode=%08x pos=(%.1f,%.1f) target=(%.1f,%.1f) immobile=%d dead=%d\n",
+                (unsigned)(unit - globals.edicts), unit->class_id, unit->s.origin2.x, unit->s.origin2.y,
+                point.x, point.y, unit->aiflags & AI_IMMOBILE, M_IsDead(unit));
 }
 
 /* Remove nearby enemy units around the selected friendly unit so traversal

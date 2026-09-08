@@ -223,7 +223,9 @@ void monster_think(LPEDICT self) {
         return;
     if (self->paused || self->stunned)
         return;
-    if (self->data.UnitData && !self->data.DestructableData && self->s.player != 0 && G_IsAIHalted())
+    /* Diagnostic halt pauses autonomous units regardless of owner.  Preserve
+     * the selected probe unit so its explicit bridge order can still run. */
+    if (self->data.UnitData && !self->data.DestructableData && G_IsAIHalted() && !self->selected)
         return;
     M_MoveFrame(self);
     if (self->currentmove->think) {

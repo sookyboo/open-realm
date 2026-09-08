@@ -194,6 +194,27 @@ static void bridge_debug_route_state(LPCEDICT self, LPCSTR mode) {
  * layer.  Excludes self, hollow entities, zero-collision entities (waypoints,
  * effects, missiles), and the opposite air/ground layer (flyers and ground
  * units pass through each other). */
+/* Distinguish an order that never starts from a pending or unreachable route. */
+void G_BridgeDebugMoveState(LPEDICT self) {
+    static DWORD count;
+    LPCEDICT bridge;
+    LPCVECTOR2 goal;
+    if (G_BridgeDebugLevel() < 1 || count >= 512 || !self || !(bridge = bridge_debug_find(&self->s.origin2))) return;
+    goal = self->goalentity ? &self->goalentity->s.origin2 : NULL;
+    fprintf(stderr,
+            "WC3_BRIDGE_MOVE_STATE seq=%u unit_id=%u rawcode=%08x pos=(%.1f,%.1f,%.1f) goal=%d target=(%.1f,%.1f) currentmove=%s ability=%s immobile=%d no_pathing=%d blocked_frames=%u distance=%.1f flow_direct=%d path_valid=%d flow_generation=%u flow_goal_reached=%d flow_unreachable=%d heading=%.3f facing=%.3f bridge=%u\n",
+            count, (unsigned)(self - globals.edicts), self->class_id, self->s.origin2.x, self->s.origin2.y,
+            self->s.origin.z, goal != NULL, goal ? goal->x : 0.0f, goal ? goal->y : 0.0f,
+            self->currentmove ? self->currentmove->animation : "none",
+            self->currentmove && self->currentmove->ability == &a_move ? "move" : "other",
+            self->aiflags & AI_IMMOBILE, self->no_pathing, self->movement.blocked_frames,
+            goal ? Vector2_distance(&self->s.origin2, goal) : 0.0f, self->movement.flow_direct,
+            self->movement.path_valid, self->movement.flow_generation, self->movement.flow_goal_reached,
+            self->movement.flow_unreachable, self->movement.heading, self->s.angle,
+            (unsigned)(bridge - globals.edicts));
+    count++;
+}
+
 static BOOL filter_blockers(LPCEDICT ent) {
     if (ent == trymove_self || IS_HOLLOW(ent) || ent->collision <= 0.0f)
         return false;
