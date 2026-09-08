@@ -194,6 +194,7 @@ enum {
     FLAG(RF_NOT_SELECTABLE, 19), /* render normally but exclude from world hit/box selection */
     FLAG(RF_NEUTRAL, 20),        /* neutral/passive relationship presentation */
     FLAG(RF_BUILDING, 21),       /* WC3 structure; enables building-only presentation */
+    FLAG(RF_TRACE_MESH_ONLY, 22), /* transient renderer query: ignore coarse collision shapes */
 };
 
 enum {

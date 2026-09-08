@@ -589,7 +589,7 @@ bool MDLX_TraceModel(renderEntity_t const *ent, LPCLINE3 line, LPVECTOR3 interse
         Matrix4_multiply_vector3(&invmodel, &line->b),
     };
 
-    if (model->collisionShapes) {
+    if (model->collisionShapes && !(ent->flags & RF_TRACE_MESH_ONLY)) {
         FOR_EACH_LIST(mdxCollisionShape_t, collisionShape, model->collisionShapes) {
             VECTOR3 point;
             BOOL shape_hit = false;

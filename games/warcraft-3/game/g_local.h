@@ -945,6 +945,7 @@ struct edict_s {
         BOOL dead;
         BOOL pathing_active;
         BOOL placement_solid;
+        BOOL walkable;
         BOOL loot_processed;
 
         DWORD editor_id;
@@ -1381,6 +1382,8 @@ typedef struct {
 } uiTrigger_t;
 
 // g_main.c
+int G_BridgeDebugLevel(void);
+void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase);
 LPPLAYER G_GetPlayerByNumber(DWORD);
 void G_InitJassHost(void);
 LPEDICT G_GetPlayerEntityByNumber(DWORD);
@@ -1540,6 +1543,9 @@ DWORD G_TimerRemaining(LPCGTIMER timer);
 LPEDICT Waypoint_add(LPCVECTOR2);
 void G_InitWaypoints(void);
 void M_CheckGround (LPEDICT);
+#ifdef BZ_TESTS
+BOOL M_TestWalkableSurfaceHeight(LPCEDICT surface, LPCVECTOR2 point, LPFLOAT height, BOOL *cached);
+#endif
 void G_RegisterGroundSurface(LPEDICT);
 void G_UnregisterGroundSurface(LPEDICT);
 void G_ClearGroundSurfaces(void);

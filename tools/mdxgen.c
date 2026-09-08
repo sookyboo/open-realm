@@ -10,11 +10,13 @@
  *   mdxgen panel_sprite  <tex_path> <out.mdx>
  *   mdxgen ui_panel      <tex_path> <out.mdx>
  *   mdxgen anim_pulse    <tex_path> <out.mdx>
+ *   mdxgen destructable_bridge <tex_path> <out.mdx>
  *
  * quad_sprite  - 1x1 unit flat quad in XY-plane, 1 sequence "Stand"
  * panel_sprite - 2x1.5 unit flat quad, suitable for orthographic UI panels, 1 sequence "Stand"
  * ui_panel     - 0.6x0.4 unit flat quad from origin, matching Warcraft glue panels
  * anim_pulse   - 1x1 quad with 2 sequences "Stand" (0-1000) and "Birth" (1001-2000)
+ * destructable_bridge - minimal bridge fixture with "Stand", "Death", and "Birth" sequences
  *
  * All models include:
  *   - one texture (path provided as argument)
@@ -481,6 +483,21 @@ static int gen_anim_pulse(int argc, char **argv) {
                        names, starts, ends, 2) ? 0 : 1;
 }
 
+static int gen_destructable_bridge(int argc, char **argv) {
+    if (argc < 3) {
+        fprintf(stderr, "usage: mdxgen destructable_bridge <tex_path> <out.mdx>\n");
+        return 1;
+    }
+    const char *tex = argv[1];
+    const char *out = argv[2];
+    const char *names[] = { "Stand", "Death", "Birth" };
+    uint32_t starts[] = { 0, 1001, 2001 };
+    uint32_t ends[] = { 1000, 2000, 3000 };
+    return build_model(tex, out, "WoodBridgeLarge45Fixture",
+                       0.5f, 0.5f,
+                       names, starts, ends, 3) ? 0 : 1;
+}
+
 /* =========================================================================
  * main
  * =========================================================================*/
@@ -493,12 +510,14 @@ static void usage(void) {
         "  mdxgen panel_sprite  <tex_path> <out.mdx>\n"
         "  mdxgen ui_panel      <tex_path> <out.mdx>\n"
         "  mdxgen anim_pulse    <tex_path> <out.mdx>\n"
+        "  mdxgen destructable_bridge <tex_path> <out.mdx>\n"
         "\n"
         "Examples:\n"
         "  mdxgen quad_sprite   TestUI/Textures/checker_8x8.blp  quad_sprite.mdx\n"
         "  mdxgen panel_sprite  TestUI/Textures/solid_white.blp  panel_sprite.mdx\n"
         "  mdxgen ui_panel      TestUI/Textures/solid_white.blp  ui_panel.mdx\n"
         "  mdxgen anim_pulse    TestUI/Textures/alpha_ring_16x16.blp  anim_pulse.mdx\n"
+        "  mdxgen destructable_bridge TestUI/Textures/solid_white.blp WoodBridgeLarge45.mdx\n"
     );
 }
 
@@ -513,6 +532,7 @@ int main(int argc, char **argv) {
     if (strcmp(cmd, "panel_sprite") == 0) return gen_panel_sprite(sub_argc, sub_argv);
     if (strcmp(cmd, "ui_panel")     == 0) return gen_ui_panel(sub_argc, sub_argv);
     if (strcmp(cmd, "anim_pulse")   == 0) return gen_anim_pulse(sub_argc, sub_argv);
+    if (strcmp(cmd, "destructable_bridge") == 0) return gen_destructable_bridge(sub_argc, sub_argv);
 
     fprintf(stderr, "mdxgen: unknown command '%s'\n\n", cmd);
     usage();

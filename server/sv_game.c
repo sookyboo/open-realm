@@ -4,6 +4,7 @@
 #endif
 
 #include "server.h"
+#include "client/client.h"
 
 /* UI layout byte tracking (legacy - now handled client-side) */
 DWORD layoutBytesWritten = 0;
@@ -99,6 +100,41 @@ void PF_Write(pfWriteType_t type, void const *value) {
             break;
         }
     }
+}
+
+/* Query the rendered MDX surface used by walkable destructables so simulation
+ * and presentation agree on the deck height instead of using model bounds. */
+static BOOL SV_GetWalkableSurfaceHeight(LPWALKABLESURFACEQUERY query) {
+    static LPMODEL models[MAX_MODELS];
+    renderEntity_t ent = { 0 };
+    LINE3 line;
+    FLOAT distance;
+    LPCSTR path;
+
+    if (!query || query->model <= 0 || query->model >= MAX_MODELS ||
+        query->model + CS_MODELS >= MAX_CONFIGSTRINGS)
+        return false;
+    path = sv.configstrings[CS_MODELS + query->model];
+    if (!*path) return false;
+    if (!models[query->model]) models[query->model] = re.LoadModel(path);
+    if (!models[query->model]) {
+        fprintf(stderr, "SV_GetWalkableSurfaceHeight: failed to load model index=%d path=\"%s\"\n",
+                query->model, path);
+        return false;
+    }
+    ent.origin = query->origin;
+    ent.model = models[query->model];
+    ent.angle = query->angle;
+    ent.scale = query->scale > 0.0f ? query->scale : 1.0f;
+    ent.frame = query->frame;
+    /* Warsmash walkable-height queries force visible mesh geometry and ignore
+     * coarse MDX CollisionShapes. Those shapes can sit well above the deck. */
+    ent.flags = RF_TRACE_MESH_ONLY;
+    line.a = MAKE(VECTOR3, query->point.x, query->point.y, 8192.0f);
+    line.b = MAKE(VECTOR3, query->point.x, query->point.y, -8192.0f);
+    if (!re.TraceModel(&ent, &line, &distance)) return false;
+    query->height = line.a.z - distance;
+    return true;
 }
 
 void PF_Confignstring(DWORD index, LPCSTR value, DWORD len) {
@@ -214,6 +250,7 @@ void SV_InitGameProgs(void) {
     import.SavePath = FS_SavePath;
     import.ListSaves = FS_ListSaves;
     import.DeleteSave = FS_DeleteSave;
+    import.GetWalkableSurfaceHeight = SV_GetWalkableSurfaceHeight;
 
     ge = GetGameAPI(&import);
     ge->Init();

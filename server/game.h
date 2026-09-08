@@ -40,6 +40,17 @@ typedef struct {
     DWORD size;
 } pfWriteData_t;
 
+typedef struct walkableSurfaceQuery_s {
+    int model;
+    DWORD frame;
+    VECTOR3 origin;
+    FLOAT angle;
+    FLOAT scale;
+    VECTOR2 point;
+    FLOAT height;
+} walkableSurfaceQuery_t;
+typedef walkableSurfaceQuery_t *LPWALKABLESURFACEQUERY;
+
 struct game_import {
     HANDLE (*MemAlloc)(long size);
     void (*MemFree)(HANDLE);
@@ -91,6 +102,7 @@ struct game_import {
     DWORD (*ListSaves)(LPSTR out, DWORD out_size);
     /* Delete one save basename from the writable save directory. */
     BOOL (*DeleteSave)(LPCSTR rel);
+    BOOL (*GetWalkableSurfaceHeight)(LPWALKABLESURFACEQUERY query);
 };
 
 struct client;

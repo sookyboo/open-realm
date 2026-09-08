@@ -64,9 +64,14 @@ BOOL CM_GetPathingFlagsAt(LPCVECTOR2 location, LPBYTE flags);
 BOOL CM_TerrainPointIsWalkable(LPCVECTOR2 location);
 BOOL CM_TerrainPointIsSwimmable(LPCVECTOR2 location);
 BOOL CM_LineIsWalkableForRadius(LPCVECTOR2 a, LPCVECTOR2 b, FLOAT radius);
+/* Opt-in WC3 bridge probe helper. Callers gate this behind a debug cvar; the
+ * routing layer prints the normal-vs-bridge static pathing decision and exact
+ * radius/diagonal cells without changing routing state. */
+void CM_DebugBridgeMoveProbe(LPCVECTOR2 a, LPCVECTOR2 b, FLOAT radius);
 BOOL CM_FindPathWaypoint(pathAccelParams_t const *params, LPVECTOR2 out);
 BOOL CM_FindDirectApproachPointForRadius(LPCVECTOR2 from, LPCVECTOR2 target, FLOAT range, FLOAT radius, LPVECTOR2 out);
 FLOAT CM_PathCellWorldSize(void);
+BOOL CM_SamePathCell(LPCVECTOR2 a, LPCVECTOR2 b);
 DWORD CM_RequestHeatmapForRadius(struct edict_s *goalentity, FLOAT radius);
 void CM_ProcessPathJobs(DWORD work_budget);
 BOOL CM_FindApproachPointToFootprintForRadius(struct edict_s const *target, LPCVECTOR2 from, FLOAT range, FLOAT radius, LPVECTOR2 out);

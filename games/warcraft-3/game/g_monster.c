@@ -669,10 +669,45 @@ void SP_SpawnUnit(LPEDICT self) {
     G_RegisterUnitSounds(self);
 }
 
+typedef struct {
+    BOOL valid;
+    int surface_index;
+    DWORD frame;
+    void const *animation;
+    int qx, qy;
+    BOOL hit;
+    FLOAT height;
+} walkableSupportCache_t;
+
+/* A point-specific bridge support query is required because long/sloped bridge
+ * decks do not share one Z.  Cache 4-world-unit buckets so multiple units and
+ * repeated simulation ticks can share renderer traces without flattening the
+ * whole bridge to its centre height. */
+#define WALKABLE_SUPPORT_CACHE_SIZE 1024
+static walkableSupportCache_t walkable_support_cache[WALKABLE_SUPPORT_CACHE_SIZE];
+
+static DWORD M_WalkableSupportCacheSlot(int surface_index, DWORD frame, int qx, int qy) {
+    DWORD h = (DWORD)surface_index * 2654435761u;
+    h ^= frame * 2246822519u;
+    h ^= (DWORD)qx * 3266489917u;
+    h ^= (DWORD)qy * 668265263u;
+    return h & (WALKABLE_SUPPORT_CACHE_SIZE - 1);
+}
+
+static void M_InvalidateWalkableSupportCache(LPEDICT ent) {
+    int const index = ent && globals.edicts ? (int)(ent - globals.edicts) : -1;
+    if (index < 0) return;
+    FOR_LOOP(i, WALKABLE_SUPPORT_CACHE_SIZE) {
+        if (walkable_support_cache[i].valid && walkable_support_cache[i].surface_index == index)
+            walkable_support_cache[i].valid = false;
+    }
+}
+
 /* Walkable destructables are sparse, so keep a level list instead of scanning every map edict per unit tick. */
 void G_RegisterGroundSurface(LPEDICT ent) {
     if (!G_IsDestructable(ent) || !ent->data.DestructableData->walkable) return;
     G_UnregisterGroundSurface(ent);
+    M_InvalidateWalkableSupportCache(ent);
     ent->ground_next = level.ground_surfaces;
     level.ground_surfaces = ent;
 }
@@ -681,10 +716,16 @@ void G_UnregisterGroundSurface(LPEDICT ent) {
     LPEDICT *link = &level.ground_surfaces;
     while (*link && *link != ent) link = &(*link)->ground_next;
     if (*link) *link = ent->ground_next;
-    if (ent) ent->ground_next = NULL;
+    if (ent) {
+        ent->ground_next = NULL;
+        M_InvalidateWalkableSupportCache(ent);
+    }
 }
 
-void G_ClearGroundSurfaces(void) { level.ground_surfaces = NULL; }
+void G_ClearGroundSurfaces(void) {
+    level.ground_surfaces = NULL;
+    memset(walkable_support_cache, 0, sizeof(walkable_support_cache));
+}
 
 static LPCSTR M_UnitMoveTypeName(LPCEDICT self) {
     return self && self->data.UnitData ? self->data.UnitData->moveTypeName : NULL;
@@ -700,6 +741,143 @@ static BOOL M_UnitUsesWaterSurface(LPCEDICT self, LPCSTR movetp) {
     }
     return false;
 }
+
+static BOOL M_QueryWalkableSurfaceHeight(LPCEDICT surface, LPCVECTOR2 point, LPFLOAT height) {
+    walkableSurfaceQuery_t query;
+    if (!surface || !point || !height || !surface->s.model) return false;
+    query = (walkableSurfaceQuery_t) {
+        .model = surface->s.model,
+        .frame = surface->s.frame,
+        .origin = surface->s.origin,
+        .angle = surface->s.angle,
+        .scale = surface->s.scale,
+        .point = *point,
+    };
+    if (!gi.GetWalkableSurfaceHeight(&query)) return false;
+    *height = query.height;
+    return true;
+}
+
+/* Keep LT05 support diagnostics bounded. At debug level 2 the extra point
+ * query verifies the cached gameplay result at the mover's exact XY. */
+static void M_DebugBridgeGround(LPCEDICT self, LPCEDICT surface, BOOL inside, FLOAT support, FLOAT before, FLOAT after) {
+    static DWORD count;
+    FLOAT point_support = 0.0f;
+    BOOL point_hit = false;
+    int const debug = G_BridgeDebugLevel();
+    if (debug < 1 || count >= 192 || !self || !surface || surface->destructable.dead ||
+        surface->class_id != MAKEFOURCC('L', 'T', '0', '5') ||
+        fabsf(self->s.origin.x - surface->s.origin.x) > 768.0f ||
+        fabsf(self->s.origin.y - surface->s.origin.y) > 768.0f)
+        return;
+    if (debug >= 2 && inside)
+        point_hit = M_QueryWalkableSurfaceHeight(surface, &self->s.origin2, &point_support);
+    fprintf(stderr,
+            "WC3_BRIDGE_GROUND unit=%08x pos=(%.1f,%.1f,%.1f) inside=%d dead=%d solid=%d pathtex=%d model=%d frame=%u anim=%s bridge_origin=(%.1f,%.1f,%.1f) angle=%.3f scale=%.3f gameplay_support=%.1f verify_hit=%d verify_support=%.1f before=%.1f after=%.1f delta_support=%.1f\n",
+            self->class_id, self->s.origin.x, self->s.origin.y, self->s.origin.z, inside,
+            surface->destructable.dead, surface->destructable.placement_solid, surface->pathtex != NULL,
+            surface->s.model, surface->s.frame, surface->animation ? surface->animation->name : "<none>",
+            surface->s.origin.x, surface->s.origin.y, surface->s.origin.z, surface->s.angle, surface->s.scale,
+            support, point_hit, point_support, before, after, support - surface->s.origin.z);
+    if (debug >= 2)
+        CM_DebugPathingPoint(surface, &self->s.origin2, inside ? "ground_inside" : "ground_near", debug);
+    count++;
+}
+
+/* Walkable MDX objects expose their actual deck through a mesh-only renderer
+ * trace at the mover's XY.  The old centre-height cache flattened LT05 to
+ * 472.9 even where the actual traced deck was tens of units lower. */
+static BOOL M_WalkableSurfaceHeight(LPCEDICT surface, LPCVECTOR2 point, LPFLOAT height, BOOL *cached) {
+    int surface_index, qx, qy;
+    DWORD slot;
+    walkableSupportCache_t *cache;
+    FLOAT result = 0.0f;
+    BOOL hit;
+
+    if (cached) *cached = false;
+    if (!surface || !point || !height) return false;
+    if (!surface->s.model) {
+        *height = surface->s.origin.z;
+        return true;
+    }
+    surface_index = globals.edicts ? (int)(surface - globals.edicts) : -1;
+    qx = (int)floorf(point->x * 0.25f);
+    qy = (int)floorf(point->y * 0.25f);
+    slot = M_WalkableSupportCacheSlot(surface_index, surface->s.frame, qx, qy);
+    cache = &walkable_support_cache[slot];
+    if (cache->valid && cache->surface_index == surface_index &&
+        cache->frame == surface->s.frame && cache->animation == surface->animation &&
+        cache->qx == qx && cache->qy == qy) {
+        if (cached) *cached = true;
+        if (cache->hit) *height = cache->height;
+        return cache->hit;
+    }
+
+    hit = M_QueryWalkableSurfaceHeight(surface, point, &result);
+    if (!hit) {
+        /* A legal Warcraft pathing cell represents an area, not an infinitely
+         * thin point.  MDX deck meshes can contain tiny seams where an exact
+         * vertical ray misses even though the mover is still on the authored
+         * walkable cell.  Probe only within this same 32-unit pathing cell so
+         * the fallback can never cross a rail/pathing boundary. */
+        static VECTOR2 const offsets[] = {
+            { 8.0f, 0.0f }, { -8.0f, 0.0f }, { 0.0f, 8.0f }, { 0.0f, -8.0f },
+            { 8.0f, 8.0f }, { 8.0f, -8.0f }, { -8.0f, 8.0f }, { -8.0f, -8.0f },
+        };
+        size_t const offset_count = sizeof(offsets) / sizeof(offsets[0]);
+        FLOAT samples[sizeof(offsets) / sizeof(offsets[0])];
+        int sample_count = 0;
+
+        FOR_LOOP(i, offset_count) {
+            VECTOR2 sample = { point->x + offsets[i].x, point->y + offsets[i].y };
+            FLOAT sample_height;
+            if (!CM_SamePathCell(point, &sample)) continue;
+            if (M_QueryWalkableSurfaceHeight(surface, &sample, &sample_height))
+                samples[sample_count++] = sample_height;
+        }
+        if (sample_count > 0) {
+            /* Median rejects a stray high rail/ornament triangle while still
+             * following sloped deck geometry. */
+            for (int i = 1; i < sample_count; i++) {
+                FLOAT value = samples[i];
+                int j = i;
+                while (j > 0 && samples[j - 1] > value) {
+                    samples[j] = samples[j - 1];
+                    j--;
+                }
+                samples[j] = value;
+            }
+            if (sample_count & 1)
+                result = samples[sample_count / 2];
+            else
+                result = 0.5f * (samples[sample_count / 2 - 1] + samples[sample_count / 2]);
+            hit = true;
+            if (G_BridgeDebugLevel() >= 2 && surface->class_id == MAKEFOURCC('L', 'T', '0', '5'))
+                fprintf(stderr,
+                        "WC3_BRIDGE_SUPPORT_FALLBACK pos=(%.1f,%.1f) samples=%d support=%.1f frame=%u anim=%s\n",
+                        point->x, point->y, sample_count, result,
+                        surface->s.frame, surface->animation ? surface->animation->name : "<none>");
+        }
+    }
+    *cache = (walkableSupportCache_t) {
+        .valid = true,
+        .surface_index = surface_index,
+        .frame = surface->s.frame,
+        .animation = surface->animation,
+        .qx = qx,
+        .qy = qy,
+        .hit = hit,
+        .height = result,
+    };
+    if (hit) *height = result;
+    return hit;
+}
+
+#ifdef BZ_TESTS
+BOOL M_TestWalkableSurfaceHeight(LPCEDICT surface, LPCVECTOR2 point, LPFLOAT height, BOOL *cached) {
+    return M_WalkableSurfaceHeight(surface, point, height, cached);
+}
+#endif
 
 /* Resolve the visual/support surface, then apply the unit's mutable fly height.
  * FOOT/HORSE stay terrain-based; FLY/HOVER/FLOAT and swimming AMPH units use
@@ -717,11 +895,31 @@ void M_CheckGround(LPEDICT self) {
     if (!floating) {
         for (LPEDICT surface = level.ground_surfaces; surface; surface = surface->ground_next) {
             pathTex_t const *pathtex = surface->pathtex;
+            FLOAT const before = height;
+            FLOAT support = surface->s.origin.z;
+            BOOL inside;
             if (!surface->inuse || surface->destructable.dead ||
-                !surface->destructable.placement_solid || !pathtex) continue;
-            if (fabsf(self->s.origin.x - surface->s.origin.x) > pathtex->width * cell * 0.5f ||
-                fabsf(self->s.origin.y - surface->s.origin.y) > pathtex->height * cell * 0.5f) continue;
-            height = MAX(height, surface->s.origin.z);
+                !surface->destructable.placement_solid || !pathtex) {
+                M_DebugBridgeGround(self, surface, false, support, before, height);
+                continue;
+            }
+            inside = fabsf(self->s.origin.x - surface->s.origin.x) <= pathtex->width * cell * 0.5f &&
+                     fabsf(self->s.origin.y - surface->s.origin.y) <= pathtex->height * cell * 0.5f;
+            if (!inside) {
+                M_DebugBridgeGround(self, surface, false, support, before, height);
+                continue;
+            }
+            {
+                BOOL support_cached = false;
+                BOOL const support_hit = M_WalkableSurfaceHeight(surface, &self->s.origin2, &support, &support_cached);
+                if (support_hit) height = MAX(height, support);
+                if (G_BridgeDebugLevel() >= 2 && surface->class_id == MAKEFOURCC('L', 'T', '0', '5'))
+                    fprintf(stderr, "WC3_BRIDGE_SUPPORT unit=%08x pos=(%.1f,%.1f) hit=%d cached=%d support=%.1f terrain_before=%.1f final=%.1f frame=%u anim=%s\n",
+                            self->class_id, self->s.origin.x, self->s.origin.y, support_hit, support_cached,
+                            support_hit ? support : 0.0f, before, height, surface->s.frame,
+                            surface->animation ? surface->animation->name : "<none>");
+                M_DebugBridgeGround(self, surface, true, support_hit ? support : before, before, height);
+            }
         }
     }
     self->s.origin.z = height + self->unitinfo.FlyHeight;

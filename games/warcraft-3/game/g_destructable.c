@@ -4,6 +4,26 @@
 #define NO_RANDOM_ITEM_TABLE ((DWORD)-1) // table index; war3map.doo sentinel meaning no random-item table
 #define RANDOM_ITEM_PREFIX_MASK 0x00ffffff // bits; compare the YYI prefix while ignoring its encoded selector byte
 
+/* Read the opt-in bridge diagnostic level without making normal map runs noisy. */
+int G_BridgeDebugLevel(void) {
+    LPCSTR value = gi.CvarString("wc3_bridge_debug", "0");
+    return value ? atoi(value) : 0;
+}
+
+void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase) {
+    int const debug = G_BridgeDebugLevel();
+    if (!ent || ent->class_id != MAKEFOURCC('L', 'T', '0', '5') || !debug) return;
+    fprintf(stderr,
+            "WC3_BRIDGE_STATE phase=%s debug=%d dead=%d solid=%d hidden=%d model=%d frame=%u anim=%s origin=(%.1f,%.1f,%.1f) angle=%.3f scale=%.3f pathtex=%ux%u walkable=%d\n",
+            phase ? phase : "?", debug, ent->destructable.dead, ent->destructable.placement_solid,
+            !!(ent->s.renderfx & RF_HIDDEN), ent->s.model, ent->s.frame,
+            ent->animation ? ent->animation->name : "<none>", ent->s.origin.x, ent->s.origin.y,
+            ent->s.origin.z, ent->s.angle, ent->s.scale,
+            ent->pathtex ? ent->pathtex->width : 0, ent->pathtex ? ent->pathtex->height : 0,
+            ent->destructable.walkable);
+    CM_DebugPathingFootprint(ent, phase, debug);
+}
+
 static void G_ApplyDestructableAlivePathing(LPEDICT ent) {
     ent->pathtex = ent->destructable.placement_solid
         ? ent->destructable.alive_pathtex
@@ -65,6 +85,9 @@ void G_ActivateScriptedDestructable(LPEDICT ent,
     ent->health.value = ent->health.max_value;
 
     G_ApplyDestructableAlivePathing(ent);
+    /* Script activation replaces a preplaced .doo placeholder; register it
+     * here because the map-load pass may have skipped the non-solid placeholder. */
+    G_RegisterGroundSurface(ent);
     G_DestructableStartAliveAnimation(ent, false);
     if (ent->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
 
@@ -256,6 +279,7 @@ static BOOL G_EnterDestructableDeathState(LPEDICT ent,
     G_DestructableStartDeathAnimation(ent);
     if (rebuild_pathing) {
         CM_BakeStaticObstacles();
+        G_DebugBridgePathing(ent, "dead");
     }
     if (publish_event) {
         G_SpawnDestructableLoot(ent);
@@ -362,6 +386,7 @@ BOOL G_RestoreDestructable(LPEDICT ent, FLOAT life, BOOL birth) {
     if (ent->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
     G_DestructableStartAliveAnimation(ent, birth);
     CM_BakeStaticObstacles();
+    G_DebugBridgePathing(ent, birth ? "restored_birth" : "restored_stand");
     return true;
 }
 

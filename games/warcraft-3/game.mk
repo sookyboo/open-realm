@@ -203,11 +203,13 @@ test-assets: blpgen mdxgen mpqtool mdxtool | $(TESTS_DIR)
 	done
 	@echo "[test-assets] generating models"
 	@mkdir -p $(TESTS_RES_DIR)/TestUI/Models
+	@mkdir -p $(TESTS_RES_DIR)/Doodads/Terrain/WoodBridgeLarge45
 	@for model in \
 		"quad_sprite TestUI/Textures/checker_8x8.blp $(TESTS_RES_DIR)/TestUI/Models/quad_sprite.mdx" \
 		"panel_sprite TestUI/Textures/solid_white.blp $(TESTS_RES_DIR)/TestUI/Models/panel_sprite.mdx" \
 		"ui_panel TestUI/Textures/solid_white.blp $(TESTS_RES_DIR)/TestUI/Models/ui_panel.mdx" \
-		"anim_pulse TestUI/Textures/alpha_ring_16x16.blp $(TESTS_RES_DIR)/TestUI/Models/anim_pulse.mdx"; do \
+		"anim_pulse TestUI/Textures/alpha_ring_16x16.blp $(TESTS_RES_DIR)/TestUI/Models/anim_pulse.mdx" \
+		"destructable_bridge TestUI/Textures/solid_white.blp $(TESTS_RES_DIR)/Doodads/Terrain/WoodBridgeLarge45/WoodBridgeLarge45.mdx"; do \
 		$(BIN_DIR)/mdxgen$(EXE_EXT) $$model; \
 	done
 	@echo "[test-assets] packing tests.mpq"
@@ -243,6 +245,8 @@ test-assets: blpgen mdxgen mpqtool mdxtool | $(TESTS_DIR)
 	@$(BIN_DIR)/mpqtool$(EXE_EXT) -mpq $(TESTS_MPQ) cat UI/SoundInfo/Music.slk | \
 		grep -q "TestMusic" && echo "  cat music SLK OK"
 	@$(BIN_DIR)/mpqtool$(EXE_EXT) -mpq $(TESTS_MPQ) cat Units/UnitBalance.slk | grep -q "hpea" && echo "  cat unit SLK OK"
+	@$(BIN_DIR)/mpqtool$(EXE_EXT) -mpq $(TESTS_MPQ) cat Units/DestructableData.slk | grep -q "CityBridgeLarge45Death.tga" && echo "  cat destructable SLK OK"
+	@$(BIN_DIR)/mpqtool$(EXE_EXT) -mpq $(TESTS_MPQ) cat Doodads/Terrain/WoodBridgeLarge45/WoodBridgeLarge45.mdx | head -c4 | grep -q "MDLX" && echo "  bridge model OK"
 	@$(BIN_DIR)/mpqtool$(EXE_EXT) -mpq $(TESTS_MPQ) cat Scripts/common.j | \
 		grep -q "playergameresult" && echo "  cat common.j OK"
 	@echo "[test-assets] done — $(TESTS_MPQ)"

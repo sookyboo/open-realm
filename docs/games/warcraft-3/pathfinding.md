@@ -26,9 +26,16 @@ The implementation reuses OpenRealm's direct-line, bounded-waypoint, and shared 
 
 ## Walkable Bridges And Water
 
-The WPM remains authoritative for horizontal movement: water cells with the no-walk bit are impassable, while the passable cells authored through a bridge form the only legal crossing lane. Bridge elevation is a separate game-side contract. `M_CheckGround()` starts with W3E terrain height, then checks the level's sparse registry of live `DestructableData.walkable` entities and uses the highest authored destructable Z whose pathing-texture footprint contains the unit. Dead, hidden/non-solid, and pathing-texture-less destructables do not supply ground.
+The WPM remains authoritative for horizontal movement: water cells with the no-walk bit are impassable, while the passable cells authored through a bridge form the only legal crossing lane. Bridge elevation is a separate game-side contract. `M_CheckGround()` starts with W3E terrain height, then checks the level's sparse registry of live `DestructableData.walkable` entities and currently traces the rendered model at the unit's XY position. Dead, hidden/non-solid, and pathing-texture-less destructables do not supply ground. Retail inspection proves a dedicated walkable-surface query exists before `cliffHeight` fallback, but does not yet prove that model geometry is the final retail height source. The local MDX trace and same-cell seam fallback are therefore compatibility behavior pending a live retail height probe; see [destructable-bridge-lifecycle.md](destructable-bridge-lifecycle.md).
 
-Human01's river bridge confirms the split. Map object `LT05` (`WoodBridgeLarge45`) is `walkable=1`, `onWater=1`, has a 32x32 pathing texture, and is placed at `(1216, -960, -114)`. W3E terrain at its centre is `-170.8`, so terrain-only ground snapping puts a unit 56.8 world units below the deck even though WPM routing correctly accepts the crossing. Walkable surfaces are registered at map/runtime destructable spawn and unregistered on edict free; ground checks iterate bridges rather than every map entity.
+Human01's river bridge confirms the split. Map object `LT05` (`WoodBridgeLarge45`) is `walkable=1`, `onWater=1`, has a 32x32 pathing texture, and is placed at `(1216, -960, -114)`. W3E terrain at its centre is below the rendered deck, so terrain-only ground snapping puts a unit under the bridge. Walkable surfaces are registered at map/runtime destructable spawn and unregistered on edict free; ground checks iterate bridges rather than every map entity.
+Preplaced destructables activated later by generated JASS must also be registered when the placeholder is replaced. Otherwise the pathing bake sees LT05 while ground checks have no bridge surface to raise a unit onto the deck.
+
+Retail binary inspection confirms that destructables own a dynamic pathing overlay: `0x006d30b0` selects the alive/death profile pathing reference and the shared pathing-surface manager updates the registered footprint during both creation and restore. The final retail cell compositor beneath that manager is still unresolved. OpenRealm's current raster implementation in `common/routing.c` therefore remains a compatibility implementation: the authored image is sampled on its vertically flipped axis, rotated by `(facing_degrees + 450) % 360` in 90-degree steps, centred on the destructable's path cell, and ORed into the WPM flags. A texture never clears a terrain restriction for ordinary destructables. Red, green, and blue source channels are read from the decoded TGA's `b`, `g`, and `r` members respectively; a channel contributes only when its value is greater than 127. Alive `walkable=1` destructables are the current bridge exception: their complete alive footprint is opened first so blocked water can become a crossing, then the authored alive path texture is stamped back over that opening so rail/non-deck pixels remain blocked. Dead pathing uses the authored death texture. The same static bake writes a compact full-footprint `walkable_surface_mask`, so movement, line checks, radius checks, and A* retain the working bridge support/radius semantics in O(1) without rescanning destructables and texture pixels.
+
+Move-time collision-radius checks currently use a Warsmash-compatible world-space contract: the center and eight samples at `+/-collisionSize` are mapped independently to pathing cells. They do not expand a cell center into a full `ceil(radius / cellSize)` square; that expansion is too conservative for a 31-unit Footman on a 32-unit grid and rejects valid bridge approaches. Once a mover's centre is on an alive walkable bridge lane, the current compatibility implementation treats the lane as its support surface and does not let diagonal rail samples reject the mover's radius footprint. Retail radius expansion and diagonal/corner semantics are still unresolved; do not treat this exception as proven retail behavior.
+
+The retail ROC `Units\\DestructableData.slk` row for LT05 names `Doodads\\Terrain\\WoodBridgeLarge45\\WoodBridgeLarge45` and `PathTextures\\CityBridgeLarge45.tga`/`CityBridgeLarge45Death.tga`. The model is `WoodBridgeLarge45.mdx`, not `WoodBridgeLarge450.mdx`; its SEQS are `Stand`, `Death`, and `Birth`. Destructable stems that already end in orientation digits use the authored stem directly, while non-numeric stems retain the variation suffix convention used by trees. `CityBridgeLarge45Destroyed.mdx` belongs to separate `YSdb`/`YSdc` rows and is not LT05's dead presentation.
 
 Attack range against a building is measured from the attacker's collision edge to the building's authored no-walk footprint when `pathtex` is available. `skills/s_attack.c` therefore uses `CM_DistanceToPathingFootprint()` for building targets instead of requiring the attacker to enter weapon range of the blocked building centre. This is especially important for explicit force-fire on owned/friendly large buildings: centre-distance range checks make a melee unit orbit the footprint forever even though it is already beside a valid attack surface. Non-building targets retain the existing centre-distance attack check.
 
@@ -173,7 +180,17 @@ prints Harvest transitions and fallback reasons. Level 2 adds per-approach route
 +set wc3_harvest_path_debug 2
 ```
 
-Lumber routing uses the `WC3_HARVEST_PATH` prefix. Gold-mine entry uses `WC3_GOLD_PATH`, and gold return/deposit uses `WC3_GOLD_RETURN`. For map-specific mine/model mismatches, level 2 also emits `WC3_GOLD_GEOMETRY`; level 3 adds the pathing-texture rows as `WC3_GOLD_FOOTPRINT`. Generic resumable routing does not emit per-build debug lines. A healthy interior-tree fallback should progress through a nonzero flow generation and then one of:
+Lumber routing uses the `WC3_HARVEST_PATH` prefix. Gold-mine entry uses `WC3_GOLD_PATH`, and gold return/deposit uses `WC3_GOLD_RETURN`. For map-specific mine/model mismatches, level 2 also emits `WC3_GOLD_GEOMETRY`; level 3 adds the pathing-texture rows as `WC3_GOLD_FOOTPRINT`. Generic resumable routing does not emit per-build debug lines.
+
+For LT05 radius/diagonal retail comparison, enable the separate bounded probe:
+
+```sh
++set wc3_bridge_probe 1
+```
+
+It logs the normal static point result without the live-confirmed bridge radius compatibility rule, the actual point/line result, all nine collision-radius samples, and each simultaneous diagonal corner pair. The probe is off by default, stops after 256 bridge-near movement candidates, and does not change gameplay. A Prologue02 run reached all 256 probes: six Footman candidates (`radius=31`) required the radius compatibility rule, while 26 supported-deck diagonals were already accepted by the ordinary corner rule and no `diagonal_exception=1` case was observed. See [destructable-bridge-lifecycle.md](destructable-bridge-lifecycle.md) for the field definitions and proof status.
+
+A healthy interior-tree fallback should progress through a nonzero flow generation and then one of:
 
 ```text
 fallback ... reason=route_goal_out_of_range
@@ -185,14 +202,16 @@ followed by `start` and `reached` for the replacement tree.
 
 ## Verification
 
-Focused tests live in `games/warcraft-3/game/tests/t_pathfinding.c` and `t_movement.c`. They cover:
+Focused tests live in `games/warcraft-3/game/tests/t_pathfinding.c`, `t_movement.c`, and `t_destructable.c`. They cover:
 
 - cache separation by collision radius;
 - resumable cache misses serialize without losing a later destination;
 - collision-radius-aware line walkability;
 - water rejection with an explicitly passable bridge lane;
 - walkable-destructable deck elevation with terrain restoration outside its footprint;
-- direct-line and flow rejection of diagonal `ox/xo` corner cuts;
+- LT05 local support seam recovery, same-path-cell fallback confinement, and animation-frame cache invalidation;
+- live-confirmed OpenRealm radius compatibility when a supported-deck unit centre is valid but a collision-radius sample grazes authored rail pathing;
+- bridge and non-bridge rejection of diagonal `ox/xo` corner cuts when either cardinal side is blocked;
 - rejection of a corridor too narrow for the mover;
 - collision-sized Move, Patrol, and Attack-move route selection;
 - collision-sized Move routing around a long wall;
@@ -212,6 +231,7 @@ Run when validating locally:
 ```sh
 make test-wc3-engine WC3_PATTERN='wc3_api.set_unit_position*'
 make test-wc3-engine WC3_PATTERN='wc3_pathfinding.*'
+make test-wc3-engine WC3_PATTERN='wc3_destructable.walkable_bridge_support_*'
 make test-wc3-engine WC3_PATTERN='wc3_movement.plain_move_*'
 make test-wc3-engine WC3_PATTERN='wc3_movement.blocked_move_*'
 make test-wc3-engine WC3_PATTERN='wc3_movement.*'
@@ -221,6 +241,8 @@ make test-wc3-engine WC3_PATTERN='wc3_movement.lumber_*'
 ### Interaction-owned route endpoints
 
 Generic radius-0 point fields are still used for mine entry, resource return, attack, and other behaviors whose real target centre may be blocked. Their flow vectors nevertheless strictly descend to the adjusted legal route endpoint. Once that endpoint is reached, `unit_changeangle()` exposes `flow_goal_reached` and steers toward the real entity target. The owning behavior decides what that means: attack/range behaviors continue using their range test, while Gold Mine entry/return may hand off immediately at the route goal or after Move's bounded near-goal settle detector proves a crowded worker has stopped making progress at the interaction edge. This keeps routing monotonic without turning a distant blocked route into a successful interaction.
+
+Walkable destructable decks use the same no-corner-cut rule as ordinary terrain. A diagonal transition is rejected when either cardinal side of the crossed corner is blocked, even when both endpoints are on the same alive `walkable=1` surface. The earlier bridge-only diagonal escape was removed after a 256-probe Prologue02 stress run observed 26 supported-deck diagonals, all of which were already accepted normally, with no blocked-cardinal or `diagonal_exception=1` case. The separate supported-centre radius rule remains because the same run captured six real Footman moves where normal radius sampling failed on authored rail pathing but the deck-centre move was required for traversal.
 
 ## See Also
 
