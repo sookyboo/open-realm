@@ -1383,6 +1383,7 @@ typedef struct {
 
 // g_main.c
 int G_BridgeDebugLevel(void);
+void G_FalsifyAliveBridgePathing(LPEDICT ent);
 void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase);
 LPPLAYER G_GetPlayerByNumber(DWORD);
 void G_InitJassHost(void);

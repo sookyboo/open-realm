@@ -10,6 +10,20 @@ int G_BridgeDebugLevel(void) {
     return value ? atoi(value) : 0;
 }
 
+/* Temporary route isolation: replace only alive walkable bridge blocker data
+ * with an all-clear in-memory texture while preserving its authored dimensions.
+ * The death texture and the source files remain unchanged. */
+void G_FalsifyAliveBridgePathing(LPEDICT ent) {
+    pathTex_t *tex;
+    if (!ent || !ent->destructable.walkable || !ent->destructable.alive_pathtex ||
+        atoi(gi.CvarString("wc3_bridge_clear_alive_pathtex", "0")) == 0)
+        return;
+    tex = ent->destructable.alive_pathtex;
+    FOR_LOOP(i, (DWORD)tex->width * tex->height) tex->map[i].b = 0;
+    fprintf(stderr, "WC3_BRIDGE_PATHTEX mode=synthetic_clear unit=%u size=%ux%u\n",
+            (unsigned)(ent - globals.edicts), tex->width, tex->height);
+}
+
 void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase) {
     int const debug = G_BridgeDebugLevel();
     if (!ent || ent->class_id != MAKEFOURCC('L', 'T', '0', '5') || !debug) return;
