@@ -76,10 +76,13 @@ gdb -q -batch -p "$pid" \
   -ex 'call Cbuf_AddText("sv_gamecmd 0 select <footman_edict>\n")' \
   -ex 'call Cbuf_AddText("sv_gamecmd 0 bridgeclear 768\n")' \
   -ex 'call Cbuf_AddText("sv_gamecmd 0 haltai 1\n")' \
-  -ex 'call Cbuf_AddText("sv_gamecmd 0 cameraselected\n")' \
-  -ex 'call Cbuf_AddText("screenshot 5\n")' \
   -ex detach -ex quit
 ```
+
+Wait at least one second after `cameraselected` before taking the screenshot;
+the command updates the authoritative camera and the client needs a rendered
+frame to receive/apply it. For the baseline, issue `cameraselected` separately,
+wait one second, then issue `screenshot 5`.
 
 Do not assume edict numbers. Read `WC3_BRIDGE_DEBUGSPAWN` and use the Footman
 edict printed there for the movement command. The Peasant is only a visible
@@ -102,13 +105,22 @@ then take additional screenshots after roughly five and eight seconds:
 ```sh
 sleep 2
 pid=$(ps -eo pid=,comm= | awk '$2 == "openwarcraft3" {print $1; exit}')
-gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("sv_gamecmd 0 cameraselected\n")' -ex 'call Cbuf_AddText("screenshot 5\n")' -ex detach -ex quit
+gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("sv_gamecmd 0 cameraselected\n")' -ex detach -ex quit
+sleep 1
+pid=$(ps -eo pid=,comm= | awk '$2 == "openwarcraft3" {print $1; exit}')
+gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("screenshot 5\n")' -ex detach -ex quit
 sleep 3
 pid=$(ps -eo pid=,comm= | awk '$2 == "openwarcraft3" {print $1; exit}')
-gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("sv_gamecmd 0 cameraselected\n")' -ex 'call Cbuf_AddText("screenshot 5\n")' -ex detach -ex quit
+gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("sv_gamecmd 0 cameraselected\n")' -ex detach -ex quit
+sleep 1
+pid=$(ps -eo pid=,comm= | awk '$2 == "openwarcraft3" {print $1; exit}')
+gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("screenshot 5\n")' -ex detach -ex quit
 sleep 3
 pid=$(ps -eo pid=,comm= | awk '$2 == "openwarcraft3" {print $1; exit}')
-gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("sv_gamecmd 0 cameraselected\n")' -ex 'call Cbuf_AddText("screenshot 5\n")' -ex detach -ex quit
+gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("sv_gamecmd 0 cameraselected\n")' -ex detach -ex quit
+sleep 1
+pid=$(ps -eo pid=,comm= | awk '$2 == "openwarcraft3" {print $1; exit}')
+gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("screenshot 5\n")' -ex detach -ex quit
 ```
 
 The engine should report `Wrote screenshots/shotNNNN.jpg`. Label the baseline

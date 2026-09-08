@@ -101,3 +101,9 @@ The temporary alive-only crossing baseline must eventually satisfy all of these 
 ## Evidence discipline
 
 Do not claim that the radius exception is required, or that bridge crossing is fixed, without `support_hit=1` on the actual LT05 deck and a complete side-to-side trajectory. Keep exploratory logs gated or remove them after the root cause is established.
+
+## Thin-edge orientation experiment
+
+Before the next path-texture hypothesis, run four fresh end-to-end processes with `wc3_bridge_clear_alive_pathtex 3` and `wc3_bridge_synthetic_line_angle` set to `0`, `90`, `180`, and `270` degrees. Mode 3 clears every alive path-texture source row except `y=0`, leaving one thin blocked source edge while preserving the authored texture dimensions. Use the exact emitted Footman edict in each run, capture a baseline and timed post-order screenshots, and stop each process after the final observation or an immediate stall capture.
+
+Record for every angle: `WC3_BRIDGE_PATHTEX`, `WC3_BRIDGE_SYNTH_EDGE`, LT05 bake counts, the Footman's `WC3_BRIDGE_MOVE_STATE`/`WC3_BRIDGE_ROUTE_STATE`, the first rejected or blocked transition, support hit/height, final position, and screenshot names. Compare the four angles for transformed edge orientation; do not treat a movement stall alone as proof that the source edge blocks the route unless the rejection is correlated with the edge and the unit has otherwise reached the deck transition.
