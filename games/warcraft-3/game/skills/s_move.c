@@ -170,6 +170,7 @@ void move_reset_progress(LPEDICT self) {
     self->movement.flow_goal_reached = false;
     self->movement.flow_unreachable = false;
     self->movement.flow_direct = false;
+    self->movement.route_retargeted = false;
     self->movement.worker_avoid_origin = self->s.origin2;
     self->movement.worker_avoid_heading = self->s.angle;
     self->movement.worker_avoid_blocked_frames = 0;

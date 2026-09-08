@@ -679,15 +679,19 @@ static void unit_changeangle_policy(LPEDICT self, moveAvoidPolicy_t policy) {
                  * component is unreachable, replace the waypoint with the
                  * closest legal point in this mover's component; aiming at the
                  * raw click made local avoidance walk forever along walls. */
-                if (radius > 0.0f && self->movement.flow_unreachable) {
+                if (radius > 0.0f && self->movement.flow_unreachable && !self->movement.route_retargeted) {
                     VECTOR2 closest;
-                        if (CM_ClosestReachablePointForRadius(
+                    self->movement.route_retargeted = true;
+                    if (CM_ClosestReachablePointForRadius(
                             &self->s.origin2, &self->goalentity->s.origin2, radius, &closest)) {
                         self->goalentity->s.origin2 = closest;
                         self->goalentity->secondarygoal = NULL;
                         self->goalentity->heatmap2 = 0;
                         self->goalentity->heatmap2_radius = 0;
                         move_reset_progress(self);
+                        /* The reset clears route progress, but this order has already
+                         * paid for its one bounded closest-point search. */
+                        self->movement.route_retargeted = true;
                     }
                     return;
                 }

@@ -824,6 +824,12 @@ static bool is_pathable_world_for_radius(LPCVECTOR2 location, FLOAT radius) {
     if (walkable_surface_cell(center.x, center.y))
         return is_pathable_node_original(center.x, center.y);
 
+    /* The authored rail is a real blocked cell, not merely an edge around the
+     * unit footprint.  Reject it before the sample test, which could otherwise
+     * accept a blocked centre when all +/-radius samples landed in clear cells. */
+    if (!is_pathable_node_original(center.x, center.y))
+        return false;
+
     for (i = -1; i <= 1; i++) {
         for (j = -1; j <= 1; j++) {
             VECTOR2 sample = { location->x + i * radius, location->y + j * radius };
@@ -1503,7 +1509,9 @@ static VECTOR2 compute_flow_at(int const *prices_field, DWORD x, DWORD y, int ra
             continue;
         if (dir >= 4 &&
             !(is_pathable_node_original_for_radius_cells((int)x + dx[dir], (int)y, radius_cells) &&
-              is_pathable_node_original_for_radius_cells((int)x, (int)y + dy[dir], radius_cells)))
+              is_pathable_node_original_for_radius_cells((int)x, (int)y + dy[dir], radius_cells)) &&
+            !(walkable_surface_cell(x, y) &&
+              walkable_surface_cell((int)x + dx[dir], (int)y + dy[dir])))
             continue;
         prices[dir] = new_price;
         min_price = MIN(new_price, min_price);

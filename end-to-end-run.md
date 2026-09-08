@@ -17,6 +17,23 @@ This keeps an interrupted session resumable from the two documents alone.
 
 ## Launch
 
+Before every end-to-end run, stop all existing game processes and verify that
+none remain. Multiple `openwarcraft3` instances can cause GDB injections to
+target the wrong process and can destabilize the session.
+
+```sh
+pids=$(ps -eo pid=,comm= | awk '$2 == "openwarcraft3" {print $1}')
+if [ -n "$pids" ]; then
+  kill -TERM $pids
+  sleep 1
+  remaining=$(ps -eo pid=,comm= | awk '$2 == "openwarcraft3" {print $1}')
+  if [ -n "$remaining" ]; then kill -KILL $remaining; fi
+fi
+ps -eo pid=,comm= | awk '$2 == "openwarcraft3" {print}'
+```
+
+The final command must produce no output before launching the fresh process.
+
 From the repository root, run:
 
 ```sh

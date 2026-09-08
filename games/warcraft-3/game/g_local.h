@@ -995,6 +995,7 @@ struct edict_s {
         BOOL flow_goal_reached; /* mover occupies the route's adjusted goal cell */
         BOOL flow_unreachable;  /* field exists but current cell has no route */
         BOOL flow_direct;       /* static path from mover to requested goal is clear */
+        BOOL route_retargeted;  /* disconnected location order already got one closest-point attempt */
         VECTOR2 path_waypoint, path_target; /* persistent accelerated turn and the destination that produced it */
         FLOAT path_radius;
         BOOL path_valid;

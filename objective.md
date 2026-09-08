@@ -508,6 +508,26 @@ verification for this change; a future runtime retry must first prevent that
 campaign route computation or use a bounded setup path before issuing the
 bridge commands.
 
+### Next run checkpoint: route-fallback slowdown verification
+
+The slowdown trace was reproduced in the main thread at
+`unit_changeangle_policy -> CM_ClosestReachablePointForRadius ->
+step_heatmap_build`. Commit `e6278a4a` introduced the synchronous unreachable
+destination fallback; later bridge commits made it easier to trigger. The
+latest code bounds that search to `4096` expansions, and this worktree change
+adds `movement.route_retargeted` so one move order cannot repeat the bounded
+fallback every frame after it has already attempted a closest-point retarget.
+Run a fresh process with `wc3_bridge_probe 0`, `wc3_bridge_debug 1`,
+`wc3_bridge_clear_alive_pathtex 0`, `+cameraedge 0`, and
+`+com_frame_limit 7000`. Halt AI immediately after `CL_SetGameplayInput`, then
+complete objective 53, wait for `restored_birth`, spawn Peasant then Footman,
+explicitly select the emitted Footman, issue `bridgeclear 768`, and order the
+Footman to `6080 -3584`. Capture baseline plus approximately 2, 5, and 8
+second frames. Record the exact Footman and any `WC3_BRIDGE_ROUTE`/movement
+state lines. Success requires the process to remain responsive through setup
+and the fallback not to recur continuously; crossing remains a separate
+pathing result. If interrupted, resume from the last completed command here.
+
 
 ## Incremental performance/correctness cleanup
 
@@ -520,3 +540,161 @@ The bridge transform fix is retained, but the follow-up implementation now separ
 - the current authored TGA transform uses the destructable facing directly. The old `+90 degree` documentation/comments were stale and are corrected without changing the current transform.
 
 This cleanup is intentionally incremental on top of the authored-TGA bridge patch. It does not change the alive/death TGA lifecycle, the vertical image flip, the shared path-texture cell mapping, or the existing bridge radius/diagonal compatibility rules. Automated tests were added/updated but not run locally; the developer will compile and test.
+
+The slowdown-verification process `35596` remained responsive through map load,
+`haltai`, objective 53 restoration, and Peasant/Footman spawning; it reported
+Footman `320` after campaign units had emitted route-state diagnostics. No
+movement order or screenshot was accepted from that run. Before testing the
+real authored blocker TGA again, the next run must prove the known all-clear
+alive path still crosses successfully with the same process/selection protocol.
+
+### Next run checkpoint: all-clear TGA performance and traversal control
+
+Launch a fresh process with `wc3_bridge_clear_alive_pathtex 1`,
+`wc3_bridge_probe 0`, `wc3_bridge_debug 1`, `+cameraedge 0`, and
+`+com_frame_limit 7000`. Halt AI immediately after `CL_SetGameplayInput`,
+complete objective 53, wait for `restored_birth`, spawn Peasant at
+`6080 -3584` then Footman at `4800 -4864`, parse the emitted Footman edict,
+explicitly select it, run `bridgeclear 768`, and issue one order to
+`6080 -3584`. Capture baseline plus approximately 2, 5, and 8 second frames.
+Accept the performance/pathing control only if the exact Footman advances to
+the far side with no persistent blocked-frame stall and the process remains
+responsive. If interrupted, record the last command and resume from this
+checkpoint before attempting the authored TGA.
+
+The all-clear control completed successfully in process `36726`: LT05 restored
+with `source_blocked=0`, `placed_blocked=0`, and `baked_open=1024`; the exact
+Footman was edict `337`, selected and camera-matched. It moved from
+`(4800.0,-4864.0)` through the deck to `(5935.6,-3764.4)` with
+`flow_direct=1` and no static-route fallback. Captures are `shot0047.jpg`
+(baseline), `shot0048.jpg`, `shot0049.jpg`, and `shot0050.jpg`. It then stopped
+near the Peasant destination because that friendly destination unit remained a
+dynamic collider; this is accepted as proof that the clear TGA bridge path and
+the responsive runtime control work. The process was stopped before the next
+run.
+
+### Next run checkpoint: authored TGA after clear-control gate
+
+The clear-control gate passed, so now run the real alive LT05 TGA with
+`wc3_bridge_clear_alive_pathtex 0`, `wc3_bridge_probe 0`,
+`wc3_bridge_debug 1`, `+cameraedge 0`, and `+com_frame_limit 7000`. First stop
+and verify all existing `openwarcraft3` processes as required by
+`end-to-end-run.md`. Halt AI immediately after `CL_SetGameplayInput`, complete
+objective 53, wait for `restored_birth`, spawn Peasant then Footman, parse the
+Footman edict, explicitly select it, run `bridgeclear 768`, and issue one
+`bridgeorder` to `6080 -3584`. Capture baseline plus approximately 2, 5, and 8
+second frames. Record whether the exact Footman crosses the deck, the first
+blocked position/frame count, and any fallback-route repetitions. Do not accept
+the run if the camera unit differs from the ordered Footman. If interrupted,
+resume from the last completed command here.
+
+### Next run checkpoint: clear-TGA regression after retry-state fix
+
+The retry-state fix now marks `movement.route_retargeted` after
+`move_reset_progress()`, so a successful closest-point retarget cannot be
+recomputed every frame. The targeted `wc3_pathfinding.*` suite passed 135/135
+assertions after rebuilding. Before another authored-TGA attempt, run the
+known clear alive path with `wc3_bridge_clear_alive_pathtex 1`,
+`wc3_bridge_probe 0`, `wc3_bridge_debug 1`, `+cameraedge 0`, and
+`+com_frame_limit 7000`. Stop and verify all existing game processes first,
+then halt AI immediately after `CL_SetGameplayInput`, complete objective 53,
+wait for `restored_birth`, spawn Peasant then Footman, explicitly select the
+Footman, run `bridgeclear 768`, and issue one `bridgeorder` to `6080 -3584`.
+Capture baseline and post-order frames. The clear path must again advance
+across the deck while the process remains responsive. If interrupted, resume
+from this checkpoint; only after this gate should the real TGA be run.
+
+The clear-TGA regression passed in process `39476` after the retry-state fix.
+LT05 restored with `source_blocked=0`, `placed_blocked=0`, `terrain_open=857`,
+and `baked_open=1024`. The explicitly selected Footman `337` accepted the
+single order and advanced from `(4800.0,-4864.0)` across the deck to
+`(6051.8,-3583.3)`, with `flow_direct=1`, `blocked_frames=0`, and no repeated
+closest-point fallback. Captures are `shot0055.jpg` (baseline),
+`shot0056.jpg`, `shot0057.jpg`, and `shot0058.jpg`. The process was killed
+after capture and no game process remains.
+
+### Next run checkpoint: authored TGA after clear regression
+
+The clear gate remains valid after the retry-state fix. Before launching,
+stop and verify all `openwarcraft3` processes. Run the authored alive LT05 TGA
+with `wc3_bridge_clear_alive_pathtex 0`, `wc3_bridge_probe 0`,
+`wc3_bridge_debug 1`, `+cameraedge 0`, and `+com_frame_limit 7000`. Halt AI
+immediately after `CL_SetGameplayInput`, complete objective 53, wait for
+`restored_birth`, spawn Peasant then Footman, explicitly select the emitted
+Footman, run `bridgeclear 768`, and issue one `bridgeorder` to `6080 -3584`.
+Capture baseline plus post-order frames, then record the first blocked state
+for the exact Footman. This is the next run to determine whether the real TGA
+pathing failure remains after the performance fix.
+
+### Next run checkpoint: clear-TGA gate after center-cell fix
+
+The second authored-TGA trace showed the footprint sampler accepting a blocked
+rail center when its radius samples landed on clear cells. The movement query
+now rejects a blocked center before sampling, while clear bridge-surface
+centres retain their explicit exception. The focused pathfinding suite remains
+135/135. Stop and verify all game processes, run the clear alive TGA with
+`wc3_bridge_clear_alive_pathtex 1`, `wc3_bridge_probe 0`,
+`wc3_bridge_debug 1`, `+cameraedge 0`, and `+com_frame_limit 7000`, then use
+the documented haltai/objective-53/Peasant-first/Footman-select protocol and
+order the exact Footman to `6080 -3584`. The clear path must cross before the
+authored TGA is tried.
+
+The clear-TGA gate passed after the center-cell fix in the disposable run
+logged at `/tmp/wc3-clear-after-center.log`. The exact Footman `320` reached
+`(6156.7,-3610.1)` with `flow_direct=1`, `blocked_frames=0`, and no static
+rejection. The process was killed and no game process remains.
+
+### Next run checkpoint: authored TGA after center-cell fix
+
+Run the real alive LT05 TGA now. Stop and verify all `openwarcraft3` processes
+first. Use `wc3_bridge_clear_alive_pathtex 0`, `wc3_bridge_probe 0`,
+`wc3_bridge_debug 1`, `+cameraedge 0`, and `+com_frame_limit 7000`; halt AI
+immediately after `CL_SetGameplayInput`, complete objective 53, wait for
+`restored_birth`, spawn Peasant then Footman, explicitly select the Footman,
+run `bridgeclear 768`, issue one `bridgeorder` to `6080 -3584`, and capture
+baseline plus post-order frames. Confirm whether it passes the former rail
+position `(5397,-4453)` without persistent blocked frames.
+
+The authored-TGA verification ran in process `42838` with Footman `320` and
+still stalled at `(5397.4,-4452.7)`. Its route remained `flow_direct=0`,
+`flow_generation=15`, and `blocked_frames` reached 21; the center-cell and
+flow-diagonal fixes did not yet make the real texture traversable. The clear
+gate did pass immediately beforehand, so the remaining failure is specific to
+authored rail/path selection, not the end-to-end harness or the clear texture.
+The process was killed and no game process remains. Further real-TGA work
+must start with a new documented checkpoint and a debug-level-3 run.
+
+### Next run checkpoint: clear-TGA gate after flow-diagonal fix
+
+The authored-TGA trace showed `compute_flow_at()` rejecting diagonal bridge
+surface transitions that the heatmap builder accepted, sending Footman 337
+into authored blocker cell `(423,117)`. The flow diagonal predicate is now
+aligned with the heatmap predicate, and `wc3_pathfinding.*` remains 135/135.
+Before a real-TGA verification, stop and verify all game processes, then run
+the clear alive path with `wc3_bridge_clear_alive_pathtex 1`,
+`wc3_bridge_probe 0`, `wc3_bridge_debug 1`, `+cameraedge 0`, and
+`+com_frame_limit 7000`. Halt AI immediately after `CL_SetGameplayInput`,
+complete objective 53, wait for `restored_birth`, spawn Peasant then Footman,
+select the exact Footman, run `bridgeclear 768`, order it to `6080 -3584`,
+and capture baseline plus post-order frames. The clear path must still cross
+the deck before the real TGA is tried.
+
+The clear gate passed again in the disposable process recorded in
+`/tmp/wc3-clear-after-flow.log` after the flow-diagonal
+fix. LT05 reported `source_blocked=0`, `placed_blocked=0`, and
+`baked_open=1024`; Footman `337` reached `(6144.1,-3622.8)` with
+`flow_direct=1`, `blocked_frames=0`, and no stall. The disposable process was
+killed and no game process remains. No screenshot was needed for this focused
+gate.
+
+### Next run checkpoint: real TGA after flow-diagonal fix
+
+Run the authored alive TGA only after the clear gate above. Stop and verify
+all `openwarcraft3` processes first. Launch with
+`wc3_bridge_clear_alive_pathtex 0`, `wc3_bridge_probe 0`,
+`wc3_bridge_debug 1`, `+cameraedge 0`, and `+com_frame_limit 7000`. Halt AI
+immediately after `CL_SetGameplayInput`, complete objective 53, wait for
+`restored_birth`, spawn Peasant then Footman, explicitly select the Footman,
+run `bridgeclear 768`, issue one `bridgeorder` to `6080 -3584`, and capture
+baseline plus post-order frames. Success requires the exact Footman to pass
+the previous blocker position without persistent rejected candidates.
