@@ -461,16 +461,10 @@ static void clear_walkable_surface(edict_t const *ent, pathMapCell_t *target) {
         py = ty + p.y - (int)div_h / 2;
         if (is_valid_point(px, py)) {
             DWORD const index = (DWORD)px + (DWORD)py * pathmap.width;
-            VECTOR2 const point = CM_GetDenormalizedMapPosition(((FLOAT)px + 0.5f) / pathmap.width,
-                                                                 ((FLOAT)py + 0.5f) / pathmap.height);
-            /* The support mask describes the rendered deck, not the complete
-             * destructable footprint. Authored alive-path blockers are rails
-             * and must remain excluded from both route candidates and support. */
+            /* The ordinary bridge baseline opens every clear alive pathing cell;
+             * support validation will be restored one constrained piece at a time
+             * after a complete traversal is proven. Authored blocked pixels stay blocked. */
             if (pt->map[x + (pt->height - 1 - y) * pt->width].b <= 127) {
-                if (walkable_surface_query && !walkable_surface_query(ent, &point)) {
-                    target[index] = pathmap.terrain[index];
-                    continue;
-                }
                 target[index].nowalk = 0;
                 if (pathmap.walkable_surface_mask) pathmap.walkable_surface_mask[index] = 1;
             }
@@ -833,13 +827,6 @@ static bool is_pathable_node_original(int x, int y) {
  * Footman on a 32-unit pathing grid and rejected valid bridge approaches. */
 static bool is_pathable_world_for_radius(LPCVECTOR2 location, FLOAT radius) {
     int i, j;
-    point2_t center = LocationToPathMap(location);
-
-    /* A walkable bridge is a support lane, not a square terrain opening. Once
-     * the mover's centre is on that lane, its radius samples may touch the
-     * diagonal rails without making the deck itself unwalkable. */
-    if (walkable_surface_cell(center.x, center.y))
-        return is_pathable_node_original(center.x, center.y);
 
     for (i = -1; i <= 1; i++) {
         for (j = -1; j <= 1; j++) {
@@ -886,10 +873,7 @@ static bool is_pathable_node_original_for_radius_cells(int x, int y, int radius_
             - pathmap.obstacle_prefix[(x1 + 1) + y0 * stride]
             + pathmap.obstacle_prefix[x0 + y0 * stride];
     if (blocked == 0) return true;
-    /* The bridge deck already cleared its authored centre cells from the
-     * terrain baseline. Do not reject a radius-expanded centre solely because
-     * the diagonal rail cells surround that support lane. */
-    return walkable_surface_cell(x, y) && is_pathable_node_original(x, y);
+    return false;
 }
 
 static bool closest_pathable_node_original(LPCVECTOR2 location, FLOAT radius, point2_t *out) {

@@ -5,6 +5,10 @@ This is the repeatable headless procedure for observing LT05 traversal in
 process for every hypothesis so route caches, unit positions, animation state,
 and cinematic state do not carry over.
 
+During the current runtime investigation, do not run the automated test suite
+between these runs; build the game binary if needed and use the end-to-end
+runtime evidence only.
+
 ## Launch
 
 From the repository root, run:
