@@ -107,3 +107,19 @@ Do not claim that the radius exception is required, or that bridge crossing is f
 Before the next path-texture hypothesis, run four fresh end-to-end processes with `wc3_bridge_clear_alive_pathtex 3` and `wc3_bridge_synthetic_line_angle` set to `0`, `90`, `180`, and `270` degrees. Mode 3 clears every alive path-texture source row except `y=0`, leaving one thin blocked source edge while preserving the authored texture dimensions. Use the exact emitted Footman edict in each run, capture a baseline and timed post-order screenshots, and stop each process after the final observation or an immediate stall capture.
 
 Record for every angle: `WC3_BRIDGE_PATHTEX`, `WC3_BRIDGE_SYNTH_EDGE`, LT05 bake counts, the Footman's `WC3_BRIDGE_MOVE_STATE`/`WC3_BRIDGE_ROUTE_STATE`, the first rejected or blocked transition, support hit/height, final position, and screenshot names. Compare the four angles for transformed edge orientation; do not treat a movement stall alone as proof that the source edge blocks the route unless the rejection is correlated with the edge and the unit has otherwise reached the deck transition.
+
+The corrected 0-degree rerun used `+set wc3_bridge_clear_alive_pathtex 3`,
+`+set wc3_bridge_synthetic_line_angle 0`, `+cameraedge 0`, and an explicit
+post-handshake `cameraedge 0`. It waited one second after each
+`cameraselected` command before capturing so the client could apply the
+authoritative camera update. The Peasant was edict `337` and the Footman was
+edict `4390`; edict `4390` was explicitly selected and commanded. LT05 logged
+`source_clear=992`, `source_blocked=32`, `placed_blocked=32`, and
+`baked_open=992`. The Footman moved from `(4800,-4864)` to `(6172.5,-3614.6)`
+with `flow_direct=1`, support hits on the rendered deck, and
+`blocked_frames=0`; the route reached the far-side destination region.
+Captures were `shot0009.jpg` (baseline), `shot0010.jpg` (~2 seconds),
+`shot0011.jpg` (~5 seconds), and `shot0012.jpg` (~8 seconds/far side). The
+baseline and observation screenshots are valid camera-framed evidence. This
+proves the 0-degree thin-edge run and camera protocol; the 90, 180, and 270
+degree cases remain outstanding.

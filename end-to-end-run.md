@@ -155,3 +155,27 @@ test -z "$pid" || kill -9 "$pid"
 
 Record the exact screenshot names, Footman edict, coordinates, bridge state,
 earliest failure layer, and representative log lines in `objective.md`.
+
+## Recorded thin-edge run: 0 degrees
+
+The successful 0-degree thin-edge run used the normal launch above with these
+additional arguments:
+
+```text
++set wc3_bridge_clear_alive_pathtex 3
++set wc3_bridge_synthetic_line_angle 0
+```
+
+After `CL_SetGameplayInput`, it injected `cameraedge 0`, then injected
+`objective complete 53` and `haltai 1`. After
+`WC3_BRIDGE_STATE phase=restored_birth`, it spawned `hpea 6080 -3584` first
+and `hfoo 4800 -4864` second, parsed the Footman edict from
+`WC3_BRIDGE_DEBUGSPAWN`, and issued `select <footman_edict>`,
+`bridgeclear 768`, and `haltai 1`. It then issued `cameraselected`, waited one
+second, and captured the baseline. The only movement command was
+`bridgeorder <footman_edict> 6080 -3584`. At approximately 2, 5, and 8 seconds
+after ordering, it repeated `cameraselected`, waited one second, and captured
+one screenshot.
+
+The one-second camera wait is required: `WC3_CAMERA_SELECTED` is a server-side
+marker, while the client applies the camera update on a later rendered frame.
