@@ -171,6 +171,25 @@ static void bridge_debug_route_failure(LPCEDICT self, LPCVECTOR2 target, LPCSTR 
             reason, self->class_id, self->s.origin2.x, self->s.origin2.y, target->x, target->y, self->collision);
 }
 
+/* Capture the route state that produced a bridge heading; this distinguishes a
+ * bad waypoint/flow direction from a later collision or support rejection. */
+static void bridge_debug_route_state(LPCEDICT self, LPCSTR mode) {
+    static DWORD count;
+    LPCVECTOR2 target;
+    if (G_BridgeDebugLevel() < 1 || count >= 256 || !self || !self->goalentity ||
+        !(bridge_debug_near(&self->s.origin2) || bridge_debug_near(&self->goalentity->s.origin2))) return;
+    target = &self->goalentity->s.origin2;
+    fprintf(stderr,
+            "WC3_BRIDGE_ROUTE_STATE seq=%u unit_id=%u rawcode=%08x mode=%s pos=(%.1f,%.1f) target=(%.1f,%.1f) waypoint=(%.1f,%.1f) flow_direct=%d path_valid=%d flow_generation=%u flow_goal_reached=%d flow_unreachable=%d heading=%.3f angle=%.3f radius=%.1f\n",
+            count, (unsigned)(self - globals.edicts), self->class_id, mode ? mode : "?",
+            self->s.origin2.x, self->s.origin2.y, target->x, target->y,
+            self->movement.path_waypoint.x, self->movement.path_waypoint.y,
+            self->movement.flow_direct, self->movement.path_valid, self->movement.flow_generation,
+            self->movement.flow_goal_reached, self->movement.flow_unreachable,
+            self->movement.heading, self->s.angle, self->collision);
+    count++;
+}
+
 /* BoxEdicts predicate: solid units/buildings sharing this mover's collision
  * layer.  Excludes self, hollow entities, zero-collision entities (waypoints,
  * effects, missiles), and the opposite air/ground layer (flyers and ground
@@ -614,9 +633,9 @@ static void unit_changeangle_policy(LPEDICT self, moveAvoidPolicy_t policy) {
     } else {
         DWORD heatmap = M_RefreshHeatmap(self->goalentity, radius);
         self->movement.flow_generation = heatmap;
-        if (!heatmap) {
-            if (!unit_accel_direction(self, radius, &dir))
-                return; /* long incremental route is still building; keep the order */
+            if (!heatmap) {
+                if (!unit_accel_direction(self, radius, &dir))
+                    return; /* long incremental route is still building; keep the order */
             /* path_valid resolves the heading while the shared field builds;
              * this is not a direct line to the requested destination. */
             unit_apply_heading(self, &dir, policy);
@@ -657,6 +676,7 @@ static void unit_changeangle_policy(LPEDICT self, moveAvoidPolicy_t policy) {
     }
 
     unit_apply_heading(self, &dir, policy);
+    bridge_debug_route_state(self, self->movement.flow_direct ? "direct" : "flow");
 }
 
 void unit_changeangle(LPEDICT self) {

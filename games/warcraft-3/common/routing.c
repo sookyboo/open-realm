@@ -460,8 +460,13 @@ static void clear_walkable_surface(edict_t const *ent, pathMapCell_t *target) {
         py = ty + p.y - (int)div_h / 2;
         if (is_valid_point(px, py)) {
             DWORD const index = (DWORD)px + (DWORD)py * pathmap.width;
-            target[index].nowalk = 0;
-            if (pathmap.walkable_surface_mask) pathmap.walkable_surface_mask[index] = 1;
+            /* The support mask describes the rendered deck, not the complete
+             * destructable footprint. Authored alive-path blockers are rails
+             * and must remain excluded from both route candidates and support. */
+            if (pt->map[x + (pt->height - 1 - y) * pt->width].b <= 127) {
+                target[index].nowalk = 0;
+                if (pathmap.walkable_surface_mask) pathmap.walkable_surface_mask[index] = 1;
+            }
         }
     }
 }

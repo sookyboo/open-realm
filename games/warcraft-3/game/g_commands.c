@@ -1896,6 +1896,43 @@ CLIENTCOMMAND(HaltAI) {
     fprintf(stderr, "WC3: haltai=%d non-player-owned unit AI\n", atoi(argv[1]));
 }
 
+/* Issue a point order to one explicit debug unit, bypassing selection and
+ * formation slot resolution so bridge traversal can be reproduced exactly. */
+CLIENTCOMMAND(BridgeOrder) {
+    LPEDICT unit;
+    VECTOR2 point;
+    if (argc < 4 || !G_DebugIsNumber(argv[1]) || !G_DebugIsNumber(argv[2]) || !G_DebugIsNumber(argv[3])) {
+        fprintf(stderr, "usage: bridgeorder <edict> <x> <y>\n");
+        return;
+    }
+    if (atoi(argv[1]) < 0 || (DWORD)atoi(argv[1]) >= globals.num_edicts) {
+        fprintf(stderr, "WC3: bridgeorder invalid unit %s\n", argv[1]);
+        return;
+    }
+    unit = &globals.edicts[atoi(argv[1])];
+    if (!unit->inuse || !unit->data.UnitData) {
+        fprintf(stderr, "WC3: bridgeorder invalid unit %s\n", argv[1]);
+        return;
+    }
+    point = (VECTOR2){ atoi(argv[2]), atoi(argv[3]) };
+    if (G_IssueUnitPointOrder(unit, "move", &point, false, unit->s.player, 0.0f))
+        fprintf(stderr, "WC3_BRIDGE_DEBUGORDER unit=%u rawcode=%08x from=(%.1f,%.1f) target=(%.1f,%.1f) radius=%.1f\n",
+                (unsigned)(unit - globals.edicts), unit->class_id, unit->s.origin2.x, unit->s.origin2.y,
+                point.x, point.y, unit->collision);
+}
+
+/* Move the local gameplay camera to a world point for deterministic bridge
+ * screenshots; this does not alter simulation state. */
+CLIENTCOMMAND(BridgeCamera) {
+    VECTOR2 point;
+    if (argc < 3 || !G_DebugIsNumber(argv[1]) || !G_DebugIsNumber(argv[2])) {
+        fprintf(stderr, "usage: bridgecamera <x> <y>\n");
+        return;
+    }
+    point = (VECTOR2){ atoi(argv[1]), atoi(argv[2]) };
+    G_ClientSetCameraPosition(clent, &point);
+}
+
 BOOL G_IsAIHalted(void) { return wc3_halt_ai; }
 
 typedef struct {
@@ -1944,6 +1981,8 @@ clientCommand_t clientCommands[] = {
     { "gameresult_quit", CMD_GameResultQuit },
     { "debugspawn", CMD_DebugSpawn },
     { "haltai", CMD_HaltAI },
+    { "bridgeorder", CMD_BridgeOrder },
+    { "bridgecamera", CMD_BridgeCamera },
     { "menu", CMD_Menu },
     { "menu_endgame", CMD_MenuEndGame },
     { "menu_restart", CMD_MenuRestart },
