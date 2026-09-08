@@ -383,6 +383,31 @@ static DWORD collision_radius_cells(FLOAT collision) {
     return MAX(1, (DWORD)ceilf(collision / pathmap_cell_world_size()));
 }
 
+/* Convert one authored path-texture pixel to the map cell used by every
+ * footprint consumer; keeping the flip and facing rotation in one helper
+ * prevents route staging from disagreeing with the static obstacle bake. */
+static point2_t pathtex_cell_to_map(edict_t const *ent, DWORD x, DWORD y) {
+    pathTex_t const *pt = ent->pathtex;
+    point2_t p = LocationToPathMap(&ent->s.origin2);
+    int angle = (int)(ent->s.angle * 180.0f / M_PI);
+    int rotation = angle % 360;
+    int tx = (int)x, ty = (int)y;
+    DWORD div_w = rotation % 180 ? pt->height : pt->width;
+    DWORD div_h = rotation % 180 ? pt->width : pt->height;
+
+    if (rotation < 0) rotation += 360;
+    switch (rotation) {
+        case 90: tx = (int)pt->height - 1 - (int)y; ty = (int)x; break;
+        case 180: tx = (int)pt->width - 1 - (int)x; ty = (int)pt->height - 1 - (int)y; break;
+        case 270: tx = (int)y; ty = (int)pt->width - 1 - (int)x; break;
+    }
+    return (point2_t){ tx + p.x - (int)div_w / 2, ty + p.y - (int)div_h / 2 };
+}
+
+static BOOL pathtex_cell_blocked(pathTex_t const *pt, DWORD x, DWORD y) {
+    return pt->map[x + (pt->height - 1 - y) * pt->width].b > 127;
+}
+
 /* Stamp a single entity's footprint into a pathmap byte array. */
 static void stamp_entity_obstacle(edict_t const *ent, pathMapCell_t *target) {
     point2_t p = LocationToPathMap(&ent->s.origin2);
@@ -393,29 +418,14 @@ static void stamp_entity_obstacle(edict_t const *ent, pathMapCell_t *target) {
      * texture and therefore remain closed. */
     if (ent->pathtex) {
         pathTex_t *pt = ent->pathtex;
-        int angle = (int)(ent->s.angle * 180.0f / M_PI);
-        int rotation = (angle + 450) % 360;
-        DWORD div_w = rotation % 180 ? pt->height : pt->width;
-        DWORD div_h = rotation % 180 ? pt->width : pt->height;
-
-        if (rotation < 0) rotation += 360;
         FOR_LOOP(x, pt->width) {
             FOR_LOOP(y, pt->height) {
-                int tx = (int)x, ty = (int)y;
-                int px, py;
+                point2_t cell = pathtex_cell_to_map(ent, x, y);
 
                 /* Match Warsmash: rotate the image in 90-degree steps, sample its vertically flipped
                  * image, and OR restrictions into WPM instead of clearing terrain restrictions. */
-                switch (rotation) {
-                    case 90: tx = (int)pt->height - 1 - (int)y; ty = (int)x; break;
-                    case 180: tx = (int)pt->width - 1 - (int)x; ty = (int)pt->height - 1 - (int)y; break;
-                    case 270: tx = (int)y; ty = (int)pt->width - 1 - (int)x; break;
-                }
-                px = tx + p.x - (int)div_w / 2;
-                py = ty + p.y - (int)div_h / 2;
-                if (is_valid_point(px, py)) {
-                    target[px + py * pathmap.width].nowalk |=
-                        pt->map[x + (pt->height - 1 - y) * pt->width].b > 127;
+                if (is_valid_point(cell.x, cell.y)) {
+                    target[cell.x + cell.y * pathmap.width].nowalk |= pathtex_cell_blocked(pt, x, y);
                 }
             }
         }
@@ -437,31 +447,15 @@ static void stamp_entity_obstacle(edict_t const *ent, pathMapCell_t *target) {
  * be unwalkable (bridges over water). Open the complete alive footprint so
  * routing sees the same continuous surface as an ordinary terrain bridge. */
 static void clear_walkable_surface(edict_t const *ent, pathMapCell_t *target) {
-    point2_t p;
     pathTex_t const *pt;
-    int angle, rotation;
-    DWORD div_w, div_h;
 
     if (!ent->destructable.walkable || ent->destructable.dead || !ent->pathtex)
         return;
     pt = ent->pathtex;
-    p = LocationToPathMap(&ent->s.origin2);
-    angle = (int)(ent->s.angle * 180.0f / M_PI);
-    rotation = (angle + 450) % 360;
-    if (rotation < 0) rotation += 360;
-    div_w = rotation % 180 ? pt->height : pt->width;
-    div_h = rotation % 180 ? pt->width : pt->height;
     FOR_LOOP(x, pt->width) FOR_LOOP(y, pt->height) {
-        int tx = (int)x, ty = (int)y, px, py;
-        switch (rotation) {
-            case 90: tx = (int)pt->height - 1 - (int)y; ty = (int)x; break;
-            case 180: tx = (int)pt->width - 1 - (int)x; ty = (int)pt->height - 1 - (int)y; break;
-            case 270: tx = (int)y; ty = (int)pt->width - 1 - (int)x; break;
-        }
-        px = tx + p.x - (int)div_w / 2;
-        py = ty + p.y - (int)div_h / 2;
-        if (is_valid_point(px, py)) {
-            DWORD const index = (DWORD)px + (DWORD)py * pathmap.width;
+        point2_t cell = pathtex_cell_to_map(ent, x, y);
+        if (is_valid_point(cell.x, cell.y)) {
+            DWORD const index = (DWORD)cell.x + (DWORD)cell.y * pathmap.width;
             /* The ordinary bridge baseline opens every clear alive pathing cell;
              * support validation will be restored one constrained piece at a time
              * after a complete traversal is proven. Authored blocked pixels stay blocked. */
@@ -504,7 +498,7 @@ void CM_DebugPathingFootprint(struct edict_s const *ent, LPCSTR phase, int level
     pt = ent->pathtex;
     p = LocationToPathMap(&ent->s.origin2);
     angle = (int)(ent->s.angle * 180.0f / M_PI);
-    rotation = (angle + 450) % 360;
+    rotation = angle % 360;
     if (rotation < 0) rotation += 360;
     div_w = rotation % 180 ? pt->height : pt->width;
     div_h = rotation % 180 ? pt->width : pt->height;
@@ -569,7 +563,7 @@ void CM_DebugPathingPoint(struct edict_s const *ent, LPCVECTOR2 point, LPCSTR ph
         return;
     }
     angle = (int)(ent->s.angle * 180.0f / M_PI);
-    rotation = (angle + 450) % 360;
+    rotation = angle % 360;
     if (rotation < 0) rotation += 360;
     div_w = rotation % 180 ? pt->height : pt->width;
     div_h = rotation % 180 ? pt->width : pt->height;
@@ -1020,7 +1014,8 @@ BOOL CM_LineIsWalkableForRadius(LPCVECTOR2 a, LPCVECTOR2 b, FLOAT radius) {
          * flow-field rule and steer through touching obstacle corners. */
         if (step_x && step_y &&
             !(is_pathable_node_original_for_radius_cells(x + sx, y, radius_cells) &&
-              is_pathable_node_original_for_radius_cells(x, y + sy, radius_cells)))
+              is_pathable_node_original_for_radius_cells(x, y + sy, radius_cells)) &&
+            !(walkable_surface_cell(x, y) && walkable_surface_cell(x + sx, y + sy)))
             return false;
         if (step_x) { err -= dy; x += sx; }
         if (step_y) { err += dx; y += sy; }
@@ -1265,7 +1260,6 @@ BOOL CM_FindDirectApproachPointForRadius(LPCVECTOR2 from, LPCVECTOR2 target,
 }
 
 FLOAT CM_DistanceToPathingFootprint(struct edict_s const *target, LPCVECTOR2 point) {
-    point2_t center;
     pathTex_t const *pt;
     FLOAT best = FLT_MAX;
 
@@ -1273,24 +1267,22 @@ FLOAT CM_DistanceToPathingFootprint(struct edict_s const *target, LPCVECTOR2 poi
         !pathmap.width || !pathmap.height)
         return FLT_MAX;
 
-    center = LocationToPathMap(&target->s.origin2);
     FOR_LOOP(x, pt->width) {
         FOR_LOOP(y, pt->height) {
-            int const px = (int)x + center.x - (int)pt->width / 2;
-            int const py = (int)y + center.y - (int)pt->height / 2;
+            point2_t const cell = pathtex_cell_to_map(target, x, y);
             VECTOR2 a, b;
             FLOAT min_x, max_x, min_y, max_y, dx = 0.0f, dy = 0.0f;
 
-            if (!pt->map[x + y * pt->width].b || !is_valid_point(px, py))
+            if (!pathtex_cell_blocked(pt, x, y) || !is_valid_point(cell.x, cell.y))
                 continue;
 
             /* Use the exact same cell placement as stamp_entity_obstacle(),
              * but measure to the blocked cell rectangle instead of reducing a
              * square/irregular footprint to one collision circle. */
-            a = CM_GetDenormalizedMapPosition((FLOAT)px / pathmap.width,
-                                               (FLOAT)py / pathmap.height);
-            b = CM_GetDenormalizedMapPosition((FLOAT)(px + 1) / pathmap.width,
-                                               (FLOAT)(py + 1) / pathmap.height);
+            a = CM_GetDenormalizedMapPosition((FLOAT)cell.x / pathmap.width,
+                                               (FLOAT)cell.y / pathmap.height);
+            b = CM_GetDenormalizedMapPosition((FLOAT)(cell.x + 1) / pathmap.width,
+                                               (FLOAT)(cell.y + 1) / pathmap.height);
             min_x = MIN(a.x, b.x); max_x = MAX(a.x, b.x);
             min_y = MIN(a.y, b.y); max_y = MAX(a.y, b.y);
             if (point->x < min_x) dx = min_x - point->x;
@@ -1360,14 +1352,15 @@ static BOOL find_approach_point_to_footprint_for_radius(
     reach_y = (int)ceilf(range / cell_y + 0.5f);
     FOR_LOOP(px_local, pt->width) {
         FOR_LOOP(py_local, pt->height) {
-            int const px = (int)px_local + center.x - (int)pt->width / 2;
-            int const py = (int)py_local + center.y - (int)pt->height / 2;
+            point2_t const cell = pathtex_cell_to_map(target, px_local, py_local);
+            int const px = cell.x;
+            int const py = cell.y;
             int const x0 = MAX(min_x, px - reach_x);
             int const x1 = MIN(max_x, px + reach_x);
             int const y0 = MAX(min_y, py - reach_y);
             int const y1 = MIN(max_y, py + reach_y);
 
-            if (!pt->map[px_local + py_local * pt->width].b ||
+            if (!pathtex_cell_blocked(pt, px_local, py_local) ||
                 !is_valid_point(px, py))
                 continue;
 

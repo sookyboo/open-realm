@@ -16,7 +16,8 @@ int G_BridgeDebugLevel(void) {
  * with synthetic in-memory texture data while preserving its authored dimensions.
  * Mode 1 is all-clear; mode 2 is a bounded diagonal lane with blocked edges;
  * mode 3 is clear except for one thin source edge rotated by the diagnostic angle;
- * mode 4 blocks one center row.
+ * mode 4 blocks one center row; mode 5 mirrors the checked anti-diagonal TGA;
+ * mode 6 fills every cell with the TGA blue clear colour.
  * The death texture and source files remain unchanged. */
 void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     pathTex_t *tex;
@@ -30,13 +31,13 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     angle = atoi(gi.CvarString("wc3_bridge_synthetic_line_angle", "0"));
     angle %= 360;
     if (angle < 0) angle += 360;
-    if (mode == 3 && angle % 90) {
-        fprintf(stderr, "WC3_BRIDGE_SYNTH_EDGE invalid angle=%d; expected a multiple of 90\n", angle);
+    if ((mode == 3 || mode == 5) && angle % 90) {
+        fprintf(stderr, "WC3_BRIDGE_SYNTH angle invalid=%d; expected a multiple of 90\n", angle);
         return;
     }
     edge = angle / 90;
     FOR_LOOP(y, tex->height) FOR_LOOP(x, tex->width) {
-        BOOL clear = mode == 1;
+        BOOL clear = mode == 1 || mode == 6;
         if (mode == 2) {
             /* The normal stamp flips source Y and rotates by facing+90.  At
              * angle 0, source x+y=w-1 becomes world x-y=0; angle 90 turns
@@ -54,8 +55,13 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
             /* Keep a full-width transverse source row blocked to test a real
              * route barrier rather than an outer footprint edge. */
             clear = y != tex->height / 2;
+        } else if (mode == 5) {
+            /* Mirror LT05_next_blocking_line.tga: black clear cells and one
+             * magenta diagonal whose red mask is the authored blocker. */
+            clear = angle % 180 ? (int)x != (int)y : (int)x + (int)y != (int)tex->width - 1;
         }
-        tex->map[x + y * tex->width].b = clear ? 0 : 255;
+        tex->map[x + y * tex->width] = mode == 6 ? (COLOR32){ 255, 0, 0, 255 }
+            : (COLOR32){ 0, 0, clear ? 0 : 255, 255 };
         if (clear) {
             clear_count++;
             min_x = MIN(min_x, (int)x);
@@ -63,7 +69,8 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
         }
     }
     fprintf(stderr, "WC3_BRIDGE_PATHTEX mode=%s unit=%u size=%ux%u line_angle=%d\n",
-            mode == 1 ? "synthetic_clear" : mode == 4 ? "synthetic_center_row" : "synthetic_line",
+            mode == 1 ? "synthetic_clear" : mode == 4 ? "synthetic_center_row" :
+            mode == 5 ? "synthetic_tga_barrier" : mode == 6 ? "synthetic_blue" : "synthetic_line",
             (unsigned)(ent - globals.edicts),
             tex->width, tex->height, angle);
     if (mode == 2)
@@ -75,6 +82,11 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     if (mode == 4)
         fprintf(stderr, "WC3_BRIDGE_SYNTH_CENTER source_clear=%d source_blocked=%u source_row=%u thickness=1\n",
                 clear_count, tex->width, tex->height / 2);
+    if (mode == 5)
+        fprintf(stderr, "WC3_BRIDGE_SYNTH_TGA source_clear=%d source_blocked=%u pattern=%s\n",
+                clear_count, tex->width, angle % 180 ? "main_diagonal x_minus_y=0" : "anti_diagonal x_plus_y=w_minus_1");
+    if (mode == 6)
+        fprintf(stderr, "WC3_BRIDGE_SYNTH_BLUE source_clear=%d source_blocked=0 color=(0,0,255)\n", clear_count);
 }
 
 void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase) {

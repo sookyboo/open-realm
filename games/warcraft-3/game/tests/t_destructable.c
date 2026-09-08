@@ -441,10 +441,9 @@ TEST(wc3_destructable, walkable_bridge_radius_grazes_authored_rail_from_supporte
     LPEDICT dest;
 
     FOR_LOOP(i, sizeof(cells) / sizeof(cells[0])) cells[i] = 2;
-    /* At angle 0 the path texture is placed with the WC3 90-degree transform.
-     * Source (1,0) lands one cell east of the bridge centre. Keep the centre
-     * clear deck and make that east cell an authored rail blocker. */
-    alive.map[7].b = 255;
+    /* At angle 0 the path texture keeps its authored axis and flips its image
+     * vertically. Source (2,1) lands one cell east of the centre. */
+    alive.map[5].b = 255;
     setup_test_pathmap(8, 8, cells);
     dest = make_test_destructable(10.0f, center.x, center.y);
     dest->data.DestructableData = &data;
@@ -462,7 +461,7 @@ TEST(wc3_destructable, walkable_bridge_radius_grazes_authored_rail_from_supporte
     T_ASSERT(!CM_PointIsPathableForRadius(&rail, 0.0f));
 }
 
-TEST(wc3_destructable, walkable_bridge_diagonal_rejects_blocked_cardinal_rail_corner) {
+TEST(wc3_destructable, walkable_bridge_diagonal_allows_supported_rail_corner) {
     BYTE cells[8 * 8];
     struct { WORD width, height; COLOR32 map[9]; } alive = { .width = 3, .height = 3 };
     static DestructableData_t const data = { .walkable = true };
@@ -474,11 +473,10 @@ TEST(wc3_destructable, walkable_bridge_diagonal_rejects_blocked_cardinal_rail_co
     LPEDICT dest;
 
     FOR_LOOP(i, sizeof(cells) / sizeof(cells[0])) cells[i] = 2;
-    /* For the angle-0 90-degree placement transform, source (0,1) lands at
-     * (4,3) and source (1,2) lands at (3,4). Those are the two cardinal cells
-     * touched by the diagonal from (3,3) to (4,4). */
-    alive.map[3].b = 255; /* source (0,1) -> world cell (4,3) */
-    alive.map[1].b = 255; /* source (1,2) -> world cell (3,4) */
+    /* Source (1,0) lands at (4,3) and source (0,1) lands at (3,4). Those are
+     * the two cardinal cells touched by the diagonal from (3,3) to (4,4). */
+    alive.map[7].b = 255; /* source (1,0) -> world cell (4,3) */
+    alive.map[3].b = 255; /* source (0,1) -> world cell (3,4) */
     setup_test_pathmap(8, 8, cells);
     dest = make_test_destructable(10.0f, center.x, center.y);
     dest->data.DestructableData = &data;
@@ -492,10 +490,9 @@ TEST(wc3_destructable, walkable_bridge_diagonal_rejects_blocked_cardinal_rail_co
     T_ASSERT(CM_PointIsPathableForRadius(&to, 0.0f));
     T_ASSERT(!CM_PointIsPathableForRadius(&east_of_from, 0.0f));
     T_ASSERT(!CM_PointIsPathableForRadius(&north_of_from, 0.0f));
-    /* Live Prologue02 probing found no case where LT05 needed a bridge-only
-     * diagonal escape. Keep the ordinary no-corner-cut rule even when both
-     * endpoint cells are on the supported deck. */
-    T_ASSERT(!CM_LineIsWalkableForRadius(&from, &to, 0.0f));
+    /* A* already admits this transition when both endpoints are supported deck
+     * cells; the direct line test must use the same bridge-only corner rule. */
+    T_ASSERT(CM_LineIsWalkableForRadius(&from, &to, 0.0f));
 }
 
 TEST(wc3_destructable, walkable_surface_reapplies_alive_blockers_after_opening_water) {
@@ -507,8 +504,8 @@ TEST(wc3_destructable, walkable_surface_reapplies_alive_blockers_after_opening_w
     LPEDICT dest;
 
     FOR_LOOP(i, sizeof(cells) / sizeof(cells[0])) cells[i] = 2;
-    /* The centre source pixel stays the centre after the 90-degree placement
-     * transform.  Mark it blocked to model a rail/non-deck pixel, while the
+    /* The centre source pixel stays the centre after the authored vertical
+     * flip. Mark it blocked to model a rail/non-deck pixel, while the
      * neighbouring pixel remains clear deck over otherwise blocked water. */
     alive.map[4].b = 255;
     setup_test_pathmap(8, 8, cells);

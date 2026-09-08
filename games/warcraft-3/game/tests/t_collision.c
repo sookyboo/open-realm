@@ -495,7 +495,7 @@ TEST(wc3_collision, destructable_pathing_overlay_rotates_flips_and_uses_binary_t
     BYTE cells[16 * 16] = {0};
     struct { WORD width, height; COLOR32 map[8]; } tex = { .width = 2, .height = 4 };
     LPEDICT bridge = G_Spawn();
-    VECTOR2 blocked = { 6.5f, 7.5f }, clear = { 7.5f, 7.5f }, threshold = { 6.5f, 8.5f };
+    VECTOR2 blocked = { 7.5f, 9.5f }, clear = { 7.5f, 7.5f }, threshold = { 8.5f, 9.5f };
     BYTE flags;
 
     setup_test_pathmap(16, 16, cells);
@@ -512,6 +512,24 @@ TEST(wc3_collision, destructable_pathing_overlay_rotates_flips_and_uses_binary_t
     T_ASSERT(!(flags & 2));
     T_ASSERT(CM_GetPathingFlagsAt(&threshold, &flags));
     T_ASSERT(!(flags & 2));
+}
+
+TEST(wc3_collision, destructable_footprint_distance_uses_stamped_flip_and_rotation) {
+    BYTE cells[16 * 16] = {0};
+    struct { WORD width, height; COLOR32 map[8]; } tex = { .width = 2, .height = 4 };
+    VECTOR2 stamped = { 7.5f, 9.5f }, unstamped = { 7.5f, 6.5f };
+    LPEDICT bridge = G_Spawn();
+
+    setup_test_pathmap(16, 16, cells);
+    bridge->s.origin = MAKE(VECTOR3, 8.0f, 8.0f, 0.0f);
+    bridge->s.angle = 0.0f;
+    tex.map[0].b = 255; /* source (0,0) stamps at map cell (7,9) after the authored vertical flip. */
+    bridge->pathtex = (pathTex_t *)&tex;
+
+    CM_BakeStaticObstacles();
+
+    T_FEQ(CM_DistanceToPathingFootprint(bridge, &stamped), 0.0f, 0.01f);
+    T_ASSERT(CM_DistanceToPathingFootprint(bridge, &unstamped) > 0.5f);
 }
 
 TEST(wc3_collision, walkable_surface_query_filters_unsupported_alive_cells) {

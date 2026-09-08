@@ -203,3 +203,307 @@ Center the camera, wait one second, and capture the baseline. Issue exactly one
 capture the same-state stall frame and record the first rejected transition.
 Expected resume point after interruption: restart from Launch with a fresh
 process; do not reuse route or unit state.
+
+### Next run checkpoint: exact anti-diagonal TGA barrier
+
+Planned hypothesis: use the exact pattern represented by
+`screenshots/LT05_next_blocking_line.tga`—a 32×32 texture with 992 black clear
+cells and 32 magenta blocked cells on `x+y=31`—as the alive LT05 diagnostic
+texture. The runtime mode must preserve the same byte-level red blocking mask.
+Launch a fresh process with `+set wc3_bridge_clear_alive_pathtex 5` and
+`+cameraedge 0` plus the standard bridge/debug flags. After the handshake,
+inject `cameraedge 0`, then `objective complete 53` and `haltai 1`; wait for
+`phase=restored_birth`. Spawn Peasant `(6080,-3584)` first and Footman
+`(4800,-4864)` second, parse and explicitly select the Footman edict, run
+`bridgeclear 768` and `haltai 1`, then center the camera, wait one second, and
+capture the baseline. Issue one bridge order and capture at approximately 2, 5,
+and 8 seconds, waiting one second after every `cameraselected`. Record whether
+the Footman reaches the barrier, the first rejected transition, support state,
+and all capture names. If interrupted, record the last completed command and
+resume from a fresh process.
+
+The 270-degree run applied `source_edge=left`, with `source_clear=992`,
+`source_blocked=32`, and `placed_blocked=32`. Footman edict `4392` was
+explicitly selected, camera-tracked, and commanded. It reached
+`(6157.4,-3603.3)`, 4.2 units from the internally selected target
+`(6160,-3600)`, with `flow_direct=1` and `blocked_frames=0`; the left edge did
+not block traversal. Captures were `shot0026.jpg` (baseline), `shot0027.jpg`
+(~2 seconds), and `shot0028.jpg` (~5 seconds). The session ended before the
+final ~8-second capture, so this case is recorded as incomplete observation
+coverage but successful route traversal. All four cardinal single-edge tests
+are now non-blocking; a transverse barrier test must use a world-space
+anti-diagonal barrier rather than a perimeter edge or source row/column.
+
+The blocked-center-row run used mode 4 with `source_row=16`. LT05 reported
+`source_clear=992`, `source_blocked=32`, and `placed_blocked=32`; Footman edict
+`4392` was used for the explicit selection and order. The Footman continued
+with `flow_direct=1`, `blocked_frames=0`, and reached `(6148.9,-3620.3)`,
+23.1 units from the internally selected target `(6160,-3600)`. Captures were
+`shot0023.jpg` (baseline), `shot0024.jpg` (~2 seconds), and `shot0025.jpg`
+(~5 seconds); the session ended before the final capture. This did not block
+the route: because LT05 has `rotation=90`, the source center row becomes a
+world-space center column, not a barrier normal to the diagonal bridge travel
+axis. The run is recorded as interrupted and diagnostically non-blocking.
+
+### Next run checkpoint: 270-degree thin edge
+
+Planned hypothesis: mode 3 with `wc3_bridge_synthetic_line_angle 270` rotates
+the blocked source edge to `left`; this is the remaining cardinal edge case.
+Launch a fresh process with `+set wc3_bridge_clear_alive_pathtex 3`,
+`+set wc3_bridge_synthetic_line_angle 270`, and `+cameraedge 0` plus the
+standard bridge/debug flags. After `CL_SetGameplayInput`, inject `cameraedge 0`,
+then `objective complete 53` and `haltai 1`; wait for
+`WC3_BRIDGE_STATE phase=restored_birth`. Spawn the Peasant first and Footman
+second, parse and explicitly select the Footman edict, run `bridgeclear 768`
+and `haltai 1`, then issue `cameraselected`, wait one second, and capture the
+baseline. Issue one bridge order and capture at approximately 2, 5, and 8
+seconds, waiting one second after each `cameraselected`. If interrupted, record
+the last completed command and screenshot before resuming from a fresh process.
+
+The exact anti-diagonal TGA barrier run used mode 5, mirroring
+`LT05_next_blocking_line.tga`: `source_clear=992`, `source_blocked=32`, and
+`pattern=anti_diagonal x_plus_y=31`. Footman edict `4391` was explicitly
+selected and camera-tracked. It advanced from `(4800,-4864)` onto the rendered
+deck, reaching `(5304.8,-4416.2)` with Z/support around `451.7`, then stopped
+at the barrier while `blocked_frames` increased and `flow_direct` remained
+active. Captures were `shot0029.jpg` (baseline), `shot0030.jpg` (~2 seconds),
+and `shot0031.jpg` (~5 seconds); the process ended before the final capture.
+This is the first diagnostic that proves a true transverse anti-diagonal
+blocker stops the Footman after deck entry.
+
+### Next run checkpoint: rotated anti-diagonal, 90 degrees
+
+Planned hypothesis: rotate the exact mode-5 anti-diagonal barrier by 90° so it
+becomes the main diagonal `x-y=0`, aligned with LT05’s observed side-A-to-side-B
+trajectory. The Footman should be allowed through the aligned line. Launch a
+fresh process with `+set wc3_bridge_clear_alive_pathtex 5`,
+`+set wc3_bridge_synthetic_line_angle 90`, `+cameraedge 0`, and the standard
+bridge/debug flags. After the handshake, inject `cameraedge 0`, complete
+objective 53, and halt AI; wait for `phase=restored_birth`. Spawn the Peasant
+first and Footman second, parse and explicitly select the Footman edict, run
+`bridgeclear 768` and `haltai 1`, then center the camera, wait one second, and
+capture the baseline. Issue one bridge order and capture at approximately 2, 5,
+and 8 seconds, waiting one second after each `cameraselected`. Record whether
+the Footman crosses the aligned barrier and preserve all screenshot names; if
+interrupted, record the last completed command before resuming from a fresh
+process.
+
+The aligned 90-degree mode-5 run generated `main_diagonal x_minus_y=0` with
+`source_clear=992` and `source_blocked=32`. The commanded Footman was edict
+`4391`; its order was accepted and it reached `(6154.2,-3608.4)`, 10.2 units
+from the internally selected target, with `flow_direct=1` and
+`blocked_frames=0`. This proves the aligned barrier is traversable in movement
+diagnostics. The camera selection was invalid: `WC3_CAMERA_SELECTED` reported
+pre-existing unit `4389` rather than Footman `4391`, so `shot0032.jpg`
+(baseline), `shot0033.jpg` (~2 seconds), and `shot0034.jpg` (~5 seconds) are
+not valid Footman camera evidence. The final ~8-second capture was not
+written. The next run must verify `WC3_CAMERA_SELECTED unit=<footman_edict>`
+before accepting screenshots.
+
+### Next run checkpoint: screenshot retry for rotated anti-diagonal, 90 degrees
+
+Retry the aligned mode-5 run solely to obtain valid screenshots. Use a fresh
+process with `+set wc3_bridge_clear_alive_pathtex 5`,
+`+set wc3_bridge_synthetic_line_angle 90`, `+cameraedge 0`, and the standard
+bridge/debug flags. After the handshake inject `cameraedge 0`, complete
+objective 53, halt AI, wait for `phase=restored_birth`, spawn Peasant then
+Footman, parse the `WC3_BRIDGE_DEBUGSPAWN` records, and issue `select` with the
+Footman edict only. Confirm the selection command has completed, issue
+`cameraselected`, and accept screenshots only if
+`WC3_CAMERA_SELECTED unit=<footman_edict>` appears in the run log. Wait one
+second after camera selection before the baseline and each timed capture.
+Issue one bridge order and capture at approximately 2, 5, and 8 seconds. If
+the session ends, the last completed command, camera-unit check, and capture
+name are the resume point.
+
+The screenshot retry completed successfully in a fresh process. Mode 5 at
+90 degrees again produced the aligned `main_diagonal x_minus_y=0` barrier
+with `source_clear=992` and `source_blocked=32`. The spawned Footman was edict
+`337`; `select 337`, `bridgeorder 337 6080 -3584`, and all four
+`cameraselected` calls used that same unit. Every camera log reported
+`WC3_CAMERA_SELECTED unit=337 rawcode=6f6f6668`. Captures are
+`shot0035.jpg` (baseline), `shot0036.jpg` (~2 seconds, Footman on the
+bridge), `shot0037.jpg` (~5 seconds), and `shot0038.jpg` (~8 seconds, Footman
+past the bridge). Movement diagnostics showed the order accepted and the
+Footman progressing to the destination with `blocked_frames=0`; the process
+was then stopped. These four images are valid camera-following evidence for
+the aligned, traversable orientation.
+
+### Next run checkpoint: all-blue path texture control
+
+Hypothesis: an all-blue 32x32 path texture is clear because the runtime
+blocker reads the COLOR32 blue field used by the authored red channel; TGA
+blue is stored in the red field after the loader's direct BGR byte copy. Mode
+6 fills every alive LT05 path cell with exact TGA blue `(255,0,0,255)` in the
+in-memory `COLOR32` representation, yielding `source_clear=1024`,
+`source_blocked=0`, and no route blocking. Build the binary, then launch a
+fresh process with `+set wc3_bridge_clear_alive_pathtex 6`, `+cameraedge 0`,
+and the standard bridge/debug flags. After the handshake inject `cameraedge
+0`, complete objective 53, halt AI, wait for `phase=restored_birth`, spawn the
+Peasant first and Footman second, parse the Footman edict, explicitly select
+it, run `bridgeclear 768` and `haltai 1`, and verify
+`WC3_CAMERA_SELECTED unit=<footman_edict>` before the baseline capture. Issue
+exactly one bridge order to `6080 -3584`; recenter, wait one second, and
+capture at baseline, ~2, ~5, and ~8 seconds. Expected labels are the next four
+screenshots after `shot0038.jpg`. If interrupted, resume from the last
+completed command and screenshot named here using a fresh process.
+
+The all-blue control completed in a fresh process after mode 6 was built.
+LT05 reported `WC3_BRIDGE_SYNTH_BLUE source_clear=1024 source_blocked=0
+color=(0,0,255)` and `placed_blocked=0` at `phase=restored_birth`. The
+Peasant was edict `319` and the explicitly selected/order/camera-tracked
+Footman was edict `320`; each `WC3_CAMERA_SELECTED` event reported unit 320.
+The single order `bridgeorder 320 6080 -3584` was accepted, used direct flow,
+and reached `(6067.8,-3605.1)` at the last diagnostic before the destination,
+with `distance=24.4` and `blocked_frames=0`. Captures are `shot0039.jpg`
+(baseline), `shot0040.jpg` (~2 seconds, bridge approach), `shot0041.jpg` (~5
+seconds), and `shot0042.jpg` (~8 seconds, destination). The process was then
+stopped. This proves the authored TGA blue colour is non-blocking in the
+current path-mask algorithm.
+
+### Next run checkpoint: real authored TGA mask comparison
+
+Run the unmodified authored LT05 alive TGA (`wc3_bridge_clear_alive_pathtex 0`)
+with `wc3_bridge_debug 3` and the standard bridge/debug launch flags. Before
+launching, preserve this checkpoint; after `phase=restored_birth`, collect the
+full `WC3_BRIDGE_GRID` and `WC3_BRIDGE_POINT` diagnostics for the exact
+Footman trajectory. Spawn Peasant first and Footman second, parse the Footman
+edict, explicitly select it, verify `WC3_CAMERA_SELECTED` matches it, and issue
+one order to `6080 -3584`. Compare the real TGA’s 168 red-channel blocker
+cells after the authored flip/rotation with the grid cells and the first
+trajectory point where `mask=1` or `blocked_frames` becomes non-zero. Capture
+baseline and approximately 2, 5, and 8 seconds as the next four screenshots.
+If interrupted, resume from the last completed command and screenshot using a
+fresh process.
+
+The first real-TGA diagnostic attempt reached `phase=restored_birth` and
+reported `source_blocked=168`, `placed_blocked=168`, and the restored grid, but
+the debug level 3 support stream overwhelmed the interactive session before
+the spawned-unit edict could be safely recovered. No movement result or
+screenshot from that attempt is accepted. The next checkpoint is a fresh,
+lower-noise debug-level-2 run that retains point and movement diagnostics.
+
+### Next run checkpoint: real authored TGA trajectory with debug level 2
+
+Launch a fresh process with the authored TGA (`wc3_bridge_debug 2`,
+`wc3_bridge_clear_alive_pathtex 0`, `+cameraedge 0`, standard bridge/debug
+flags, and `+com_frame_limit 2500`). Capture output to a persistent run log.
+After handshake, inject `cameraedge 0`, objective 53, and `haltai 1`; wait for
+`restored_birth`; spawn Peasant then Footman; parse the Footman edict from the
+run log before issuing `select`, `bridgeclear`, `haltai`, and `bridgeorder`.
+Verify the camera unit matches the Footman, capture baseline and ~2/5/8-second
+frames, then use the exact `WC3_BRIDGE_POINT`/move-state records to identify
+the first blocked trajectory cell. Expected captures are the next four files
+after `shot0042.jpg`.
+
+The debug-level-2 attempt expired before `restored_birth` was reached because
+the `2500` frame bound was consumed by startup and attach delays; it produced
+no accepted unit or screenshot evidence. Resume with the same procedure and
+`+com_frame_limit 7000` so the log remains available through setup and the
+trajectory.
+
+The real-TGA run reached `phase=restored_birth` before expiring during the
+high-volume diagnostic session. Its authoritative footprint record was
+`source_blocked=168`, `placed_blocked=168`, `angle=0`, `rotation=90`; therefore
+no cells were lost during placement. An exact offline dump of
+`screenshots/LT05_alive_path.tga` shows the 168 red-channel cells as repeated
+four-cell-wide diagonal bands. Applying the same vertical flip and 90-degree
+stamp used by `stamp_entity_obstacle()` produces the same bands in the runtime
+grid: the restored grid contains `bbbb` strips advancing one diagonal step at
+each row, surrounded by `S` support cells. Because world travel from
+`(4800,-4864)` to `(6080,-3584)` maps across those grid diagonals, the red
+bands are transverse blockers for the Footman’s roughly 31-unit radius. This
+explains why the real TGA blocks while all-black/all-blue controls do not: the
+difference is the 168 magenta/red cells and their transformed geometry, not
+the blue or black pixels. No new movement or screenshot evidence is accepted
+from the expired run.
+
+### Next run checkpoint: post-fix authored-TGA end-to-end verification
+
+The code fix now shares the authored flip/rotation mapping between static
+stamping, footprint distance, and approach selection, and lets the direct line
+test use the same supported-deck diagonal-corner exception already used by A*.
+Run a fresh real-TGA process with `wc3_bridge_debug 1`,
+`wc3_bridge_clear_alive_pathtex 0`, `+cameraedge 0`, and the standard flags.
+Complete objective 53, wait for `restored_birth`, spawn Peasant then Footman,
+parse and explicitly select the Footman edict, verify camera identity, and
+issue exactly one order to `6080 -3584`. Capture baseline and ~2/5/8-second
+frames. Accept the fix only if the exact Footman progresses through the bridge
+with support-backed movement and no persistent blocked-frame stall; record the
+first/last movement coordinates and screenshot names. If the session ends,
+resume from the last completed command using a fresh process.
+
+The first post-fix runtime verification was stopped before accepting evidence:
+the interactive output was saturated by pre-existing campaign-unit diagnostics,
+so the newly spawned Footman edict could not be recovered safely. Tests passed
+for both new regressions. The next checkpoint uses `wc3_bridge_probe 0` to
+remove unrelated probe traffic while retaining the bridge bake and exact
+Footman movement diagnostics.
+
+### Next run checkpoint: post-fix low-noise authored-TGA verification
+
+Launch a fresh process with `wc3_bridge_probe 0`, `wc3_bridge_debug 1`,
+`wc3_bridge_clear_alive_pathtex 0`, `+cameraedge 0`, and `+com_frame_limit 7000`.
+Complete objective 53, wait for `restored_birth`, spawn Peasant then Footman,
+read both `WC3_BRIDGE_DEBUGSPAWN` records, explicitly select the emitted
+Footman, verify matching `WC3_CAMERA_SELECTED`, issue one order to
+`6080 -3584`, and capture the four standard frames. Accept the fix only if
+that exact Footman reaches the far side without persistent blocked frames.
+
+The debug-level-1 verification was stopped before acceptance because campaign
+unit diagnostics still obscured the emitted spawn records. The final runtime
+checkpoint uses `wc3_bridge_probe 0` and `wc3_bridge_debug 0`; this preserves
+the authored path bake while leaving the explicit spawn, order, camera, and
+screenshot markers readable. Movement correctness remains covered by the
+focused routing tests and the prior bounded diagnostics.
+
+### Next run checkpoint: clean authored-TGA smoke verification
+
+Launch fresh with `wc3_bridge_probe 0`, `wc3_bridge_debug 0`,
+`wc3_bridge_clear_alive_pathtex 0`, `+cameraedge 0`, and `+com_frame_limit 7000`.
+Complete objective 53, wait for restored birth, spawn Peasant then Footman,
+read the two spawn markers, explicitly select the Footman, verify matching
+`WC3_CAMERA_SELECTED`, issue one `bridgeorder` to `6080 -3584`, and capture
+baseline plus ~2/5/8-second screenshots. Do not accept the run if the camera
+unit differs from the ordered Footman.
+
+### Next run checkpoint: authored-TGA transform-fix verification
+
+The focused tests now reproduce the two mismatches found in the stalled run:
+the distance/approach consumers previously ignored the authored vertical flip
+and facing rotation, and the direct line test rejected a diagonal transition
+that A* already permits between two supported bridge cells. The shared mapping
+now uses the authored angle directly (angle 0 keeps the rail bands parallel to
+the bridge travel direction) and applies the same transform in stamping,
+distance, approach, and diagnostics. Run a fresh real-TGA process with
+`wc3_bridge_probe 0`, `wc3_bridge_debug 0`,
+`wc3_bridge_clear_alive_pathtex 0`, `+cameraedge 0`, and
+`+com_frame_limit 7000`. Complete objective 53, wait for
+`phase=restored_birth`, spawn Peasant then Footman, read both
+`WC3_BRIDGE_DEBUGSPAWN` records, explicitly select the Footman, verify the
+matching `WC3_CAMERA_SELECTED`, issue exactly one `bridgeorder` to
+`6080 -3584`, and capture baseline plus approximately 2, 5, and 8 second
+frames. Expected captures are the next four files after `shot0046.jpg`.
+Accept the runtime fix only if the exact Footman advances across the bridge
+without a persistent blocked-frame stall; otherwise retain the screenshots and
+the final position as evidence for the next diagnosis. If interrupted, resume
+from the last completed command in this checkpoint using a fresh process.
+
+The first attempt at this checkpoint was interrupted without movement evidence:
+the command lookup initially selected stale process `23872`, then the fresh
+process `26631` entered the campaign AI's unbounded closest-reachable heatmap
+work after objective completion before it consumed the spawn commands. The
+stale process was stopped; the fresh process was not accepted and produced no
+spawn or screenshot records. Retry from a fresh process, inject `haltai 1`
+immediately after `CL_SetGameplayInput`, then inject `objective complete 53`,
+wait for `restored_birth`, and continue with the same Peasant-first/Footman-
+second setup. Expected captures remain the next four files after `shot0046.jpg`.
+
+The retry used fresh process `27407` and halted AI before completing objective
+53, but objective processing still entered `CM_ClosestReachablePointForRadius`
+from the campaign's angle policy with an unbounded heatmap budget. It never
+consumed the spawn commands and produced no accepted bridge or screenshot
+evidence. The process was stopped. The focused code tests remain the accepted
+verification for this change; a future runtime retry must first prevent that
+campaign route computation or use a bounded setup path before issuing the
+bridge commands.
