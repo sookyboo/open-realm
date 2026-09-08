@@ -138,6 +138,7 @@ void SV_ApplyLobbySettings(LPMAPINFO info);
 void SV_LobbyBroadcastSetup(void);
 void SV_LobbyWriteSetup(LPCLIENT cl);
 void SV_LobbyAddCommands(void);
+void SV_AddGameCommands(void);
 void SV_BuildClientFrame(LPCLIENT client);
 void SV_WriteFrameToClient(LPCLIENT client);
 void SV_SetPaused(BOOL paused);

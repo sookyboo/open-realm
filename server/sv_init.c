@@ -359,6 +359,36 @@ void SV_Shutdown(void) {
     }
 }
 
+/* Dispatch a console command through an explicitly selected in-game client so
+ * listen-server diagnostics can exercise the authoritative game command path. */
+static void SV_GameCommand_f(void) {
+    LPCLIENT client;
+    LPCSTR argv[MAX_CMDARGS - 1];
+    int argc, client_num;
+
+    argc = Cmd_Argc();
+    if (argc < 3) {
+        fprintf(stderr, "usage: sv_gamecmd <client> <game-command> [args...]\n");
+        return;
+    }
+    client_num = atoi(Cmd_Argv(1));
+    if (client_num < 0 || client_num >= MAX_CLIENTS || client_num >= (int)svs.num_clients) {
+        fprintf(stderr, "sv_gamecmd: invalid client %d\n", client_num);
+        return;
+    }
+    client = &svs.clients[client_num];
+    if (client->state != cs_spawned || !client->edict || !client->edict->client) {
+        fprintf(stderr, "sv_gamecmd: client %d is not spawned\n", client_num);
+        return;
+    }
+    FOR_LOOP(i, argc - 2) argv[i] = Cmd_Argv(i + 2);
+    ge->ClientCommand(client->edict, (DWORD)(argc - 2), argv);
+}
+
+void SV_AddGameCommands(void) {
+    Cmd_AddCommand("sv_gamecmd", SV_GameCommand_f);
+}
+
 void SV_Init(void) {
     memset(&svs, 0, sizeof(struct server_static));
     memset(&sv, 0, sizeof(struct server));
@@ -368,4 +398,5 @@ void SV_Init(void) {
     Cmd_AddCommand("save", SV_SaveGame_f);
     SV_LobbyAddCommands();
 #endif
+    SV_AddGameCommands();
 }
