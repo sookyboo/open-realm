@@ -73,7 +73,6 @@ gdb -q -batch -p "$pid" \
   -ex 'call Cbuf_AddText("sv_gamecmd 0 debugspawn hfoo 4800 -4864\n")' \
   -ex 'call Cbuf_AddText("sv_gamecmd 0 bridgeclear 768\n")' \
   -ex 'call Cbuf_AddText("sv_gamecmd 0 haltai 1\n")' \
-  -ex 'call Cbuf_AddText("sv_gamecmd 0 bridgecamera 5440 -4224\n")' \
   -ex 'call Cbuf_AddText("sv_gamecmd 0 cameraselected\n")' \
   -ex 'call Cbuf_AddText("screenshot 5\n")' \
   -ex detach -ex quit
@@ -93,19 +92,20 @@ gdb -q -batch -p "$pid" \
   -ex detach -ex quit
 ```
 
-Take the first post-order screenshot after roughly two seconds, then take
-additional screenshots after roughly five and eight seconds:
+Recenter the camera on the selected Footman immediately before every
+screenshot. Take the first post-order screenshot after roughly two seconds,
+then take additional screenshots after roughly five and eight seconds:
 
 ```sh
 sleep 2
 pid=$(ps -eo pid=,comm= | awk '$2 == "openwarcraft3" {print $1; exit}')
-gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("screenshot 5\n")' -ex detach -ex quit
+gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("sv_gamecmd 0 cameraselected\n")' -ex 'call Cbuf_AddText("screenshot 5\n")' -ex detach -ex quit
 sleep 3
 pid=$(ps -eo pid=,comm= | awk '$2 == "openwarcraft3" {print $1; exit}')
-gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("screenshot 5\n")' -ex detach -ex quit
+gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("sv_gamecmd 0 cameraselected\n")' -ex 'call Cbuf_AddText("screenshot 5\n")' -ex detach -ex quit
 sleep 3
 pid=$(ps -eo pid=,comm= | awk '$2 == "openwarcraft3" {print $1; exit}')
-gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("screenshot 5\n")' -ex detach -ex quit
+gdb -q -batch -p "$pid" -ex 'call Cbuf_AddText("sv_gamecmd 0 cameraselected\n")' -ex 'call Cbuf_AddText("screenshot 5\n")' -ex detach -ex quit
 ```
 
 The engine should report `Wrote screenshots/shotNNNN.jpg`. Label the baseline
