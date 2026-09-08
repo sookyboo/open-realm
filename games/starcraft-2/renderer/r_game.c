@@ -172,6 +172,10 @@ void R_BeginSplatBatch(splat_shader_t *shader) { sc2_batch_shader = shader; }
 void R_AddRectSplat(LPCVECTOR2 mins, LPCVECTOR2 maxs, LPCTEXTURE texture, COLOR32 color) {
     R_RenderRectSplat(mins, maxs, texture, sc2_batch_shader, color);
 }
+void R_AddFlatRectSplat(LPCVECTOR2 mins, LPCVECTOR2 maxs, FLOAT z, FLOAT angle, BOOL flip_y, LPCTEXTURE texture, COLOR32 color) {
+    (void)z; (void)angle; (void)flip_y;
+    R_AddRectSplat(mins, maxs, texture, color);
+}
 void R_EndSplatBatch(void) { }
 
 void R_LoadAssets(void) {

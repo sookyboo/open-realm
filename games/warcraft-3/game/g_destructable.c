@@ -103,6 +103,35 @@ void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase) {
     CM_DebugPathingFootprint(ent, phase, debug);
 }
 
+void G_UpdateDestructablePathingPresentation(LPEDICT ent) {
+    DestructableData_t const *row;
+    LPCSTR path;
+
+    if (!ent) return;
+    row = ent->data.DestructableData;
+    if (!row || !row->walkable || !ent->pathtex) {
+        ent->s.pathing_image = 0;
+        ent->s.pathing_width = 0;
+        ent->s.pathing_height = 0;
+        ent->s.pathing_z_offset = 0.0f;
+        return;
+    }
+
+    path = ent->destructable.dead ? row->deathPathingTexture : row->pathingTexture;
+    if (!path || !*path) {
+        ent->s.pathing_image = 0;
+        ent->s.pathing_width = 0;
+        ent->s.pathing_height = 0;
+        ent->s.pathing_z_offset = 0.0f;
+        return;
+    }
+
+    ent->s.pathing_image = (USHORT)gi.ImageIndex(path);
+    ent->s.pathing_width = (USHORT)MIN(ent->pathtex->width, USHRT_MAX);
+    ent->s.pathing_height = (USHORT)MIN(ent->pathtex->height, USHRT_MAX);
+    ent->s.pathing_z_offset = row->flyHeight;
+}
+
 static void G_ApplyDestructableAlivePathing(LPEDICT ent) {
     ent->pathtex = ent->destructable.placement_solid
         ? ent->destructable.alive_pathtex
@@ -112,6 +141,7 @@ static void G_ApplyDestructableAlivePathing(LPEDICT ent) {
         : 0.0f;
     ent->destructable.pathing_active = ent->destructable.placement_solid &&
         (ent->pathtex || ent->collision > 0.0f);
+    G_UpdateDestructablePathingPresentation(ent);
 }
 
 static void G_ApplyDestructableDeathPathing(LPEDICT ent) {
@@ -121,6 +151,7 @@ static void G_ApplyDestructableDeathPathing(LPEDICT ent) {
     ent->collision = 0.0f;
     ent->destructable.pathing_active = ent->destructable.placement_solid &&
         ent->pathtex != NULL;
+    G_UpdateDestructablePathingPresentation(ent);
 }
 
 /*

@@ -250,6 +250,48 @@ void R_AddRectSplat(LPCVECTOR2 mins, LPCVECTOR2 maxs, LPCTEXTURE texture, COLOR3
     R_GenerateSplatTiles(mins, maxs, color);
 }
 
+/* Flat splats are used by diagnostics that must sit over world geometry rather
+ * than being projected back onto terrain. Keep them in the same batch/shader
+ * path as ordinary splats so an enabled overlay costs one quad, not one draw
+ * per source pixel. angle is a world-space yaw in radians. */
+void R_AddFlatRectSplat(LPCVECTOR2 mins, LPCVECTOR2 maxs, FLOAT z, FLOAT angle, BOOL flip_y, LPCTEXTURE texture, COLOR32 color) {
+    VECTOR2 const center = { (mins->x + maxs->x) * 0.5f, (mins->y + maxs->y) * 0.5f };
+    FLOAT const hx = (maxs->x - mins->x) * 0.5f;
+    FLOAT const hy = (maxs->y - mins->y) * 0.5f;
+    FLOAT const c = cosf(angle), sn = sinf(angle);
+    VECTOR2 const local[4] = { { -hx, -hy }, { hx, -hy }, { hx, hy }, { -hx, hy } };
+    VECTOR2 uv[4] = { { 0, 1 }, { 1, 1 }, { 1, 0 }, { 0, 0 } };
+    VECTOR3 p[4];
+    VECTOR3 const normal = { 0, 0, 1 };
+
+    if (!tr.world || !texture || hx <= 0.0f || hy <= 0.0f) return;
+    if (texture != g_splat_texture) {
+        R_FlushSplatBatch();
+        R_SetupSplatState(texture, g_splat_shader);
+    }
+    if ((ground_current_vertex - ground_vertex_buffer) + 6 > GROUND_VERTEX_BUFFER_CAPACITY)
+        R_FlushSplatBatch();
+
+    FOR_LOOP(i, 4) {
+        p[i] = (VECTOR3){
+            center.x + local[i].x * c - local[i].y * sn,
+            center.y + local[i].x * sn + local[i].y * c,
+            z,
+        };
+        if (flip_y) uv[i].y = 1.0f - uv[i].y;
+    }
+    VERTEX const geom[] = {
+        { .position = p[0], .texcoord = uv[0], .normal = normal, .color = color },
+        { .position = p[1], .texcoord = uv[1], .normal = normal, .color = color },
+        { .position = p[2], .texcoord = uv[2], .normal = normal, .color = color },
+        { .position = p[0], .texcoord = uv[0], .normal = normal, .color = color },
+        { .position = p[2], .texcoord = uv[2], .normal = normal, .color = color },
+        { .position = p[3], .texcoord = uv[3], .normal = normal, .color = color },
+    };
+    memcpy(ground_current_vertex, geom, sizeof(geom));
+    ground_current_vertex += sizeof(geom) / sizeof(VERTEX);
+}
+
 void R_EndSplatBatch(void) {
     R_FlushSplatBatch();
     R_Call(glDepthMask, GL_TRUE);

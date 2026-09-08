@@ -328,6 +328,7 @@ static void SP_SpawnDestructable(LPEDICT edict) {
     edict->destructable.item_table = (DWORD)-1;
     edict->destructable.placement_solid = true;
     edict->destructable.pathing_active = edict->pathtex || edict->collision > 0.0f;
+    G_UpdateDestructablePathingPresentation(edict);
 #ifndef USE_SHADOWMAPS
     edict->s.shadow = G_LoadShadowTexture(row->shadow, false);
     edict->s.shadow_rect = 0;

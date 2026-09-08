@@ -643,6 +643,8 @@ typedef struct entityState_s {
     BYTE ability;
     USHORT pathing_width;   /* authored cursor/building pathing texture width in 32-unit cells */
     USHORT pathing_height;  /* authored cursor/building pathing texture height in 32-unit cells */
+    USHORT pathing_image;   /* optional authored pathing texture image for client diagnostics */
+    FLOAT pathing_z_offset; /* optional authored surface offset used by pathing diagnostics */
     DWORD pathing_preview;  /* low16 ignore entity, bits16..23 prevented, bits24..31 required */
     DWORD splat;
 #ifdef WOW

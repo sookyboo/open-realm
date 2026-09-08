@@ -2131,6 +2131,7 @@ BOOL G_SetDestructableDeadState(LPEDICT ent, BOOL process_death);
 BOOL G_RemoveDestructable(LPEDICT ent);
 BOOL G_SetDestructableLife(LPEDICT ent, FLOAT life);
 BOOL G_RestoreDestructable(LPEDICT ent, FLOAT life, BOOL birth);
+void G_UpdateDestructablePathingPresentation(LPEDICT ent);
 DWORD G_SelectDropItem(droppableItem_t const *entries, DWORD count, DWORD roll);
 DWORD G_SelectRandomTableItem(mapRandomItem_t const *entries, DWORD count, DWORD roll);
 mapRandomItemTable_t const *G_FindRandomItemTable(DWORD table_number);

@@ -220,6 +220,58 @@ TEST(wc3_destructable, walkable_bridge_support_cache_tracks_birth_frame_changes)
     T_EQ(after_second, after_first + 9);
 }
 
+
+static PATHSTR pathing_overlay_image_name;
+static int pathing_overlay_image_index(LPCSTR name) {
+    snprintf(pathing_overlay_image_name, sizeof(pathing_overlay_image_name), "%s", name ? name : "");
+    return strstr(pathing_overlay_image_name, "Death") ? 52 : 51;
+}
+
+TEST(wc3_destructable, walkable_pathing_presentation_tracks_alive_and_death_tga) {
+    static DestructableData_t const data = {
+        .walkable = true,
+        .pathingTexture = "PathTextures\\BridgeAlive.tga",
+        .deathPathingTexture = "PathTextures\\BridgeDeath.tga",
+        .flyHeight = 256.0f,
+    };
+    struct { WORD width, height; COLOR32 map[8]; } alive = { .width = 2, .height = 4 };
+    struct { WORD width, height; COLOR32 map[15]; } dead = { .width = 3, .height = 5 };
+    int (*old_image_index)(LPCSTR) = gi.ImageIndex;
+    LPEDICT bridge;
+
+    setup_test_world();
+    bridge = make_test_destructable(100.0f, 0.0f, 0.0f);
+    bridge->data.DestructableData = &data;
+    bridge->destructable.dead = false;
+    bridge->pathtex = (pathTex_t *)&alive;
+    gi.ImageIndex = pathing_overlay_image_index;
+
+    G_UpdateDestructablePathingPresentation(bridge);
+    T_EQ(bridge->s.pathing_image, 51);
+    T_EQ(bridge->s.pathing_width, 2);
+    T_EQ(bridge->s.pathing_height, 4);
+    T_FEQ(bridge->s.pathing_z_offset, 256.0f, 0.001f);
+    T_STREQ(pathing_overlay_image_name, "PathTextures\\BridgeAlive.tga");
+
+    bridge->destructable.dead = true;
+    bridge->pathtex = (pathTex_t *)&dead;
+    G_UpdateDestructablePathingPresentation(bridge);
+    T_EQ(bridge->s.pathing_image, 52);
+    T_EQ(bridge->s.pathing_width, 3);
+    T_EQ(bridge->s.pathing_height, 5);
+    T_FEQ(bridge->s.pathing_z_offset, 256.0f, 0.001f);
+    T_STREQ(pathing_overlay_image_name, "PathTextures\\BridgeDeath.tga");
+
+    bridge->pathtex = NULL;
+    G_UpdateDestructablePathingPresentation(bridge);
+    T_EQ(bridge->s.pathing_image, 0);
+    T_EQ(bridge->s.pathing_width, 0);
+    T_EQ(bridge->s.pathing_height, 0);
+    T_FEQ(bridge->s.pathing_z_offset, 0.0f, 0.001f);
+
+    gi.ImageIndex = old_image_index;
+}
+
 TEST(wc3_destructable, placement_applies_life_flags_and_editor_id) {
     LPEDICT dest = make_test_destructable(200.0f, 0.0f, 0.0f);
     DOODAD placement = {

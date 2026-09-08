@@ -41,6 +41,28 @@ Move-time collision-radius checks currently use a Warsmash-compatible world-spac
 
 The retail ROC `Units\\DestructableData.slk` row for LT05 names `Doodads\\Terrain\\WoodBridgeLarge45\\WoodBridgeLarge45` and `PathTextures\\CityBridgeLarge45.tga`/`CityBridgeLarge45Death.tga`. The model is `WoodBridgeLarge45.mdx`, not `WoodBridgeLarge450.mdx`; its SEQS are `Stand`, `Death`, and `Birth`. Destructable stems that already end in orientation digits use the authored stem directly, while non-numeric stems retain the variation suffix convention used by trees. `CityBridgeLarge45Destroyed.mdx` belongs to separate `YSdb`/`YSdc` rows and is not LT05's dead presentation.
 
+### Walkable path-texture visualizer
+
+Walkable destructables publish their currently active pathing texture through `entityState_t.pathing_image` together with the existing `pathing_width` / `pathing_height`. This is presentation-only metadata: it does not participate in the path bake or movement checks. Alive state publishes `pathTex`; death state publishes `pathTexDeath`; hidden/non-solid/pathing-less states clear the preview fields. The client therefore visualizes the exact archive TGA already registered by the server rather than reconstructing pixels from the baked WPM.
+
+Enable the overlay with:
+
+```sh
++set wc3_bridge_pathtex_overlay 1
+```
+
+The renderer draws one translucent textured plane centered on each active walkable destructable at `entity Z + authored flyH + 4` world units. LT05's `flyH=256` places the diagnostic near the actual deck instead of down at the destructable origin. Useful controls are:
+
+```sh
++set wc3_bridge_pathtex_overlay_z 4
++set wc3_bridge_pathtex_overlay_alpha 160
++set wc3_bridge_pathtex_overlay_rotation 0
+```
+
+Mode `1` shows renderer-native TGA orientation. Mode `2` flips the texture V axis so source-image orientation can be compared directly with pathing diagnostics that apply a vertical flip. `wc3_bridge_pathtex_overlay_rotation` adds degrees to the destructable's authored yaw and is intended for 0/90/180/270 transform experiments. Raise `_z` if the plane intersects the deck. The overlay is off by default and submits one quad per visible walkable destructable, so ordinary gameplay does not pay its rendering cost.
+
+For LT05 this makes `PathTextures\CityBridgeLarge45.tga` visible directly over the bridge and switches to `PathTextures\CityBridgeLarge45Death.tga` when the destructable enters its dead pathing state. Use this to correlate the red/magenta authored blocker bands with the bridge rails and the route direction before changing raster/pathing transforms.
+
 Attack range against a building is measured from the attacker's collision edge to the building's authored no-walk footprint when `pathtex` is available. `skills/s_attack.c` therefore uses `CM_DistanceToPathingFootprint()` for building targets instead of requiring the attacker to enter weapon range of the blocked building centre. This is especially important for explicit force-fire on owned/friendly large buildings: centre-distance range checks make a melee unit orbit the footprint forever even though it is already beside a valid attack surface. Non-building targets retain the existing centre-distance attack check.
 
 Lumber's unreachable-interior-tree detection is the narrower exception: `unit_changeangle_for_radius()` uses the Peasant's collision radius so Harvest can identify when the best legal approach to a blocked tree has genuinely been exhausted outside `HARVEST_RANGE`. Do not use that route-end signal for building interactions unless the route request also carries the behavior's interaction range.

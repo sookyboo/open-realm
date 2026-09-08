@@ -354,6 +354,7 @@ void R_RenderFlatRectSplat(LPCVECTOR2 mins, LPCVECTOR2 maxs, FLOAT z, LPCTEXTURE
  * instead of one upload + draw per splat. */
 void R_BeginSplatBatch(splat_shader_t *shader);
 void R_AddRectSplat(LPCVECTOR2 mins, LPCVECTOR2 maxs, LPCTEXTURE texture, COLOR32 color);
+void R_AddFlatRectSplat(LPCVECTOR2 mins, LPCVECTOR2 maxs, FLOAT z, FLOAT angle, BOOL flip_y, LPCTEXTURE texture, COLOR32 color);
 void R_EndSplatBatch(void);
 
 // r_shader.c

@@ -2228,6 +2228,8 @@ TEST(net, entity_delta_preserves_build_preview_fields) {
         .collision = 42.5f,
         .pathing_width = 6,
         .pathing_height = 4,
+        .pathing_image = 23,
+        .pathing_z_offset = 256.0f,
         .pathing_preview = EntityPathingPreviewPack(17, 0x0a, 0x20),
     };
     entityState_t out = { 0 };
@@ -2243,6 +2245,8 @@ TEST(net, entity_delta_preserves_build_preview_fields) {
     T_FEQ(out.collision, 42.5f, 0.001f);
     T_EQ(out.pathing_width, 6);
     T_EQ(out.pathing_height, 4);
+    T_EQ(out.pathing_image, 23);
+    T_FEQ(out.pathing_z_offset, 256.0f, 0.001f);
     T_EQ(EntityPathingPreviewIgnore(out.pathing_preview), 17);
     T_EQ(EntityPathingPreviewPrevented(out.pathing_preview), 0x0a);
     T_EQ(EntityPathingPreviewRequired(out.pathing_preview), 0x20);

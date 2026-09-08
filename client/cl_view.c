@@ -320,7 +320,7 @@ static void CL_AddBuildingPlacementGrid(LPCVECTOR3 origin) {
 
     FOR_LOOP(x, width) {
         FOR_LOOP(y, height) {
-            renderSplatRect_t rect;
+            renderSplatRect_t rect = { 0 };
             VECTOR2 sample;
             BYTE pathing = 0;
             BOOL blocked;
@@ -375,6 +375,47 @@ static void CL_AddBuildingPlacementGrid(LPCVECTOR3 origin) {
                 }
             }
         }
+    }
+}
+
+/* Visualize the authored pathing TGA carried by walkable destructables. The
+ * server publishes only an image index plus the existing footprint dimensions;
+ * the client draws one textured quad, so this debug view does not duplicate the
+ * pathing decoder or stream per-cell data. Mode 1 shows renderer-native TGA
+ * orientation; mode 2 additionally flips V for comparison with pathing-space
+ * diagnostics. */
+static void CL_AddPathingTextureOverlays(void) {
+    int const mode = Cvar_Integer("wc3_bridge_pathtex_overlay", 0);
+    FLOAT const z_offset = Cvar_Value("wc3_bridge_pathtex_overlay_z", 4.0f);
+    FLOAT const rotation = Cvar_Value("wc3_bridge_pathtex_overlay_rotation", 0.0f) * (FLOAT)M_PI / 180.0f;
+    int const alpha_value = MAX(0, MIN(255, Cvar_Integer("wc3_bridge_pathtex_overlay_alpha", 160)));
+    FLOAT const cell_size = 32.0f; /* WC3 authored pathing texels are 32 world units */
+
+    if (mode <= 0) return;
+
+    FOR_LOOP(i, cl.num_active) {
+        DWORD const number = cl.active_entities[i];
+        entityState_t const *state;
+        renderSplatRect_t rect = { 0 };
+        FLOAT width, height;
+
+        if (!number || number >= MAX_CLIENT_ENTITIES ||
+            view_state.num_splat_rects >= MAX_RENDER_SPLAT_RECTS) continue;
+        state = &cl.ents[number].current;
+        if (!state->pathing_image || !state->pathing_width || !state->pathing_height ||
+            state->pathing_image >= MAX_IMAGES || !cl.pics[state->pathing_image] ||
+            (state->renderfx & RF_HIDDEN)) continue;
+
+        width = state->pathing_width * cell_size;
+        height = state->pathing_height * cell_size;
+        rect.mins = (VECTOR2){ state->origin.x - width * 0.5f, state->origin.y - height * 0.5f };
+        rect.maxs = (VECTOR2){ state->origin.x + width * 0.5f, state->origin.y + height * 0.5f };
+        rect.color = (COLOR32){ 255, 255, 255, (BYTE)alpha_value };
+        rect.texture = cl.pics[state->pathing_image];
+        rect.z = state->origin.z + state->pathing_z_offset + z_offset;
+        rect.angle = state->angle + rotation;
+        rect.flags = RSF_FIXED_Z | (mode >= 2 ? RSF_FLIP_Y : 0);
+        view_state.splat_rects[view_state.num_splat_rects++] = rect;
     }
 }
 
@@ -446,7 +487,8 @@ static void CL_AddEntities(void) {
     }
     
     CL_AddTEnts();
-    
+
+    CL_AddPathingTextureOverlays();
     CL_AddBuilding();
     CL_AddCursorSplat();
 

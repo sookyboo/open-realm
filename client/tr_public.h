@@ -156,13 +156,23 @@ typedef struct {
     float radius;
 } renderDecal_t;
 
-/* Terrain-conforming solid-colour rectangles. The renderer batches these with
- * its built-in white texture, so callers can submit many placement/pathing
- * cells without allocating textures or issuing one draw per cell. */
+enum {
+    RSF_FIXED_Z = 1 << 0, /* draw a flat world-space quad at z instead of conforming to terrain */
+    RSF_FLIP_Y  = 1 << 1, /* invert the texture V axis for source/pathing-space diagnostics */
+};
+
+/* Batched world rectangles. Ordinary placement cells leave texture/flags zero
+ * and retain the terrain-conforming solid-colour path. Diagnostics may instead
+ * provide a texture and RSF_FIXED_Z to draw one translucent plane in world
+ * space without regenerating CPU-side image data. */
 typedef struct {
     VECTOR2 mins;
     VECTOR2 maxs;
     COLOR32 color;
+    LPCTEXTURE texture;
+    FLOAT z;
+    FLOAT angle;
+    BYTE flags;
 } renderSplatRect_t;
 
 typedef struct {

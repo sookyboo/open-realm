@@ -58,6 +58,8 @@ netField_t entityStateFields[] = {
     { NETF(entityState_t, ability), NFT_BYTE },
     { NETF(entityState_t, pathing_width), NFT_SHORT },
     { NETF(entityState_t, pathing_height), NFT_SHORT },
+    { NETF(entityState_t, pathing_image), NFT_SHORT },
+    { NETF(entityState_t, pathing_z_offset), NFT_FLOAT },
     { NETF(entityState_t, pathing_preview), NFT_LONG },
 #ifdef WOW
     /* WoW creature radii can be 0.5; NFT_ROUND serialized those as zero. WoW radii stay < 65.5 so the packed-float

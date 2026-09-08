@@ -140,7 +140,14 @@ void R_DrawSplatRects(void) {
                 continue;
             }
         }
-        R_AddRectSplat(&rect->mins, &rect->maxs, tr.texture[TEX_WHITE], rect->color);
+        if (rect->flags & RSF_FIXED_Z) {
+            R_AddFlatRectSplat(&rect->mins, &rect->maxs, rect->z, rect->angle,
+                               (rect->flags & RSF_FLIP_Y) != 0,
+                               rect->texture ? rect->texture : tr.texture[TEX_WHITE], rect->color);
+        } else {
+            R_AddRectSplat(&rect->mins, &rect->maxs,
+                           rect->texture ? rect->texture : tr.texture[TEX_WHITE], rect->color);
+        }
     }
     R_EndSplatBatch();
 }
