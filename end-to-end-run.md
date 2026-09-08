@@ -9,6 +9,12 @@ During the current runtime investigation, do not run the automated test suite
 between these runs; build the game binary if needed and use the end-to-end
 runtime evidence only.
 
+Before starting every new run, append a checkpoint to `objective.md` recording
+the hypothesis, angle/mode, exact launch flags, command order, expected
+screenshot labels, and the next command to resume. Update that checkpoint
+after the run with the actual edict, captures, final state, and any interruption.
+This keeps an interrupted session resumable from the two documents alone.
+
 ## Launch
 
 From the repository root, run:
@@ -179,3 +185,7 @@ one screenshot.
 
 The one-second camera wait is required: `WC3_CAMERA_SELECTED` is a server-side
 marker, while the client applies the camera update on a later rendered frame.
+
+If the process exits or the session is interrupted, do not reuse its process or
+route state. Read the latest checkpoint in `objective.md`, record a new fresh
+run checkpoint, and restart from Launch.

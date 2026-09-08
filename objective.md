@@ -124,6 +124,27 @@ baseline and observation screenshots are valid camera-framed evidence. This
 proves the 0-degree thin-edge run and camera protocol; the 90, 180, and 270
 degree cases remain outstanding.
 
+The mode-3 diagnostic was corrected before the next comparison: its angle now
+rotates the synthetic blocked edge itself (`0=top`, `90=right`, `180=bottom`,
+`270=left`) and rejects non-cardinal angles. The prior 90-degree attempt was
+interrupted after the process had already produced a valid setup and partial
+observations. It used `source_edge=right`, `source_blocked=32`,
+`placed_blocked=32`, Footman edict `4392`, and screenshots `shot0017.jpg`
+(baseline), `shot0018.jpg` (~2 seconds), and `shot0019.jpg` (~5 seconds). The
+camera was correctly centered. The Footman reached `(5950.7,-3744.5)` before
+the run was stopped, with `flow_direct=0`, `flow_generation=62`, and growing
+`blocked_frames`; this is an interrupted/inconclusive 90-degree result, not a
+confirmed edge block. The next run must be documented here before launch.
+
+## Run checkpoint rule
+
+Before every run, record the complete planned invocation and resume point in
+this file: diagnostic mode and angle, launch flags, handshake wait, injected
+commands, exact screenshot schedule, and the expected next command. Afterward,
+record the actual Footman edict, bridge/bake state, captures, final position,
+and earliest failure layer. If a session ends unexpectedly, leave the
+checkpoint marked interrupted and start the next attempt from a fresh process.
+
 The corrected 90-degree rerun used the same procedure with
 `+set wc3_bridge_synthetic_line_angle 90`. The Peasant was edict `337` and the
 Footman was edict `4390`; explicit selection and delayed camera centering were
