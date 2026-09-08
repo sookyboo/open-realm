@@ -662,6 +662,11 @@ CLIENTCOMMAND(SmartPoint) {
         if (move_selectlocation(clent, &loc)) issued = true;
         client->menu.order_queued = old_queued;
     }
+    if (G_BridgeDebugLevel() >= 1 && non_rally)
+        FOR_CONTROLLABLE_SELECTED_UNITS(client, ent)
+            fprintf(stderr, "WC3_BRIDGE_DEBUGORDER unit=%u rawcode=%08x from=(%.1f,%.1f) target=(%.1f,%.1f) radius=%.1f\n",
+                    (unsigned)(ent - globals.edicts), ent->class_id, ent->s.origin2.x, ent->s.origin2.y,
+                    loc.x, loc.y, ent->collision);
     if (rally || issued) {
         G_QueueOrderSound(G_GetMainControllableUnit(client));
     }
@@ -1872,6 +1877,10 @@ CLIENTCOMMAND(DebugSpawn) {
         G_DeselectEntity(client, ent);
     }
     G_SelectEntity(client, spawned);
+    if (G_BridgeDebugLevel() >= 1)
+        fprintf(stderr, "WC3_BRIDGE_DEBUGSPAWN unit=%u rawcode=%08x pos=(%.1f,%.1f,%.1f) radius=%.1f owner=%u\n",
+                (unsigned)(spawned - globals.edicts), spawned->class_id, spawned->s.origin.x, spawned->s.origin.y,
+                spawned->s.origin.z, spawned->collision, spawned->s.player);
     Get_Portrait_f(clent);
     Get_Commands_f(clent);
 }
