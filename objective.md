@@ -155,3 +155,51 @@ support during the crossing. Captures were `shot0013.jpg` (baseline),
 `shot0014.jpg` (~2 seconds), `shot0015.jpg` (~5 seconds), and
 `shot0016.jpg` (~8 seconds/far side). The 90-degree transformed edge also did
 not block the route; the 180 and 270 degree cases remain outstanding.
+
+### Next run checkpoint: 180-degree thin edge
+
+Planned hypothesis: mode 3 with the synthetic bottom source edge should reveal
+whether that transformed edge blocks the LT05 route. Launch with
+`+set wc3_bridge_clear_alive_pathtex 3`,
+`+set wc3_bridge_synthetic_line_angle 180`, `+cameraedge 0`, and the standard
+bridge/debug flags. After `CL_SetGameplayInput`, inject `cameraedge 0`, then
+`objective complete 53` and `haltai 1`; wait for
+`WC3_BRIDGE_STATE phase=restored_birth`. Spawn the Peasant first at
+`(6080,-3584)` and the Footman second at `(4800,-4864)`, parse the Footman
+edict, then issue `select <footman_edict>`, `bridgeclear 768`, and `haltai 1`.
+Issue `cameraselected`, wait one second, and capture the baseline. Issue one
+`bridgeorder <footman_edict> 6080 -3584`; capture at approximately 2, 5, and
+8 seconds, issuing `cameraselected` and waiting one second before each capture.
+If the process stalls, capture one same-state stall frame, stop it, and record
+the actual state below. Expected next command after interruption: restart from
+Launch with a new process; do not reuse route or unit state.
+
+The 180-degree run used the checkpoint above and applied `source_edge=bottom`,
+with `source_clear=992`, `source_blocked=32`, and `placed_blocked=32`. The exact
+Footman was edict `4392`; selection, camera centering, and
+`WC3_BRIDGE_DEBUGORDER` all identified that same unit. LT05 movement remained
+`flow_direct=1` with `blocked_frames=0`; the Footman reached
+`(6154.1,-3602.7)`, 6.5 units from the internally selected target
+`(6160,-3600)`, so the bottom edge did not block traversal. Captures were
+`shot0020.jpg` (baseline), `shot0021.jpg` (~2 seconds), and `shot0022.jpg`
+(~5 seconds). The process/session ended before the final ~8-second capture
+(`shot0023.jpg`) was written; this case is recorded as interrupted. The
+270-degree case remains outstanding.
+
+### Next run checkpoint: blocked center row
+
+Planned hypothesis: a full-width blocked source row through the texture center
+will act as a transverse barrier and reveal whether the route can cross a true
+lane blocker. Add/use a dedicated synthetic mode that clears the alive texture
+except for the center source row. Launch with the standard bridge/debug flags,
+`+set wc3_bridge_clear_alive_pathtex 4`, and `+cameraedge 0`; after
+`CL_SetGameplayInput`, inject `cameraedge 0`, then `objective complete 53` and
+`haltai 1`, waiting for `WC3_BRIDGE_STATE phase=restored_birth`. Spawn the
+Peasant first at `(6080,-3584)` and Footman second at `(4800,-4864)`, parse and
+explicitly select the Footman edict, then run `bridgeclear 768` and `haltai 1`.
+Center the camera, wait one second, and capture the baseline. Issue exactly one
+`bridgeorder <footman_edict> 6080 -3584`; capture at approximately 2, 5, and
+8 seconds with the one-second camera wait before each screenshot. If it stalls,
+capture the same-state stall frame and record the first rejected transition.
+Expected resume point after interruption: restart from Launch with a fresh
+process; do not reuse route or unit state.

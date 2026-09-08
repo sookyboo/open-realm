@@ -15,7 +15,8 @@ int G_BridgeDebugLevel(void) {
 /* Temporary route isolation: replace only alive walkable bridge blocker data
  * with synthetic in-memory texture data while preserving its authored dimensions.
  * Mode 1 is all-clear; mode 2 is a bounded diagonal lane with blocked edges;
- * mode 3 is clear except for one thin source edge rotated by the diagnostic angle.
+ * mode 3 is clear except for one thin source edge rotated by the diagnostic angle;
+ * mode 4 blocks one center row.
  * The death texture and source files remain unchanged. */
 void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     pathTex_t *tex;
@@ -49,6 +50,10 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
              * test distinct source edges while the normal stamp remains intact. */
             clear = edge == 0 ? y != 0 : edge == 1 ? x != tex->width - 1
                 : edge == 2 ? y != tex->height - 1 : x != 0;
+        } else if (mode == 4) {
+            /* Keep a full-width transverse source row blocked to test a real
+             * route barrier rather than an outer footprint edge. */
+            clear = y != tex->height / 2;
         }
         tex->map[x + y * tex->width].b = clear ? 0 : 255;
         if (clear) {
@@ -58,7 +63,8 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
         }
     }
     fprintf(stderr, "WC3_BRIDGE_PATHTEX mode=%s unit=%u size=%ux%u line_angle=%d\n",
-            mode == 1 ? "synthetic_clear" : "synthetic_line", (unsigned)(ent - globals.edicts),
+            mode == 1 ? "synthetic_clear" : mode == 4 ? "synthetic_center_row" : "synthetic_line",
+            (unsigned)(ent - globals.edicts),
             tex->width, tex->height, angle);
     if (mode == 2)
         fprintf(stderr, "WC3_BRIDGE_SYNTH_LINE source_clear=%d source_min=(%d,%d) source_axis=%s\n",
@@ -66,6 +72,9 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     if (mode == 3)
         fprintf(stderr, "WC3_BRIDGE_SYNTH_EDGE source_clear=%d source_blocked=%u source_edge=%s thickness=1 angle=%d\n",
                 clear_count, tex->width, synthetic_edge_names[edge], angle);
+    if (mode == 4)
+        fprintf(stderr, "WC3_BRIDGE_SYNTH_CENTER source_clear=%d source_blocked=%u source_row=%u thickness=1\n",
+                clear_count, tex->width, tex->height / 2);
 }
 
 void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase) {
