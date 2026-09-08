@@ -39,6 +39,7 @@ static LPEDICT make_test_destructable(FLOAT life, FLOAT x, FLOAT y) {
     ent->s.model = 1;
     ent->s.scale = 1.0f;
     ent->s.origin = (VECTOR3){ x, y, 0.0f };
+    ent->s.origin2 = (VECTOR2){ x, y };
     ent->targtype = TARG_DEBRIS;
     ent->health.value = life;
     ent->health.max_value = life;
@@ -122,7 +123,7 @@ TEST(wc3_destructable, generated_script_reuses_and_activates_hidden_placement) {
 TEST(wc3_destructable, lt05_uses_authored_model_sequences_for_death_birth_stand) {
     LPEDICT dest = make_test_destructable(2500.0f, 0.0f, 0.0f);
 
-    dest->s.model = G_RegisterModel("Doodads\\Terrain\\WoodBridgeLarge45\\WoodBridgeLarge45.mdx");
+    dest->s.model = G_RegisterModel("TestUI\\Models\\destructable_bridge.mdx");
     T_NOT_NULL(G_GetAnimation(dest->s.model, "death"));
     T_NOT_NULL(G_GetAnimation(dest->s.model, "birth"));
     T_NOT_NULL(G_GetAnimation(dest->s.model, "stand"));

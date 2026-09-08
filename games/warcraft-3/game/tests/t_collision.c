@@ -489,11 +489,12 @@ TEST(wc3_collision, destructable_pathing_overlay_uses_warsmash_rotation_and_flip
     BYTE cells[16 * 16] = {0};
     struct { WORD width, height; COLOR32 map[8]; } tex = { .width = 2, .height = 4 };
     LPEDICT bridge = G_Spawn();
-    VECTOR2 blocked = { 6.5f, 8.5f }, clear = { 8.5f, 8.5f }, threshold = { 6.5f, 9.5f };
+    VECTOR2 blocked = { 6.5f, 7.5f }, clear = { 8.5f, 8.5f }, threshold = { 6.5f, 9.5f };
     BYTE flags;
 
     setup_test_pathmap(16, 16, cells);
     bridge->s.origin = MAKE(VECTOR3, 8.0f, 8.0f, 0.0f);
+    bridge->s.origin2 = MAKE(VECTOR2, 8.0f, 8.0f);
     bridge->s.angle = 0.0f;
     tex.map[0].b = 255;
     tex.map[1].b = 127;

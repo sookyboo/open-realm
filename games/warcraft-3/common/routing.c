@@ -384,7 +384,8 @@ static void stamp_entity_obstacle(edict_t const *ent, pathMapCell_t *target) {
     /* HACK: alive walkable destructables behave like ordinary bridge terrain
      * for now; their visual rail pixels must not reintroduce blockers after the
      * alive footprint has been opened below. Dead pathing remains stamped. */
-    if (ent->destructable.walkable && !ent->destructable.dead) return;
+    if (ent->destructable.walkable && !ent->destructable.dead &&
+        ent->destructable.alive_pathtex == ent->pathtex) return;
     if (ent->pathtex) {
         pathTex_t *pt = ent->pathtex;
         int angle = (int)(ent->s.angle * 180.0f / M_PI);
@@ -556,7 +557,7 @@ static BOOL entity_blocks_static_pathing(edict_t const *ent) {
      * presentation/save state, but that alive footprint must no longer block.
      * Dead destructables may deliberately swap to a death path texture, so
      * their non-monster pathtex remains authoritative. */
-    if ((ent->svflags & SVF_MONSTER) && (ent->svflags & SVF_DEADMONSTER)) return false;
+    if ((ent->svflags & SVF_MONSTER) && (ent->svflags & SVF_DEADMONSTER) && !ent->pathtex) return false;
     if (ent->pathtex) return true;
     if (ent->svflags & SVF_DEADMONSTER) return false;
     return !(ent->svflags & SVF_MONSTER) && ent->collision > 0.0f;

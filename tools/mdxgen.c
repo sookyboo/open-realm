@@ -10,6 +10,7 @@
  *   mdxgen panel_sprite  <tex_path> <out.mdx>
  *   mdxgen ui_panel      <tex_path> <out.mdx>
  *   mdxgen anim_pulse    <tex_path> <out.mdx>
+ *   mdxgen destructable_bridge <tex_path> <out.mdx>
  *
  * quad_sprite  - 1x1 unit flat quad in XY-plane, 1 sequence "Stand"
  * panel_sprite - 2x1.5 unit flat quad, suitable for orthographic UI panels, 1 sequence "Stand"
@@ -481,6 +482,18 @@ static int gen_anim_pulse(int argc, char **argv) {
                        names, starts, ends, 2) ? 0 : 1;
 }
 
+static int gen_destructable_bridge(int argc, char **argv) {
+    if (argc < 3) {
+        fprintf(stderr, "usage: mdxgen destructable_bridge <tex_path> <out.mdx>\n");
+        return 1;
+    }
+    const char *names[] = { "stand", "death", "birth" };
+    uint32_t starts[] = { 0, 1001, 2001 };
+    uint32_t ends[] = { 1000, 2000, 3000 };
+    return build_model(argv[1], argv[2], "DestructableBridge", 0.5f, 0.5f,
+                       names, starts, ends, 3) ? 0 : 1;
+}
+
 /* =========================================================================
  * main
  * =========================================================================*/
@@ -493,6 +506,7 @@ static void usage(void) {
         "  mdxgen panel_sprite  <tex_path> <out.mdx>\n"
         "  mdxgen ui_panel      <tex_path> <out.mdx>\n"
         "  mdxgen anim_pulse    <tex_path> <out.mdx>\n"
+        "  mdxgen destructable_bridge <tex_path> <out.mdx>\n"
         "\n"
         "Examples:\n"
         "  mdxgen quad_sprite   TestUI/Textures/checker_8x8.blp  quad_sprite.mdx\n"
@@ -513,6 +527,7 @@ int main(int argc, char **argv) {
     if (strcmp(cmd, "panel_sprite") == 0) return gen_panel_sprite(sub_argc, sub_argv);
     if (strcmp(cmd, "ui_panel")     == 0) return gen_ui_panel(sub_argc, sub_argv);
     if (strcmp(cmd, "anim_pulse")   == 0) return gen_anim_pulse(sub_argc, sub_argv);
+    if (strcmp(cmd, "destructable_bridge") == 0) return gen_destructable_bridge(sub_argc, sub_argv);
 
     fprintf(stderr, "mdxgen: unknown command '%s'\n\n", cmd);
     usage();

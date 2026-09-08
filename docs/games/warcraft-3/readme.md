@@ -107,6 +107,7 @@ File formats, renderer notes, UI/FDF behavior, and gameplay coverage work used b
 - [Persistent Hero And Idle-Worker Shortcuts](unit-shortcuts.md)
 - [Pathfinding And Harvest Reachability](pathfinding.md)
 - [Destructable Bridge Lifecycle And Pathing](destructable-bridge-lifecycle.md)
+- [Retail Destructable Bridge Specification](retail-destructable-bridge-spec.md)
 - [Inventory And World Items](inventory-and-items.md)
 - [Ability And Item Effects](ability-and-item-effects.md)
 - [Ability Coverage](architecture/ability-coverage.md)
