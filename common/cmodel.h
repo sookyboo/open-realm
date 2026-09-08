@@ -64,6 +64,7 @@ BOOL CM_GetPathingFlagsAt(LPCVECTOR2 location, LPBYTE flags);
 BOOL CM_TerrainPointIsWalkable(LPCVECTOR2 location);
 BOOL CM_TerrainPointIsSwimmable(LPCVECTOR2 location);
 BOOL CM_LineIsWalkableForRadius(LPCVECTOR2 a, LPCVECTOR2 b, FLOAT radius);
+BOOL CM_WalkableSurfaceAt(LPCVECTOR2 location);
 /* Opt-in WC3 bridge probe helper. Callers gate this behind a debug cvar; the
  * routing layer prints the normal-vs-bridge static pathing decision and exact
  * radius/diagonal cells without changing routing state. */

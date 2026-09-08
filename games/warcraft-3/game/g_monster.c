@@ -760,6 +760,23 @@ static BOOL M_QueryWalkableSurfaceHeight(LPCEDICT surface, LPCVECTOR2 point, LPF
     return true;
 }
 
+/* Read active LT05 support without changing unit altitude; diagnostics must
+ * observe ground resolution rather than participate in it. */
+BOOL G_DebugBridgeSupportAt(LPCEDICT self, LPCVECTOR2 point, LPFLOAT height) {
+    if (!self || !point || !height) return false;
+    for (LPCEDICT surface = level.ground_surfaces; surface; surface = surface->ground_next) {
+        pathTex_t const *pathtex = surface->pathtex;
+        FLOAT const cell = CM_PathCellWorldSize();
+        if (!surface->inuse || surface->class_id != MAKEFOURCC('L', 'T', '0', '5') ||
+            surface->destructable.dead || !surface->destructable.placement_solid || !pathtex ||
+            fabsf(point->x - surface->s.origin.x) > pathtex->width * cell * 0.5f ||
+            fabsf(point->y - surface->s.origin.y) > pathtex->height * cell * 0.5f)
+            continue;
+        return M_QueryWalkableSurfaceHeight(surface, point, height);
+    }
+    return false;
+}
+
 /* Keep LT05 support diagnostics bounded. At debug level 2 the extra point
  * query verifies the cached gameplay result at the mover's exact XY. */
 static void M_DebugBridgeGround(LPCEDICT self, LPCEDICT surface, BOOL inside, FLOAT support, FLOAT before, FLOAT after) {

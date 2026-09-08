@@ -118,6 +118,29 @@ static void bridge_probe_move(LPCEDICT self, LPCVECTOR2 cand) {
     count++;
 }
 
+/* Record accepted, committed bridge steps so candidate probes cannot be
+ * mistaken for proof that a unit traversed the rendered deck. */
+static void bridge_debug_commit_step(LPEDICT self, LPCVECTOR2 from, LPCVECTOR2 cand, FLOAT z_before) {
+    static DWORD count;
+    LPCEDICT bridge = bridge_debug_find(cand);
+    FLOAT from_support = 0.0f, to_support = 0.0f;
+    BOOL from_hit, to_hit;
+    BOOL point_final, line_final;
+    if (!bridge) bridge = bridge_debug_find(from);
+    if (G_BridgeDebugLevel() < 1 || count >= 256 || !self || !from || !cand || !bridge) return;
+    from_hit = G_DebugBridgeSupportAt(self, from, &from_support);
+    to_hit = G_DebugBridgeSupportAt(self, cand, &to_support);
+    point_final = CM_PointIsPathableForRadius(cand, self->collision);
+    line_final = CM_LineIsWalkableForRadius(from, cand, self->collision);
+    fprintf(stderr,
+            "WC3_BRIDGE_TRAVERSE_COMMIT seq=%u unit=%08x bridge=%u radius=%.1f from=(%.1f,%.1f) to=(%.1f,%.1f) from_mask=%d to_mask=%d from_support_hit=%d to_support_hit=%d from_support_height=%.1f to_support_height=%.1f unit_z_before=%.1f unit_z_after=%.1f point_final=%d line_final=%d\n",
+            count, self->class_id, (unsigned)(bridge - globals.edicts), self->collision,
+            from->x, from->y, cand->x, cand->y, CM_WalkableSurfaceAt(from), CM_WalkableSurfaceAt(cand),
+            from_hit, to_hit, from_hit ? from_support : 0.0f, to_hit ? to_support : 0.0f,
+            z_before, self->s.origin.z, point_final, line_final);
+    count++;
+}
+
 static void bridge_debug_move_reject(LPCEDICT self, LPCVECTOR2 cand, LPCSTR reason) {
     static DWORD count;
     LPCEDICT bridge;
@@ -255,9 +278,12 @@ BOOL M_MoveIsValid(LPEDICT self, LPCVECTOR2 pos) {
 }
 
 static void unit_commit_step(LPEDICT self, LPCVECTOR2 cand) {
+    VECTOR2 const from = self->s.origin2;
+    FLOAT const z_before = self->s.origin.z;
     if (self->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
     self->s.origin2 = *cand;
     gi.LinkEntity(self);
+    bridge_debug_commit_step(self, &from, cand, z_before);
 }
 
 /* Advance the unit one tick.  Avoidance is decided ONCE per tick in

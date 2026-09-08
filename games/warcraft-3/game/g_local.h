@@ -1543,6 +1543,7 @@ DWORD G_TimerRemaining(LPCGTIMER timer);
 LPEDICT Waypoint_add(LPCVECTOR2);
 void G_InitWaypoints(void);
 void M_CheckGround (LPEDICT);
+BOOL G_DebugBridgeSupportAt(LPCEDICT self, LPCVECTOR2 point, LPFLOAT height);
 #ifdef BZ_TESTS
 BOOL M_TestWalkableSurfaceHeight(LPCEDICT surface, LPCVECTOR2 point, LPFLOAT height, BOOL *cached);
 #endif

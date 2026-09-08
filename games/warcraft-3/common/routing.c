@@ -971,6 +971,14 @@ BOOL CM_TerrainPointIsSwimmable(LPCVECTOR2 location) {
     return cell ? !cell->nowater : false;
 }
 
+/* Report baked walkable-surface membership without exposing the path-map representation. */
+BOOL CM_WalkableSurfaceAt(LPCVECTOR2 location) {
+    point2_t cell;
+    if (!location || !pathmap.walkable_surface_mask) return false;
+    cell = LocationToPathMap(location);
+    return walkable_surface_cell(cell.x, cell.y);
+}
+
 BOOL CM_LineIsWalkableForRadius(LPCVECTOR2 a, LPCVECTOR2 b, FLOAT radius) {
     if (!a || !b)
         return false;
