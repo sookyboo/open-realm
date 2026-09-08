@@ -1824,11 +1824,12 @@ static void CMD_PortraitCameraDown(LPEDICT clent, DWORD argc, LPCSTR argv[]) {
  * controller as clicking that unit's portrait. */
 CLIENTCOMMAND(CameraSelected) {
     LPEDICT target;
-    if (!clent || !clent->client || clent->client->no_control ||
-        clent->client->camera.target_controller || !(target = G_GetMainSelectedUnit(clent->client))) return;
+    if (!clent || !clent->client || clent->client->no_control || !(target = G_GetMainSelectedUnit(clent->client))) return;
     G_ClientSetCameraPosition(clent, &target->s.origin2);
     clent->client->camera.target_controller = target;
     clent->client->camera.target_offset = (VECTOR2){ 0, 0 };
+    fprintf(stderr, "WC3_CAMERA_SELECTED unit=%u rawcode=%08x pos=(%.1f,%.1f)\n",
+            (unsigned)(target - globals.edicts), target->class_id, target->s.origin2.x, target->s.origin2.y);
 }
 
 static void CMD_QuickCamera(LPEDICT clent, DWORD argc, LPCSTR argv[]) {
