@@ -223,6 +223,8 @@ void monster_think(LPEDICT self) {
         return;
     if (self->paused || self->stunned)
         return;
+    if (self->data.UnitData && !self->data.DestructableData && self->s.player != 0 && G_IsAIHalted())
+        return;
     M_MoveFrame(self);
     if (self->currentmove->think) {
         self->currentmove->think(self);

@@ -3,6 +3,8 @@
 
 #include "g_local.h"
 
+static BOOL wc3_halt_ai;
+
 #define CLIENTCOMMAND(NAME) void CMD_##NAME(LPEDICT clent, DWORD argc, LPCSTR argv[])
 #define WC3_SELECTION_LIMIT 12
 
@@ -1874,6 +1876,19 @@ CLIENTCOMMAND(DebugSpawn) {
     Get_Commands_f(clent);
 }
 
+/* Toggle diagnostic AI suppression for non-player-owned units without
+ * changing their positions, collision, or authored map state. */
+CLIENTCOMMAND(HaltAI) {
+    if (argc < 2 || (atoi(argv[1]) != 0 && atoi(argv[1]) != 1)) {
+        fprintf(stderr, "usage: haltai <0|1>\n");
+        return;
+    }
+    wc3_halt_ai = atoi(argv[1]) != 0;
+    fprintf(stderr, "WC3: haltai=%d non-player-owned unit AI\n", atoi(argv[1]));
+}
+
+BOOL G_IsAIHalted(void) { return wc3_halt_ai; }
+
 typedef struct {
     LPCSTR name;
     void (*func)(LPEDICT ent, DWORD argc, LPCSTR argv[]);
@@ -1919,6 +1934,7 @@ clientCommand_t clientCommands[] = {
     { "gameresult_load", CMD_GameResultLoad },
     { "gameresult_quit", CMD_GameResultQuit },
     { "debugspawn", CMD_DebugSpawn },
+    { "haltai", CMD_HaltAI },
     { "menu", CMD_Menu },
     { "menu_endgame", CMD_MenuEndGame },
     { "menu_restart", CMD_MenuRestart },
