@@ -59,6 +59,104 @@ Campaign quest/script debugging uses several related command families, all gated
 
 The server console can dispatch one of these game commands directly to a spawned listen-server client with `sv_gamecmd <client> <command> [args...]`. For example, `sv_gamecmd 0 objective complete 53`, `sv_gamecmd 0 debugspawn hfoo 5200 -4300`, `sv_gamecmd 0 select 42`, and `sv_gamecmd 0 smartpoint 5664 -4128` use the same authoritative client-command handlers as normal gameplay input. This is a diagnostics bridge only; the dispatched game command retains its own cheat and control checks. `sv_gamecmd 0 haltai 1` pauses think callbacks for non-player-owned WC3 units while leaving player-owned test units and world/pathing state active; use `sv_gamecmd 0 haltai 0` to restore AI. The setting is runtime-only and resets on process restart.
 
+## Headless runtime-agent workflow
+
+An agent can run a listen-server map without a window and still drive the authoritative game command path. Use the offscreen SDL backend and enable bounded diagnostics at launch:
+
+```sh
+DISPLAY=:99 SDL_VIDEODRIVER=offscreen build/bin/openwarcraft3 \
+  -data 'data/Warcraft III' \
+  +set sv_cheats 1 +set skip_cutscene 1 \
+  +set wc3_bridge_probe 1 +set wc3_bridge_debug 4 \
+  +map 'Maps/Campaign/Prologue02.w3m' +com_frame_limit 12000 \
+  > /tmp/wc3-headless.log 2>&1 &
+game_pid=$!
+```
+
+Wait until `/tmp/wc3-headless.log` contains both `G_ClientBegin` and `CL_SetGameplayInput`. The listen-server client is then client `0`. Inject commands into the running process's existing command buffer with a debugger or an equivalent process-control wrapper:
+
+```gdb
+call Cbuf_AddText("sv_gamecmd 0 objective complete 53")
+call Cbuf_AddText("sv_gamecmd 0 haltai 1")
+call Cbuf_AddText("sv_gamecmd 0 debugspawn hfoo 5200 -4300")
+call Cbuf_AddText("sv_gamecmd 0 smartpoint 5664 -4128")
+```
+
+Use `sv_gamecmd 0 haltai 0` before testing ordinary campaign AI again. `haltai` pauses non-player-owned unit think callbacks; it does not remove units, alter their collision, clear pathing, or freeze the bridge support/animation system. A player-owned `hfoo` spawned by `debugspawn` therefore remains available as the test mover.
+
+Collect evidence from stderr rather than screenshots:
+
+```sh
+rg 'WC3_BRIDGE_(STATE|PROBE|PROBE_SAMPLE|PROBE_CORNER|MOVE|ROUTE|SUPPORT|GROUND)' \
+  /tmp/wc3-headless.log
+```
+
+The headless renderer does not prove visual deck traversal. A traversal claim requires committed position/support sequences in the log: approach, `support_hit=1` entry, movement through the bridge center, `support_hit=1` movement, and exit onto terrain. `mask=1` alone is insufficient.
+
+For deterministic code coverage, use the dedicated test binary instead:
+
+```sh
+build/bin/openwarcraft3-tests -data 'data/Warcraft III' \
+  +dedicated 1 +test 'wc3_pathfinding*'
+```
+
+Dedicated mode has no spawned listen-server client, so `sv_gamecmd` and client-targeted commands are unavailable there; use in-engine tests for pathing logic and the offscreen listen-server workflow for map/runtime evidence.
+
+## Headless Debian agent sandbox
+
+The following packages are sufficient for a Debian-based agent that builds OpenRealm, runs the offscreen SDL/OpenGL client, attaches a debugger, and extracts bounded bridge logs:
+
+```sh
+sudo apt-get update
+sudo apt-get install --no-install-recommends \
+  build-essential make \
+  libsdl2-dev libegl1-mesa-dev libgl-dev zlib1g-dev \
+  libgl1-mesa-dri libegl1 gdb ripgrep procps
+```
+
+`build-essential` supplies the compiler and standard C build tools. `libsdl2-dev`, EGL/GL development packages, and `zlib1g-dev` match the Linux linker inputs used by the normal OpenRealm build. The Mesa runtime packages provide a software OpenGL implementation suitable for an unaccelerated sandbox. `gdb` is used to inject `sv_gamecmd` into an already-running listen server, `ripgrep` extracts probe markers, and `procps` supplies `pgrep`/`ps` for lifecycle checks.
+
+No Debian package supplies the Warcraft III data. Mount or copy data from a legal Warcraft III installation and verify the files needed by this test:
+
+```sh
+for f in War3.mpq War3Local.mpq War3x.mpq War3xLocal.mpq; do
+  test -r "data/Warcraft III/$f" || { echo "missing data/Warcraft III/$f" >&2; exit 1; }
+done
+```
+
+Movie MPQs are not required for the bridge run unless the selected campaign intro cannot proceed without them. Lua, XML, MPQ, and JPEG support used by this build is vendored or in-tree; `liblua5.4-dev`, `libxml2-dev`, and StormLib are not prerequisites.
+
+Build and test from the repository root:
+
+```sh
+make openwarcraft3
+build/bin/openwarcraft3-tests -data 'data/Warcraft III' +dedicated 1 +test 'wc3_pathfinding*'
+```
+
+For the agent run, `SDL_VIDEODRIVER=offscreen` avoids requiring an X server or window manager. `DISPLAY=:99` is harmless but is not a substitute for an SDL video backend. Install `xvfb` only when a separate visual/X11 automation step is required; it is not needed for log-only bridge evidence:
+
+```sh
+SDL_VIDEODRIVER=offscreen build/bin/openwarcraft3 \
+  -data 'data/Warcraft III' +set sv_cheats 1 +set skip_cutscene 1 \
+  +set wc3_bridge_probe 1 +set wc3_bridge_debug 0 \
+  +map 'Maps/Campaign/Prologue02.w3m' +com_frame_limit 12000 \
+  > /tmp/wc3-headless.log 2>&1 &
+game_pid=$!
+```
+
+The current command-dispatch workflow attaches `gdb` to this process and calls `Cbuf_AddText`. A Debian sandbox must permit `ptrace` between the agent and its child process; restrictive containers may need `--cap-add=SYS_PTRACE` and a compatible seccomp profile. Without debugger attach permission, use the normal console/UI path or provide an equivalent in-process command-buffer bridge.
+
+For example, after waiting for `G_ClientBegin` and `CL_SetGameplayInput`:
+
+```sh
+gdb -q -batch -p "$game_pid" \
+  -ex 'call Cbuf_AddText("sv_gamecmd 0 objective complete 53")' \
+  -ex 'call Cbuf_AddText("sv_gamecmd 0 haltai 1")' \
+  -ex detach -ex quit
+```
+
+If `libgl-dev` is unavailable on an older Debian image, use `libgl1-mesa-dev` in its place. If the sandbox has no usable software GL despite the Mesa packages, the deterministic dedicated tests can still run, but a runtime traversal session requires a working SDL video/GL backend.
+
 For JASS group-lifetime diagnostics, `wc3_group_debug 1` records each live group's creator, nested JASS call path, and trigger ordinal in a non-persistent growable side table. The group registry itself grows past the old 1024-handle ceiling and prints `WC3_GROUP_DEBUG grow ...` at each pointer-table expansion; if allocation genuinely fails, the engine prints grouped `WC3_GROUP_DEBUG chain` summaries with live/allocated/freed/outstanding counts. Use these to find pathological retention without adding map-specific cleanup rules.
 
 With `wc3_quest_debug 1`, on-screen tutorial/message presentation also emits `WC3_TUTORIAL_TEXT` lines. `DisplayTextToPlayer`, both timed text natives, and `SetCinematicScene` include the active trigger ordinal, JASS caller, target player, raw `TRIGSTR_*` token, resolved text, and timing/position fields; `EndCinematicScene` logs the matching clear. Use this to distinguish a tutorial trigger that never emits its next instruction from text that was authored correctly but failed in presentation.
