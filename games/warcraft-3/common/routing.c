@@ -386,10 +386,9 @@ static DWORD collision_radius_cells(FLOAT collision) {
 /* Stamp a single entity's footprint into a pathmap byte array. */
 static void stamp_entity_obstacle(edict_t const *ent, pathMapCell_t *target) {
     point2_t p = LocationToPathMap(&ent->s.origin2);
-    /* TEMP bridge baseline: walkable destructables are open support surfaces
-     * in every lifecycle state; restore authored dead/alive blockers after a
-     * complete traversal is proven. */
-    if (ent->destructable.walkable) return;
+    /* TEMP bridge baseline: alive walkable destructables are open support
+     * surfaces; dead bridges retain their authored death pathing and block. */
+    if (ent->destructable.walkable && !ent->destructable.dead) return;
     /* Alive walkable destructables first open their complete support footprint
      * in clear_walkable_surface(), then stamp the authored path texture back on
      * top.  This preserves the working bridge crossing over blocked water while
@@ -445,7 +444,7 @@ static void clear_walkable_surface(edict_t const *ent, pathMapCell_t *target) {
     int angle, rotation;
     DWORD div_w, div_h;
 
-    if (!ent->destructable.walkable || !ent->pathtex)
+    if (!ent->destructable.walkable || ent->destructable.dead || !ent->pathtex)
         return;
     pt = ent->pathtex;
     p = LocationToPathMap(&ent->s.origin2);
