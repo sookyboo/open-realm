@@ -540,7 +540,8 @@ void CM_DebugPathingFootprint(struct edict_s const *ent, LPCSTR phase, int level
         for (int x = min_x; x <= max_x && n < (int)sizeof(row) - 1; x++) {
             BOOL terrain = !is_valid_point(x, y) || pathmap.terrain[x + y * pathmap.width].nowalk;
             BOOL baked = !is_valid_point(x, y) || pathmap.original[x + y * pathmap.width].nowalk;
-            row[n++] = terrain ? (baked ? 'X' : 't') : (baked ? 'b' : '.');
+            row[n++] = ent->destructable.walkable && walkable_surface_cell(x, y)
+                ? 'S' : terrain ? (baked ? 'X' : 't') : (baked ? 'b' : '.');
         }
         row[n] = '\0';
         fprintf(stderr, "WC3_BRIDGE_GRID phase=%s y=%d %s\n", phase, y, row);

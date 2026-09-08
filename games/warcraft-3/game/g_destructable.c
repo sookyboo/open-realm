@@ -11,17 +11,40 @@ int G_BridgeDebugLevel(void) {
 }
 
 /* Temporary route isolation: replace only alive walkable bridge blocker data
- * with an all-clear in-memory texture while preserving its authored dimensions.
- * The death texture and the source files remain unchanged. */
+ * with synthetic in-memory texture data while preserving its authored dimensions.
+ * Mode 1 is all-clear; mode 2 is a bounded lane with blocked edges.
+ * The death texture and source files remain unchanged. */
 void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     pathTex_t *tex;
+    int mode, angle, clear_count = 0, min_x, min_y;
     if (!ent || !ent->destructable.walkable || !ent->destructable.alive_pathtex ||
-        atoi(gi.CvarString("wc3_bridge_clear_alive_pathtex", "0")) == 0)
+        (mode = atoi(gi.CvarString("wc3_bridge_clear_alive_pathtex", "0"))) == 0)
         return;
     tex = ent->destructable.alive_pathtex;
-    FOR_LOOP(i, (DWORD)tex->width * tex->height) tex->map[i].b = 0;
-    fprintf(stderr, "WC3_BRIDGE_PATHTEX mode=synthetic_clear unit=%u size=%ux%u\n",
-            (unsigned)(ent - globals.edicts), tex->width, tex->height);
+    min_x = tex->width;
+    min_y = tex->height;
+    angle = atoi(gi.CvarString("wc3_bridge_synthetic_line_angle", "0"));
+    FOR_LOOP(y, tex->height) FOR_LOOP(x, tex->width) {
+        BOOL clear = mode == 1;
+        if (mode == 2) {
+            /* The normal stamp flips the source Y axis before applying its
+             * facing rotation, so encode the mirrored line here. */
+            int const line = angle % 180 ? (int)x - (int)tex->width / 2 : (int)y - (int)tex->height / 2;
+            clear = abs(line) <= 3;
+        }
+        tex->map[x + y * tex->width].b = clear ? 0 : 255;
+        if (clear) {
+            clear_count++;
+            min_x = MIN(min_x, (int)x);
+            min_y = MIN(min_y, (int)y);
+        }
+    }
+    fprintf(stderr, "WC3_BRIDGE_PATHTEX mode=%s unit=%u size=%ux%u line_angle=%d\n",
+            mode == 1 ? "synthetic_clear" : "synthetic_line", (unsigned)(ent - globals.edicts),
+            tex->width, tex->height, angle);
+    if (mode == 2)
+        fprintf(stderr, "WC3_BRIDGE_SYNTH_LINE source_clear=%d source_min=(%d,%d) source_axis=%s\n",
+                clear_count, min_x, min_y, angle % 180 ? "horizontal" : "vertical");
 }
 
 void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase) {
