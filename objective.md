@@ -19,6 +19,8 @@ Investigate and fix LT05 bridge traversal in `Maps\Campaign\Prologue02.w3m`.
 - `screenshot 5` wrote a valid 1024x768 image and the screenshot workflow itself worked. The image contained the selected Footman HUD over a black world; record that as an unexpected visual result to investigate, but do not treat it as proof that the camera command failed or that a cinematic remained active.
 - The first background launch exited before producing output because the shell-owned process did not persist. Use a persistent terminal session (or an equivalent `nohup`/session wrapper) and confirm `G_ClientBegin` plus `CL_SetGameplayInput` before injecting commands.
 - The latest retry used `+cameraedge 0` successfully and confirmed the launch/client handshake. Footman 319 reached `(5157.3,-4504.8)` with `WC3_BRIDGE_SUPPORT hit=1 cached=1 support=403.6`, then stalled there while `WC3_BRIDGE_ROUTE_STATE` repeatedly reported `mode=direct path_valid=0`. Removing nearby units 321, 322, 341, and 343 in the disposable run did not yet produce a crossing. This proves valid LT05 support at the stall point, but not the cause of the remaining movement failure.
+- The fresh end-to-end rerun produced `screenshots/shot0002.jpg` as the baseline before movement and `screenshots/shot0003.jpg` after the movement order. Both captures are valid; the baseline visibly shows the restored bridge deck and selected Footman, and the post-order capture visibly shows the bridge/deck area with units on or near it. These screenshots establish that camera positioning and capture work, but do not by themselves prove that Footman 319 completed a side-to-side crossing.
+- Added the diagnostic command `bridgeclear [radius]`. It requires `sv_cheats 1`, uses the primary selected friendly unit as its center, and immediately deletes nearby non-building enemy units; the default radius is 768 world units. Use `sv_gamecmd 0 bridgeclear 768` after selecting the probe Footman and before the baseline screenshot/order. This is needed because `haltai` does not stop player-owned campaign units, which can remain near LT05 and interfere with collision/traversal evidence. The command does not delete the selected unit or modify bridge pathing.
 
 ## Screenshot and rerun protocol
 
@@ -26,6 +28,7 @@ Investigate and fix LT05 bridge traversal in `Maps\Campaign\Prologue02.w3m`.
 - If the unit stalls or any unexpected camera/world result occurs, immediately take a second screenshot while preserving the exact same simulation state, then collect the focused logs.
 - Do not issue another movement command in the same contaminated run. Start a fresh process for the next hypothesis so route caches, unit positions, animation frames, and cinematic state cannot carry over.
 - Label captures in the session notes as `baseline-before-move` and `stall-after-move`; the screenshot mechanism is considered working when the engine reports `Wrote screenshots/shotNNNN.jpg`.
+- The latest capture labels are `shot0002.jpg` = `baseline-before-move` and `shot0003.jpg` = `stall-after-move`.
 
 ## Next session procedure
 

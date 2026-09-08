@@ -7,6 +7,7 @@ static BOOL wc3_halt_ai;
 
 #define CLIENTCOMMAND(NAME) void CMD_##NAME(LPEDICT clent, DWORD argc, LPCSTR argv[])
 #define WC3_SELECTION_LIMIT 12
+#define WC3_BRIDGE_CLEAR_RADIUS 768.0f // world units; covers the bridge approach; used as bridgeclear's default radius
 
 typedef struct {
     LPCSTR name;
@@ -1933,6 +1934,56 @@ CLIENTCOMMAND(BridgeOrder) {
                 point.x, point.y, unit->collision);
 }
 
+/* Remove nearby enemy units around the selected friendly unit so traversal
+ * probes are not changed by campaign combat or crowd collision. */
+CLIENTCOMMAND(BridgeClear) {
+    LPGAMECLIENT client = clent ? clent->client : NULL;
+    LPEDICT center;
+    VECTOR2 origin;
+    float radius = WC3_BRIDGE_CLEAR_RADIUS;
+    float radius_sq;
+    DWORD removed = 0;
+
+    if (!G_CheatsEnabled()) {
+        G_CheatPrintf(clent, "WC3: cheats are disabled; set sv_cheats 1");
+        return;
+    }
+    if (argc > 2 || (argc == 2 && (!G_DebugIsNumber(argv[1]) || argv[1][0] == '-'))) {
+        G_CheatPrintf(clent, "WC3: usage: bridgeclear [radius]");
+        return;
+    }
+    if (argc == 2) radius = (float)atof(argv[1]);
+    if (radius <= 0.0f) {
+        G_CheatPrintf(clent, "WC3: bridgeclear radius must be positive");
+        return;
+    }
+    center = client ? G_GetMainSelectedUnit(client) : NULL;
+    if (!center || !G_UnitCanControl(client, center)) {
+        G_CheatPrintf(clent, "WC3: bridgeclear requires a selected friendly unit");
+        return;
+    }
+    origin = center->s.origin2;
+    radius_sq = radius * radius;
+    FOR_LOOP(i, globals.num_edicts) {
+        LPEDICT ent = &globals.edicts[i];
+        float dx, dy;
+
+        if (!ent->inuse || ent == center || !(ent->svflags & SVF_MONSTER) || !ent->data.UnitData ||
+            G_UnitIsBuilding(ent->class_id) || G_SelectionRelation(client->ps.number, ent) != SELECT_RELATION_ENEMY)
+            continue;
+        dx = ent->s.origin2.x - origin.x;
+        dy = ent->s.origin2.y - origin.y;
+        if (dx * dx + dy * dy > radius_sq) continue;
+        G_CheatPrintf(clent, "WC3_BRIDGE_CLEAR unit=%u rawcode=%08x pos=(%.1f,%.1f) center=%u",
+                      (unsigned)i, ent->class_id, ent->s.origin2.x, ent->s.origin2.y,
+                      (unsigned)(center - globals.edicts));
+        G_FreeEdict(ent);
+        removed++;
+    }
+    G_CheatPrintf(clent, "WC3: bridgeclear removed %u enemy unit%s around selected unit %u within %.0f",
+                  (unsigned)removed, removed == 1 ? "" : "s", (unsigned)(center - globals.edicts), radius);
+}
+
 /* Move the local gameplay camera to a world point for deterministic bridge
  * screenshots; this does not alter simulation state. */
 CLIENTCOMMAND(BridgeCamera) {
@@ -1994,6 +2045,7 @@ clientCommand_t clientCommands[] = {
     { "debugspawn", CMD_DebugSpawn },
     { "haltai", CMD_HaltAI },
     { "bridgeorder", CMD_BridgeOrder },
+    { "bridgeclear", CMD_BridgeClear },
     { "bridgecamera", CMD_BridgeCamera },
     { "cameraselected", CMD_CameraSelected },
     { "menu", CMD_Menu },

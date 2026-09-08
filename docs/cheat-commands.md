@@ -242,11 +242,19 @@ Warcraft III camera controls for deterministic runtime tests are:
 cameraedge 0           # disable screen-edge camera scrolling
 cameraedge 1           # re-enable screen-edge camera scrolling
 cameraselected         # focus and follow the primary selected unit
+bridgeclear [radius]   # delete enemy units near the primary selected unit
 ```
 
 `cameraselected` uses the same persistent camera target used by clicking a
 selected unit's portrait. `cameraedge` changes only mouse-edge scrolling;
 keyboard camera binds, drag-pan, and portrait focusing remain available.
+
+`bridgeclear [radius]` is a cheat-only traversal diagnostic. It immediately
+deletes non-building enemy units within the optional radius (default 768 world
+units) of the primary selected friendly unit. For example, use
+`sv_gamecmd 0 bridgeclear 768` after selecting the probe Footman and before
+ordering it across LT05. This removes nearby campaign-unit interference without
+altering authored bridge pathing or the selected unit.
 
 `give item` uses the normal item spawn and pickup path, so inventory capacity and passive item effects remain authoritative. `research <rawcode>` remains available for the existing non-cheat research/debug path.
 
