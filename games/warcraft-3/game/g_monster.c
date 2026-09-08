@@ -927,7 +927,7 @@ void M_CheckGround(LPEDICT self) {
             FLOAT const before = height;
             FLOAT support = surface->s.origin.z;
             BOOL inside;
-            if (!surface->inuse || surface->destructable.dead ||
+            if (!surface->inuse ||
                 !surface->destructable.placement_solid || !pathtex) {
                 M_DebugBridgeGround(self, surface, false, support, before, height);
                 continue;
