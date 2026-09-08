@@ -12,7 +12,8 @@ int G_BridgeDebugLevel(void) {
 
 /* Temporary route isolation: replace only alive walkable bridge blocker data
  * with synthetic in-memory texture data while preserving its authored dimensions.
- * Mode 1 is all-clear; mode 2 is a bounded diagonal lane with blocked edges.
+ * Mode 1 is all-clear; mode 2 is a bounded diagonal lane with blocked edges;
+ * mode 3 is clear except for one thin source edge used to verify transforms.
  * The death texture and source files remain unchanged. */
 void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     pathTex_t *tex;
@@ -34,6 +35,10 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
                 ? (int)x - (int)y
                 : (int)x + (int)y - ((int)tex->width - 1);
             clear = abs(line) <= 3;
+        } else if (mode == 3) {
+            /* Keep one source edge blocked; the normal transform reveals its
+             * world orientation and the exact one-cell authored thickness. */
+            clear = y != 0;
         }
         tex->map[x + y * tex->width].b = clear ? 0 : 255;
         if (clear) {
@@ -48,6 +53,9 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     if (mode == 2)
         fprintf(stderr, "WC3_BRIDGE_SYNTH_LINE source_clear=%d source_min=(%d,%d) source_axis=%s\n",
                 clear_count, min_x, min_y, angle % 180 ? "anti_diagonal" : "diagonal");
+    if (mode == 3)
+        fprintf(stderr, "WC3_BRIDGE_SYNTH_EDGE source_clear=%d source_blocked=%u source_edge=top thickness=1 angle=%d\n",
+                clear_count, tex->width, angle);
 }
 
 void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase) {
