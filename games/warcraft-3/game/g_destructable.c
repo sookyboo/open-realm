@@ -12,7 +12,7 @@ int G_BridgeDebugLevel(void) {
 
 /* Temporary route isolation: replace only alive walkable bridge blocker data
  * with synthetic in-memory texture data while preserving its authored dimensions.
- * Mode 1 is all-clear; mode 2 is a bounded lane with blocked edges.
+ * Mode 1 is all-clear; mode 2 is a bounded diagonal lane with blocked edges.
  * The death texture and source files remain unchanged. */
 void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     pathTex_t *tex;
@@ -27,9 +27,12 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
     FOR_LOOP(y, tex->height) FOR_LOOP(x, tex->width) {
         BOOL clear = mode == 1;
         if (mode == 2) {
-            /* The normal stamp flips the source Y axis before applying its
-             * facing rotation, so encode the mirrored line here. */
-            int const line = angle % 180 ? (int)x - (int)tex->width / 2 : (int)y - (int)tex->height / 2;
+            /* The normal stamp flips source Y and rotates by facing+90.  At
+             * angle 0, source x+y=w-1 becomes world x-y=0; angle 90 turns
+             * that into the perpendicular world x+y constant lane. */
+            int const line = angle % 180
+                ? (int)x - (int)y
+                : (int)x + (int)y - ((int)tex->width - 1);
             clear = abs(line) <= 3;
         }
         tex->map[x + y * tex->width].b = clear ? 0 : 255;
@@ -44,7 +47,7 @@ void G_FalsifyAliveBridgePathing(LPEDICT ent) {
             tex->width, tex->height, angle);
     if (mode == 2)
         fprintf(stderr, "WC3_BRIDGE_SYNTH_LINE source_clear=%d source_min=(%d,%d) source_axis=%s\n",
-                clear_count, min_x, min_y, angle % 180 ? "horizontal" : "vertical");
+                clear_count, min_x, min_y, angle % 180 ? "anti_diagonal" : "diagonal");
 }
 
 void G_DebugBridgePathing(LPEDICT ent, LPCSTR phase) {
