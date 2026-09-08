@@ -55,15 +55,17 @@ state becomes effective. Confirm the log contains trigger 53 completion and
 
 ## Unit setup
 
-The order is important because each `debugspawn` selects the newly created
-unit:
+The order is important. `debugspawn` may select the newly created unit, but
+the run must explicitly select the recorded Footman edict before camera or
+movement commands:
 
 1. Spawn the destination Peasant first.
-2. Spawn the crossing Footman second, so it remains selected for the camera
-   and screenshots.
-3. Run `bridgeclear 768` while the Footman is selected. This removes nearby
+2. Spawn the crossing Footman second and record its `WC3_BRIDGE_DEBUGSPAWN
+   unit=<N>` edict number.
+3. Run `select <N>` and verify that the same Footman edict is selected.
+4. Run `bridgeclear 768` while the Footman is explicitly selected. This removes nearby
    enemy units around the selected unit; it does not remove friendly units.
-4. Run `haltai 1` after the Footman is selected. This pauses unselected unit
+5. Run `haltai 1` after the Footman is explicitly selected. This pauses unselected unit
    AI, including player-0 campaign units, while preserving the selected
    Footman's explicit debug order.
 
@@ -71,6 +73,7 @@ unit:
 gdb -q -batch -p "$pid" \
   -ex 'call Cbuf_AddText("sv_gamecmd 0 debugspawn hpea 6080 -3584\n")' \
   -ex 'call Cbuf_AddText("sv_gamecmd 0 debugspawn hfoo 4800 -4864\n")' \
+  -ex 'call Cbuf_AddText("sv_gamecmd 0 select <footman_edict>\n")' \
   -ex 'call Cbuf_AddText("sv_gamecmd 0 bridgeclear 768\n")' \
   -ex 'call Cbuf_AddText("sv_gamecmd 0 haltai 1\n")' \
   -ex 'call Cbuf_AddText("sv_gamecmd 0 cameraselected\n")' \
