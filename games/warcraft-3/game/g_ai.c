@@ -133,8 +133,8 @@ static void bridge_debug_commit_step(LPEDICT self, LPCVECTOR2 from, LPCVECTOR2 c
     point_final = CM_PointIsPathableForRadius(cand, self->collision);
     line_final = CM_LineIsWalkableForRadius(from, cand, self->collision);
     fprintf(stderr,
-            "WC3_BRIDGE_TRAVERSE_COMMIT seq=%u unit=%08x bridge=%u radius=%.1f from=(%.1f,%.1f) to=(%.1f,%.1f) from_mask=%d to_mask=%d from_support_hit=%d to_support_hit=%d from_support_height=%.1f to_support_height=%.1f unit_z_before=%.1f unit_z_after=%.1f point_final=%d line_final=%d\n",
-            count, self->class_id, (unsigned)(bridge - globals.edicts), self->collision,
+            "WC3_BRIDGE_TRAVERSE_COMMIT seq=%u unit_id=%u unit=%08x bridge=%u radius=%.1f from=(%.1f,%.1f) to=(%.1f,%.1f) from_mask=%d to_mask=%d from_support_hit=%d to_support_hit=%d from_support_height=%.1f to_support_height=%.1f unit_z_before=%.1f unit_z_after=%.1f point_final=%d line_final=%d\n",
+            count, (unsigned)(self - globals.edicts), self->class_id, (unsigned)(bridge - globals.edicts), self->collision,
             from->x, from->y, cand->x, cand->y, CM_WalkableSurfaceAt(from), CM_WalkableSurfaceAt(cand),
             from_hit, to_hit, from_hit ? from_support : 0.0f, to_hit ? to_support : 0.0f,
             z_before, self->s.origin.z, point_final, line_final);
