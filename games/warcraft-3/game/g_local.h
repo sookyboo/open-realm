@@ -1665,6 +1665,7 @@ extern ability_t a_on_fire;
 void G_ApplyUnitAbilityTraits(LPEDICT);
 void G_SolveCollisions(void);
 BOOL M_CheckCollision(LPCVECTOR2, FLOAT);
+BOOL G_WalkableSurfaceQuery(LPCEDICT, LPCVECTOR2);
 void G_PushEntity(LPEDICT ent, FLOAT distance, LPCVECTOR2 direction);
 void G_PushEntity3(LPEDICT ent, FLOAT distance, LPCVECTOR3 direction);
 

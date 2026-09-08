@@ -257,6 +257,7 @@ void MemFree(HANDLE mem);
 void Sys_MkDir(LPCSTR directory);
 
 struct edict_s;
+typedef BOOL (*cmWalkableSurfaceQuery_t)(struct edict_s const *surface, LPCVECTOR2 point);
 DWORD CM_BuildHeatmap(struct edict_s *goalentity);
 DWORD CM_BuildHeatmapForRadius(struct edict_s *goalentity, FLOAT radius);
 DWORD CM_RequestHeatmapForRadius(struct edict_s *goalentity, FLOAT radius);
@@ -267,6 +268,7 @@ BOOL  CM_FlowReachedGoal(DWORD generation, FLOAT x, FLOAT y);
 BOOL  CM_FlowCanReach(DWORD generation, FLOAT x, FLOAT y);
 VECTOR2 get_flow_direction(DWORD heatmapindex, float fnx, float fny);
 void CM_BakeStaticObstacles(void);
+void CM_SetWalkableSurfaceQuery(cmWalkableSurfaceQuery_t query);
 void CM_DebugPathingFootprint(struct edict_s const *ent, LPCSTR phase, int level);
 void CM_DebugPathingPoint(struct edict_s const *ent, LPCVECTOR2 point, LPCSTR phase, int level);
 void CM_InvalidatePathCache(void);

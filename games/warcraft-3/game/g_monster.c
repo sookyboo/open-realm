@@ -892,6 +892,14 @@ static BOOL M_WalkableSurfaceHeight(LPCEDICT surface, LPCVECTOR2 point, LPFLOAT 
     return hit;
 }
 
+/* Adapt the same-cell support resolver used by movement to the common routing
+ * bake, so path cells do not depend on a single seam-sensitive ray. */
+BOOL G_WalkableSurfaceQuery(LPCEDICT surface, LPCVECTOR2 point) {
+    FLOAT height;
+    BOOL cached;
+    return M_WalkableSurfaceHeight(surface, point, &height, &cached);
+}
+
 #ifdef BZ_TESTS
 BOOL M_TestWalkableSurfaceHeight(LPCEDICT surface, LPCVECTOR2 point, LPFLOAT height, BOOL *cached) {
     return M_WalkableSurfaceHeight(surface, point, height, cached);

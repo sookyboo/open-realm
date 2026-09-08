@@ -76,6 +76,11 @@ static void reset_collision_world(void) {
     setup_test_world();
 }
 
+static BOOL test_walkable_surface_query(LPCEDICT surface, LPCVECTOR2 point) {
+    (void)surface;
+    return point->x < 8.0f;
+}
+
 /* -----------------------------------------------------------------------
  * G_PushEntity tests
  * --------------------------------------------------------------------- */
@@ -507,6 +512,29 @@ TEST(wc3_collision, destructable_pathing_overlay_rotates_flips_and_uses_binary_t
     T_ASSERT(!(flags & 2));
     T_ASSERT(CM_GetPathingFlagsAt(&threshold, &flags));
     T_ASSERT(!(flags & 2));
+}
+
+TEST(wc3_collision, walkable_surface_query_filters_unsupported_alive_cells) {
+    BYTE cells[16 * 16];
+    struct { WORD width, height; COLOR32 map[4]; } tex = { .width = 2, .height = 2 };
+    static DestructableData_t const data = { .walkable = true };
+    VECTOR2 supported = { 7.5f, 7.5f }, unsupported = { 8.5f, 7.5f };
+
+    memset(cells, 2, sizeof(cells));
+    setup_test_pathmap(16, 16, cells);
+    LPEDICT bridge = G_Spawn();
+    bridge->data.DestructableData = &data;
+    bridge->destructable.walkable = true;
+    bridge->pathtex = (pathTex_t *)&tex;
+    bridge->s.origin = MAKE(VECTOR3, 8.0f, 8.0f, 64.0f);
+    CM_SetWalkableSurfaceQuery(test_walkable_surface_query);
+    CM_BakeStaticObstacles();
+    CM_SetWalkableSurfaceQuery(NULL);
+
+    T_ASSERT(CM_WalkableSurfaceAt(&supported));
+    T_ASSERT(!CM_WalkableSurfaceAt(&unsupported));
+    T_ASSERT(CM_PointIsPathableForRadius(&supported, 0.0f));
+    T_ASSERT(!CM_PointIsPathableForRadius(&unsupported, 0.0f));
 }
 
 /* -----------------------------------------------------------------------
