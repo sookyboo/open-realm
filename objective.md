@@ -48,6 +48,28 @@ Investigate and fix LT05 bridge traversal in `Maps\Campaign\Prologue02.w3m`.
 - Alive-only bridge pass: changed the temporary baseline so only alive `walkable=1` destructables open the bridge footprint and bypass authored bridge blockers. Dead walkable destructables now retain their death path texture in the static path bake, and dead walkable destructables do not provide ground support in `M_CheckGround()`. A fresh run completed `objective complete 53`, logged LT05 as `dead=0` in `restored_birth`, and reported `source_blocked=168`, `terrain_open=857`, `baked_open=1024`. The selected Footman moved from `(4800,-4864)` through the LT05 region toward `(6080,-3584)`, reaching `(6068.7,-3606.9)` with `blocked_frames=0`, `flow_direct=1`, and `flow_unreachable=0`; this reproduces the successful alive traversal under the alive-only rule. Captures: `shot0033.jpg` baseline, `shot0034.jpg`, `shot0035.jpg`, and `shot0036.jpg` centered observation frames. Automated tests were skipped. A separate clean pre-objective runtime is still required to record dead-state movement rejection, so this run does not claim that evidence.
 - Dead-state verification after the alive-only change: a fresh map-load log recorded LT05 as `dead=1`, `anim=Death`, with `pathtex=34x34`; the dead bake reported `source_blocked=652` and only `baked_open=312`. A movement probe near the bridge returned `mask=0`, `point_final=0` for blocked candidates, and `flow_direct=0` with the order remaining active but stationary. This confirms the dead bridge is not opened by the temporary alive bridge rule. The setup command selected newly spawned Footman 337, but the injected order addressed pre-existing edict 319 (a Peasant), so this is pathing evidence rather than a valid selected-Footman screenshot run; the next dead-state run should use the emitted spawn edict. `shot0037.jpg` is the baseline capture. Automated tests were skipped.
 
+## Final bridge constraints
+
+The temporary alive-only crossing baseline must eventually satisfy all of these constraints:
+
+1. Dead LT05 must block passage.
+2. Alive LT05 must provide a continuous walkable lane from one entrance to the other.
+3. Only valid deck cells may be opened over blocked terrain or water.
+4. Authored rail and non-deck pathing cells must remain blocked.
+5. Collision radius must still matter near bridge edges and rails.
+6. Ordinary no-corner-cut rules must remain active except where the deck geometry proves a valid transition.
+7. Ground units must receive bridge support height only while physically over the deck.
+8. Units must not use bridge height when the bridge is dead, hidden, or unsupported.
+9. Support-height changes must follow the rendered deck and animation state.
+10. Bridge restoration must update routing immediately without a manual rebake.
+11. Routes must enter the bridge, cross its center, and exit onto normal terrain.
+12. The reverse direction must work as well.
+13. Enemy and friendly units must not be mistaken for bridge pathing.
+14. No model-name-specific gameplay exception should be required.
+15. Debug logging must remain CVar-gated and disabled by default.
+16. Runtime pathing must not rescan all entities or texture pixels every movement frame.
+17. Tests must verify dead blocking, alive crossing, rails, collision radius, support selection, and restoration.
+
 ## Next session procedure
 
 1. Launch the Debian headless sandbox with bridge probing enabled and cinematic/tutorial timing logs:
