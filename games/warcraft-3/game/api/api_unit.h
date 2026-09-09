@@ -241,25 +241,65 @@ DWORD SetUnitVertexColor(LPJASS j) {
     return 0;
 }
 DWORD QueueUnitAnimation(LPJASS j) {
-    //LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
-    //LPCSTR whichAnimation = jass_checkstring(j, 2);
+    LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
+    LPCSTR whichAnimation = jass_checkstring(j, 2);
+    if (G_AnimationDebugLevel() >= 1) {
+        fprintf(stderr,
+                "WC3_ANIM native time=%u name=QueueUnitAnimation ent=%u class=%.4s "
+                "model=\"%s\" animation=\"%s\" current=\"%s\" frame=%u\n",
+                (unsigned)level.time, whichUnit ? (unsigned)whichUnit->s.number : 0u,
+                whichUnit ? (LPCSTR)&whichUnit->class_id : "----",
+                whichUnit ? G_ModelFilename(whichUnit->s.model) : "", whichAnimation ? whichAnimation : "",
+                whichUnit && whichUnit->animation ? whichUnit->animation->name : "<none>",
+                whichUnit ? (unsigned)whichUnit->s.frame : 0u);
+    }
     return 0;
 }
 DWORD SetUnitAnimation(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
     LPCSTR whichAnimation = jass_checkstring(j, 2);
+    if (G_AnimationDebugLevel() >= 1) {
+        fprintf(stderr,
+                "WC3_ANIM native time=%u name=SetUnitAnimation ent=%u class=%.4s "
+                "model=\"%s\" animation=\"%s\" current=\"%s\" frame=%u\n",
+                (unsigned)level.time, whichUnit ? (unsigned)whichUnit->s.number : 0u,
+                whichUnit ? (LPCSTR)&whichUnit->class_id : "----",
+                whichUnit ? G_ModelFilename(whichUnit->s.model) : "", whichAnimation ? whichAnimation : "",
+                whichUnit && whichUnit->animation ? whichUnit->animation->name : "<none>",
+                whichUnit ? (unsigned)whichUnit->s.frame : 0u);
+    }
     if (whichUnit) G_SetUnitAnimation(whichUnit, whichAnimation);
     return 0;
 }
 DWORD SetUnitAnimationByIndex(LPJASS j) {
-    //LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
-    //LONG whichAnimation = jass_checkinteger(j, 2);
+    LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
+    LONG whichAnimation = jass_checkinteger(j, 2);
+    if (G_AnimationDebugLevel() >= 1) {
+        fprintf(stderr,
+                "WC3_ANIM native time=%u name=SetUnitAnimationByIndex ent=%u class=%.4s "
+                "model=\"%s\" index=%ld current=\"%s\" frame=%u\n",
+                (unsigned)level.time, whichUnit ? (unsigned)whichUnit->s.number : 0u,
+                whichUnit ? (LPCSTR)&whichUnit->class_id : "----",
+                whichUnit ? G_ModelFilename(whichUnit->s.model) : "", (long)whichAnimation,
+                whichUnit && whichUnit->animation ? whichUnit->animation->name : "<none>",
+                whichUnit ? (unsigned)whichUnit->s.frame : 0u);
+    }
     return 0;
 }
 DWORD SetUnitAnimationWithRarity(LPJASS j) {
-    //LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
-    //LPCSTR whichAnimation = jass_checkstring(j, 2);
-    //HANDLE rarity = jass_checkhandle(j, 3, "raritycontrol");
+    LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
+    LPCSTR whichAnimation = jass_checkstring(j, 2);
+    HANDLE rarity = jass_checkhandle(j, 3, "raritycontrol");
+    if (G_AnimationDebugLevel() >= 1) {
+        fprintf(stderr,
+                "WC3_ANIM native time=%u name=SetUnitAnimationWithRarity ent=%u class=%.4s "
+                "model=\"%s\" animation=\"%s\" rarity=%p current=\"%s\" frame=%u\n",
+                (unsigned)level.time, whichUnit ? (unsigned)whichUnit->s.number : 0u,
+                whichUnit ? (LPCSTR)&whichUnit->class_id : "----",
+                whichUnit ? G_ModelFilename(whichUnit->s.model) : "", whichAnimation ? whichAnimation : "",
+                rarity, whichUnit && whichUnit->animation ? whichUnit->animation->name : "<none>",
+                whichUnit ? (unsigned)whichUnit->s.frame : 0u);
+    }
     return 0;
 }
 DWORD AddUnitAnimationProperties(LPJASS j) {

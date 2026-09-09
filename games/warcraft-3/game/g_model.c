@@ -328,6 +328,19 @@ static g_cmodel_t *LoadModel(LPCSTR filename) {
         default:
             break;
     }
+    if (G_AnimationDebugLevel() >= 2 && model->animations &&
+        (strcasestr(filename, "CircleOfPower") || strcasestr(filename, "Waypoint") ||
+         strcasestr(filename, "Indicator") || strcasestr(filename, "Beacon"))) {
+        FOR_LOOP(i, model->num_animations) {
+            LPCANIMATION anim = model->animations + i;
+            fprintf(stderr,
+                    "WC3_ANIM sequence model=\"%s\" index=%u name=\"%s\" interval=%u..%u "
+                    "nonloop=%u rarity=%.3f sync=%u\n",
+                    filename, (unsigned)i, anim->name, (unsigned)anim->interval[0],
+                    (unsigned)anim->interval[1], (unsigned)(anim->flags & 1), anim->rarity,
+                    (unsigned)anim->syncpoint);
+        }
+    }
     gi.MemFree(data);
     return model;
 }
