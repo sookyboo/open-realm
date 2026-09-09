@@ -400,6 +400,7 @@ void R_RegisterMapAssets(LPCSTR mapFileName);
 BOOL R_MapAssetCandidate(LPCSTR asset, LPSTR candidate, DWORD candidate_size);
 void R_SetMapAssetScope(LPCSTR scope);
 void R_ShutdownModels(void);
+LPCSTR R_ModelDebugName(LPCMODEL model);
 
 size2_t R_GetWindowSize(void);
 void R_SetWindowSize(DWORD width, DWORD height);

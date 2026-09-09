@@ -55,6 +55,109 @@ typedef struct {
 
 static model_texture_cache_t model_texture_cache = { 0 };
 
+static int R_W3AnimationDebugLevel(void) {
+    return atoi(ri.CvarString ? ri.CvarString("wc3_animation_debug", "0") : "0");
+}
+
+static BOOL R_W3AnimationDebugModelPath(LPCSTR path) {
+    if (!path || !*path) return false;
+    return strcasestr(path, "CircleOfPower") || strcasestr(path, "Waypoint") ||
+           strcasestr(path, "Indicator") || strcasestr(path, "Beacon");
+}
+
+static DWORD R_W3CountGeosets(mdxModel_t const *model) {
+    DWORD count = 0;
+    for (mdxGeoset_t const *it = model ? model->geosets : NULL; it; it = it->next) count++;
+    return count;
+}
+
+static DWORD R_W3CountTextureAnims(mdxModel_t const *model) {
+    DWORD count = 0;
+    for (mdxTextureAnim_t const *it = model ? model->textureAnims : NULL; it; it = it->next) count++;
+    return count;
+}
+
+static DWORD R_W3CountGeosetAnims(mdxModel_t const *model) {
+    DWORD count = 0;
+    for (mdxGeosetAnim_t const *it = model ? model->geosetAnims : NULL; it; it = it->next) count++;
+    return count;
+}
+
+static DWORD R_W3CountEmitters(mdxModel_t const *model) {
+    DWORD count = 0;
+    for (mdxParticleEmitter_t const *it = model ? model->emitters : NULL; it; it = it->next) count++;
+    return count;
+}
+
+static void R_W3AnimationDebugChunks(LPCSTR filename, BYTE const *data, DWORD size) {
+    DWORD offset = 4;
+    int const debug = R_W3AnimationDebugLevel();
+
+    if (debug < 2 || !R_W3AnimationDebugModelPath(filename) || !data || size < 12) return;
+    while (offset + 8 <= size) {
+        DWORD tag, block_size;
+        char fourcc[5];
+        memcpy(&tag, data + offset, 4);
+        memcpy(&block_size, data + offset + 4, 4);
+        memcpy(fourcc, &tag, 4);
+        fourcc[4] = '\0';
+        fprintf(stderr, "WC3_ANIM mdx-block model=\"%s\" tag=%.4s size=%u\n",
+                filename, fourcc, (unsigned)block_size);
+        if (block_size > size - offset - 8) {
+            fprintf(stderr,
+                    "WC3_ANIM mdx-block-invalid model=\"%s\" tag=%.4s offset=%u size=%u file=%u\n",
+                    filename, fourcc, (unsigned)offset, (unsigned)block_size, (unsigned)size);
+            break;
+        }
+        offset += 8 + block_size;
+    }
+}
+
+static void R_W3AnimationDebugModelSummary(LPCSTR filename, LPCMODEL wrapper) {
+    mdxModel_t const *model;
+    int const debug = R_W3AnimationDebugLevel();
+
+    if (debug < 2 || !R_W3AnimationDebugModelPath(filename) || !wrapper || wrapper->modeltype != ID_MDLX)
+        return;
+    model = wrapper->mdx;
+    if (!model) return;
+    fprintf(stderr,
+            "WC3_ANIM mdx-model model=\"%s\" sequences=%d geosets=%u txan=%u geoa=%u "
+            "pre2=%u nodes=%d textures=%d global_sequences=%d\n",
+            filename, model->num_sequences, (unsigned)R_W3CountGeosets(model),
+            (unsigned)R_W3CountTextureAnims(model), (unsigned)R_W3CountGeosetAnims(model),
+            (unsigned)R_W3CountEmitters(model), model->num_nodes, model->num_textures,
+            model->num_globalSequences);
+}
+
+static void R_W3AnimationDebugRenderEntity(renderEntity_t const *entity) {
+    static DWORD last_sample[MAX_CLIENT_ENTITIES];
+    LPCSTR filename;
+    int const debug = R_W3AnimationDebugLevel();
+    DWORD slot;
+    mdxModel_t const *model;
+
+    if (debug < 2 || !entity || !entity->model || entity->model->modeltype != ID_MDLX) return;
+    filename = R_ModelDebugName(entity->model);
+    if (debug < 3) {
+        BOOL const classless_effect_candidate = (entity->flags & RF_NOT_SELECTABLE) &&
+            (!filename || !strcasestr(filename, "Doodads\\Terrain\\"));
+        if (!R_W3AnimationDebugModelPath(filename) && !classless_effect_candidate) return;
+    }
+    slot = entity->number < MAX_CLIENT_ENTITIES ? entity->number : 0;
+    if (tr.viewDef.time < last_sample[slot] || tr.viewDef.time - last_sample[slot] < 1000) return;
+    last_sample[slot] = tr.viewDef.time;
+    model = entity->model->mdx;
+    fprintf(stderr,
+            "WC3_ANIM render time=%u ent=%u model=\"%s\" frame=%u->%u lerp=%.3f "
+            "flags=0x%x geosets=%u txan=%u geoa=%u pre2=%u nodes=%d\n",
+            (unsigned)tr.viewDef.time, (unsigned)entity->number, filename ? filename : "",
+            (unsigned)entity->oldframe, (unsigned)entity->frame, tr.viewDef.lerpfrac,
+            (unsigned)entity->flags, (unsigned)R_W3CountGeosets(model),
+            (unsigned)R_W3CountTextureAnims(model), (unsigned)R_W3CountGeosetAnims(model),
+            (unsigned)R_W3CountEmitters(model), model ? model->num_nodes : 0);
+}
+
 static BOOL R_W3PathHasExtension(LPCSTR path, LPCSTR extension) {
     size_t pathLen;
     size_t extLen;
@@ -300,9 +403,11 @@ LPMODEL R_LoadModel(LPCSTR modelFilename) {
         return NULL;
     }
     if (*(DWORD *)buffer == ID_MDLX) {
+        R_W3AnimationDebugChunks(modelFilename, buffer, (DWORD)fileSize);
         model = ri.MemAlloc(sizeof(model_t));
         model->mdx = R_LoadModelMDLX(buffer, fileSize);
         model->modeltype = ID_MDLX;
+        R_W3AnimationDebugModelSummary(modelFilename, model);
     } else if (R_W3PathHasExtension(modelFilename, ".mdl")) {
         /* Same case-insensitive issue: use stem length, not strstr. */
         PATHSTR tempFileName = { 0 };
@@ -335,6 +440,7 @@ void R_RenderModel(renderEntity_t const *entity) {
     if (!entity || !entity->model || entity->model->modeltype != ID_MDLX) {
         return;
     }
+    R_W3AnimationDebugRenderEntity(entity);
     R_GetEntityMatrix(entity, &transform);
     MDX_RenderModel(entity, entity->model->mdx, &transform);
 

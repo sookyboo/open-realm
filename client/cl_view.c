@@ -16,6 +16,59 @@ static struct {
 static bool world_loaded = false;
 static bool begin_sent = false;
 
+static BOOL V_AnimationDebugModelPath(LPCSTR path) {
+    if (!path || !*path) return false;
+    return strcasestr(path, "CircleOfPower") || strcasestr(path, "Waypoint") ||
+           strcasestr(path, "Indicator") || strcasestr(path, "Beacon");
+}
+
+static BOOL V_AnimationDebugCandidate(centity_t const *ent, LPCSTR path) {
+    if (!ent) return false;
+    if (V_AnimationDebugModelPath(path)) return true;
+    /* JASS model effects use a classless non-selectable snapshot entity.  Do
+     * not use EF_NOT_SELECTABLE alone: destructables such as LTlt trees also
+     * carry it and would swamp the trace. */
+    if (!ent->current.class_id && (ent->current.flags & EF_NOT_SELECTABLE)) {
+        if (path && strcasestr(path, "Doodads\\Terrain\\")) return false;
+        return true;
+    }
+    return false;
+}
+
+static void V_AnimationDebugRawcode(DWORD class_id, char out[5]) {
+    if (!class_id) {
+        memcpy(out, "----", 5);
+        return;
+    }
+    memcpy(out, &class_id, 4);
+    out[4] = '\0';
+}
+
+static void V_AnimationDebugClientEntity(centity_t const *ent, renderEntity_t const *render) {
+    static DWORD last_sample[MAX_CLIENT_ENTITIES];
+    int const debug = Cvar_Integer("wc3_animation_debug", 0);
+    LPCSTR path;
+    char rawcode[5];
+    DWORD slot;
+
+    if (debug < 2 || !ent || !render || !ent->current.model) return;
+    path = cl.configstrings[CS_MODELS + ent->current.model];
+    if (debug < 3 && !V_AnimationDebugCandidate(ent, path)) return;
+    slot = ent->current.number < MAX_CLIENT_ENTITIES ? ent->current.number : 0;
+    if (cl.time < last_sample[slot] || cl.time - last_sample[slot] < 1000) return;
+    last_sample[slot] = cl.time;
+    V_AnimationDebugRawcode(ent->current.class_id, rawcode);
+    fprintf(stderr,
+            "WC3_ANIM client time=%u serverframe=%u ent=%u class=%.4s model=\"%s\" "
+            "snapshot=%u->%u render=%u->%u lerp=%.3f flags=0x%x renderfx=0x%x\n",
+            (unsigned)cl.time, (unsigned)cl.frame.serverframe,
+            (unsigned)ent->current.number, rawcode, path ? path : "",
+            (unsigned)ent->prev.frame, (unsigned)ent->current.frame,
+            (unsigned)render->oldframe, (unsigned)render->frame,
+            cl.viewDef.lerpfrac, (unsigned)ent->current.flags,
+            (unsigned)render->flags);
+}
+
 /* Optional CS_MODELS indices become handles here. Games that do not publish
  * CS_TERRAIN_LIGHT_MODEL / CS_ENTITY_LIGHT_MODEL leave the slots empty. */
 static LPCMODEL V_ConfigLightModel(DWORD configstring) {
@@ -235,6 +288,7 @@ static void V_AddClientEntity(centity_t const *ent) {
     re.radius = ent->current.radius;
     re.ground_offset = ent->current.ground_offset;
     re.number = ent->current.number;
+    V_AnimationDebugClientEntity(ent, &re);
     re.splat = cl.pics[ent->current.splat & 0xffff];
     re.splatsize = ent->current.splat >> 16;
 #ifndef USE_SHADOWMAPS

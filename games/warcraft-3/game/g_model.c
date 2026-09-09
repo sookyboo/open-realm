@@ -593,7 +593,9 @@ void G_SetUnitAnimation(LPEDICT unit, LPCSTR animname) {
     unit->animation = G_GetUnitAnimation(unit, request);
     changed = changed || previous != unit->animation;
 
-    if (changed && G_AnimationDebugLevel() >= 1) {
+    int const debug = G_AnimationDebugLevel();
+    if (changed && debug >= 1 &&
+        (debug == 1 || debug >= 3 || G_AnimationDebugPresentationEntity(unit))) {
         model = G_ModelFilename(unit->s.model);
         G_AnimationDebugRawcode(unit->class_id, rawcode);
         fprintf(stderr,

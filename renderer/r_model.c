@@ -117,3 +117,11 @@ void R_ShutdownModels(void) {
     R_SetMapAssetScope(NULL);
     R_FreeUnusedModels(true);
 }
+
+LPCSTR R_ModelDebugName(LPCMODEL model) {
+    if (!model) return "";
+    FOR_LOOP(i, MAX_MOD_KNOWN) {
+        if (mod_known[i].model == model) return mod_known[i].name;
+    }
+    return "";
+}
