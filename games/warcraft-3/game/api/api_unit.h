@@ -435,7 +435,23 @@ DWORD SetUnitInvulnerable(LPJASS j) {
 DWORD PauseUnit(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
     BOOL flag = jass_checkboolean(j, 2);
-    if (whichUnit) whichUnit->paused = flag;
+    if (whichUnit) {
+        whichUnit->paused = flag;
+        if (G_AnimationDebugLevel() >= 1) {
+            char rawcode[5] = "----";
+            if (whichUnit->class_id) {
+                memcpy(rawcode, &whichUnit->class_id, 4);
+                rawcode[4] = '\0';
+            }
+            fprintf(stderr,
+                    "WC3_ANIM pause time=%u ent=%u class=%.4s model=\"%s\" paused=%d "
+                    "request=\"%s\" selected=\"%s\" frame=%u\n",
+                    (unsigned)level.time, (unsigned)whichUnit->s.number, rawcode,
+                    G_ModelFilename(whichUnit->s.model), flag, whichUnit->animation_request,
+                    whichUnit->animation ? whichUnit->animation->name : "<none>",
+                    (unsigned)whichUnit->s.frame);
+        }
+    }
     return 0;
 }
 DWORD IsUnitPaused(LPJASS j) {

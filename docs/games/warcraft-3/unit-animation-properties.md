@@ -14,6 +14,16 @@ The stock Medivh model/data combination is unusual: the raven-form unit requests
 
 This distinction matters for campaign presentation units such as tutorial beacons and other Locust-style markers: maps may pause them to suppress behavior while still expecting their `Stand`/script-selected animation to remain alive. `AI_HOLD_FRAME` remains authoritative for construction/corpse states that intentionally freeze a model frame.
 
+## Animation Diagnostics
+
+Use `wc3_animation_debug` to trace server-authored WC3 model animation state without changing simulation behavior:
+
+- `+set wc3_animation_debug 1` logs animation selection, JASS `PauseUnit` changes, and JASS special-effect spawns. Each selection line includes the entity/rawcode, registered MDX path, requested animation, active animation properties, resolved sequence, authored interval/non-loop flag, and current frame.
+- `+set wc3_animation_debug 2` additionally samples frame progression once per second for presentation-like modeled entities: effects, paused units, Locust/not-selectable units, and invulnerable pathing-disabled markers. The sample records the driver (`monster`, `monster-paused`, `monster-no-move`, `monster-stunned`, or `effect`) and `frame=before->after`.
+- `+set wc3_animation_debug 3` samples every modeled entity once per second and is intentionally noisy.
+
+For a static Circle of Power or tutorial waypoint/beacon, capture level 2 from shortly before the marker appears until a few seconds afterward. Search the log for `WC3_ANIM`. The decisive fields are `model`, `request`, `selected`, `interval`, `nonloop`, `currentmove`, and whether repeated samples advance `frame`. A resolved `<none>` points to model/sequence selection; a valid looping sequence with an unchanged server frame points to the simulation animation driver; an advancing server frame with a visually static model moves the investigation to snapshot/render interpolation.
+
 ## Raven Form Orders
 
 WC3 exposes two stock abilities that use the `ravenform` / `unravenform` order pair: Medivh Crow Form (`Amrf`) and Druid of the Talon Storm Crow Form (`Arav`). Each ability's object data owns its own transformation endpoints:

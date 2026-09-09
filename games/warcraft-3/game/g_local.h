@@ -1554,6 +1554,9 @@ void monster_think(LPEDICT);
 // g_model.c
 void         G_NormalizeModelFilename(LPCSTR authored, LPSTR out, size_t out_size);
 int          G_RegisterModel(LPCSTR filename);
+LPCSTR       G_ModelFilename(DWORD modelindex);
+int          G_AnimationDebugLevel(void);
+void         G_AnimationDebugSample(LPCEDICT unit, LPCSTR source, DWORD before_frame);
 LPCANIMATION G_GetAnimation(DWORD modelindex, LPCSTR animname);
 LPCANIMATION G_SelectAnimationForProperties(LPCANIMATION animations, DWORD count, LPCSTR animname, LPCSTR properties);
 LPCANIMATION G_GetAnimationForProperties(DWORD modelindex, LPCSTR animname, LPCSTR properties);

@@ -237,15 +237,23 @@ void M_MoveFrame(LPEDICT self) {
  * Called each game frame by G_RunEntity; drives the animation clock and
  * invokes the active umove_t think callback (e.g. ai_walk, ai_melee). */
 void monster_think(LPEDICT self) {
-    if (!self->currentmove)
-        return;
-    if (self->paused) {
-        M_MovePausedFrame(self);
+    DWORD before_frame = self->s.frame;
+
+    if (!self->currentmove) {
+        G_AnimationDebugSample(self, "monster-no-move", before_frame);
         return;
     }
-    if (self->stunned)
+    if (self->paused) {
+        M_MovePausedFrame(self);
+        G_AnimationDebugSample(self, "monster-paused", before_frame);
         return;
+    }
+    if (self->stunned) {
+        G_AnimationDebugSample(self, "monster-stunned", before_frame);
+        return;
+    }
     M_MoveFrame(self);
+    G_AnimationDebugSample(self, "monster", before_frame);
     if (self->currentmove->think) {
         self->currentmove->think(self);
     }

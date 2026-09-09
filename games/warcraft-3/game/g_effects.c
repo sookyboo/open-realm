@@ -129,10 +129,13 @@ void G_EffectValidateTarget(LPEDICT effect) {
 }
 
 void G_EffectThink(LPEDICT effect) {
+    DWORD before_frame = effect->s.frame;
+
     if (effect->goalentity && effect->wait != 0.0f) {
         effect->s.origin.z += effect->wait;
     }
     M_MoveFrame(effect);
+    G_AnimationDebugSample(effect, "effect", before_frame);
 }
 
 static void G_EffectLoopStand(LPEDICT effect) {
@@ -205,6 +208,15 @@ LPEDICT G_SpawnModelEffect(LPCSTR model, LPCVECTOR2 point, LPEDICT target,
 
     effect->think = G_EffectThink;
     G_EffectStartAnimation(effect, temporary);
+    if (effect->inuse && G_AnimationDebugLevel() >= 1) {
+        fprintf(stderr,
+                "WC3_ANIM effect-spawn time=%u ent=%u model=\"%s\" temporary=%d target=%u "
+                "origin=(%.1f %.1f %.1f) selected=\"%s\" frame=%u\n",
+                (unsigned)level.time, (unsigned)effect->s.number, model, temporary,
+                target ? (unsigned)target->s.number : 0u, effect->s.origin.x, effect->s.origin.y,
+                effect->s.origin.z, effect->animation ? effect->animation->name : "<none>",
+                (unsigned)effect->s.frame);
+    }
     return effect->inuse ? effect : NULL;
 }
 

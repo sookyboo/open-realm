@@ -224,6 +224,58 @@ int G_RegisterModel(LPCSTR filename) {
     return index;
 }
 
+LPCSTR G_ModelFilename(DWORD modelindex) {
+    if (!modelindex || modelindex >= G_MAX_MODELS) return "";
+    return g_models[modelindex].filename;
+}
+
+int G_AnimationDebugLevel(void) {
+    LPCSTR value = gi.CvarString("wc3_animation_debug", "0");
+    return value ? atoi(value) : 0;
+}
+
+static BOOL G_AnimationDebugPresentationEntity(LPCEDICT unit) {
+    if (!unit) return false;
+    return !unit->class_id || unit->paused ||
+           (unit->s.flags & EF_NOT_SELECTABLE) ||
+           (unit->invulnerable && unit->no_pathing);
+}
+
+static void G_AnimationDebugRawcode(DWORD class_id, char out[5]) {
+    if (!class_id) {
+        memcpy(out, "----", 5);
+        return;
+    }
+    memcpy(out, &class_id, 4);
+    out[4] = '\0';
+}
+
+void G_AnimationDebugSample(LPCEDICT unit, LPCSTR source, DWORD before_frame) {
+    LPCANIMATION anim;
+    LPCSTR model;
+    char rawcode[5];
+    int debug = G_AnimationDebugLevel();
+
+    if (debug < 2 || !unit || !unit->s.model) return;
+    if (debug < 3 && !G_AnimationDebugPresentationEntity(unit)) return;
+    if ((level.time % 1000) >= FRAMETIME) return;
+
+    anim = unit->animation;
+    model = G_ModelFilename(unit->s.model);
+    G_AnimationDebugRawcode(unit->class_id, rawcode);
+    fprintf(stderr,
+            "WC3_ANIM sample time=%u source=%s ent=%u class=%.4s model=\"%s\" "
+            "request=\"%s\" selected=\"%s\" frame=%u->%u interval=%u..%u "
+            "nonloop=%u paused=%d stunned=%d hold=%d selectable=%d currentmove=\"%s\"\n",
+            (unsigned)level.time, source ? source : "?", (unsigned)unit->s.number, rawcode,
+            model ? model : "", unit->animation_request, anim ? anim->name : "<none>",
+            (unsigned)before_frame, (unsigned)unit->s.frame,
+            anim ? (unsigned)anim->interval[0] : 0u, anim ? (unsigned)anim->interval[1] : 0u,
+            anim ? (unsigned)(anim->flags & 1) : 0u, unit->paused, unit->stunned,
+            !!(unit->aiflags & AI_HOLD_FRAME), !(unit->s.flags & EF_NOT_SELECTABLE),
+            unit->currentmove && unit->currentmove->animation ? unit->currentmove->animation : "<none>");
+}
+
 static BYTE *ReadModelFile(LPCSTR filename, DWORD *out_size) {
     BYTE *data;
 
@@ -518,11 +570,34 @@ LPCANIMATION G_GetUnitAnimation(LPEDICT unit, LPCSTR animname) {
 
 void G_SetUnitAnimation(LPEDICT unit, LPCSTR animname) {
     char request[WC3_ANIMATION_REQUEST_SIZE];
+    char rawcode[5];
+    LPCANIMATION previous;
+    LPCSTR model;
+    BOOL changed;
 
     if (!unit || !animname) return;
     strlcpy(request, animname, sizeof(request));
+    previous = unit->animation;
+    changed = strcmp(unit->animation_request, request) != 0;
     strlcpy(unit->animation_request, request, sizeof(unit->animation_request));
     unit->animation = G_GetUnitAnimation(unit, request);
+    changed = changed || previous != unit->animation;
+
+    if (changed && G_AnimationDebugLevel() >= 1) {
+        model = G_ModelFilename(unit->s.model);
+        G_AnimationDebugRawcode(unit->class_id, rawcode);
+        fprintf(stderr,
+                "WC3_ANIM select time=%u ent=%u class=%.4s model=\"%s\" request=\"%s\" "
+                "props=\"%s\" selected=\"%s\" interval=%u..%u nonloop=%u frame=%u "
+                "paused=%d hold=%d selectable=%d\n",
+                (unsigned)level.time, (unsigned)unit->s.number, rawcode, model ? model : "", request,
+                unit->animation_props, unit->animation ? unit->animation->name : "<none>",
+                unit->animation ? (unsigned)unit->animation->interval[0] : 0u,
+                unit->animation ? (unsigned)unit->animation->interval[1] : 0u,
+                unit->animation ? (unsigned)(unit->animation->flags & 1) : 0u,
+                (unsigned)unit->s.frame, unit->paused, !!(unit->aiflags & AI_HOLD_FRAME),
+                !(unit->s.flags & EF_NOT_SELECTABLE));
+    }
 }
 
 void G_AddUnitAnimationProperties(LPEDICT unit, LPCSTR properties, BOOL add) {
