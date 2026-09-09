@@ -120,7 +120,7 @@ void G_SetHealth(LPEDICT ent, FLOAT value) {
     BYTE const old = compress_stat(&ent->health);
     if (G_AnimationDebugLevel() >= 2 && G_AnimationDebugFocusEntity(ent) && ent->health.value != value)
         fprintf(stderr, "WC3_ANIM lifecycle time=%u op=G_SetHealth ent=%u old=%.3f new=%.3f dead_before=%d\n",
-                level.time, ENT_NUM(ent), ent->health.value, value, M_IsDead(ent));
+                level.time, ent->s.number, ent->health.value, value, M_IsDead(ent));
     ent->health.value = value;
     if ((ent->s.flags & EF_BUILDING) && old != compress_stat(&ent->health)) S_RefreshAbilityLevel(ent, &a_on_fire);
 }
@@ -131,7 +131,7 @@ void unit_die(LPEDICT self, LPEDICT attacker) {
     LPGAMECLIENT owner;
     if (G_AnimationDebugLevel() >= 2 && G_AnimationDebugFocusEntity(self))
         fprintf(stderr, "WC3_ANIM lifecycle time=%u op=unit_die ent=%u life=%.3f attacker=%u\n",
-                level.time, ENT_NUM(self), self->health.value, attacker ? ENT_NUM(attacker) : 0);
+                level.time, self->s.number, self->health.value, attacker ? attacker->s.number : 0);
     DWORD const selected_mask = self ? self->selected : 0;
 
     S_AvatarExpire(self);
