@@ -8,6 +8,12 @@ Warcraft unit profile data may provide `animProps` (`uani`, Required Animation N
 
 The stock Medivh model/data combination is unusual: the raven-form unit requests `alternateex`, while the shared model exposes `Alternate` sequences. Animation selection therefore falls back from a required `alternateex` tag to `alternate` only when no matching `AlternateEx` sequence exists. A genuine `AlternateEx` model remains distinct.
 
+## Paused Unit Presentation
+
+`PauseUnit` freezes the unit's simulation behavior but does not make the selected MDX sequence a static pose. Warsmash keeps model animation in the render-side animation listener while the simulation unit is paused. OpenRealm's server-authored frame path mirrors that separation by advancing a paused unit's currently selected sequence without running the `umove_t` think or end callbacks. Looping sequences wrap to their first frame; non-looping sequences hold their final authored frame.
+
+This distinction matters for campaign presentation units such as tutorial beacons and other Locust-style markers: maps may pause them to suppress behavior while still expecting their `Stand`/script-selected animation to remain alive. `AI_HOLD_FRAME` remains authoritative for construction/corpse states that intentionally freeze a model frame.
+
 ## Raven Form Orders
 
 WC3 exposes two stock abilities that use the `ravenform` / `unravenform` order pair: Medivh Crow Form (`Amrf`) and Druid of the Talon Storm Crow Form (`Arav`). Each ability's object data owns its own transformation endpoints:

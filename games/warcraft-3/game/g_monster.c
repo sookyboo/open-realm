@@ -169,6 +169,24 @@ DWORD M_RefreshHeatmap(LPEDICT self, FLOAT radius) {
     return route->heatmap2;
 }
 
+/* PauseUnit suspends WC3 unit behavior, not presentation animation. The old
+ * paused branch returned before advancing s.frame and froze presentation units.
+ * Advance the selected sequence without invoking think/end callbacks, which may
+ * issue orders or advance combat; non-looping sequences hold their final frame. */
+static void M_MovePausedFrame(LPEDICT self) {
+    LPCANIMATION anim = self->animation;
+    DWORD next;
+
+    if (!anim || (self->aiflags & AI_HOLD_FRAME) || anim->interval[1] <= anim->interval[0]) return;
+    next = self->s.frame + FRAMETIME;
+    if (self->s.frame < anim->interval[0] || self->s.frame >= anim->interval[1])
+        self->s.frame = anim->interval[0];
+    else if (next >= anim->interval[1])
+        self->s.frame = (anim->flags & 1) ? anim->interval[1] - 1 : anim->interval[0];
+    else
+        self->s.frame = next;
+}
+
 /* Advance the unit's animation frame by FRAMETIME milliseconds.
  * If the new frame would exceed the animation's end interval, the current
  * umove_t endfunc is called (e.g. to loop the walk cycle or transition to
@@ -221,7 +239,11 @@ void M_MoveFrame(LPEDICT self) {
 void monster_think(LPEDICT self) {
     if (!self->currentmove)
         return;
-    if (self->paused || self->stunned)
+    if (self->paused) {
+        M_MovePausedFrame(self);
+        return;
+    }
+    if (self->stunned)
         return;
     M_MoveFrame(self);
     if (self->currentmove->think) {

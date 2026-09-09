@@ -101,6 +101,67 @@ static LPEDICT unit_make_harvest_goldmine(FLOAT x, FLOAT y) {
     return mine;
 }
 
+static DWORD paused_anim_think_calls, paused_anim_end_calls;
+
+static void paused_anim_think(LPEDICT ent) { (void)ent; paused_anim_think_calls++; }
+static void paused_anim_end(LPEDICT ent) { (void)ent; paused_anim_end_calls++; }
+
+TEST(wc3_unit, paused_unit_keeps_looping_visual_animation_without_advancing_behavior) {
+    animation_t anim = { .name = "Stand", .interval = { 1000, 1300 }, .flags = 0 };
+    umove_t move = { "stand", paused_anim_think, paused_anim_end };
+    edict_t ent = { .animation = &anim, .currentmove = &move, .paused = true };
+
+    paused_anim_think_calls = paused_anim_end_calls = 0;
+    ent.s.frame = 1200;
+    monster_think(&ent);
+
+    T_EQ(ent.s.frame, 1000);
+    T_EQ(paused_anim_think_calls, 0);
+    T_EQ(paused_anim_end_calls, 0);
+}
+
+TEST(wc3_unit, paused_unit_holds_non_looping_animation_tail_without_end_callback) {
+    animation_t anim = { .name = "Birth", .interval = { 2000, 2300 }, .flags = 1 };
+    umove_t move = { "birth", paused_anim_think, paused_anim_end };
+    edict_t ent = { .animation = &anim, .currentmove = &move, .paused = true };
+
+    paused_anim_think_calls = paused_anim_end_calls = 0;
+    ent.s.frame = 2200;
+    monster_think(&ent);
+
+    T_EQ(ent.s.frame, 2299);
+    T_EQ(paused_anim_think_calls, 0);
+    T_EQ(paused_anim_end_calls, 0);
+}
+
+TEST(wc3_unit, paused_unit_preserves_explicit_hold_frame) {
+    animation_t anim = { .name = "Stand", .interval = { 1000, 1300 }, .flags = 0 };
+    umove_t move = { "stand", paused_anim_think, paused_anim_end };
+    edict_t ent = { .animation = &anim, .currentmove = &move, .paused = true, .aiflags = AI_HOLD_FRAME };
+
+    paused_anim_think_calls = paused_anim_end_calls = 0;
+    ent.s.frame = 1100;
+    monster_think(&ent);
+
+    T_EQ(ent.s.frame, 1100);
+    T_EQ(paused_anim_think_calls, 0);
+    T_EQ(paused_anim_end_calls, 0);
+}
+
+TEST(wc3_unit, unpaused_unit_still_advances_behavior_and_animation) {
+    animation_t anim = { .name = "Stand", .interval = { 1000, 1400 }, .flags = 0 };
+    umove_t move = { "stand", paused_anim_think, paused_anim_end };
+    edict_t ent = { .animation = &anim, .currentmove = &move };
+
+    paused_anim_think_calls = paused_anim_end_calls = 0;
+    ent.s.frame = 1100;
+    monster_think(&ent);
+
+    T_EQ(ent.s.frame, 1200);
+    T_EQ(paused_anim_think_calls, 1);
+    T_EQ(paused_anim_end_calls, 0);
+}
+
 TEST(wc3_unit, shared_test_unit_starts_alive) {
     LPEDICT ent = alloc_test_unit(MAKEFOURCC('h','p','e','a'), 0, 0);
 
