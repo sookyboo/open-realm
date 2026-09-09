@@ -60,6 +60,11 @@ the `overhead` attachment specially, and `LIGHTNING` spell effects remain
 unsupported, so those paths are partial rather than proof of full retail
 conformance. See [Ability, Buff, And Item Presentation Effects](ability-and-item-effects.md) and [Weather](weather.md).
 
+`KillUnit` must use the normal unit-death transition rather than only writing life to zero. The transition selects the
+model's `Death` sequence, publishes unit/player death events, clears orders and selection, updates pathing/FOW state,
+and starts the corpse/decay lifecycle. Campaign scripts can use `KillUnit` for presentation units such as Circle of
+Power tutorial checkpoints, so bypassing `unit_die()` leaves the authored completion animation unreachable.
+
 Known examples include:
 
 - `GroupAddUnit` and `GroupRemoveUnit` are declared to return `boolean`, but the
