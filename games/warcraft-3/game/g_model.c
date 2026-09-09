@@ -235,10 +235,20 @@ int G_AnimationDebugLevel(void) {
 }
 
 static BOOL G_AnimationDebugPresentationEntity(LPCEDICT unit) {
+    LPCSTR model;
+
     if (!unit) return false;
-    return !unit->class_id || unit->paused ||
-           (unit->s.flags & EF_NOT_SELECTABLE) ||
-           (unit->invulnerable && unit->no_pathing);
+    /* A missing class id is not enough to identify presentation: map terrain
+     * doodads/destructables can also be non-selectable and were flooding level 2.
+     * JASS/model effects have the dedicated effect thinker, while marker-style
+     * units are normally paused or both invulnerable and pathing-disabled. */
+    if (unit->think == G_EffectThink || unit->paused || (unit->invulnerable && unit->no_pathing))
+        return true;
+
+    model = G_ModelFilename(unit->s.model);
+    if (!model || !*model) return false;
+    return strcasestr(model, "CircleOfPower") || strcasestr(model, "Waypoint") ||
+           strcasestr(model, "Indicator") || strcasestr(model, "Beacon");
 }
 
 static void G_AnimationDebugRawcode(DWORD class_id, char out[5]) {
