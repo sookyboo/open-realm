@@ -131,7 +131,7 @@ static void R_W3AnimationDebugModelSummary(LPCSTR filename, LPCMODEL wrapper) {
 }
 
 static void R_W3AnimationDebugRenderEntity(renderEntity_t const *entity) {
-    static DWORD last_sample[MAX_CLIENT_ENTITIES];
+    static DWORD last_sample[MAX_GAME_ENTITIES];
     LPCSTR filename;
     int const debug = R_W3AnimationDebugLevel();
     DWORD slot;
@@ -144,7 +144,7 @@ static void R_W3AnimationDebugRenderEntity(renderEntity_t const *entity) {
             (!filename || !strcasestr(filename, "Doodads\\Terrain\\"));
         if (!R_W3AnimationDebugModelPath(filename) && !classless_effect_candidate) return;
     }
-    slot = entity->number < MAX_CLIENT_ENTITIES ? entity->number : 0;
+    slot = entity->number < MAX_GAME_ENTITIES ? entity->number : 0;
     if (tr.viewDef.time < last_sample[slot] || tr.viewDef.time - last_sample[slot] < 1000) return;
     last_sample[slot] = tr.viewDef.time;
     model = entity->model->mdx;

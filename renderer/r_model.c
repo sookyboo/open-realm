@@ -125,3 +125,11 @@ LPCSTR R_ModelDebugName(LPCMODEL model) {
     }
     return "";
 }
+
+LPCSTR R_ModelDebugName(LPCMODEL model) {
+    if (!model) return "";
+    FOR_LOOP(i, MAX_MOD_KNOWN) {
+        if (mod_known[i].model == model) return mod_known[i].name;
+    }
+    return "";
+}
