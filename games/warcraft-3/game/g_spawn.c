@@ -145,12 +145,30 @@ static void G_DumpReferencedTutorialTriggers(LPCSTR script, LPCSTR start, LPCSTR
 }
 
 static void G_DumpPrologue01CircleSource(LPCSTR script) {
+    static LPCSTR const flow_tokens[] = {
+        "GetEnteringUnit",
+        "TriggerRegisterEnterRectSimple",
+        "AddSpecialEffect",
+        "DestroyEffect",
+        "UnitAddIndicator",
+        "PingMinimap",
+        "UnitApplyTimedLife",
+        "SetUnitPosition",
+        "SetUnitX",
+        "SetUnitY",
+    };
+
     if (G_AnimationDebugLevel() < 2 || !script) return;
 
     fprintf(stdout, "WC3_ANIM_SOURCE circle-references begin\n");
     G_DumpTutorialJassFunctionsReferencing(script, "gg_unit_ncp3_");
     G_DumpTutorialJassFunctionsReferencing(script, "'ncp3'");
     fprintf(stdout, "WC3_ANIM_SOURCE circle-references end\n");
+
+    fprintf(stdout, "WC3_ANIM_SOURCE waypoint-flow begin\n");
+    FOR_LOOP(i, sizeof(flow_tokens) / sizeof(flow_tokens[0]))
+        G_DumpTutorialJassFunctionsReferencing(script, flow_tokens[i]);
+    fprintf(stdout, "WC3_ANIM_SOURCE waypoint-flow end\n");
 }
 
 static void G_DumpPrologue02BurrowHandoffSource(LPCSTR script) {
