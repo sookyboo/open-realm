@@ -19,8 +19,8 @@ void UI_WriteLoadingLayout(LPEDICT ent) {
     LPCMAPINFO info = level.mapinfo;
     LPCSTR title = info && info->loadingScreenTitle && *info->loadingScreenTitle ? info->loadingScreenTitle :
                    info ? info->mapName : NULL;
-    LPCSTR background = info && info->loadingScreenModel && *info->loadingScreenModel ? info->loadingScreenModel :
-                        "LoadingMeleeBackground";
+    BOOL custom_background = info && info->loadingScreenModel && *info->loadingScreenModel;
+    LPCSTR background = custom_background ? info->loadingScreenModel : "LoadingMeleeBackground";
 
     if (!ent || !hud.loading.Loading) return;
     if (hud.loading.LoadingTitleText)
@@ -31,6 +31,7 @@ void UI_WriteLoadingLayout(LPEDICT ent) {
         UI_SetText(hud.loading.LoadingText, "%s", UI_LevelStringSafe(info ? info->loadingScreenText : NULL));
     if (hud.loading.LoadingBackground)
         /* Keep LoadingBackground as FT_SPRITE so its model index resolves via cl.models. */
-        hud.loading.LoadingBackground->Portrait.model = gi.ModelIndex(background);
+        hud.loading.LoadingBackground->Portrait.model = custom_background ? gi.ModelIndex(background) :
+                                                         UI_LoadModel(background, true);
     UI_WriteLayout(ent, hud.loading.Loading, LAYER_LOADING);
 }
