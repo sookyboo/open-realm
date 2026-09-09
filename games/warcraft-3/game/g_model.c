@@ -251,6 +251,8 @@ static BOOL G_AnimationDebugPresentationEntity(LPCEDICT unit) {
            strcasestr(model, "Indicator") || strcasestr(model, "Beacon");
 }
 
+BOOL G_AnimationDebugFocusEntity(LPCEDICT unit) { return G_AnimationDebugPresentationEntity(unit); }
+
 static void G_AnimationDebugRawcode(DWORD class_id, char out[5]) {
     if (!class_id) {
         memcpy(out, "----", 5);

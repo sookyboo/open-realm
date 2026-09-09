@@ -16,6 +16,9 @@ void G_SetPlayerText(LPGAMECLIENT client, PLAYERTEXT index, LPCSTR text) {
 
 void G_FreeEdict(LPEDICT ent) {
     if (!ent) return;
+    if (G_AnimationDebugLevel() >= 2 && G_AnimationDebugFocusEntity(ent))
+        fprintf(stderr, "WC3_ANIM lifecycle time=%u op=G_FreeEdict ent=%u life=%.3f dead=%d hidden=%d\n",
+                level.time, ENT_NUM(ent), ent->health.value, M_IsDead(ent), !!(ent->s.renderfx & RF_HIDDEN));
     /* Removed units cannot remain in JASS groups: save files require every group member to resolve to a live edict. */
     FOR_LOOP(i, level.num_groups) {
         ggroup_t *group = level.groups[i];

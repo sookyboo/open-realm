@@ -1556,6 +1556,7 @@ void         G_NormalizeModelFilename(LPCSTR authored, LPSTR out, size_t out_siz
 int          G_RegisterModel(LPCSTR filename);
 LPCSTR       G_ModelFilename(DWORD modelindex);
 int          G_AnimationDebugLevel(void);
+BOOL         G_AnimationDebugFocusEntity(LPCEDICT unit);
 void         G_AnimationDebugSample(LPCEDICT unit, LPCSTR source, DWORD before_frame);
 LPCANIMATION G_GetAnimation(DWORD modelindex, LPCSTR animname);
 LPCANIMATION G_SelectAnimationForProperties(LPCANIMATION animations, DWORD count, LPCSTR animname, LPCSTR properties);

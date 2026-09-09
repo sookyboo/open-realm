@@ -100,12 +100,19 @@ DWORD SetUnitFacingTimed(LPJASS j) {
 
 DWORD KillUnit(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
+    if (G_AnimationDebugLevel() >= 2 && G_AnimationDebugFocusEntity(whichUnit))
+        fprintf(stderr, "WC3_ANIM lifecycle time=%u op=KillUnit ent=%u life=%.3f dead=%d\n",
+                level.time, ENT_NUM(whichUnit), whichUnit->health.value, M_IsDead(whichUnit));
     /* KillUnit is a death transition, not a raw life write; unit_die owns the death animation, events, and cleanup. */
     if (whichUnit && !M_IsDead(whichUnit)) unit_die(whichUnit, NULL);
     return 0;
 }
 DWORD RemoveUnit(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
+    if (G_AnimationDebugLevel() >= 2 && G_AnimationDebugFocusEntity(whichUnit))
+        fprintf(stderr, "WC3_ANIM lifecycle time=%u op=RemoveUnit ent=%u life=%.3f dead=%d hidden=%d\n",
+                level.time, ENT_NUM(whichUnit), whichUnit->health.value, M_IsDead(whichUnit),
+                !!(whichUnit->s.renderfx & RF_HIDDEN));
     if (whichUnit) {
         LPGAMECLIENT owner = G_GetPlayerClientByNumber(whichUnit->s.player);
         if (owner && owner->ps.number == whichUnit->s.player) G_InvalidateCommands(owner);
@@ -123,6 +130,9 @@ DWORD ShowUnit(LPJASS j) {
     }
     was_idle = G_UnitIsIdleWorker(whichUnit);
     was_hidden = !!(whichUnit->s.renderfx & RF_HIDDEN);
+    if (G_AnimationDebugLevel() >= 2 && G_AnimationDebugFocusEntity(whichUnit))
+        fprintf(stderr, "WC3_ANIM lifecycle time=%u op=ShowUnit ent=%u show=%d hidden_before=%d\n",
+                level.time, ENT_NUM(whichUnit), show, was_hidden);
     if (show) {
         whichUnit->s.renderfx &= ~RF_HIDDEN;
     } else {
@@ -144,6 +154,10 @@ JASS_API(SetUnitState,
         return;
     }
     was_dead = M_IsDead(whichUnit);
+    if (G_AnimationDebugLevel() >= 2 && G_AnimationDebugFocusEntity(whichUnit))
+        fprintf(stderr, "WC3_ANIM lifecycle time=%u op=SetUnitState ent=%u state=%d old=%.3f new=%.3f dead=%d\n",
+                level.time, ENT_NUM(whichUnit), (int)*whichUnitState, (&whichUnit->health.value)[*whichUnitState],
+                newVal, was_dead);
     (&whichUnit->health.value)[*whichUnitState] = newVal;
     if ((whichUnit->s.flags & EF_FOW_BLOCKER) && was_dead != M_IsDead(whichUnit)) G_FowMarkBlockersDirty();
 }
@@ -231,11 +245,12 @@ DWORD SetUnitBlendTime(LPJASS j) {
     return 0;
 }
 DWORD SetUnitVertexColor(LPJASS j) {
-    //LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
-    //LONG red = jass_checkinteger(j, 2);
-    //LONG green = jass_checkinteger(j, 3);
-    //LONG blue = jass_checkinteger(j, 4);
-    //LONG alpha = jass_checkinteger(j, 5);
+    LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
+    LONG red = jass_checkinteger(j, 2), green = jass_checkinteger(j, 3);
+    LONG blue = jass_checkinteger(j, 4), alpha = jass_checkinteger(j, 5);
+    if (G_AnimationDebugLevel() >= 2 && G_AnimationDebugFocusEntity(whichUnit))
+        fprintf(stderr, "WC3_ANIM lifecycle time=%u op=SetUnitVertexColor ent=%u rgba=%d,%d,%d,%d\n",
+                level.time, ENT_NUM(whichUnit), (int)red, (int)green, (int)blue, (int)alpha);
     return 0;
 }
 DWORD QueueUnitAnimation(LPJASS j) {

@@ -705,6 +705,9 @@ DWORD SetWidgetLife(LPJASS j) {
     FLOAT newLife = jass_checknumber(j, 2);
     if (whichWidget) {
         BOOL const was_dead = M_IsDead(whichWidget);
+        if (G_AnimationDebugLevel() >= 2 && G_AnimationDebugFocusEntity(whichWidget))
+            fprintf(stderr, "WC3_ANIM lifecycle time=%u op=SetWidgetLife ent=%u old=%.3f new=%.3f dead=%d\n",
+                    level.time, ENT_NUM(whichWidget), whichWidget->health.value, newLife, was_dead);
         G_SetHealth(whichWidget, newLife);
         if ((whichWidget->s.flags & EF_FOW_BLOCKER) && was_dead != M_IsDead(whichWidget)) G_FowMarkBlockersDirty();
     }
