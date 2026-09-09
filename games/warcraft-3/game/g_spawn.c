@@ -309,16 +309,39 @@ LPEDICT G_Spawn(void) {
     return edict;
 }
 
+static void SP_DoodadModelFilename(Doodads_t const *row, DWORD variation,
+                                   LPSTR out, size_t out_size) {
+    PATHSTR stem = { 0 };
+    LPCSTR file;
+    char *dot;
+
+    if (!out || !out_size) return;
+    out[0] = '\0';
+    if (!row || !(file = row->file) || !*file) return;
+
+    /* Doodads.slk `file` is already the authoritative model stem.  Do not
+     * rebuild it from the legacy `dir` column: doing so turns entries such as
+     * LOo2 into a path that the game-side MDX loader cannot open even though
+     * the map renderer can still display the placement.  Warsmash likewise
+     * resolves doodads from `file` directly. */
+    strlcpy(stem, file, sizeof(stem));
+    dot = strrchr(stem, '.');
+    if (dot && (!strcasecmp(dot, ".mdx") || !strcasecmp(dot, ".mdl")))
+        *dot = '\0';
+
+    if (row->numVar > 1) {
+        DWORD const max_variation = (DWORD)row->numVar - 1;
+        snprintf(out, out_size, "%s%u.mdx", stem, MIN(variation, max_variation));
+    } else {
+        snprintf(out, out_size, "%s.mdx", stem);
+    }
+}
+
 static void SP_SpawnDoodad(LPEDICT edict) {
     Doodads_t const *row = edict->data.Doodads;
-    LPCSTR dir = row->dir;
-    LPCSTR file = row->file;
     PATHSTR buffer;
-    if (dir) {
-        snprintf(buffer, sizeof(buffer), "%s\\%s\\%s%d.mdx", dir, file, file, edict->variation);
-    } else {
-        snprintf(buffer, sizeof(buffer), "%s%d.mdx", file, edict->variation);
-    }
+
+    SP_DoodadModelFilename(row, edict->variation, buffer, sizeof(buffer));
     edict->s.model = G_RegisterModel(buffer);
     edict->movetype = MOVETYPE_NONE;
     edict->svflags |= SVF_STATIC_SCENERY;

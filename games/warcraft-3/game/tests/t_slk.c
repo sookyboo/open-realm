@@ -645,6 +645,52 @@ static int capture_spawn_model(LPCSTR name) {
     snprintf(spawn_model, sizeof(spawn_model), "%s", name); return 43;
 }
 
+TEST(wc3_slk, doodad_model_uses_file_stem_and_only_appends_real_variations) {
+    static LPCSTR const single_slk =
+        "ID;PWXL;N;E\n"
+        "C;Y1;X1;K\"ID\"\n"
+        "C;Y1;X2;K\"file\"\n"
+        "C;Y1;X3;K\"dir\"\n"
+        "C;Y1;X4;K\"numVar\"\n"
+        "C;Y2;X1;K\"LOo2\"\n"
+        "C;Y2;X2;K\"Doodads\\LordaeronSummer\\Props\\BannerHuman\\BannerHuman.mdx\"\n"
+        "C;Y2;X3;K\"LegacyDir\"\n"
+        "C;Y2;X4;K1\n"
+        "E\n";
+    static LPCSTR const varied_slk =
+        "ID;PWXL;N;E\n"
+        "C;Y1;X1;K\"ID\"\n"
+        "C;Y1;X2;K\"file\"\n"
+        "C;Y1;X3;K\"numVar\"\n"
+        "C;Y2;X1;K\"LOo2\"\n"
+        "C;Y2;X2;K\"Doodads\\LordaeronSummer\\Props\\BannerHuman\\BannerHuman\"\n"
+        "C;Y2;X3;K3\n"
+        "E\n";
+    slkTestData_t *single_rows = parse_slk_string(single_slk);
+    slkTestData_t *varied_rows = parse_slk_string(varied_slk);
+    slkTestData_t *saved = G_SetSLKRows("Doodads", single_rows);
+    int (*old_index)(LPCSTR) = gi.ModelIndex;
+    edict_t ent = { .class_id = MAKEFOURCC('L','O','o','2'), .variation = 0 };
+
+    setup_test_world();
+    spawn_model[0] = '\0';
+    gi.ModelIndex = capture_spawn_model;
+    SP_CallSpawn(&ent);
+    T_STREQ(spawn_model, "Doodads\\LordaeronSummer\\Props\\BannerHuman\\BannerHuman.mdx");
+
+    G_SetSLKRows("Doodads", varied_rows);
+    memset(&ent, 0, sizeof(ent));
+    ent.class_id = MAKEFOURCC('L','O','o','2');
+    ent.variation = 2;
+    SP_CallSpawn(&ent);
+    T_STREQ(spawn_model, "Doodads\\LordaeronSummer\\Props\\BannerHuman\\BannerHuman2.mdx");
+
+    G_SetSLKRows("Doodads", saved);
+    free_slk_rows(single_rows);
+    free_slk_rows(varied_rows);
+    gi.ModelIndex = old_index;
+}
+
 TEST(wc3_slk, single_variation_bridge_registers_authoritative_unsuffixed_model) {
     static LPCSTR const slk =
         "ID;PWXL;N;E\n"
