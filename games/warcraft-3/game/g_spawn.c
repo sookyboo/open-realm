@@ -169,6 +169,17 @@ static void G_DumpPrologue01CircleSource(LPCSTR script) {
     FOR_LOOP(i, sizeof(flow_tokens) / sizeof(flow_tokens[0]))
         G_DumpTutorialJassFunctionsReferencing(script, flow_tokens[i]);
     fprintf(stdout, "WC3_ANIM_SOURCE waypoint-flow end\n");
+
+    fprintf(stdout, "WC3_ANIM_SOURCE circle-completion begin\n");
+    G_DumpTutorialJassFunctionsReferencing(script, "udg_Circle");
+    G_DumpTutorialJassFunction(script, "Trig_S2_MoveThrall_Done_Actions");
+    G_DumpTutorialJassFunction(script, "Trig_S3_Scroll_Done_Actions");
+    G_DumpTutorialJassFunction(script, "Trig_S4_BlackMask_Done_Actions");
+    G_DumpTutorialJassFunction(script, "Trig_S6_MoveMore_Done_Actions");
+    G_DumpTutorialJassFunction(script, "Trig_R3_GroupMove_Done_Actions");
+    G_DumpTutorialJassFunction(script, "Trig_A1_SingleGnoll_DoneB_Actions");
+    G_DumpTutorialJassFunction(script, "Trig_C1_Continue_Done_Actions");
+    fprintf(stdout, "WC3_ANIM_SOURCE circle-completion end\n");
 }
 
 static void G_DumpPrologue02BurrowHandoffSource(LPCSTR script) {
