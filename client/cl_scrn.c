@@ -6,6 +6,8 @@
 
 BOOL scr_initialized;
 
+void SCR_LayoutDrawSprite(LPCUIFRAME, LPCRECT);
+
 #define SCR_FPS_HEIGHT 8
 #define SCR_FPS_BOTTOM_MARGIN 4
 
@@ -911,9 +913,9 @@ void SCR_LayoutDrawLoadingBar(LPCUIFRAME frame, LPCRECT screen) {
     char anim[16];
 
     snprintf(anim, sizeof(anim), "#0@%.4f", cl.loading_progress);
-    bar.flags.type = FT_PORTRAIT;
+    bar.flags.type = FT_SPRITE;
     bar.text = anim;
-    SCR_LayoutDrawPortrait(&bar, screen);
+    SCR_LayoutDrawSprite(&bar, screen);
 }
 
 void SCR_LayoutDrawSprite(LPCUIFRAME frame, LPCRECT screen) {

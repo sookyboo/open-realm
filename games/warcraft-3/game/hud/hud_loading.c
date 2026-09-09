@@ -9,7 +9,8 @@ void UI_LoadHudLoading(void) {
     if (hud.loading.LoadingCustomPanel) UI_SetHidden(hud.loading.LoadingCustomPanel, false);
     if (hud.loading.LoadingMeleePanel) UI_SetHidden(hud.loading.LoadingMeleePanel, true);
     if (hud.loading.LoadingBar) {
-        UI_SetPortraitFrameModel(hud.loading.LoadingBar, UI_LoadModel("LoadingProgressBar", true));
+        /* Loading art is registered in the shared model table; portrait frames use the separate portrait table. */
+        hud.loading.LoadingBar->Portrait.model = UI_LoadModel("LoadingProgressBar", true);
         hud.loading.LoadingBar->Type = FT_LOADING_BAR;
     }
 }
@@ -29,6 +30,7 @@ void UI_WriteLoadingLayout(LPEDICT ent) {
     if (hud.loading.LoadingText)
         UI_SetText(hud.loading.LoadingText, "%s", UI_LevelStringSafe(info ? info->loadingScreenText : NULL));
     if (hud.loading.LoadingBackground)
-        UI_SetPortraitFrameModel(hud.loading.LoadingBackground, gi.ModelIndex(background));
+        /* Keep LoadingBackground as FT_SPRITE so its model index resolves via cl.models. */
+        hud.loading.LoadingBackground->Portrait.model = gi.ModelIndex(background);
     UI_WriteLayout(ent, hud.loading.Loading, LAYER_LOADING);
 }
