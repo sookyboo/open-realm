@@ -144,6 +144,15 @@ static void G_DumpReferencedTutorialTriggers(LPCSTR script, LPCSTR start, LPCSTR
     }
 }
 
+static void G_DumpPrologue01CircleSource(LPCSTR script) {
+    if (G_AnimationDebugLevel() < 2 || !script) return;
+
+    fprintf(stdout, "WC3_ANIM_SOURCE circle-references begin\n");
+    G_DumpTutorialJassFunctionsReferencing(script, "gg_unit_ncp3_");
+    G_DumpTutorialJassFunctionsReferencing(script, "'ncp3'");
+    fprintf(stdout, "WC3_ANIM_SOURCE circle-references end\n");
+}
+
 static void G_DumpPrologue02BurrowHandoffSource(LPCSTR script) {
     static LPCSTR const root_names[] = {
         "Trig_W2_BurrowComplete_Q_Func002001",
@@ -645,6 +654,7 @@ void G_SpawnEntities(void) {
     jass_dofile(level.vm, "Scripts\\Blizzard.j");
 //    jass_dofilenative(level.vm, "/Users/igor/Desktop/war3map.j");
     G_DumpPrologue02BurrowHandoffSource(level.mapinfo->mapscript);
+    G_DumpPrologue01CircleSource(level.mapinfo->mapscript);
     jass_dobuffer(level.vm, level.mapinfo->mapscript);
 
     UI_Init();
