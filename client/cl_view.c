@@ -160,6 +160,24 @@ void Matrix4_getCameraMatrix(LPMATRIX4 output) {
         : (FLOAT)windowSize.width / (FLOAT)windowSize.height;
     FLOAT znear = LerpNumber(a->znear, b->znear, cl.viewDef.lerpfrac);
     FLOAT zfar = LerpNumber(a->zfar, b->zfar, cl.viewDef.lerpfrac);
+    Matrix4_perspective(&proj, fov, aspect, znear, zfar);
+#ifdef WC3
+    /* Retail keeps the WC3 camera source above the terrain during low-angle
+     * cinematic shots.  The authored orbit can place the source underground;
+     * shorten the orbit until its source clears the rendered terrain. */
+    if (distance > 0.0f) {
+        FOR_LOOP(i, 32) {
+            MATRIX4 test_view, inverse;
+            VECTOR3 eye;
+            Matrix4_fromViewQuat(&origin, &quat, distance, &test_view);
+            Matrix4_inverse(&test_view, &inverse);
+            eye = (VECTOR3){ inverse.v[12], inverse.v[13], inverse.v[14] };
+            if (eye.z >= CM_GetHeightAtPoint(eye.x, eye.y))
+                break;
+            distance *= 0.95f;
+        }
+    }
+#endif
 #ifdef WC3_DEBUG_CAMERA
     static VECTOR3 last_origin, last_angles;
     static FLOAT last_distance, last_fov, last_znear, last_zfar;
@@ -176,9 +194,25 @@ void Matrix4_getCameraMatrix(LPMATRIX4 output) {
         last_znear = znear; last_zfar = zfar; have_last = true;
     }
 #endif
-    
-    Matrix4_perspective(&proj, fov, aspect, znear, zfar);
     Matrix4_fromViewQuat(&origin, &quat, distance, &view);
+#ifdef WC3_DEBUG_CAMERA
+    {
+        static VECTOR3 last_eye;
+        static BOOL have_eye;
+        MATRIX4 inverse;
+        VECTOR3 eye, dir;
+        Matrix4_inverse(&view, &inverse);
+        eye = (VECTOR3){ inverse.v[12], inverse.v[13], inverse.v[14] };
+        dir = (VECTOR3){ -inverse.v[8], -inverse.v[9], -inverse.v[10] };
+        if (Cvar_Integer("wc3_camera_debug", 0) && (!have_eye || fabsf(eye.x - last_eye.x) > 32.0f ||
+            fabsf(eye.y - last_eye.y) > 32.0f || fabsf(eye.z - last_eye.z) > 32.0f)) {
+            fprintf(stderr, "WC3_CAMERA eye=(%.2f,%.2f,%.2f) ground=%.2f dir=(%.3f,%.3f,%.3f) target=(%.2f,%.2f,%.2f)\n",
+                eye.x, eye.y, eye.z, CM_GetHeightAtPoint(eye.x, eye.y), dir.x, dir.y, dir.z,
+                origin.x, origin.y, origin.z);
+            last_eye = eye; have_eye = true;
+        }
+    }
+#endif
     Matrix4_multiply(&proj, &view, output);
 }
 
