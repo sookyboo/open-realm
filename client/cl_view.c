@@ -161,23 +161,6 @@ void Matrix4_getCameraMatrix(LPMATRIX4 output) {
     FLOAT znear = LerpNumber(a->znear, b->znear, cl.viewDef.lerpfrac);
     FLOAT zfar = LerpNumber(a->zfar, b->zfar, cl.viewDef.lerpfrac);
     Matrix4_perspective(&proj, fov, aspect, znear, zfar);
-#ifdef WC3
-    /* Retail keeps the WC3 camera source above the terrain during low-angle
-     * cinematic shots.  The authored orbit can place the source underground;
-     * shorten the orbit until its source clears the rendered terrain. */
-    if (distance > 0.0f) {
-        FOR_LOOP(i, 32) {
-            MATRIX4 test_view, inverse;
-            VECTOR3 eye;
-            Matrix4_fromViewQuat(&origin, &quat, distance, &test_view);
-            Matrix4_inverse(&test_view, &inverse);
-            eye = (VECTOR3){ inverse.v[12], inverse.v[13], inverse.v[14] };
-            if (eye.z >= CM_GetHeightAtPoint(eye.x, eye.y))
-                break;
-            distance *= 0.95f;
-        }
-    }
-#endif
 #ifdef WC3_DEBUG_CAMERA
     static VECTOR3 last_origin, last_angles;
     static FLOAT last_distance, last_fov, last_znear, last_zfar;

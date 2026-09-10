@@ -20,6 +20,10 @@ static FLOAT G_CameraRenderToAuthoredFov(FLOAT render) {
     return render * 2.0f;
 }
 
+/* Convert WC3's wrapped authored AoA while keeping low-angle campaign shots above their targets. */
+static FLOAT G_CameraAuthoredToPitch(FLOAT value) { return value < 90 ? 90 - value : -90 - value; }
+static FLOAT G_CameraPitchToAuthored(FLOAT value) { return value < 0 ? -90 - value : 90 - value; }
+
 /* Report authored camera transitions so map data and runtime state can be compared without changing camera behavior. */
 static void G_DebugCameraState(LPCSTR source, LPCGAMECLIENT gc) {
 #ifdef WC3_DEBUG_CAMERA
@@ -214,7 +218,7 @@ DWORD CameraSetupSetField(LPJASS j) {
         case CAMERA_FIELD_TARGET_DISTANCE: whichSetup->target_distance = value; break;
         case CAMERA_FIELD_FARZ: whichSetup->far_z = value; break;
         case CAMERA_FIELD_NEARZ: whichSetup->near_z = value; break;
-        case CAMERA_FIELD_ANGLE_OF_ATTACK: whichSetup->viewangles.x = -90 - value; break;
+        case CAMERA_FIELD_ANGLE_OF_ATTACK: whichSetup->viewangles.x = G_CameraAuthoredToPitch(value); break;
         case CAMERA_FIELD_FIELD_OF_VIEW: whichSetup->fov = G_CameraAuthoredToRenderFov(value); break;
         case CAMERA_FIELD_ROLL: whichSetup->viewangles.y = value; break;
         case CAMERA_FIELD_ROTATION: whichSetup->viewangles.z = 90 - value; break;
@@ -235,7 +239,7 @@ DWORD CameraSetupGetField(LPJASS j) {
         case CAMERA_FIELD_TARGET_DISTANCE: value = whichSetup->target_distance; break;
         case CAMERA_FIELD_FARZ: value = whichSetup->far_z; break;
         case CAMERA_FIELD_NEARZ: value = whichSetup->near_z; break;
-        case CAMERA_FIELD_ANGLE_OF_ATTACK: value = -90 - whichSetup->viewangles.x; break;
+        case CAMERA_FIELD_ANGLE_OF_ATTACK: value = G_CameraPitchToAuthored(whichSetup->viewangles.x); break;
         case CAMERA_FIELD_FIELD_OF_VIEW: value = G_CameraRenderToAuthoredFov(whichSetup->fov); break;
         case CAMERA_FIELD_ROLL: value = whichSetup->viewangles.y; break;
         case CAMERA_FIELD_ROTATION: value = 90 - whichSetup->viewangles.z; break;
@@ -279,20 +283,6 @@ static void G_ApplyCameraSetup(LPCAMERASETUP setup, BOOL apply_position,
     }
     if (G_SkipCutscene()) {
         duration_ms = 0;
-    }
-    /* Campaign startup applies DummyStart and a replacement in one JASS tick;
-     * retail renders the first setup before accepting that replacement. */
-    if (level.started && gc->camera.initial_setup_pending) {
-        if (gc->camera.setup_command_time == G_Time())
-            return;
-        gc->camera.initial_setup_pending = false;
-    }
-    if (!gc->camera.setup_command_seen) {
-        gc->camera.setup_command_seen = true;
-        gc->camera.setup_command_time = G_Time();
-        gc->camera.initial_setup_pending = level.started;
-    } else {
-        gc->camera.setup_command_time = G_Time();
     }
     G_ClearCameraTarget(gc, "CameraSetupApply");
     gc->camera.old_state = gc->camera.state;

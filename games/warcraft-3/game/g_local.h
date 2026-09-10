@@ -408,8 +408,6 @@ struct client_s {
         CAMERASETUP old_state;
         DWORD start_time;
         DWORD end_time;
-        DWORD setup_command_time;
-        BOOL setup_command_seen, initial_setup_pending;
         VECTOR2 quick_position; /* SetCameraQuickPosition spacebar target; does not move the camera */
         BOOL quick_position_set;
         LPEDICT target_controller;
