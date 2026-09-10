@@ -650,6 +650,28 @@ TEST(wc3_api, camera_setup_applies_clip_planes_z_and_dopan_contract) {
     currentplayer = NULL;
 }
 
+TEST(wc3_api, camera_setup_matches_warsmash_target_height_and_fov) {
+    LPGAMECLIENT gc = &game.clients[0];
+
+    gc->ps.number = 0;
+    gc->camera.state.position = MAKE(VECTOR2, 12.0f, 34.0f);
+    gc->camera.state.z_offset = 0.0f;
+    gc->camera.old_state = gc->camera.state;
+    currentplayer = &gc->ps;
+    T_ASSERT(run_test_jass(
+        "function main takes nothing returns nothing\n"
+        "  local camerasetup c = CreateCameraSetup()\n"
+        "  call CameraSetupSetField(c, CAMERA_FIELD_FIELD_OF_VIEW, 90.0, 0.0)\n"
+        "  call CameraSetupSetField(c, CAMERA_FIELD_ZOFFSET, 125.0, 0.0)\n"
+        "  call BJassAssert(CameraSetupGetField(c, CAMERA_FIELD_FIELD_OF_VIEW) == 90.0, \"camera FOV mismatch\")\n"
+        "  call CameraSetupApply(c, false, false)\n"
+        "endfunction\n"));
+    G_RunClients();
+    T_FEQ(gc->ps.vieworigin.z, 125.0f, 0.001f);
+    T_FEQ(gc->ps.fov, 45.0f, 0.001f);
+    currentplayer = NULL;
+}
+
 TEST(wc3_api, camera_quick_position_sets_spacebar_target_without_moving_camera) {
     LPGAMECLIENT gc = &game.clients[0];
 

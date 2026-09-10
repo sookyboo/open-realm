@@ -25,7 +25,7 @@ FLOAT CL_GameLerpDegrees(FLOAT a, FLOAT b, FLOAT fraction) {
     return a + delta * fraction;
 }
 FLOAT CM_GetCameraHeightOffset(void) {
-    return -TILE_SIZE; // orbit look-at sits one tile below sampled terrain
+    return 0.0f; // world units; Warsmash adds the active camera height separately
 }
 
 #ifdef BZ_TESTS

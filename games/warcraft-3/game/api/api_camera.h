@@ -4,8 +4,6 @@ LPPLAYER NAME = NAME##Context && NAME##Context->unit ? G_GetPlayerByNumber(NAME#
 
 extern LPPLAYER currentplayer;
 
-#define WC3_CAMERA_ASPECT 1.66f /* Warcraft camera horizontal/vertical FOV conversion aspect */
-
 static LPGAMECLIENT G_CurrentCameraClient(LPCSTR func) {
     (void)func;
     if (!currentplayer) {
@@ -14,14 +12,26 @@ static LPGAMECLIENT G_CurrentCameraClient(LPCSTR func) {
     return G_GetPlayerClientByNumber(PLAYER_NUM(currentplayer));
 }
 
-static FLOAT G_CameraHorizontalToVerticalFov(FLOAT horizontal) {
-    FLOAT const hfov_rad = horizontal * (FLOAT)M_PI / 180.0f;
-    return 2.0f * atanf(tanf(hfov_rad / 2.0f) / WC3_CAMERA_ASPECT) * 180.0f / (FLOAT)M_PI;
+static FLOAT G_CameraAuthoredToRenderFov(FLOAT authored) {
+    return authored * 0.5f;
 }
 
-static FLOAT G_CameraVerticalToHorizontalFov(FLOAT vertical) {
-    FLOAT const vfov_rad = vertical * (FLOAT)M_PI / 180.0f;
-    return 2.0f * atanf(tanf(vfov_rad / 2.0f) * WC3_CAMERA_ASPECT) * 180.0f / (FLOAT)M_PI;
+static FLOAT G_CameraRenderToAuthoredFov(FLOAT render) {
+    return render * 2.0f;
+}
+
+/* Report authored camera transitions so map data and runtime state can be compared without changing camera behavior. */
+static void G_DebugCameraState(LPCSTR source, LPCGAMECLIENT gc) {
+#ifdef WC3_DEBUG_CAMERA
+    if (WC3_CAMERA_DEBUG_ENABLED() && gc)
+        fprintf(stderr, "WC3_CAMERA %s pos=(%.2f,%.2f) z=%.2f angles=(%.2f,%.2f,%.2f) dist=%.2f fov=%.2f clip=(%.2f,%.2f) pan=%u..%u\n",
+            source, gc->camera.state.position.x, gc->camera.state.position.y, gc->camera.state.z_offset,
+            gc->camera.state.viewangles.x, gc->camera.state.viewangles.y, gc->camera.state.viewangles.z,
+            gc->camera.state.target_distance, gc->camera.state.fov, gc->camera.state.near_z, gc->camera.state.far_z,
+            (unsigned)gc->camera.start_time, (unsigned)gc->camera.end_time);
+#else
+    (void)source; (void)gc;
+#endif
 }
 
 static void G_SetCameraPositionForCurrentPlayer(LPCSTR func, FLOAT x, FLOAT y,
@@ -45,6 +55,7 @@ static void G_SetCameraPositionForCurrentPlayer(LPCSTR func, FLOAT x, FLOAT y,
     }
     gc->camera.start_time = G_Time();
     gc->camera.end_time = gc->camera.start_time + duration * 1000;
+    G_DebugCameraState(func, gc);
 }
 
 DWORD SetCameraTargetController(LPJASS j) {
@@ -69,6 +80,7 @@ DWORD SetCameraTargetController(LPJASS j) {
         }
         gc->camera.start_time = G_Time();
         gc->camera.end_time = gc->camera.start_time;
+        G_DebugCameraState("SetCameraTargetController", gc);
     } else {
         gc->camera.target_offset = (VECTOR2){ 0, 0 };
         gc->camera.target_inherit_orientation = false;
@@ -203,7 +215,7 @@ DWORD CameraSetupSetField(LPJASS j) {
         case CAMERA_FIELD_FARZ: whichSetup->far_z = value; break;
         case CAMERA_FIELD_NEARZ: whichSetup->near_z = value; break;
         case CAMERA_FIELD_ANGLE_OF_ATTACK: whichSetup->viewangles.x = -90 - value; break;
-        case CAMERA_FIELD_FIELD_OF_VIEW: whichSetup->fov = G_CameraHorizontalToVerticalFov(value); break;
+        case CAMERA_FIELD_FIELD_OF_VIEW: whichSetup->fov = G_CameraAuthoredToRenderFov(value); break;
         case CAMERA_FIELD_ROLL: whichSetup->viewangles.y = value; break;
         case CAMERA_FIELD_ROTATION: whichSetup->viewangles.z = 90 - value; break;
         case CAMERA_FIELD_ZOFFSET: whichSetup->z_offset = value; break;
@@ -224,7 +236,7 @@ DWORD CameraSetupGetField(LPJASS j) {
         case CAMERA_FIELD_FARZ: value = whichSetup->far_z; break;
         case CAMERA_FIELD_NEARZ: value = whichSetup->near_z; break;
         case CAMERA_FIELD_ANGLE_OF_ATTACK: value = -90 - whichSetup->viewangles.x; break;
-        case CAMERA_FIELD_FIELD_OF_VIEW: value = G_CameraVerticalToHorizontalFov(whichSetup->fov); break;
+        case CAMERA_FIELD_FIELD_OF_VIEW: value = G_CameraRenderToAuthoredFov(whichSetup->fov); break;
         case CAMERA_FIELD_ROLL: value = whichSetup->viewangles.y; break;
         case CAMERA_FIELD_ROTATION: value = 90 - whichSetup->viewangles.z; break;
         case CAMERA_FIELD_ZOFFSET: value = whichSetup->z_offset; break;
@@ -280,6 +292,7 @@ static void G_ApplyCameraSetup(LPCAMERASETUP setup, BOOL apply_position,
     gc->camera.state.position = G_ClampCameraPosition(gc, &gc->camera.state.position);
     gc->camera.start_time = G_Time();
     gc->camera.end_time = gc->camera.start_time + duration_ms;
+    G_DebugCameraState("CameraSetupApply", gc);
 }
 DWORD CameraSetupApply(LPJASS j) {
     LPCAMERASETUP whichSetup = jass_checkhandle(j, 1, "camerasetup");

@@ -694,6 +694,12 @@ typedef struct {
 #define WC3_TUTORIAL_DEBUG_ENABLED() false
 #endif
 
+#ifdef WC3_DEBUG_CAMERA
+#define WC3_CAMERA_DEBUG_ENABLED() (gi.CvarString && atoi(gi.CvarString("wc3_camera_debug", "0")) != 0)
+#else
+#define WC3_CAMERA_DEBUG_ENABLED() false
+#endif
+
 typedef struct {
     DWORD handle_id; // runtime ordinal in level.groups; rebuilt from slot position on load
     BOOL inuse;

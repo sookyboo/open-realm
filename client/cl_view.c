@@ -160,6 +160,22 @@ void Matrix4_getCameraMatrix(LPMATRIX4 output) {
         : (FLOAT)windowSize.width / (FLOAT)windowSize.height;
     FLOAT znear = LerpNumber(a->znear, b->znear, cl.viewDef.lerpfrac);
     FLOAT zfar = LerpNumber(a->zfar, b->zfar, cl.viewDef.lerpfrac);
+#ifdef WC3_DEBUG_CAMERA
+    static VECTOR3 last_origin, last_angles;
+    static FLOAT last_distance, last_fov, last_znear, last_zfar;
+    static BOOL have_last;
+    if (Cvar_Integer("wc3_camera_debug", 0) && (!have_last || fabsf(origin.x - last_origin.x) > 1.0f ||
+        fabsf(origin.y - last_origin.y) > 1.0f || fabsf(origin.z - last_origin.z) > 32.0f ||
+        fabsf(b->viewangles.x - last_angles.x) > 1.0f || fabsf(b->viewangles.y - last_angles.y) > 1.0f ||
+        fabsf(b->viewangles.z - last_angles.z) > 1.0f || fabsf(distance - last_distance) > 1.0f ||
+        fabsf(fov - last_fov) > 1.0f || fabsf(znear - last_znear) > 1.0f || fabsf(zfar - last_zfar) > 1.0f)) {
+        fprintf(stderr, "WC3_CAMERA render origin=(%.2f,%.2f,%.2f) angles=(%.2f,%.2f,%.2f) dist=%.2f fov=%.2f clip=(%.2f,%.2f) lerp=%.3f\n",
+            origin.x, origin.y, origin.z, b->viewangles.x, b->viewangles.y, b->viewangles.z,
+            distance, fov, znear, zfar, cl.viewDef.lerpfrac);
+        last_origin = origin; last_angles = b->viewangles; last_distance = distance; last_fov = fov;
+        last_znear = znear; last_zfar = zfar; have_last = true;
+    }
+#endif
     
     Matrix4_perspective(&proj, fov, aspect, znear, zfar);
     Matrix4_fromViewQuat(&origin, &quat, distance, &view);

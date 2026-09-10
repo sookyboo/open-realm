@@ -332,6 +332,7 @@ globals
     constant playercolor PLAYER_COLOR_BLUE = ConvertPlayerColor(1)
     constant playercolor PLAYER_COLOR_LIGHT_GRAY = ConvertPlayerColor(8)
     constant camerafield CAMERA_FIELD_FARZ = ConvertCameraField(1)
+    constant camerafield CAMERA_FIELD_FIELD_OF_VIEW = ConvertCameraField(3)
     constant camerafield CAMERA_FIELD_ZOFFSET = ConvertCameraField(6)
     constant camerafield CAMERA_FIELD_NEARZ = ConvertCameraField(7)
     constant fgamestate GAME_STATE_TIME_OF_DAY = ConvertFGameState(2)
