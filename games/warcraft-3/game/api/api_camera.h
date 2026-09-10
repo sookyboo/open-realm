@@ -280,6 +280,20 @@ static void G_ApplyCameraSetup(LPCAMERASETUP setup, BOOL apply_position,
     if (G_SkipCutscene()) {
         duration_ms = 0;
     }
+    /* Campaign startup applies DummyStart and a replacement in one JASS tick;
+     * retail renders the first setup before accepting that replacement. */
+    if (level.started && gc->camera.initial_setup_pending) {
+        if (gc->camera.setup_command_time == G_Time())
+            return;
+        gc->camera.initial_setup_pending = false;
+    }
+    if (!gc->camera.setup_command_seen) {
+        gc->camera.setup_command_seen = true;
+        gc->camera.setup_command_time = G_Time();
+        gc->camera.initial_setup_pending = level.started;
+    } else {
+        gc->camera.setup_command_time = G_Time();
+    }
     G_ClearCameraTarget(gc, "CameraSetupApply");
     gc->camera.old_state = gc->camera.state;
     gc->camera.state = *setup;
