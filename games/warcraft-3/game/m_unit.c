@@ -131,14 +131,12 @@ static void unit_play_raven_morph(LPEDICT unit, BOOL raven_form) {
      * animation while the geoset alpha track is revealing the new form. */
     unit_setmove(unit, raven_form ? &unit_move_morph : &unit_move_morph_alt);
     morph = unit->animation;
-    if ((raven_form && morph) || (!raven_form && !morph)) {
-        if (raven_form) {
-            G_AddUnitAnimationProperties(unit, "alternateex", true);
-            /* Keep the untagged Morph selected after restoring the form tag;
-             * later cinematic orders must immediately use crow animations. */
-            unit->animation = morph;
-        }
-    } else {
+    if (raven_form) {
+        G_AddUnitAnimationProperties(unit, "alternateex", true);
+        /* Keep the untagged Morph selected after restoring the form tag;
+         * later cinematic orders must immediately use crow animations. */
+        unit->animation = morph;
+    } else if (!morph) {
         G_AddUnitAnimationProperties(unit, "alternate,alternateex", false);
     }
     if (!morph) {
