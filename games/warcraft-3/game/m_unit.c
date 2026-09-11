@@ -831,15 +831,8 @@ static BOOL unit_raven_form_data(LPEDICT unit, ravenFormData_t *out) {
 static BOOL unit_raven_form_order(LPEDICT unit, BOOL raven_form) {
     ravenFormData_t form = {0};
     DWORD target_type;
-    LPCSTR order_name = raven_form ? "ravenform" : "unravenform";
 
-
-    if (!unit_raven_form_data(unit, &form)) {
-        fprintf(stderr,
-                "WC3_RAVEN phase=reject order=%s reason=no-matching-transform-ability class=%.4s\n",
-                order_name, unit ? (LPCSTR)&unit->class_id : "----");
-        return false;
-    }
+    if (!unit_raven_form_data(unit, &form)) return false;
     target_type = raven_form ? form.raven_type : form.base_type;
 
     if (unit->class_id == target_type) {
