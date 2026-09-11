@@ -137,7 +137,9 @@ static void unit_play_raven_morph(LPEDICT unit, BOOL raven_form) {
 }
 
 static void unit_raven_morph_forward_end(LPEDICT unit) {
-    G_AddUnitAnimationProperties(unit, "alternate", true);
+    /* nmdm's authored required tag is alternateex; restoring alternate would
+     * select Medivh's base stand sequence after the crow morph completes. */
+    G_AddUnitAnimationProperties(unit, "alternateex", true);
     unit_stand(unit);
 }
 
