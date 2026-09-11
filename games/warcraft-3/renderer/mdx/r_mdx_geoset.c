@@ -284,22 +284,31 @@ static bool MDLX_IsGeosetVisible(mdxModel_t const *model,
 }
 
 /* Medivh's glow is an unreferenced MDX material; draw the authored texture only during morph. */
-static void MDLX_RenderMorphGlow(renderEntity_t const *entity, mdxModel_t const *model) {
+static void MDLX_RenderMorphGlow(renderEntity_t const *entity, mdxModel_t const *model, LPCMATRIX4 transform) {
     LPCTEXTURE texture = NULL;
+    LPCSTR attach = NULL;
 
     FOR_LOOP(i, model->num_sequences) {
         mdxSequence_t const *seq = &model->sequences[i];
         if ((!strcasecmp(seq->name, "Morph") || !strcasecmp(seq->name, "Morph Alternate")) &&
             entity->frame >= seq->interval[0] && entity->frame < seq->interval[1]) {
+            attach = !strcasecmp(seq->name, "Morph") ? "Origin Alternate Ref" : "Origin Ref";
             FOR_LOOP(j, model->num_textures)
                 if (!strcasecmp(model->textures[j].path, "units\\creeps\\medivh\\genericglow2_mip1.blp")) {
                     texture = R_FindTextureByID(model->textures[j].texid);
                     break;
                 }
             if (texture) {
-                VECTOR3 origin = entity->origin;
-                origin.z += entity->ground_offset;
-                R_DrawBillboardSpriteAdditive(texture, &origin, MAX(entity->radius * 2.0f, 64.0f) * entity->scale,
+                mdxAttachmentPosition_t pos;
+
+                /* The transform glow is authored at the form-specific origin attachment;
+                 * the old unit-origin billboard stayed fixed while the morph bones moved. */
+                if (!MDLX_CollectAttachmentPositions(model, transform, entity->frame, entity->oldframe,
+                                                      attach, &pos, 1)) {
+                    fprintf(stderr, "MDLX_RenderMorphGlow: missing attachment %s in %s\n", attach, model->info.name);
+                    return;
+                }
+                R_DrawBillboardSpriteAdditive(texture, &pos.origin, MAX(entity->radius * 2.0f, 64.0f) * entity->scale,
                                                COLOR32_WHITE);
             }
             return;
@@ -978,7 +987,7 @@ void MDX_RenderModel(renderEntity_t const *entity,
         R_Call(glActiveTexture, GL_TEXTURE0);
     }
     MDLX_RenderGeosets(entity, model);
-    MDLX_RenderMorphGlow(entity, model);
+    MDLX_RenderMorphGlow(entity, model, transform);
     
     MDLX_RenderParticleEmitters(entity, model, transform);
 
