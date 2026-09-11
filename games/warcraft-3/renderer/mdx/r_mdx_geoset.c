@@ -283,7 +283,7 @@ static bool MDLX_IsGeosetVisible(mdxModel_t const *model,
     return true;
 }
 
-/* Medivh's glow is an unreferenced MDX material; draw the authored texture only during morph. */
+/* Medivh's MDX has no child effect model; use the archive's soft radial glow at its animated marker. */
 static void MDLX_RenderMorphGlow(renderEntity_t const *entity, mdxModel_t const *model, LPCMATRIX4 transform) {
     LPCTEXTURE texture = NULL;
     LPCSTR attach = NULL;
@@ -293,16 +293,15 @@ static void MDLX_RenderMorphGlow(renderEntity_t const *entity, mdxModel_t const 
         if ((!strcasecmp(seq->name, "Morph") || !strcasecmp(seq->name, "Morph Alternate")) &&
             entity->frame >= seq->interval[0] && entity->frame < seq->interval[1]) {
             attach = !strcasecmp(seq->name, "Morph") ? "Origin Alternate Ref" : "Origin Ref";
-            FOR_LOOP(j, model->num_textures)
-                if (!strcasecmp(model->textures[j].path, "units\\creeps\\medivh\\genericglow2_mip1.blp")) {
-                    texture = R_FindTextureByID(model->textures[j].texid);
-                    break;
-                }
-            if (texture) {
+                /* HACK: GenericGlow2_mip1 is an unreferenced ring in Medivh.mdx. The authored model
+                 * has no child effect path, so use the archive's soft radial effect until that
+                 * proprietary morph-effect hookup is represented by the renderer. */
+                texture = R_LoadTexture("Textures\\GenericGlow1.blp");
+                if (texture) {
                 mdxAttachmentPosition_t pos;
 
-                /* The transform glow is authored at the form-specific origin attachment;
-                 * the old unit-origin billboard stayed fixed while the morph bones moved. */
+                /* Origin markers remain visible throughout the authored morph; chest markers are
+                 * hidden at the start of Morph and would make the effect disappear mid-transition. */
                 if (!MDLX_CollectAttachmentPositions(model, transform, entity->frame, entity->oldframe,
                                                       attach, &pos, 1)) {
                     fprintf(stderr, "MDLX_RenderMorphGlow: missing attachment %s in %s\n", attach, model->info.name);

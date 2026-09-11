@@ -338,8 +338,12 @@ void R_DrawBillboardSpriteAdditive(LPCTEXTURE texture, LPCVECTOR3 origin, float 
 
     if (!texture) texture = particles_resources.texture;
     Matrix4_identity(&matrix);
+    /* Additive effect billboards are overlays; the parent model otherwise occludes their center,
+     * leaving only an eclipse-like rim around the sprite. */
+    R_Call(glDisable, GL_DEPTH_TEST);
     pv = R_AddParticle(pv, origin, NULL, uv, color, size);
     R_FlushParticles(texture, &matrix, pv, BLEND_MODE_ADD);
+    R_Call(glEnable, GL_DEPTH_TEST);
     R_SetAlphaKeyState(false);
 }
 
