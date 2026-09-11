@@ -17,13 +17,16 @@ void ai_birth2(LPEDICT self) {
     unit_runwait(self, unit_stand);
 }
 
+static void unit_raven_morph_forward_end(LPEDICT unit);
+static void unit_raven_morph_reverse_end(LPEDICT unit);
+
 //static mmove_t unit_move_decay2 = { "Decay Bone", NULL, unit_die };
 //static mmove_t unit_move_decay1 = { "Decay Flesh", NULL, unit_decay2 };
 static umove_t unit_move_birth = { "birth", ai_birth, unit_stand };
 static umove_t unit_move_stand = { "stand", ai_stand, unit_stand };
 static umove_t unit_move_stand_ready = { "stand ready", ai_stand, unit_stand };
-static umove_t unit_move_morph = { "morph", ai_stand, unit_stand };
-static umove_t unit_move_morph_alt = { "morph alternate", ai_stand, unit_stand };
+static umove_t unit_move_morph = { "morph", ai_stand, unit_raven_morph_forward_end };
+static umove_t unit_move_morph_alt = { "morph alternate", ai_stand, unit_raven_morph_reverse_end };
 static umove_t unit_move_death = { "death", NULL, unit_begin_decay };
 /* The corpse holds its final death frame (AI_HOLD_FRAME) while the decay timer
  * counts down; the model has no separate decay sequence we can rely on. */
@@ -120,6 +123,7 @@ void unit_stand(LPEDICT self) {
 /* Play the authored morph sequence after a form rebind; the reverse transform
  * uses the source form's Alternate sequence before returning to ordinary stand. */
 static void unit_play_raven_morph(LPEDICT unit, BOOL raven_form) {
+    if (raven_form) G_AddUnitAnimationProperties(unit, "alternate,alternateex", false);
     /* Keep the morph as the active move, rather than only replacing the
      * animation pointer; the ordinary stand move can otherwise reassert its
      * animation while the geoset alpha track is revealing the new form. */
@@ -130,6 +134,16 @@ static void unit_play_raven_morph(LPEDICT unit, BOOL raven_form) {
         G_SetUnitAnimation(unit, "stand");
     }
     if (unit->animation) unit->s.frame = unit->animation->interval[0];
+}
+
+static void unit_raven_morph_forward_end(LPEDICT unit) {
+    G_AddUnitAnimationProperties(unit, "alternate", true);
+    unit_stand(unit);
+}
+
+static void unit_raven_morph_reverse_end(LPEDICT unit) {
+    G_AddUnitAnimationProperties(unit, "alternate,alternateex", false);
+    unit_stand(unit);
 }
 
 /* All runtime unit-health changes pass here so intrinsic ability levels transition exactly once. */
@@ -804,6 +818,7 @@ static BOOL unit_raven_form_order(LPEDICT unit, BOOL raven_form) {
     ravenFormData_t form = {0};
     DWORD target_type;
     LPCSTR order_name = raven_form ? "ravenform" : "unravenform";
+
 
     if (!unit_raven_form_data(unit, &form)) {
         fprintf(stderr,
