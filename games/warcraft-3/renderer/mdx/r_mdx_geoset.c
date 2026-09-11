@@ -254,7 +254,6 @@ static void MDLX_RenderMorphGlow(renderEntity_t const *entity, mdxModel_t const 
                 }
             if (texture) {
                 VECTOR3 origin = entity->origin;
-                origin.z += entity->ground_offset;
                 R_DrawBillboardSprite(texture, &origin, MAX(entity->radius * 2.0f, 64.0f) * entity->scale,
                                       COLOR32_WHITE);
             }
