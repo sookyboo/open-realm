@@ -283,6 +283,30 @@ static bool MDLX_IsGeosetVisible(mdxModel_t const *model,
     return true;
 }
 
+/* Medivh's glow is an unreferenced MDX material; draw the authored texture only during morph. */
+static void MDLX_RenderMorphGlow(renderEntity_t const *entity, mdxModel_t const *model) {
+    LPCTEXTURE texture = NULL;
+
+    FOR_LOOP(i, model->num_sequences) {
+        mdxSequence_t const *seq = &model->sequences[i];
+        if ((!strcasecmp(seq->name, "Morph") || !strcasecmp(seq->name, "Morph Alternate")) &&
+            entity->frame >= seq->interval[0] && entity->frame < seq->interval[1]) {
+            FOR_LOOP(j, model->num_textures)
+                if (!strcasecmp(model->textures[j].path, "units\\creeps\\medivh\\genericglow2_mip1.blp")) {
+                    texture = R_FindTextureByID(model->textures[j].texid);
+                    break;
+                }
+            if (texture) {
+                VECTOR3 origin = entity->origin;
+                origin.z += entity->ground_offset;
+                R_DrawBillboardSpriteAdditive(texture, &origin, MAX(entity->radius * 2.0f, 64.0f) * entity->scale,
+                                               COLOR32_WHITE);
+            }
+            return;
+        }
+    }
+}
+
 static mdxTextureAnim_t *MDLX_GetTextureAnimAtIndex(mdxModel_t const *model, DWORD textureAnimId) {
     mdxTextureAnim_t *textureAnim = model->textureAnims;
     if (textureAnimId == 0xFFFFFFFF) {
@@ -954,6 +978,7 @@ void MDX_RenderModel(renderEntity_t const *entity,
         R_Call(glActiveTexture, GL_TEXTURE0);
     }
     MDLX_RenderGeosets(entity, model);
+    MDLX_RenderMorphGlow(entity, model);
     
     MDLX_RenderParticleEmitters(entity, model, transform);
 

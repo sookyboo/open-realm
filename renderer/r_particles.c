@@ -318,7 +318,7 @@ void R_DrawParticles(void) {
     R_SetAlphaKeyState(false);
 }
 
-/* Draw a normal alpha-blended billboard for UI and world presentation icons. */
+/* Draw a camera-facing sprite through the particle path with the blend mode required by its BLP. */
 void R_DrawBillboardSprite(LPCTEXTURE texture, LPCVECTOR3 origin, float size, COLOR32 color) {
     MATRIX4 matrix;
     particleVertex_t *pv = particles_resources.vertices;
@@ -328,6 +328,18 @@ void R_DrawBillboardSprite(LPCTEXTURE texture, LPCVECTOR3 origin, float size, CO
     Matrix4_identity(&matrix);
     pv = R_AddParticle(pv, origin, NULL, uv, color, size);
     R_FlushParticles(texture, &matrix, pv, BLEND_MODE_BLEND);
+    R_SetAlphaKeyState(false);
+}
+
+void R_DrawBillboardSpriteAdditive(LPCTEXTURE texture, LPCVECTOR3 origin, float size, COLOR32 color) {
+    MATRIX4 matrix;
+    particleVertex_t *pv = particles_resources.vertices;
+    COLOR32 const uv = { 0, 255, 255, 0 };
+
+    if (!texture) texture = particles_resources.texture;
+    Matrix4_identity(&matrix);
+    pv = R_AddParticle(pv, origin, NULL, uv, color, size);
+    R_FlushParticles(texture, &matrix, pv, BLEND_MODE_ADD);
     R_SetAlphaKeyState(false);
 }
 
