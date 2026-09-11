@@ -123,14 +123,28 @@ void unit_stand(LPEDICT self) {
 /* Play the authored morph sequence after a form rebind; the reverse transform
  * uses the source form's Alternate sequence before returning to ordinary stand. */
 static void unit_play_raven_morph(LPEDICT unit, BOOL raven_form) {
+    LPCANIMATION morph;
+
     if (raven_form) G_AddUnitAnimationProperties(unit, "alternate,alternateex", false);
     /* Keep the morph as the active move, rather than only replacing the
      * animation pointer; the ordinary stand move can otherwise reassert its
      * animation while the geoset alpha track is revealing the new form. */
     unit_setmove(unit, raven_form ? &unit_move_morph : &unit_move_morph_alt);
-    if (!unit->animation) {
+    morph = unit->animation;
+    if ((raven_form && morph) || (!raven_form && !morph)) {
+        if (raven_form) {
+            G_AddUnitAnimationProperties(unit, "alternateex", true);
+            /* Keep the untagged Morph selected after restoring the form tag;
+             * later cinematic orders must immediately use crow animations. */
+            unit->animation = morph;
+        }
+    } else {
+        G_AddUnitAnimationProperties(unit, "alternate,alternateex", false);
+    }
+    if (!morph) {
         fprintf(stderr, "WC3_RAVEN missing morph animation order=%s class=%.4s\n",
                 raven_form ? "ravenform" : "unravenform", (LPCSTR)&unit->class_id);
+        unit_stand(unit);
         G_SetUnitAnimation(unit, "stand");
     }
     if (unit->animation) unit->s.frame = unit->animation->interval[0];
