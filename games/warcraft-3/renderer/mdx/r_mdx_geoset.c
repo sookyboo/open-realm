@@ -238,30 +238,6 @@ static bool MDLX_MaterialHasPass(mdxMaterial_t const *material, bool blendedPass
     return false;
 }
 
-/* Medivh's authored Morph event uses the model-local glow texture; keep that
- * presentation on the model timeline so it cannot linger after the morph. */
-static void MDLX_RenderMorphGlow(renderEntity_t const *entity, mdxModel_t const *model) {
-    LPCTEXTURE texture = NULL;
-
-    FOR_LOOP(i, model->num_sequences) {
-        mdxSequence_t const *seq = &model->sequences[i];
-        if ((!strcasecmp(seq->name, "Morph") || !strcasecmp(seq->name, "Morph Alternate")) &&
-            entity->frame >= seq->interval[0] && entity->frame < seq->interval[1]) {
-            FOR_LOOP(j, model->num_textures)
-                if (!strcasecmp(model->textures[j].path, "units\\creeps\\medivh\\genericglow2_mip1.blp")) {
-                    texture = R_FindTextureByID(model->textures[j].texid);
-                    break;
-                }
-            if (texture) {
-                VECTOR3 origin = entity->origin;
-                R_DrawBillboardSpriteAdditive(texture, &origin, MAX(entity->radius * 2.0f, 64.0f) * entity->scale,
-                                               COLOR32_WHITE);
-            }
-            return;
-        }
-    }
-}
-
 static VECTOR4 MDLX_EvaluateGeosetColor(mdxModel_t const *model,
                                         mdxGeoset_t const *geoset,
                                         DWORD frame);
@@ -978,7 +954,6 @@ void MDX_RenderModel(renderEntity_t const *entity,
         R_Call(glActiveTexture, GL_TEXTURE0);
     }
     MDLX_RenderGeosets(entity, model);
-    MDLX_RenderMorphGlow(entity, model);
     
     MDLX_RenderParticleEmitters(entity, model, transform);
 

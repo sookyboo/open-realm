@@ -32,14 +32,6 @@ typedef struct PARTICLEPROG {
 typedef struct PARTICLEPROG *LPPARTICLEPROG;
 typedef const struct PARTICLEPROG *LPCPARTICLEPROG;
 
-typedef struct {
-    LPCTEXTURE texture;
-    LPCVECTOR3 origin;
-    float size;
-    COLOR32 color;
-    BLEND_MODE blend_mode;
-} drawBillboardParams_t;
-
 static struct {
     PARTICLEPROG shader;
 //    LPRENDERTARGET rt[FOW_RT_COUNT];
@@ -326,32 +318,17 @@ void R_DrawParticles(void) {
     R_SetAlphaKeyState(false);
 }
 
-/* Draw a camera-facing sprite through the particle path; the blend mode is part of the contract
- * because some legacy BLP1 effects have opaque black pixels intended for additive compositing. */
-static void R_DrawBillboard(const drawBillboardParams_t *params) {
+/* Draw a normal alpha-blended billboard for UI and world presentation icons. */
+void R_DrawBillboardSprite(LPCTEXTURE texture, LPCVECTOR3 origin, float size, COLOR32 color) {
     MATRIX4 matrix;
     particleVertex_t *pv = particles_resources.vertices;
     COLOR32 const uv = { 0, 255, 255, 0 };
-    LPCTEXTURE texture;
 
-    if (!params || !params->origin) return;
-    texture = params->texture ? params->texture : particles_resources.texture;
+    if (!texture) texture = particles_resources.texture;
     Matrix4_identity(&matrix);
-    pv = R_AddParticle(pv, params->origin, NULL, uv, params->color, params->size);
-    R_FlushParticles(texture, &matrix, pv, params->blend_mode);
+    pv = R_AddParticle(pv, origin, NULL, uv, color, size);
+    R_FlushParticles(texture, &matrix, pv, BLEND_MODE_BLEND);
     R_SetAlphaKeyState(false);
-}
-
-/* Draw a normal alpha-blended billboard for UI and world presentation icons. */
-void R_DrawBillboardSprite(LPCTEXTURE texture, LPCVECTOR3 origin, float size, COLOR32 color) {
-    R_DrawBillboard(&(drawBillboardParams_t){
-        .texture = texture, .origin = origin, .size = size, .color = color, .blend_mode = BLEND_MODE_BLEND });
-}
-
-/* Draw legacy glow textures whose opaque black background is removed by additive compositing. */
-void R_DrawBillboardSpriteAdditive(LPCTEXTURE texture, LPCVECTOR3 origin, float size, COLOR32 color) {
-    R_DrawBillboard(&(drawBillboardParams_t){
-        .texture = texture, .origin = origin, .size = size, .color = color, .blend_mode = BLEND_MODE_ADD });
 }
 
 static LPBUFFER R_MakeParticlesVertexArrayObject(void) {
