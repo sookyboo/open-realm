@@ -22,6 +22,8 @@ void ai_birth2(LPEDICT self) {
 static umove_t unit_move_birth = { "birth", ai_birth, unit_stand };
 static umove_t unit_move_stand = { "stand", ai_stand, unit_stand };
 static umove_t unit_move_stand_ready = { "stand ready", ai_stand, unit_stand };
+static umove_t unit_move_morph = { "morph", ai_stand, unit_stand };
+static umove_t unit_move_morph_alt = { "morph alternate", ai_stand, unit_stand };
 static umove_t unit_move_death = { "death", NULL, unit_begin_decay };
 /* The corpse holds its final death frame (AI_HOLD_FRAME) while the decay timer
  * counts down; the model has no separate decay sequence we can rely on. */
@@ -118,9 +120,10 @@ void unit_stand(LPEDICT self) {
 /* Play the authored morph sequence after a form rebind; the reverse transform
  * uses the source form's Alternate sequence before returning to ordinary stand. */
 static void unit_play_raven_morph(LPEDICT unit, BOOL raven_form) {
-    LPCSTR anim = raven_form ? "morph" : "morph alternate";
-
-    G_SetUnitAnimation(unit, anim);
+    /* Keep the morph as the active move, rather than only replacing the
+     * animation pointer; the ordinary stand move can otherwise reassert its
+     * animation while the geoset alpha track is revealing the new form. */
+    unit_setmove(unit, raven_form ? &unit_move_morph : &unit_move_morph_alt);
     if (!unit->animation) {
         fprintf(stderr, "WC3_RAVEN missing morph animation order=%s class=%.4s\n",
                 raven_form ? "ravenform" : "unravenform", (LPCSTR)&unit->class_id);
