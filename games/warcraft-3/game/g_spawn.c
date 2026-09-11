@@ -686,6 +686,7 @@ void G_SpawnEntities(void) {
         ent->s.angle = doodad->angle;
         ent->s.scale = doodad->scale.x;
         SP_CallSpawn(ent);
+        if (ent->svflags & SVF_MONSTER) G_ApplyMapUnitTeamColor(ent, doodad);
         if (G_IsDestructable(ent)) {
             G_InitializeDestructablePlacement(ent, doodad);
             G_RegisterGroundSurface(ent);
