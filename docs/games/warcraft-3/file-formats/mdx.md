@@ -62,6 +62,8 @@ The `flags` field uses the following bitmasks:
 | `CollisionShape` | `8192` | Physics collision volume |
 | `RibbonEmitter` | `16384` | Ribbon/trail emitter |
 
+OpenRealm resolves full `Billboarded` nodes against the interpolated rendered camera. This matters for camera-facing authored geometry used by effects during cinematic camera motion: a fixed default-camera approximation makes the quad turn away from the view even when its material and alpha tracks are otherwise correct. UI/model-preview renders that provide their own entity camera retain the renderer's existing fallback orientation because those views do not populate the world `camerastate` samples.
+
 ## Keyframe Tracks (Animated Values)
 
 Animation data is stored as **keyframe tracks**. Each track is identified by a 4-byte tag that encodes the node type and the animated property. For example:

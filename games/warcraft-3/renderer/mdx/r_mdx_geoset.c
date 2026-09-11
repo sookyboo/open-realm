@@ -283,38 +283,6 @@ static bool MDLX_IsGeosetVisible(mdxModel_t const *model,
     return true;
 }
 
-/* Medivh's MDX has no child effect model; use the archive's soft radial glow at its animated marker. */
-static void MDLX_RenderMorphGlow(renderEntity_t const *entity, mdxModel_t const *model, LPCMATRIX4 transform) {
-    LPCTEXTURE texture = NULL;
-    LPCSTR attach = NULL;
-
-    FOR_LOOP(i, model->num_sequences) {
-        mdxSequence_t const *seq = &model->sequences[i];
-        if ((!strcasecmp(seq->name, "Morph") || !strcasecmp(seq->name, "Morph Alternate")) &&
-            entity->frame >= seq->interval[0] && entity->frame < seq->interval[1]) {
-            attach = !strcasecmp(seq->name, "Morph") ? "Origin Alternate Ref" : "Origin Ref";
-                /* HACK: GenericGlow2_mip1 is an unreferenced ring in Medivh.mdx. The authored model
-                 * has no child effect path, so use the archive's soft radial effect until that
-                 * proprietary morph-effect hookup is represented by the renderer. */
-                texture = R_LoadTexture("Textures\\GenericGlow1.blp");
-                if (texture) {
-                mdxAttachmentPosition_t pos;
-
-                /* Origin markers remain visible throughout the authored morph; chest markers are
-                 * hidden at the start of Morph and would make the effect disappear mid-transition. */
-                if (!MDLX_CollectAttachmentPositions(model, transform, entity->frame, entity->oldframe,
-                                                      attach, &pos, 1)) {
-                    fprintf(stderr, "MDLX_RenderMorphGlow: missing attachment %s in %s\n", attach, model->info.name);
-                    return;
-                }
-                R_DrawBillboardSpriteAdditive(texture, &pos.origin, MAX(entity->radius * 2.0f, 64.0f) * entity->scale,
-                                               COLOR32_WHITE);
-            }
-            return;
-        }
-    }
-}
-
 static mdxTextureAnim_t *MDLX_GetTextureAnimAtIndex(mdxModel_t const *model, DWORD textureAnimId) {
     mdxTextureAnim_t *textureAnim = model->textureAnims;
     if (textureAnimId == 0xFFFFFFFF) {
@@ -986,7 +954,6 @@ void MDX_RenderModel(renderEntity_t const *entity,
         R_Call(glActiveTexture, GL_TEXTURE0);
     }
     MDLX_RenderGeosets(entity, model);
-    MDLX_RenderMorphGlow(entity, model, transform);
     
     MDLX_RenderParticleEmitters(entity, model, transform);
 

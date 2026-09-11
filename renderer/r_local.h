@@ -478,7 +478,6 @@ void R_ShutdownParticles(void);
 void R_DrawParticles(void);
 cparticle_t *R_SpawnParticle(void);
 void R_DrawBillboardSprite(LPCTEXTURE texture, LPCVECTOR3 origin, float size, COLOR32 color);
-void R_DrawBillboardSpriteAdditive(LPCTEXTURE texture, LPCVECTOR3 origin, float size, COLOR32 color);
 
 extern struct render_globals tr;
 

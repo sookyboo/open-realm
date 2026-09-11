@@ -15,6 +15,47 @@ void R_EvalKeyframeValue(void const *left, void const *right, float t, MODELKEYT
 static MATRIX4 local_matrices[MDX_MAX_NODES];
 MATRIX4 node_matrices[MDX_MAX_NODES];
 
+/* Warcraft MDX billboard nodes face the rendered camera. The old renderer
+ * used a fixed {30, 0, 90} approximation, which only matched the ordinary
+ * gameplay camera and made authored billboarded effects rotate incorrectly
+ * during cinematic camera changes. Keep entity-camera UI renders on the
+ * historical fallback because those cameras are supplied as view matrices,
+ * not through viewDef.camerastate. */
+static FLOAT MDLX_WrapDegrees(FLOAT angle) {
+    while (angle > 180.0f) angle -= 360.0f;
+    while (angle <= -180.0f) angle += 360.0f;
+    return angle;
+}
+
+static FLOAT MDLX_LerpDegrees(FLOAT a, FLOAT b, FLOAT t) {
+    return MDLX_WrapDegrees(a + MDLX_WrapDegrees(b - a) * t);
+}
+
+static VECTOR3 MDLX_BillboardViewAngles(void) {
+    VECTOR3 angles = { 30.0f, 0.0f, 90.0f };
+    viewCamera_t const *a;
+    viewCamera_t const *b;
+    FLOAT pitch;
+    FLOAT yaw;
+
+    if (tr.viewDef.rdflags & (RDF_USE_ENTITY_CAMERA | RDF_NOWORLDMODEL)) {
+        return angles;
+    }
+
+    a = &tr.viewDef.camerastate[1];
+    b = &tr.viewDef.camerastate[0];
+    pitch = MDLX_LerpDegrees(a->viewangles.x, b->viewangles.x, tr.viewDef.lerpfrac);
+    yaw = MDLX_LerpDegrees(a->viewangles.z, b->viewangles.z, tr.viewDef.lerpfrac);
+
+    /* Match the existing MDX basis convention while using the actual camera.
+     * A stock WC3 pitch near 326 degrees becomes +34 here, close to the old
+     * fixed +30 degree approximation, but cinematic pitch/yaw now follow the
+     * rendered view instead of remaining frozen. */
+    angles.x = -pitch;
+    angles.z = 90.0f - yaw;
+    return angles;
+}
+
 mdxSequence_t const *R_FindSequenceAtTime(mdxModel_t const *model, DWORD time) {
     FOR_LOOP(seqIndex, model->num_sequences) {
         mdxSequence_t const *seq = &model->sequences[seqIndex];
@@ -221,7 +262,10 @@ LPCMATRIX4 R_GetNodeGlobalMatrix(mdxModel_t const *model, LPCMATRIX4 model_matri
             }
             
             Matrix4_identity(&tmp1);
-            Matrix4_rotate(&tmp1, &(VECTOR3){30,0,90}, ROTATE_XYZ);
+            {
+                VECTOR3 billboard_angles = MDLX_BillboardViewAngles();
+                Matrix4_rotate(&tmp1, &billboard_angles, ROTATE_XYZ);
+            }
             Matrix4_multiply(&tmp1, model_matrix, &tmp2);
 
             QUATERNION viewrot = Quaternion_fromMatrix(&tmp2);

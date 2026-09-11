@@ -23,7 +23,7 @@ The type rebind still happens on the script-issued order so the existing edict i
 
 `M_MoveFrame()` restarts the animation that is active *after* an end callback returns. This matters for morph completion: an end callback can replace `Morph Alternate` with `Stand`, and resetting the frame to the completed morph's start would make the newly rebound human model sample an unrelated frame for one tick, producing a visible blank between forms.
 
-Transformation glow/effect rendering is intentionally not handled by this change. Full `Amrf`/`Arav` cast time, takeoff/landing interpolation, transformation effects/sounds, duration/buff-driven automatic reversion, and command-card ability behavior remain separate compatibility work.
+The Raven Form transition does not synthesize a gameplay effect or replacement billboard. The shared Medivh model owns its morph presentation: its authored geometry/materials, texture references, animated alpha and MDX billboard nodes are rendered through the normal model path while `Morph` / `Morph Alternate` is active. This keeps the transition tied to the model data instead of hard-coding a texture, attachment point, scale, or depth override for one unit. Full `Amrf`/`Arav` cast time, takeoff/landing interpolation, transformation sounds, duration/buff-driven automatic reversion, and command-card ability behavior remain separate compatibility work.
 
 ## Verification
 
