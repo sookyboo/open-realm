@@ -2877,6 +2877,20 @@ TEST(wc3_api, authored_team_color_precedence_matches_unit_data) {
     T_EQ(unit_team_color(unit), 5);
 }
 
+TEST(wc3_api, missing_unit_type_team_color_uses_owner_color) {
+    LPEDICT unit = make_unit_hero();
+    UnitUI_t ui = *unit->data.UnitUI;
+
+    unit->data.UnitUI = &ui;
+    unit->s.player = 4;
+    game.clients[4].ps.number = 4;
+    game.clients[4].ps.color = 7;
+    ui.teamColor = 0;
+    ui.customTeamColor = false;
+    G_InitializeUnitTeamColor(unit);
+    T_EQ(unit_team_color(unit), 7);
+}
+
 /* =========================================================================
  * Unit — hidden flag (RF_HIDDEN)
  * ========================================================================= */

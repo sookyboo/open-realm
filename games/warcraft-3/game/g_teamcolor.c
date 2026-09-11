@@ -17,7 +17,10 @@ DWORD G_GetUnitTeamColor(LPCEDICT unit) {
     if (!unit) return 0;
     encoded = (unit->s.effect_flags & EFX_TEAM_COLOR_MASK) >> EFX_TEAM_COLOR_SHIFT;
     if (encoded) return encoded - 1u;
-    if (unit->data.UnitUI && unit->data.UnitUI->teamColor >= 0)
+    /* Retail rows omit utco for ordinary units; the SLK decoder represents
+     * that missing integer as zero, which is also PLAYER_COLOR_RED.  Only
+     * customTeamColor makes zero an authored unit-type color here. */
+    if (unit->data.UnitUI && (unit->data.UnitUI->teamColor > 0 || unit->data.UnitUI->customTeamColor))
         return G_ClampTeamColor((DWORD)unit->data.UnitUI->teamColor);
     return G_PlayerTeamColor(unit->s.player);
 }
@@ -34,7 +37,7 @@ void G_InitializeUnitTeamColor(LPEDICT unit) {
     DWORD color;
 
     if (!unit) return;
-    color = unit->data.UnitUI && unit->data.UnitUI->teamColor >= 0
+    color = unit->data.UnitUI && (unit->data.UnitUI->teamColor > 0 || unit->data.UnitUI->customTeamColor)
         ? (DWORD)unit->data.UnitUI->teamColor : G_PlayerTeamColor(unit->s.player);
     G_SetUnitTeamColor(unit, color);
 }
