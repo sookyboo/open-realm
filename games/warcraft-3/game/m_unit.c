@@ -115,6 +115,20 @@ void unit_stand(LPEDICT self) {
     }
 }
 
+/* Play the authored morph sequence after a form rebind; the reverse transform
+ * uses the source form's Alternate sequence before returning to ordinary stand. */
+static void unit_play_raven_morph(LPEDICT unit, BOOL raven_form) {
+    LPCSTR anim = raven_form ? "morph" : "morph alternate";
+
+    G_SetUnitAnimation(unit, anim);
+    if (!unit->animation) {
+        fprintf(stderr, "WC3_RAVEN missing morph animation order=%s class=%.4s\n",
+                raven_form ? "ravenform" : "unravenform", (LPCSTR)&unit->class_id);
+        G_SetUnitAnimation(unit, "stand");
+    }
+    if (unit->animation) unit->s.frame = unit->animation->interval[0];
+}
+
 /* All runtime unit-health changes pass here so intrinsic ability levels transition exactly once. */
 void G_SetHealth(LPEDICT ent, FLOAT value) {
     BYTE const old = compress_stat(&ent->health);
@@ -796,91 +810,21 @@ static BOOL unit_raven_form_order(LPEDICT unit, BOOL raven_form) {
     }
     target_type = raven_form ? form.raven_type : form.base_type;
 
-    /* Temporary one-shot diagnostics.  These only fire for ravenform and
-     * unravenform, so the campaign cinematic reproducer stays concise. */
-    fprintf(stderr,
-            "WC3_RAVEN phase=resolve order=%s ent=%u class=%.4s sclass=%.4s model=%u "
-            "ability=%.4s code=%.4s dataA=%.4s unitID=%.4s target=%.4s "
-            "hasAbility=%u props=\"%s\" request=\"%s\" anim=\"%s\" frame=%u "
-            "model_file=\"%s\"\n",
-            order_name,
-            (unsigned)unit->s.number,
-            (LPCSTR)&unit->class_id,
-            (LPCSTR)&unit->s.class_id,
-            (unsigned)unit->s.model,
-            (LPCSTR)&form.ability_id,
-            (LPCSTR)&form.ability->code,
-            (LPCSTR)&form.base_type,
-            (LPCSTR)&form.raven_type,
-            (LPCSTR)&target_type,
-            (unsigned)G_ActorHasSkill(unit, form.ability_name),
-            unit->animation_props,
-            unit->animation_request,
-            unit->animation ? unit->animation->name : "<none>",
-            (unsigned)unit->s.frame,
-            unit->data.UnitUI && unit->data.UnitUI->modelFile
-                ? unit->data.UnitUI->modelFile : "");
-
     if (unit->class_id == target_type) {
-        fprintf(stderr,
-                "WC3_RAVEN phase=noop order=%s reason=already-target class=%.4s\n",
-                order_name, (LPCSTR)&unit->class_id);
         return true;
     }
     if (raven_form ? unit->class_id != form.base_type : unit->class_id != form.raven_type) {
-        fprintf(stderr,
-                "WC3_RAVEN phase=reject order=%s reason=wrong-source-endpoint class=%.4s\n",
-                order_name, (LPCSTR)&unit->class_id);
         return false;
     }
 
     G_ClearUnitOrderQueue(unit);
-    if (!G_TransformUnitType(unit, target_type)) {
-        fprintf(stderr,
-                "WC3_RAVEN phase=reject order=%s reason=transform-failed target=%.4s\n",
-                order_name, (LPCSTR)&target_type);
-        return false;
-    }
-    fprintf(stderr,
-            "WC3_RAVEN phase=transformed order=%s ent=%u class=%.4s sclass=%.4s model=%u "
-            "props=\"%s\" request=\"%s\" anim=\"%s\" frame=%u model_file=\"%s\"\n",
-            order_name,
-            (unsigned)unit->s.number,
-            (LPCSTR)&unit->class_id,
-            (LPCSTR)&unit->s.class_id,
-            (unsigned)unit->s.model,
-            unit->animation_props,
-            unit->animation_request,
-            unit->animation ? unit->animation->name : "<none>",
-            (unsigned)unit->s.frame,
-            unit->data.UnitUI && unit->data.UnitUI->modelFile
-                ? unit->data.UnitUI->modelFile : "");
+    if (!G_TransformUnitType(unit, target_type)) return false;
 
     unit->goalentity = NULL;
     unit->secondarygoal = NULL;
     move_reset_progress(unit);
     unit_stand(unit);
-    /* Cinematics can keep transformed units paused.  Paused units skip
-     * M_MoveFrame(), so snap directly to the destination form's sequence. */
-    if (unit->animation) unit->s.frame = unit->animation->interval[0];
-
-    fprintf(stderr,
-            "WC3_RAVEN phase=final order=%s ent=%u class=%.4s sclass=%.4s model=%u "
-            "props=\"%s\" request=\"%s\" anim=\"%s\" interval=%u..%u frame=%u "
-            "model_file=\"%s\"\n",
-            order_name,
-            (unsigned)unit->s.number,
-            (LPCSTR)&unit->class_id,
-            (LPCSTR)&unit->s.class_id,
-            (unsigned)unit->s.model,
-            unit->animation_props,
-            unit->animation_request,
-            unit->animation ? unit->animation->name : "<none>",
-            unit->animation ? (unsigned)unit->animation->interval[0] : 0u,
-            unit->animation ? (unsigned)unit->animation->interval[1] : 0u,
-            (unsigned)unit->s.frame,
-            unit->data.UnitUI && unit->data.UnitUI->modelFile
-                ? unit->data.UnitUI->modelFile : "");
+    unit_play_raven_morph(unit, raven_form);
     return true;
 }
 
