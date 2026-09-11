@@ -645,7 +645,7 @@ void R_InitRenderer(DWORD width, DWORD height) {
      * activates the process regardless of window visibility.  Set the policy
      * to Prohibited first so the app never appears in the Dock or takes focus.
      * NSApplicationActivationPolicyProhibited = 2. */
-    if (atoi(ri.CvarString("vid_hidden", "0"))) {
+    if (ri.CvarString && atoi(ri.CvarString("vid_hidden", "0"))) {
         MacId ns_app = ((MacId(*)(MacId, MacSel))objc_msgSend)(
             objc_getClass("NSApplication"),
             sel_registerName("sharedApplication"));
@@ -686,7 +686,7 @@ void R_InitRenderer(DWORD width, DWORD height) {
             sdl_version.patch);
     fprintf(stderr, "SDL video driver is \"%s\".\n", SDL_GetCurrentVideoDriver());
     /* The full SDL mode list is diagnostic output, previously printed on every startup. */
-    if (atoi(ri.CvarString("vid_modes", "0"))) R_PrintDisplayModes();
+    if (ri.CvarString && atoi(ri.CvarString("vid_modes", "0"))) R_PrintDisplayModes();
     R_ResolveInitialWindowSize(&width, &height);
     fprintf(stderr, "Video initialized.\n\n");
     
