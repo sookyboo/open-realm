@@ -70,7 +70,7 @@ enum {
 
 static DWORD const save_magic = MAKEFOURCC('W', '3', 'S', 'V');
 static DWORD const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
-static DWORD const save_version = 20; // format version; adds race-specific construction state to the v19 edict layout
+static DWORD const save_version = 21; // format version; adds racial gold-mine overlay/harvester state to v20
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
 #define UMOVE_RELOC_RANGE (64 << 20) // bytes; every umove_t is static data in libgame, so a valid offset from the anchor stays well inside one module image
@@ -319,6 +319,16 @@ static field_t const goldmine_fields[] = {
     { NULL, 0, 0, 0, 0, 0 }
 };
 
+static field_t const mineoverlay_fields[] = {
+    TF(edictMineOverlay_s, parent, F_EDICT, 0, FIELD_NONE),
+    { NULL, 0, 0, 0, 0, 0 }
+};
+
+static field_t const acolyte_mine_fields[] = {
+    TF(edictAcolyteMine_s, mine, F_EDICT, 0, FIELD_NONE),
+    { NULL, 0, 0, 0, 0, 0 }
+};
+
 static field_t const item_fields[] = {
     TF(edictItem_s, carrier, F_EDICT, 0, FIELD_NONE),
     { NULL, 0, 0, 0, 0, 0 }
@@ -433,6 +443,8 @@ field_t edict_fields[] = {
     F(edict_s, revival, F_STRUCT, 1, revival_fields),
     F(edict_s, hero_shortcut_alert_until, F_IGNORE, 0, FIELD_RUNTIME),
     F(edict_s, goldmine, F_STRUCT, 1, goldmine_fields),
+    F(edict_s, mineoverlay, F_STRUCT, 1, mineoverlay_fields),
+    F(edict_s, acolyte_mine, F_STRUCT, 1, acolyte_mine_fields),
     F(edict_s, inventory, F_EDICT, MAX_INVENTORY, FIELD_NONE),
     F(edict_s, cargo, F_STRUCT, 1, cargo_fields),
     F(edict_s, item, F_STRUCT, 1, item_fields),

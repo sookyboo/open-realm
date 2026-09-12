@@ -15,9 +15,17 @@ void G_SetPlayerText(LPGAMECLIENT client, PLAYERTEXT index, LPCSTR text) {
 }
 
 void G_FreeEdict(LPEDICT ent) {
+    BOOL const rebuild_overlay_pathing = ent && ent->mineoverlay.parent &&
+        G_UnitIsBuilding(ent->class_id);
+
     if (!ent) return;
-    /* Direct JASS RemoveUnit must release construction workers before the building edict is cleared. */
+    /* Direct JASS RemoveUnit must release owned gameplay relationships before
+     * the edict is cleared, otherwise hidden parents/cargo/mining slots strand. */
     if (ent->construction.active) G_StopConstruction(ent);
+    if (ent->mineoverlay.parent) S_MineOverlayRelease(ent);
+    if (S_AcolyteHarvestIsActive(ent)) S_AcolyteHarvestRelease(ent);
+    S_CargoReleaseUnit(ent);
+    if (ent->cargo.count > 0) cargo_drop_all(ent);
     if (ent->buildwork.ability) S_CancelRepair(ent);
     /* Removed units cannot remain in JASS groups: save files require every group member to resolve to a live edict. */
     FOR_LOOP(i, level.num_groups) {
@@ -41,6 +49,9 @@ void G_FreeEdict(LPEDICT ent) {
     gi.UnlinkEntity(ent);
     memset(ent, 0, sizeof(*ent));
     ent->freetime = level.time;
+    /* Overlay removal simultaneously restores the hidden parent mine. Rebuild
+     * after clearing this edict so routing sees the parent footprint, not both. */
+    if (rebuild_overlay_pathing) CM_BakeStaticObstacles();
 }
 
 LPEVENT G_MakeEvent(EVENTTYPE type) {

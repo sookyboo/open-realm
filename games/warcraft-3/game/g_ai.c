@@ -1,6 +1,6 @@
 #include "g_local.h"
 
-extern ability_t a_militia, a_build;
+extern ability_t a_militia, a_build, a_acolyte_harvest;
 
 void unit_setanimation(LPEDICT self, LPCSTR anim) {
     G_SetUnitAnimation(self, anim);
@@ -31,6 +31,12 @@ void unit_setmove(LPEDICT self, umove_t *move) {
     if (self->currentmove && self->currentmove->ability == &a_militia &&
         move->ability != &a_militia) {
         S_CancelMilitiaPairing(self);
+    }
+    /* Acolyte mine slots are owned by the harvesting behavior. Any unrelated
+     * replacement order must unregister the slot immediately. */
+    if (self->currentmove && self->currentmove->ability == &a_acolyte_harvest &&
+        move->ability != &a_acolyte_harvest) {
+        S_AcolyteHarvestRelease(self);
     }
     /* A point-drop keeps the exact carried item separately from its waypoint.
      * Replacing that behavior must abandon the pending drop just like replacing
