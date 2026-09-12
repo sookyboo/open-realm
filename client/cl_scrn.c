@@ -1285,6 +1285,17 @@ static drawer_t drawers[] = {
 
 void SCR_LayoutDrawFrame(LPCUIFRAME frame) {
     RECT const *screen = SCR_LayoutRect(frame);
+#ifdef WC3_DEBUG_PARTICLES
+    /* Keep the quest-button bounds in the same FDF/UI coordinate space used by
+     * MDX sprite particles, so particle logs can be compared without scaling. */
+    if (frame->onclick && !strcmp(frame->onclick, "quests"))
+        fprintf(stderr, "WC3 particles: quest button TL=(%.4f,%.4f) BR=(%.4f,%.4f)\n",
+                screen->x, screen->y, screen->x + screen->w, screen->y + screen->h);
+#endif
+#ifdef WC3
+    if (frame->onclick && !strcmp(frame->onclick, "quests") && re.DrawUIAttentionParticles)
+        re.DrawUIAttentionParticles(screen);
+#endif
     FOR_LOOP(j, sizeof(drawers)/sizeof(*drawers)) {
         if (drawers[j].type == frame->flags.type) {
             drawers[j].func(frame, screen);

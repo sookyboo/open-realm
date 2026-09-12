@@ -61,6 +61,13 @@ static void mdx_spawn_particle(void *raw) {
         pivot = ctx->model->pivots[ctx->emitter->node.node_id];
     VECTOR3 dir = FX_GenerateRandomDirection(ctx->lat * (float)M_PI / 180.0f);
     p->org = MDLX_TransformEmitterPoint(ctx->matrix, &pivot, &origin);
+#ifdef WC3_DEBUG_PARTICLES
+    {
+        VECTOR3 const ui = Matrix4_multiply_vector3(&tr.viewDef.viewProjectionMatrix, &p->org);
+        fprintf(stderr, "WC3 particles: emitter=%u particle world=(%.4f,%.4f,%.4f) ui=(%.4f,%.4f)\n",
+                (unsigned)ctx->emitter->node.node_id, p->org.x, p->org.y, p->org.z, ui.x, ui.y);
+    }
+#endif
     p->vel = Vector3_scale(&dir, ctx->speed + (r - 0.5f) * ctx->varia);
     p->accel = (VECTOR3){ 0, 0, -ctx->grav };
     p->lifespan = ctx->life; p->time = 0;

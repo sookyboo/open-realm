@@ -3,6 +3,7 @@
 
 #define NUM_PARTICLE_VERTICES 6
 #define MAX_PARTICLES 10000
+#define UI_ATTENTION_PARTICLE_SIZE 0.012f // UI units; keeps corner markers visible at 0.022-high quest buttons; used for WC3 attention dots.
 
 typedef struct particle_vertex {
     VECTOR3 position;
@@ -306,6 +307,13 @@ void R_DrawParticles(void) {
         VECTOR3 halfAccelT = Vector3_scale(&p->accel, 0.5f * p->time);
         VECTOR3 vel = Vector3_add(&p->vel, &halfAccelT);
         VECTOR3 org = Vector3_mad(&p->org, p->time, &vel);
+#ifdef WC3_DEBUG_PARTICLES
+        {
+            VECTOR3 const ui = Matrix4_multiply_vector3(&tr.viewDef.viewProjectionMatrix, &org);
+            fprintf(stderr, "WC3 particles: live world=(%.4f,%.4f,%.4f) ui=(%.4f,%.4f) age=%.3f\n",
+                    org.x, org.y, org.z, ui.x, ui.y, p->time);
+        }
+#endif
         COLOR32 col = FX_BlendColor(p);
         float size = p->size_value_scale * FX_BlendFloat(p->size, p->time * p->size_time_scale,
                                                          BYTE2FLOAT(p->midtime));
@@ -331,6 +339,25 @@ void R_DrawBillboardSprite(LPCTEXTURE texture, LPCVECTOR3 origin, float size, CO
     pv = R_AddParticle(pv, origin, NULL, uv, color, size);
     R_FlushParticles(texture, &matrix, pv, BLEND_MODE_BLEND);
     R_SetAlphaKeyState(false);
+}
+
+/* Draw two immediate UI particles at the supplied corners; unlike world particles,
+ * these are not inserted into the persistent world particle pool. */
+void R_DrawUIAttentionParticles(LPCRECT rect) {
+    viewDef_t saved;
+    RECT scene;
+    MATRIX4 ui;
+
+    if (!rect) return;
+    saved = tr.viewDef;
+    scene = R_UISceneRect();
+    Matrix4_ortho(&ui, scene.x, scene.x + scene.w, scene.y + scene.h, scene.y, 0.0f, 100.0f);
+    tr.viewDef.viewProjectionMatrix = ui;
+    Matrix4_identity(&tr.viewDef.textureMatrix);
+    R_Call(glDisable, GL_DEPTH_TEST);
+    R_DrawBillboardSprite(NULL, &(VECTOR3){ rect->x, rect->y, 0.0f }, UI_ATTENTION_PARTICLE_SIZE, COLOR32_WHITE);
+    R_DrawBillboardSprite(NULL, &(VECTOR3){ rect->x + rect->w, rect->y + rect->h, 0.0f }, UI_ATTENTION_PARTICLE_SIZE, COLOR32_WHITE);
+    tr.viewDef = saved;
 }
 
 static LPBUFFER R_MakeParticlesVertexArrayObject(void) {

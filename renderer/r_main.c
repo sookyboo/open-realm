@@ -1103,6 +1103,7 @@ refExport_t R_GetAPI(refImport_t imp) {
         .WindowChanged = R_WindowChanged,
         .GetTextureSize = R_GetTextureSize,
         .DrawSprite = R_DrawSprite,
+        .DrawUIAttentionParticles = R_DrawUIAttentionParticles,
         .DrawCursor = R_DrawCursor,
         .SetEntityAnimFrame = R_SetEntityAnimFrame,
         .DrawText = R_DrawText,

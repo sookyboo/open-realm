@@ -260,6 +260,7 @@ typedef struct {
     void (*DrawMinimap)(LPCRECT screen, LPCSTR map);
     void (*DrawLoadingIndicator)(LPCRECT rect, DWORD time, COLOR32 color);
     void (*DrawSprite)(LPCMODEL model, LPCSTR anim, float x, float y);
+    void (*DrawUIAttentionParticles)(LPCRECT rect);
     bool (*DrawCursor)(float x, float y, COLOR32 tint);
     bool (*SetEntityAnimFrame)(LPCMODEL model, LPCSTR anim, renderEntity_t *entity);
     void (*DrawText)(LPCDRAWTEXT drawText);
