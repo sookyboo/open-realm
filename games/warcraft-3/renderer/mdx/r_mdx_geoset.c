@@ -59,9 +59,8 @@ static void mdx_spawn_particle(void *raw) {
     VECTOR3 pivot = { 0, 0, 0 };
     if (ctx->emitter->node.node_id < (DWORD)ctx->model->num_pivots)
         pivot = ctx->model->pivots[ctx->emitter->node.node_id];
-    VECTOR3 pivoted = Vector3_add(&origin, &pivot);
     VECTOR3 dir = FX_GenerateRandomDirection(ctx->lat * (float)M_PI / 180.0f);
-    p->org = Matrix4_multiply_vector3(ctx->matrix, &pivoted);
+    p->org = MDLX_TransformEmitterPoint(ctx->matrix, &pivot, &origin);
     p->vel = Vector3_scale(&dir, ctx->speed + (r - 0.5f) * ctx->varia);
     p->accel = (VECTOR3){ 0, 0, -ctx->grav };
     p->lifespan = ctx->life; p->time = 0;
@@ -121,8 +120,13 @@ static void MDLX_RenderTailEmitter(mdxModel_t const *model,
     }
     if (emitter->node.node_id >= MDX_MAX_NODES) return;
     MATRIX4 matrix;
+    VECTOR3 pivot = { 0, 0, 0 };
+    VECTOR3 local = { 0, 0, 0 };
+
     Matrix4_multiply(modelMatrix, &node_matrices[emitter->node.node_id], &matrix);
-    VECTOR3 spine = Matrix4_multiply_vector3(&matrix, &(VECTOR3){ 0, 0, 0 });
+    if (emitter->node.node_id < (DWORD)model->num_pivots)
+        pivot = model->pivots[emitter->node.node_id];
+    VECTOR3 spine = MDLX_TransformEmitterPoint(&matrix, &pivot, &local);
     FLOAT dt = (FLOAT)tr.viewDef.deltaTime / 1000.0f;
     COLOR32 c0 = MDLX_GetEmitterColor(emitter, 0);
     VECTOR3 col = { c0.r / 255.0f, c0.g / 255.0f, c0.b / 255.0f };

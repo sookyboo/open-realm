@@ -285,6 +285,20 @@ static inline BLEND_MODE MDLX_ParticleBlendMode(DWORD filter_mode) {
     }
 }
 
+/* PRE2 emitter points are authored relative to the emitter pivot. Apply the
+ * animated node transform and model transform to (local + pivot) for every
+ * emitter path so head and tail particles share the same coordinate chain. */
+static inline VECTOR3 MDLX_TransformEmitterPoint(LPCMATRIX4 emitter_matrix,
+                                                  LPCVECTOR3 pivot,
+                                                  LPCVECTOR3 local)
+{
+    VECTOR3 point = local ? *local : (VECTOR3){ 0, 0, 0 };
+
+    if (pivot)
+        point = Vector3_add(&point, pivot);
+    return Matrix4_multiply_vector3(emitter_matrix, &point);
+}
+
 typedef struct mdxParticleEmitter_s {
     mdxNode_t node;
     float Speed;

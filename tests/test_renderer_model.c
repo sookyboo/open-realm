@@ -428,6 +428,29 @@ TEST(renderer_model, mdx_particle_filter_modes_preserve_authored_blending) {
     T_EQ(MDLX_ParticleBlendMode(MDX_PRE2_FILTER_ALPHAKEY), BLEND_MODE_ALPHAKEY);
 }
 
+TEST(renderer_model, mdx_pre2_emitter_points_share_pivoted_node_transform) {
+    MATRIX4 model, node, emitter;
+    VECTOR3 pivot = { 4.0f, 5.0f, 6.0f };
+    VECTOR3 local = { 1.0f, 2.0f, 3.0f };
+    VECTOR3 transformed, tail_origin;
+
+    Matrix4_identity(&model);
+    Matrix4_translate(&model, &(VECTOR3){ 10.0f, 20.0f, 30.0f });
+    Matrix4_identity(&node);
+    Matrix4_translate(&node, &(VECTOR3){ 7.0f, 8.0f, 9.0f });
+    Matrix4_multiply(&model, &node, &emitter);
+
+    transformed = MDLX_TransformEmitterPoint(&emitter, &pivot, &local);
+    tail_origin = MDLX_TransformEmitterPoint(&emitter, &pivot, NULL);
+
+    T_FEQ(transformed.x, 22.0f, 0.001f);
+    T_FEQ(transformed.y, 35.0f, 0.001f);
+    T_FEQ(transformed.z, 48.0f, 0.001f);
+    T_FEQ(tail_origin.x, 21.0f, 0.001f);
+    T_FEQ(tail_origin.y, 33.0f, 0.001f);
+    T_FEQ(tail_origin.z, 45.0f, 0.001f);
+}
+
 TEST(renderer_model, mdx_attachment_positions_follow_authored_pivot_and_model_transform) {
     mdxAttachment_t sprite = { 0 }, other = { 0 };
     mdxAttachmentPosition_t positions[2] = { 0 };

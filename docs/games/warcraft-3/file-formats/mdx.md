@@ -168,3 +168,12 @@ Standard sequence names are: `Stand`, `Walk`, `Attack`, `Attack Slam`, `Attack 2
 | `games/warcraft-3/renderer/mdx/r_mdx_load.c` | Chunk parser and model loader |
 | `games/warcraft-3/renderer/mdx/r_mdx_render.c` | Per-frame skinning and draw calls |
 | `games/warcraft-3/renderer/mdx/r_mdx_interpolation.c` | Keyframe track evaluation |
+
+### ParticleEmitter2 transform origin
+
+`ParticleEmitter2` spawn positions are relative to the emitter node pivot. Both
+head particles and tail trails must transform `(local offset + pivot)` through
+the animated node matrix and then the model matrix. Transforming tail origins
+from local `(0,0,0)` without the pivot collapses differently-authored emitters
+onto the same apparent origin, which is especially visible in small UI particle
+models.
