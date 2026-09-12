@@ -3,7 +3,33 @@
 
 #define NUM_PARTICLE_VERTICES 6
 #define MAX_PARTICLES 10000
-#define UI_ATTENTION_PARTICLE_SIZE 0.012f // UI units; keeps corner markers visible at 0.022-high quest buttons; used for WC3 attention dots.
+#define UI_ATTENTION_EMITTERS 2 // emitters; opposite-phase sparkle paths around one quest button.
+#define UI_ATTENTION_MAX_TAIL 32 // samples; 50/sec × 0.3 sec trail lifetime with headroom.
+#define UI_ATTENTION_MAX_HEAD 64 // particles; 2 × 50/sec × 1 sec head lifetime with headroom.
+#define UI_ATTENTION_RATE 50.0f // particles/sec; tail and head emission rate from quest sparkle simulation.
+#define UI_ATTENTION_TAIL_LIFE 0.3f // seconds; fixed trail-sample lifetime for a short perimeter streak.
+#define UI_ATTENTION_HEAD_LIFE 1.0f // seconds; head sparkle lifetime.
+#define UI_ATTENTION_HEAD_SPEED 0.02f // UI units/sec; fixed downward head-particle speed.
+#define UI_ATTENTION_MOTION_SPEED 0.9f // unitless; perimeter motion multiplier before the 0.18 authored scale.
+#define UI_ATTENTION_MOTION_SCALE 0.18f // cycles/unit; authored path-time scale for the 6.17-second loop.
+#define UI_ATTENTION_DT_MAX 0.05f // seconds; caps a stalled frame to keep the simulation frame-rate independent.
+
+typedef struct {
+    VECTOR2 pos, vel;
+    FLOAT age, life, start, mid, end;
+} uiAttentionParticle_t;
+
+typedef struct {
+    RECT rect;
+    FLOAT time, acc[UI_ATTENTION_EMITTERS];
+    BOOL valid;
+    uiAttentionParticle_t tail[UI_ATTENTION_EMITTERS][UI_ATTENTION_MAX_TAIL];
+    DWORD tail_count[UI_ATTENTION_EMITTERS];
+    uiAttentionParticle_t head[UI_ATTENTION_EMITTERS][UI_ATTENTION_MAX_HEAD];
+    DWORD head_count[UI_ATTENTION_EMITTERS];
+} uiAttentionState_t;
+
+static uiAttentionState_t ui_attention;
 
 typedef struct particle_vertex {
     VECTOR3 position;
@@ -283,6 +309,73 @@ static COLOR32 FX_GetFrame(const cparticle_t *p) {
     };
 }
 
+/* Evaluate clockwise perimeter distance so the two UI emitters never jump at the loop seam. */
+static VECTOR2 R_UIAttentionPosition(LPCRECT rect, FLOAT phase) {
+    FLOAT span = 2.0f * (rect->w + rect->h);
+    FLOAT dist = fmodf(phase, 1.0f) * span;
+
+    if (dist < rect->w) return (VECTOR2){ rect->x + dist, rect->y };
+    dist -= rect->w;
+    if (dist < rect->h) return (VECTOR2){ rect->x + rect->w, rect->y + dist };
+    dist -= rect->h;
+    if (dist < rect->w) return (VECTOR2){ rect->x + rect->w - dist, rect->y + rect->h };
+    dist -= rect->w;
+    return (VECTOR2){ rect->x, rect->y + rect->h - dist };
+}
+
+/* Apply the shared three-point particle size curve to either head or tail age. */
+static FLOAT R_UIAttentionSize(uiAttentionParticle_t const *p) {
+    FLOAT u = MAX(0.0f, MIN(1.0f, p->age / p->life));
+    return u < 0.5f ? p->start + (p->mid - p->start) * u * 2.0f
+                    : p->mid + (p->end - p->mid) * (u - 0.5f) * 2.0f;
+}
+
+/* Remove expired UI particles in-place while retaining stable order for diagnostics. */
+static void R_UIAttentionCompact(uiAttentionParticle_t *list, DWORD *count, DWORD max) {
+    DWORD out = 0;
+    FOR_LOOP(i, *count) if (list[i].age < list[i].life) list[out++] = list[i];
+    *count = MIN(out, max);
+}
+
+/* Advance the two opposite-phase emitters and deposit frame-rate-independent head/tail samples. */
+static void R_UIAttentionUpdate(LPCRECT rect, FLOAT dt) {
+    FLOAT rate_dt = UI_ATTENTION_RATE * dt;
+
+    if (!ui_attention.valid || memcmp(&ui_attention.rect, rect, sizeof(*rect))) {
+        memset(&ui_attention, 0, sizeof(ui_attention));
+        ui_attention.rect = *rect;
+        ui_attention.valid = true;
+    }
+    ui_attention.time += dt;
+    FOR_LOOP(e, UI_ATTENTION_EMITTERS) {
+        FLOAT phase = ui_attention.time * UI_ATTENTION_MOTION_SPEED * UI_ATTENTION_MOTION_SCALE + e * 0.5f;
+        VECTOR2 pos = R_UIAttentionPosition(rect, phase);
+        ui_attention.acc[e] += rate_dt;
+        while (ui_attention.acc[e] >= 1.0f) {
+            ui_attention.acc[e] -= 1.0f;
+            if (ui_attention.tail_count[e] == UI_ATTENTION_MAX_TAIL) {
+                memmove(&ui_attention.tail[e][0], &ui_attention.tail[e][1],
+                        sizeof(ui_attention.tail[e][0]) * (UI_ATTENTION_MAX_TAIL - 1));
+                ui_attention.tail_count[e]--;
+            }
+            ui_attention.tail[e][ui_attention.tail_count[e]++] = (uiAttentionParticle_t){
+                .pos = pos, .life = UI_ATTENTION_TAIL_LIFE,
+                .start = e ? 0.006f : 0.010f, .mid = 0.004f, .end = 0.002f };
+            if (ui_attention.head_count[e] < UI_ATTENTION_MAX_HEAD)
+                ui_attention.head[e][ui_attention.head_count[e]++] = (uiAttentionParticle_t){
+                    .pos = pos, .vel = { 0, -UI_ATTENTION_HEAD_SPEED }, .life = UI_ATTENTION_HEAD_LIFE,
+                    .start = e ? 0.006f : 0.010f, .mid = 0.004f, .end = 0.002f };
+        }
+        FOR_LOOP(i, ui_attention.tail_count[e]) ui_attention.tail[e][i].age += dt;
+        FOR_LOOP(i, ui_attention.head_count[e]) {
+            uiAttentionParticle_t *p = &ui_attention.head[e][i];
+            p->pos.x += p->vel.x * dt; p->pos.y += p->vel.y * dt; p->age += dt;
+        }
+        R_UIAttentionCompact(ui_attention.tail[e], &ui_attention.tail_count[e], UI_ATTENTION_MAX_TAIL);
+        R_UIAttentionCompact(ui_attention.head[e], &ui_attention.head_count[e], UI_ATTENTION_MAX_HEAD);
+    }
+}
+
 void R_DrawParticles(void) {
     MATRIX4 matrix;
     particleVertex_t *pv = particles_resources.vertices;
@@ -347,16 +440,41 @@ void R_DrawUIAttentionParticles(LPCRECT rect) {
     viewDef_t saved;
     RECT scene;
     MATRIX4 ui;
+    MATRIX4 model;
+    particleVertex_t *pv = particles_resources.vertices;
+    FLOAT dt;
 
     if (!rect) return;
     saved = tr.viewDef;
     scene = R_UISceneRect();
+    dt = MIN((FLOAT)tr.viewDef.deltaTime / 1000.0f, UI_ATTENTION_DT_MAX);
+    R_UIAttentionUpdate(rect, dt);
     Matrix4_ortho(&ui, scene.x, scene.x + scene.w, scene.y + scene.h, scene.y, 0.0f, 100.0f);
     tr.viewDef.viewProjectionMatrix = ui;
     Matrix4_identity(&tr.viewDef.textureMatrix);
+    Matrix4_identity(&model);
     R_Call(glDisable, GL_DEPTH_TEST);
-    R_DrawBillboardSprite(NULL, &(VECTOR3){ rect->x, rect->y, 0.0f }, UI_ATTENTION_PARTICLE_SIZE, COLOR32_WHITE);
-    R_DrawBillboardSprite(NULL, &(VECTOR3){ rect->x + rect->w, rect->y + rect->h, 0.0f }, UI_ATTENTION_PARTICLE_SIZE, COLOR32_WHITE);
+    FOR_LOOP(e, UI_ATTENTION_EMITTERS) {
+        FOR_LOOP(i, ui_attention.tail_count[e]) {
+            uiAttentionParticle_t const *p = &ui_attention.tail[e][i];
+            FLOAT fade = 1.0f - p->age / p->life;
+            COLOR32 outer = { 255, 255, 255, (BYTE)(fade * 31.0f + 0.5f) };
+            COLOR32 core = { 255, 255, 255, (BYTE)(fade * 153.0f + 0.5f) };
+            VECTOR3 pos = { p->pos.x, p->pos.y, 0.0f };
+            FLOAT size = R_UIAttentionSize(p);
+            pv = R_AddParticle(pv, &pos, NULL, (COLOR32){ 0, 255, 255, 0 }, outer, size * 1.8f);
+            pv = R_AddParticle(pv, &pos, NULL, (COLOR32){ 0, 255, 255, 0 }, core, size * 0.8f);
+        }
+        FOR_LOOP(i, ui_attention.head_count[e]) {
+            uiAttentionParticle_t const *p = &ui_attention.head[e][i];
+            FLOAT fade = 1.0f - p->age / p->life;
+            COLOR32 col = { 255, 255, 255, (BYTE)(fade * 166.0f + 0.5f) };
+            VECTOR3 pos = { p->pos.x, p->pos.y, 0.0f };
+            pv = R_AddParticle(pv, &pos, NULL, (COLOR32){ 0, 255, 255, 0 }, col, R_UIAttentionSize(p));
+        }
+    }
+    if (pv != particles_resources.vertices)
+        R_FlushParticles(NULL, &model, pv, BLEND_MODE_ADDALPHA);
     tr.viewDef = saved;
 }
 
