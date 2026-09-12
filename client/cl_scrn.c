@@ -1292,16 +1292,17 @@ void SCR_LayoutDrawFrame(LPCUIFRAME frame) {
         fprintf(stderr, "WC3 particles: quest button TL=(%.4f,%.4f) BR=(%.4f,%.4f)\n",
                 screen->x, screen->y, screen->x + screen->w, screen->y + screen->h);
 #endif
-#ifdef WC3
-    if (frame->onclick && !strcmp(frame->onclick, "quests") && re.DrawUIAttentionParticles)
-        re.DrawUIAttentionParticles(screen);
-#endif
     FOR_LOOP(j, sizeof(drawers)/sizeof(*drawers)) {
         if (drawers[j].type == frame->flags.type) {
             drawers[j].func(frame, screen);
             break;
         }
     }
+#ifdef WC3
+    /* Submit after the button's own art so the sparkle is composited above it. */
+    if (frame->onclick && !strcmp(frame->onclick, "quests") && re.DrawUIAttentionParticles)
+        re.DrawUIAttentionParticles(screen);
+#endif
 }
 
 void SCR_LayoutUpdateFrame(LPCUIFRAME frame) {
