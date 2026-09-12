@@ -11,6 +11,11 @@
 #define UI_ATTENTION_HEAD_LIFE 1.0f // seconds; head sparkle lifetime.
 #define UI_ATTENTION_HEAD_SPEED 0.02f // UI units/sec; fixed downward head-particle speed.
 #define UI_ATTENTION_TAIL_LENGTH 0.012f // UI units; short trail axis aligned to the perimeter tangent.
+#define UI_ATTENTION_TAIL_OUTER 1.8f // radius scale; expands the soft outer glow around each UI trail sample.
+#define UI_ATTENTION_TAIL_CORE 0.8f // radius scale; keeps the bright core tighter than the outer glow.
+#define UI_ATTENTION_TAIL_OUTER_ALPHA 0.12f // alpha scale; keeps the outer UI glow soft under additive blending.
+#define UI_ATTENTION_TAIL_CORE_ALPHA 0.6f // alpha scale; preserves the bright center of each fading UI sample.
+#define UI_ATTENTION_TAIL_QUADS 128 // quads; 2 emitters × 32 samples × 2 fading UI layers.
 #define UI_ATTENTION_MOTION_SPEED 0.9f // unitless; perimeter motion multiplier before the 0.18 authored scale.
 #define UI_ATTENTION_MOTION_SCALE 0.18f // cycles/unit; authored path-time scale for the 6.17-second loop.
 #define UI_ATTENTION_DT_MAX 0.05f // seconds; caps a stalled frame to keep the simulation frame-rate independent.
@@ -49,6 +54,7 @@ typedef struct PARTICLESTATE {
     int texture;
     int fogOfWar;
     bool alphaKey;
+    bool uiSpace;
     FLOAT alphaCutoff;
 } PARTICLESTATE;
 typedef struct PARTICLESTATE *LPPARTICLESTATE;
@@ -67,6 +73,7 @@ static struct {
     LPTEXTURE texture;
     particleVertex_t vertices[MAX_PARTICLES * NUM_PARTICLE_VERTICES];
 } particles_resources = { 0 };
+static BOOL particle_ui_space;
 
 cparticle_t *active_particles, *free_particles;
 cparticle_t particles[MAX_PARTICLES];
@@ -106,6 +113,7 @@ static const shader_desc_t sd_particle = {
         UNIFORM(texture,        UT_SAMPLER_2D, PRECISION_LOW),
         UNIFORM(fogOfWar,       UT_SAMPLER_2D, PRECISION_LOW),
         UNIFORM(alphaKey,       UT_BOOL,       PRECISION_LOW),
+        UNIFORM(uiSpace,        UT_BOOL,       PRECISION_LOW),
         UNIFORM(alphaCutoff,    UT_FLOAT,      PRECISION_LOW),
     },
     .Attributes = {
@@ -130,9 +138,15 @@ static const shader_desc_t sd_particle = {
         "  vec3 pos;\n"
         "  if (dot(a_tail, a_tail) > 0.0001) {\n"
         "    vec3 point = a_position - a_tail * (1.0 - a_axis.y);\n"
-        "    vec3 side = cross(normalize(a_tail), u_eye - point);\n"
-        "    float sideLength = length(side);\n"
-        "    if (sideLength < 0.0001) side = cameraLeft; else side /= sideLength;\n"
+        "    vec3 side;\n"
+        "    if (u_uiSpace) {\n"
+        "      vec3 tangent = normalize(a_tail);\n"
+        "      side = normalize(vec3(-tangent.y, tangent.x, 0.0));\n"
+        "    } else {\n"
+        "      side = cross(normalize(a_tail), u_eye - point);\n"
+        "      float sideLength = length(side);\n"
+        "      if (sideLength < 0.0001) side = cameraLeft; else side /= sideLength;\n"
+        "    }\n"
         "    pos = point + side * ((a_axis.x - 0.5) * a_size);\n"
         "  } else {\n"
         "    mat3 bb_mat = mat3(left, up, a_position);\n"
@@ -246,6 +260,7 @@ static void R_FlushParticles(LPCTEXTURE texture, LPCMATRIX4 matrix, particleVert
     particles_resources.shader.state.viewProjection = tr.viewDef.viewProjectionMatrix;
     particles_resources.shader.state.eye = tr.viewDef.camerastate[0].eye;
     particles_resources.shader.state.textureMatrix = tr.viewDef.textureMatrix;
+    particles_resources.shader.state.uiSpace = particle_ui_space;
     R_Call(glActiveTexture, GL_TEXTURE0);
     R_Call(glBindTexture, GL_TEXTURE_2D, (texture?texture:particles_resources.texture)->texid);
     particles_resources.shader.state.alphaKey = blend_mode == BLEND_MODE_ALPHAKEY;
@@ -387,6 +402,7 @@ void R_DrawParticles(void) {
     LPCTEXTURE texture;
     BLEND_MODE blend_mode;
 
+    particle_ui_space = false;
     if (!R_CvarEnabled("r_particles", "1") || !active_particles) return;
     texture = active_particles->texture; blend_mode = active_particles->blend_mode;
     
@@ -432,6 +448,7 @@ void R_DrawBillboardSprite(LPCTEXTURE texture, LPCVECTOR3 origin, float size, CO
     particleVertex_t *pv = particles_resources.vertices;
     COLOR32 const uv = { 0, 255, 255, 0 };
 
+    particle_ui_space = false;
     if (!texture) texture = particles_resources.texture;
     Matrix4_identity(&matrix);
     pv = R_AddParticle(pv, origin, NULL, uv, color, size);
@@ -447,6 +464,8 @@ void R_DrawUIAttentionParticles(LPCRECT rect) {
     MATRIX4 ui;
     MATRIX4 model;
     particleVertex_t *pv = particles_resources.vertices;
+    VERTEX tail_vertices[UI_ATTENTION_TAIL_QUADS * 6];
+    DWORD tail_count = 0;
     FLOAT dt;
 
     if (!rect) return;
@@ -461,19 +480,45 @@ void R_DrawUIAttentionParticles(LPCRECT rect) {
      * camera rather than the restored gameplay eye for a stable 2D orientation. */
     tr.viewDef.camerastate[0].eye = (VECTOR3){ 0, 0, 100 };
     Matrix4_identity(&model);
+    particle_ui_space = true;
     R_Call(glDisable, GL_DEPTH_TEST);
     FOR_LOOP(e, UI_ATTENTION_EMITTERS) {
         FOR_LOOP(i, ui_attention.tail_count[e]) {
             uiAttentionParticle_t const *p = &ui_attention.tail[e][i];
             FLOAT fade = 1.0f - p->age / p->life;
-            COLOR32 col = { 255, 255, 255, (BYTE)(fade * 255.0f + 0.5f) };
-            VECTOR3 pos = { p->pos.x, p->pos.y, 0.0f };
             FLOAT size = R_UIAttentionSize(p);
-            /* Match the original MDX particle look: one shared particle sprite
-             * per trail sample, rather than expanding each sample into two glows. */
-            VECTOR3 tail = { p->tail.x, p->tail.y, 0.0f };
-            pv = R_AddParticle(pv, &pos, &tail, (COLOR32){ 0, 255, 255, 0 }, col, size);
+            FLOAT len = MAX(fabsf(p->tail.x), fabsf(p->tail.y));
+            RECT box = { p->pos.x, p->pos.y, 0, 0 };
+            if (fabsf(p->tail.x) > 0.0f) {
+                box.x -= MAX(p->tail.x, 0.0f);
+                box.w = len;
+                box.y -= size * UI_ATTENTION_TAIL_OUTER * 0.5f;
+                box.h = size * UI_ATTENTION_TAIL_OUTER;
+            } else {
+                box.y -= MAX(p->tail.y, 0.0f);
+                box.w = size * UI_ATTENTION_TAIL_OUTER;
+                box.h = len;
+                box.x -= size * UI_ATTENTION_TAIL_OUTER * 0.5f;
+            }
+            R_AddQuad(tail_vertices + tail_count, &box, &(RECT){0, 0, 1, 1},
+                      (COLOR32){255, 255, 255, (BYTE)(fade * UI_ATTENTION_TAIL_OUTER_ALPHA * 255.0f + 0.5f)}, 0);
+            tail_count += 6;
+            if (fabsf(p->tail.x) > 0.0f) {
+                box.y = p->pos.y - size * UI_ATTENTION_TAIL_CORE * 0.5f;
+                box.h = size * UI_ATTENTION_TAIL_CORE;
+            } else {
+                box.x = p->pos.x - size * UI_ATTENTION_TAIL_CORE * 0.5f;
+                box.w = size * UI_ATTENTION_TAIL_CORE;
+            }
+            R_AddQuad(tail_vertices + tail_count, &box, &(RECT){0, 0, 1, 1},
+                      (COLOR32){255, 255, 255, (BYTE)(fade * UI_ATTENTION_TAIL_CORE_ALPHA * 255.0f + 0.5f)}, 0);
+            tail_count += 6;
         }
+    }
+    if (tail_count)
+        R_DrawImageBatch(tr.texture[TEX_WHITE], SHADER_UI, BLEND_MODE_BLEND, 0, 0, false, NULL,
+                         tail_vertices, tail_count, false);
+    FOR_LOOP(e, UI_ATTENTION_EMITTERS) {
         FOR_LOOP(i, ui_attention.head_count[e]) {
             uiAttentionParticle_t const *p = &ui_attention.head[e][i];
             FLOAT fade = 1.0f - p->age / p->life;
@@ -484,6 +529,7 @@ void R_DrawUIAttentionParticles(LPCRECT rect) {
     }
     if (pv != particles_resources.vertices)
         R_FlushParticles(NULL, &model, pv, BLEND_MODE_ADD);
+    particle_ui_space = false;
     tr.viewDef = saved;
 }
 
