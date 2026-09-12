@@ -5,6 +5,16 @@ void build_build(LPEDICT ent);
 void repair_build_legacy(LPEDICT ent, LPEDICT building);
 void repair_build_primary(LPEDICT ent, LPEDICT building);
 
+static unitRace_t build_worker_race(LPCEDICT ent) {
+    LPCSTR race = ent && ent->data.UnitData ? ent->data.UnitData->race : NULL;
+    if (!race) return RACE_UNKNOWN;
+    if (!strcmp(race, STR_HUMAN)) return RACE_HUMAN;
+    if (!strcmp(race, STR_ORC)) return RACE_ORC;
+    if (!strcmp(race, STR_UNDEAD)) return RACE_UNDEAD;
+    if (!strcmp(race, STR_NIGHTELF)) return RACE_NIGHTELF;
+    return RACE_UNKNOWN;
+}
+
 static void G_BuildError(LPEDICT clent, LPCSTR text) {
     if (!clent || !text || !*text) return;
     G_ShowCommandErrorText(clent, text);
@@ -66,6 +76,10 @@ static void ai_build_walk(LPEDICT ent) {
 }
 
 static umove_t build_move_walk = { "walk", ai_build_walk, NULL, &a_build };
+/* Undead builders remain visible for the short summon animation while the
+ * structure has already begun autonomous construction. The building-owned
+ * construction timer releases this worker after the Warsmash 2.267 s window. */
+static umove_t build_move_summon = { "stand work", NULL, NULL, &a_build };
 
 /* Shared callers submit only validated legal orders; build_build revalidates before charging at arrival. */
 BOOL G_IssueBuildOrder(LPEDICT builder, DWORD building_id, LPCVECTOR2 location) {
@@ -133,6 +147,8 @@ void build_build(LPEDICT ent) {
     buildCommandState_t state;
     LPEDICT building;
     DWORD building_id;
+    BOOL construction_started = false;
+    unitRace_t race;
 
     if (!ent || !ent->goalentity || !ent->build_project) {
         if (ent) ent->stand(ent);
@@ -203,21 +219,34 @@ void build_build(LPEDICT ent) {
         ent->stand(ent);
         return;
     }
-    if (G_UnitHasHumanRepair(ent)) {
-        G_StartHumanConstruction(ent, building);
+    race = build_worker_race(ent);
+    /* Repair is shared by worker data, but only Human construction uses the
+     * external Repair clock; Orc Peons must enter the hidden worker-owned path. */
+    if (race == RACE_HUMAN && G_UnitHasHumanRepair(ent)) {
+        construction_started = G_StartHumanConstruction(ent, building);
+    } else {
+        switch (race) {
+        case RACE_ORC: construction_started = G_StartOrcConstruction(ent, building); break;
+        case RACE_UNDEAD: construction_started = G_StartUndeadConstruction(ent, building); break;
+        case RACE_NIGHTELF: construction_started = G_StartNightElfConstruction(ent, building); break;
+        default: break;
+        }
+    }
+    if (construction_started) {
         /* Cancellation refunds the exact base construction payment, not later
-         * power-build Repair spending. Record that transaction on the spawned
-         * structure while the paying client and authored cost are still known. */
+         * Human Power Build Repair spending. Record it for every race strategy. */
         building->construction.payer = client->ps.number;
         if (!G_BuildAllEnabled()) {
             building->construction.paid = true;
             building->construction.gold = MAX(0, building->data.UnitBalance->goldCost);
             building->construction.lumber = MAX(0, building->data.UnitBalance->lumberCost);
         }
-        repair_build_primary(ent, building);
+        if (building->construction.type == CONSTRUCTION_HUMAN)
+            repair_build_primary(ent, building);
+        else if (building->construction.type == CONSTRUCTION_UNDEAD)
+            unit_setmove(ent, &build_move_summon);
     } else {
-        /* Other race lifecycles remain the legacy behavior until their
-         * worker-inside/summon construction strategies are implemented. */
+        /* Preserve the old generic fallback for custom/unknown workers. */
         repair_build_legacy(ent, building);
         G_SetHealth(building, 0);
     }

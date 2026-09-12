@@ -472,6 +472,78 @@ TEST(wc3_spell, mirror_image_immediate_order_spawns_summoned_illusion) {
 	free_slk_rows(rows);
 }
 
+TEST(wc3_spell, moon_well_replenishes_life_then_mana_using_authored_ratios) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X4\n"
+        "C;Y1;X1;K\"alias\"\n"
+        "C;Y1;X2;K\"code\"\n"
+        "C;Y1;X3;K\"DataA1\"\n"
+        "C;Y1;X4;K\"DataB1\"\n"
+        "C;Y2;X1;K\"Ambt\"\n"
+        "C;Y2;X2;K\"Ambt\"\n"
+        "C;Y2;X3;K\"0.5\"\n"
+        "C;Y2;X4;K\"2.0\"\n"
+        "E\n";
+    slkTestData_t *rows = parse_slk_string(slk);
+    slkTestData_t *old = G_SetSLKRows("AbilityData", rows);
+    spell_info_t const *spell = S_SpellInfoForCode(MAKEFOURCC('A','m','b','t'));
+    LPEDICT well = make_hero(MAKEFOURCC('h','b','a','r'), 100, 50, 0, 0);
+    LPEDICT target = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64, 0);
+    spellTarget_t st = { .type = SPELL_TARGET_UNIT, .entity = target };
+
+    well->s.player = target->s.player = 0;
+    target->health.max_value = 100.0f;
+    target->health.value = 80.0f;
+    target->mana.max_value = 100.0f;
+    target->mana.value = 50.0f;
+    T_NOT_NULL(spell);
+    T_ASSERT(spell->validate(well, st));
+    spell->execute(well, st, spell);
+
+    /* 20 HP costs 40 well mana at DataB=2; the remaining 10 restores 20 mana
+     * at DataA=0.5. */
+    T_FEQ(target->health.value, 100.0f, 0.001f);
+    T_FEQ(target->mana.value, 70.0f, 0.001f);
+    T_FEQ(well->mana.value, 0.0f, 0.001f);
+
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
+}
+
+TEST(wc3_spell, moon_well_accepts_mana_only_replenishment) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X4\n"
+        "C;Y1;X1;K\"alias\"\n"
+        "C;Y1;X2;K\"code\"\n"
+        "C;Y1;X3;K\"DataA1\"\n"
+        "C;Y1;X4;K\"DataB1\"\n"
+        "C;Y2;X1;K\"Ambt\"\n"
+        "C;Y2;X2;K\"Ambt\"\n"
+        "C;Y2;X3;K\"0.5\"\n"
+        "C;Y2;X4;K\"2.0\"\n"
+        "E\n";
+    slkTestData_t *rows = parse_slk_string(slk);
+    slkTestData_t *old = G_SetSLKRows("AbilityData", rows);
+    spell_info_t const *spell = S_SpellInfoForCode(MAKEFOURCC('A','m','b','t'));
+    LPEDICT well = make_hero(MAKEFOURCC('h','b','a','r'), 100, 10, 0, 0);
+    LPEDICT target = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64, 0);
+    spellTarget_t st = { .type = SPELL_TARGET_UNIT, .entity = target };
+
+    well->s.player = target->s.player = 0;
+    target->health.max_value = target->health.value = 100.0f;
+    target->mana.max_value = 100.0f;
+    target->mana.value = 50.0f;
+    T_NOT_NULL(spell);
+    T_ASSERT(spell->validate(well, st));
+    spell->execute(well, st, spell);
+    T_FEQ(target->health.value, 100.0f, 0.001f);
+    T_FEQ(target->mana.value, 70.0f, 0.001f);
+    T_FEQ(well->mana.value, 0.0f, 0.001f);
+
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
+}
+
 /* ---- spell_info_t registration ---- */
 
 TEST(wc3_spell, spell_info_attached_to_ability) {
