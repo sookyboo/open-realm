@@ -10,12 +10,13 @@
 #define UI_ATTENTION_TAIL_LIFE 0.3f // seconds; fixed trail-sample lifetime for a short perimeter streak.
 #define UI_ATTENTION_HEAD_LIFE 1.0f // seconds; head sparkle lifetime.
 #define UI_ATTENTION_HEAD_SPEED 0.02f // UI units/sec; fixed downward head-particle speed.
+#define UI_ATTENTION_TAIL_LENGTH 0.012f // UI units; short trail axis aligned to the perimeter tangent.
 #define UI_ATTENTION_MOTION_SPEED 0.9f // unitless; perimeter motion multiplier before the 0.18 authored scale.
 #define UI_ATTENTION_MOTION_SCALE 0.18f // cycles/unit; authored path-time scale for the 6.17-second loop.
 #define UI_ATTENTION_DT_MAX 0.05f // seconds; caps a stalled frame to keep the simulation frame-rate independent.
 
 typedef struct {
-    VECTOR2 pos, vel;
+    VECTOR2 pos, vel, tail;
     FLOAT age, life, start, mid, end;
 } uiAttentionParticle_t;
 
@@ -310,16 +311,20 @@ static COLOR32 FX_GetFrame(const cparticle_t *p) {
 }
 
 /* Evaluate clockwise perimeter distance so the two UI emitters never jump at the loop seam. */
-static VECTOR2 R_UIAttentionPosition(LPCRECT rect, FLOAT phase) {
+static VECTOR2 R_UIAttentionPosition(LPCRECT rect, FLOAT phase, LPVECTOR2 dir) {
     FLOAT span = 2.0f * (rect->w + rect->h);
     FLOAT dist = fmodf(phase, 1.0f) * span;
 
+    *dir = (VECTOR2){ 1, 0 };
     if (dist < rect->w) return (VECTOR2){ rect->x + dist, rect->y };
     dist -= rect->w;
+    *dir = (VECTOR2){ 0, 1 };
     if (dist < rect->h) return (VECTOR2){ rect->x + rect->w, rect->y + dist };
     dist -= rect->h;
+    *dir = (VECTOR2){ -1, 0 };
     if (dist < rect->w) return (VECTOR2){ rect->x + rect->w - dist, rect->y + rect->h };
     dist -= rect->w;
+    *dir = (VECTOR2){ 0, -1 };
     return (VECTOR2){ rect->x, rect->y + rect->h - dist };
 }
 
@@ -349,7 +354,7 @@ static void R_UIAttentionUpdate(LPCRECT rect, FLOAT dt) {
     ui_attention.time += dt;
     FOR_LOOP(e, UI_ATTENTION_EMITTERS) {
         FLOAT phase = ui_attention.time * UI_ATTENTION_MOTION_SPEED * UI_ATTENTION_MOTION_SCALE + e * 0.5f;
-        VECTOR2 pos = R_UIAttentionPosition(rect, phase);
+        VECTOR2 dir, pos = R_UIAttentionPosition(rect, phase, &dir);
         ui_attention.acc[e] += rate_dt;
         while (ui_attention.acc[e] >= 1.0f) {
             ui_attention.acc[e] -= 1.0f;
@@ -359,7 +364,7 @@ static void R_UIAttentionUpdate(LPCRECT rect, FLOAT dt) {
                 ui_attention.tail_count[e]--;
             }
             ui_attention.tail[e][ui_attention.tail_count[e]++] = (uiAttentionParticle_t){
-                .pos = pos, .life = UI_ATTENTION_TAIL_LIFE,
+                .pos = pos, .tail = Vector2_scale(&dir, UI_ATTENTION_TAIL_LENGTH), .life = UI_ATTENTION_TAIL_LIFE,
                 .start = e ? 0.006f : 0.010f, .mid = 0.004f, .end = 0.002f };
             if (ui_attention.head_count[e] < UI_ATTENTION_MAX_HEAD)
                 ui_attention.head[e][ui_attention.head_count[e]++] = (uiAttentionParticle_t){
@@ -452,6 +457,9 @@ void R_DrawUIAttentionParticles(LPCRECT rect) {
     Matrix4_ortho(&ui, scene.x, scene.x + scene.w, scene.y + scene.h, scene.y, 0.0f, 100.0f);
     tr.viewDef.viewProjectionMatrix = ui;
     Matrix4_identity(&tr.viewDef.textureMatrix);
+    /* The tail shader builds its perpendicular from the view eye; use the UI
+     * camera rather than the restored gameplay eye for a stable 2D orientation. */
+    tr.viewDef.camerastate[0].eye = (VECTOR3){ 0, 0, 100 };
     Matrix4_identity(&model);
     R_Call(glDisable, GL_DEPTH_TEST);
     FOR_LOOP(e, UI_ATTENTION_EMITTERS) {
@@ -463,7 +471,8 @@ void R_DrawUIAttentionParticles(LPCRECT rect) {
             FLOAT size = R_UIAttentionSize(p);
             /* Match the original MDX particle look: one shared particle sprite
              * per trail sample, rather than expanding each sample into two glows. */
-            pv = R_AddParticle(pv, &pos, NULL, (COLOR32){ 0, 255, 255, 0 }, col, size);
+            VECTOR3 tail = { p->tail.x, p->tail.y, 0.0f };
+            pv = R_AddParticle(pv, &pos, &tail, (COLOR32){ 0, 255, 255, 0 }, col, size);
         }
         FOR_LOOP(i, ui_attention.head_count[e]) {
             uiAttentionParticle_t const *p = &ui_attention.head[e][i];
