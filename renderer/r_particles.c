@@ -458,12 +458,12 @@ void R_DrawUIAttentionParticles(LPCRECT rect) {
         FOR_LOOP(i, ui_attention.tail_count[e]) {
             uiAttentionParticle_t const *p = &ui_attention.tail[e][i];
             FLOAT fade = 1.0f - p->age / p->life;
-            COLOR32 outer = { 255, 255, 255, (BYTE)(fade * 31.0f + 0.5f) };
-            COLOR32 core = { 255, 255, 255, (BYTE)(fade * 153.0f + 0.5f) };
+            COLOR32 col = { 255, 255, 255, (BYTE)(fade * 255.0f + 0.5f) };
             VECTOR3 pos = { p->pos.x, p->pos.y, 0.0f };
             FLOAT size = R_UIAttentionSize(p);
-            pv = R_AddParticle(pv, &pos, NULL, (COLOR32){ 0, 255, 255, 0 }, outer, size * 1.8f);
-            pv = R_AddParticle(pv, &pos, NULL, (COLOR32){ 0, 255, 255, 0 }, core, size * 0.8f);
+            /* Match the original MDX particle look: one shared particle sprite
+             * per trail sample, rather than expanding each sample into two glows. */
+            pv = R_AddParticle(pv, &pos, NULL, (COLOR32){ 0, 255, 255, 0 }, col, size);
         }
         FOR_LOOP(i, ui_attention.head_count[e]) {
             uiAttentionParticle_t const *p = &ui_attention.head[e][i];
@@ -474,7 +474,7 @@ void R_DrawUIAttentionParticles(LPCRECT rect) {
         }
     }
     if (pv != particles_resources.vertices)
-        R_FlushParticles(NULL, &model, pv, BLEND_MODE_ADDALPHA);
+        R_FlushParticles(NULL, &model, pv, BLEND_MODE_ADD);
     tr.viewDef = saved;
 }
 
