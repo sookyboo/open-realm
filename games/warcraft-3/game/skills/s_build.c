@@ -5,16 +5,6 @@ void build_build(LPEDICT ent);
 void repair_build_legacy(LPEDICT ent, LPEDICT building);
 void repair_build_primary(LPEDICT ent, LPEDICT building);
 
-static unitRace_t build_worker_race(LPCEDICT ent) {
-    LPCSTR race = ent && ent->data.UnitData ? ent->data.UnitData->race : NULL;
-    if (!race) return RACE_UNKNOWN;
-    if (!strcmp(race, STR_HUMAN)) return RACE_HUMAN;
-    if (!strcmp(race, STR_ORC)) return RACE_ORC;
-    if (!strcmp(race, STR_UNDEAD)) return RACE_UNDEAD;
-    if (!strcmp(race, STR_NIGHTELF)) return RACE_NIGHTELF;
-    return RACE_UNKNOWN;
-}
-
 static void G_BuildError(LPEDICT clent, LPCSTR text) {
     if (!clent || !text || !*text) return;
     G_ShowCommandErrorText(clent, text);
@@ -219,7 +209,7 @@ void build_build(LPEDICT ent) {
         ent->stand(ent);
         return;
     }
-    race = build_worker_race(ent);
+    race = WC3_RaceFromString(ent->data.UnitData ? ent->data.UnitData->race : NULL);
     /* Repair is shared by worker data, but only Human construction uses the
      * external Repair clock; Orc Peons must enter the hidden worker-owned path. */
     if (race == RACE_HUMAN && G_UnitHasHumanRepair(ent)) {
