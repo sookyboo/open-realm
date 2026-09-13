@@ -917,6 +917,10 @@ DWORD IssueTargetOrderById(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
     DWORD order = (DWORD)jass_checkinteger(j, 2);
     LPEDICT targetWidget = jass_checkhandle(j, 3, "widget");
+    /* Blizzard.j represents build-on-target orders (notably 'ugol') as target
+     * orders; route those rawcodes through construction instead of treating
+     * them as ordinary string orders. */
+    BOOL const route_build = G_UnitIsBuilding(order) && targetWidget;
     BOOL accepted;
 
 #ifdef WC3_DEBUG_BUILD
@@ -927,13 +931,13 @@ DWORD IssueTargetOrderById(LPJASS j) {
             targetWidget ? (long)(targetWidget - g_edicts) : -1L,
             targetWidget ? (LPCSTR)&targetWidget->class_id : "????");
 #endif
-    if (G_UnitIsBuilding(order) && targetWidget)
+    if (route_build)
         accepted = G_IssueBuildOrder(whichUnit, order, &targetWidget->s.origin2);
     else
         accepted = unit_issuetargetorder(whichUnit, G_OrderId2String(order), targetWidget);
 #ifdef WC3_DEBUG_BUILD
     fprintf(stderr, "WC3_DEBUG_BUILD JASS IssueTargetOrderById result=%d routed_to_build=%d order=%.4s\n",
-            accepted, G_UnitIsBuilding(order), (LPCSTR)&order);
+            accepted, route_build, (LPCSTR)&order);
 #endif
     return jass_pushboolean(j, accepted);
 }
@@ -964,7 +968,7 @@ DWORD IssueBuildOrderById(LPJASS j) {
     VECTOR2 point = { jass_checknumber(j, 3), jass_checknumber(j, 4) };
     BOOL accepted;
 
- #ifdef WC3_DEBUG_BUILD
+#ifdef WC3_DEBUG_BUILD
     fprintf(stderr, "WC3_DEBUG_BUILD JASS IssueBuildOrderById caller=\"%s\" worker=%ld worker_id=%.4s building=%.4s point=(%.1f,%.1f)\n",
             jass_currentfunctionname(j) ? jass_currentfunctionname(j) : "(root)",
             whichPeon ? (long)(whichPeon - g_edicts) : -1L,

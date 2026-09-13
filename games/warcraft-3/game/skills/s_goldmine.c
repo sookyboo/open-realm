@@ -709,7 +709,10 @@ static FLOAT haunted_mine_ring_radius(LPEDICT mine) {
     return alias ? MAX(0.0f, G_AbilityLevel(alias, 1)->data[3].number) : 0.0f;
 }
 
-static void haunted_mine_slot_position(LPEDICT mine, DWORD slot, DWORD capacity, LPVECTOR2 out) {
+/* Resolve one authored ring slot from the mine's current capacity so callers
+ * cannot accidentally use a stale capacity after ability data changes. */
+static void haunted_mine_slot_position(LPEDICT mine, DWORD slot, LPVECTOR2 out) {
+    DWORD const capacity = haunted_mine_max_miners(mine);
     double angle;
     FLOAT radius;
     if (!out || !mine || !capacity) return;
@@ -768,7 +771,7 @@ static BOOL acolyte_claim_slot(LPEDICT worker, LPEDICT mine) {
         VECTOR2 point;
         FLOAT dx, dy, distance;
         if (haunted_slot_occupied(mine, (LONG)i)) continue;
-        haunted_mine_slot_position(mine, i, capacity, &point);
+        haunted_mine_slot_position(mine, i, &point);
         dx = point.x - worker->s.origin2.x;
         dy = point.y - worker->s.origin2.y;
         distance = dx * dx + dy * dy;
@@ -792,7 +795,7 @@ static void acolyte_snap_to_slot(LPEDICT worker) {
     if (!S_AcolyteHarvestIsActive(worker) || !(mine = worker->acolyte_mine.mine)) return;
     capacity = haunted_mine_max_miners(mine);
     if (!capacity || worker->acolyte_mine.slot < 0 || (DWORD)worker->acolyte_mine.slot >= capacity) return;
-    haunted_mine_slot_position(mine, (DWORD)worker->acolyte_mine.slot, capacity, &point);
+    haunted_mine_slot_position(mine, (DWORD)worker->acolyte_mine.slot, &point);
     worker->s.origin2 = point;
     worker->s.origin.x = point.x;
     worker->s.origin.y = point.y;
@@ -922,7 +925,7 @@ static BOOL entangle_goldmine_selecttarget(LPEDICT clent, LPEDICT target) {
 #ifdef WC3_DEBUG_BUILD
         fprintf(stderr, "WC3_DEBUG_BUILD entangle rejected: target=%ld id=%.4s overlay=%d hidden=%d occupied=%d\n",
                 (long)(target - g_edicts), (LPCSTR)&target->class_id,
-                goldmine_is_overlay_type(target), (target->s.renderfx & RF_HIDDEN) != 0,
+                goldmine_is_overlay_type(target), (target->s.renderfx & RF_HIDDEN),
                 mineoverlay_parent_in_use(target, NULL));
 #endif
         return false;
