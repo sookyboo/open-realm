@@ -158,6 +158,15 @@ static void G_ExecuteEvent(GAMEEVENT *evt) {
                     BOOL direct = subject && e->subject == subject;
                     BOOL owner_match = subject &&
                         e->subject == G_GetPlayerEntityByNumber(subject->s.player);
+#ifdef WC3_DEBUG_AI
+                    if (evt->type == EVENT_PLAYER_UNIT_DEATH && subject && subject->s.player == 6)
+                        fprintf(stderr, "WC3_DEBUG_AI death handler trigger=%ld subject=%ld handler_subject=%ld direct=%u owner_match=%u disabled=%u cond=%s action=%s\n",
+                            e->trigger ? (long)(e->trigger - level.triggers) : -1L,
+                            (long)(subject - globals.edicts), e->subject ? (long)(e->subject - globals.edicts) : -1L,
+                            direct, owner_match, e->trigger ? e->trigger->disabled : 0,
+                            e->trigger && e->trigger->conditions ? jass_functionname(e->trigger->conditions->expr) : "none",
+                            e->trigger && e->trigger->actions ? jass_functionname(e->trigger->actions->func) : "none");
+#endif
                     LONG quest_trigger_ordinal = e->trigger
                         ? (LONG)(e->trigger - level.triggers) : -1L;
                     BOOL quest_peon_stage = gi.CvarString &&
@@ -217,6 +226,12 @@ static void G_ExecuteEvent(GAMEEVENT *evt) {
                     }
                     if (direct || owner_match) {
                         BOOL queued = jass_calltriggerevent(level.vm, e->trigger, evt);
+#ifdef WC3_DEBUG_AI
+                        if (evt->type == EVENT_PLAYER_UNIT_DEATH && subject && subject->s.player == 6)
+                            fprintf(stderr, "WC3_DEBUG_AI death handler result trigger=%ld passed=%u disabled=%u\n",
+                                e->trigger ? (long)(e->trigger - level.triggers) : -1L, queued,
+                                e->trigger ? e->trigger->disabled : 0);
+#endif
                         if (quest_build_event) {
                             fprintf(stderr,
                                     "WC3_QUEST_BUILD dispatch-result event=%u trigger=%ld queued=%d disabled=%d\n",

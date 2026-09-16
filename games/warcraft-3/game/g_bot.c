@@ -329,13 +329,44 @@ BOOL G_BotSuicidePlayer(LPPLAYER player, LPPLAYER target, BOOL check_full) {
     VECTOR2 goal;
     DWORD issued = 0;
     if (!bot || !target || !level.mapinfo || PLAYER_NUM(target) >= MAX_PLAYERS ||
-        !level.mapinfo->players[PLAYER_NUM(target)].used) return false;
+        !level.mapinfo->players[PLAYER_NUM(target)].used) {
+#ifdef WC3_DEBUG_AI
+        fprintf(stderr, "WC3_DEBUG_AI suicide reject player=%u target=%u check_full=%u reason=invalid_target\n",
+            player ? PLAYER_NUM(player) : MAX_PLAYERS, target ? PLAYER_NUM(target) : MAX_PLAYERS, check_full);
+#endif
+        return false;
+    }
     captain = bot->captains + BOT_CAPTAIN_ATTACK;
-    if (!G_BotCaptainGroupSize(player) || (check_full && !G_BotCaptainIsFull(player))) return false;
+    if (!G_BotCaptainGroupSize(player) || (check_full && !G_BotCaptainIsFull(player))) {
+#ifdef WC3_DEBUG_AI
+        fprintf(stderr, "WC3_DEBUG_AI suicide reject player=%u target=%u check_full=%u size=%u desired=%u reason=not_ready\n",
+            PLAYER_NUM(player), PLAYER_NUM(target), check_full, G_BotCaptainGroupSize(player), captain->desired);
+#endif
+        return false;
+    }
     goal = level.mapinfo->players[PLAYER_NUM(target)].startingPosition;
     FOR_EACH_ARRAY(LPEDICT, unit, captain->units)
-        if (G_BotUnitAlive(*unit) && G_IssueUnitPointOrder(*unit, "attack", &goal, false, PLAYER_NUM(player), 0.0f)) issued++;
-    if (!issued) return false;
+        if (G_BotUnitAlive(*unit)) {
+            BOOL accepted = G_IssueUnitPointOrder(*unit, "attack", &goal, false, PLAYER_NUM(player), 0.0f);
+#ifdef WC3_DEBUG_AI
+            fprintf(stderr, "WC3_DEBUG_AI suicide order player=%u unit=%ld id=%.4s goal=(%.1f,%.1f) accepted=%u\n",
+                PLAYER_NUM(player), (long)(*unit - globals.edicts), (LPCSTR)&(*unit)->class_id,
+                goal.x, goal.y, accepted);
+#endif
+            if (accepted) issued++;
+        }
+    if (!issued) {
+#ifdef WC3_DEBUG_AI
+        fprintf(stderr, "WC3_DEBUG_AI suicide reject player=%u target=%u reason=no_order_accepted\n",
+            PLAYER_NUM(player), PLAYER_NUM(target));
+#endif
+        return false;
+    }
+#ifdef WC3_DEBUG_AI
+    fprintf(stderr, "WC3_DEBUG_AI suicide launch player=%u target=%u size=%u desired=%u goal=(%.1f,%.1f) issued=%u\n",
+        PLAYER_NUM(player), PLAYER_NUM(target), G_BotCaptainGroupSize(player), captain->desired,
+        goal.x, goal.y, issued);
+#endif
     captain->goal = goal; captain->state = BOT_CAPTAIN_ACTIVE;
     return true;
 }
@@ -414,6 +445,10 @@ BOOL G_BotPushCommand(LPPLAYER player, LONG command, LONG data) {
     if (bot->commands) gi.MemFree(bot->commands);
     bot->commands = commands; ARRAY_COUNT(bot->commands) = count + 1;
     bot->commands[count] = MAKE(botCommand_t, command, data);
+#ifdef WC3_DEBUG_AI
+    fprintf(stderr, "WC3_DEBUG_AI command player=%u command=%d data=%d depth=%u\n",
+        PLAYER_NUM(player), command, data, count + 1);
+#endif
     return true;
 }
 

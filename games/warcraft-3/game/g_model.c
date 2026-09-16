@@ -547,6 +547,14 @@ void G_SetUnitAnimation(LPEDICT unit, LPCSTR animname) {
     strlcpy(request, animname, sizeof(request));
     strlcpy(unit->animation_request, request, sizeof(unit->animation_request));
     unit->animation = G_GetUnitAnimation(unit, request);
+#ifdef WC3_DEBUG_AI
+    if (G_DebugTownHall(unit->class_id))
+        fprintf(stderr, "WC3_DEBUG_AI townhall animation unit=%ld id=%.4s request=%s resolved=%s interval=%u-%u model=%u\n",
+            (long)(unit - globals.edicts), (LPCSTR)&unit->class_id, request,
+            unit->animation ? unit->animation->name : "null",
+            unit->animation ? unit->animation->interval[0] : 0,
+            unit->animation ? unit->animation->interval[1] : 0, unit->s.model);
+#endif
 }
 
 void G_AddUnitAnimationProperties(LPEDICT unit, LPCSTR properties, BOOL add) {

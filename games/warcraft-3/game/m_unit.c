@@ -92,6 +92,14 @@ BOOL unit_affectingcombat(LPEDICT self) {
 }
 
 void unit_stand(LPEDICT self) {
+#ifdef WC3_DEBUG_AI
+    if (G_DebugTownHall(self->class_id))
+        fprintf(stderr, "WC3_DEBUG_AI townhall stand unit=%ld id=%.4s move=%s frame=%u hold=%u construction=%u upgrade=%u health=%.1f\n",
+            (long)(self - globals.edicts), (LPCSTR)&self->class_id,
+            self->currentmove && self->currentmove->animation ? self->currentmove->animation : "null",
+            self->s.frame, self->aiflags & AI_HOLD_FRAME, self->construction.active,
+            G_BuildingUpgradeActive(self), self->health.value);
+#endif
     /* Reaching stand is the common completion edge for Move, direct Attack,
      * Repair, Harvest, and several cast behaviors. Retire transient state first,
      * then let a pending Shift order become authoritative before installing the
@@ -125,11 +133,36 @@ void G_SetHealth(LPEDICT ent, FLOAT value) {
 
 void G_AddHealth(LPEDICT ent, FLOAT value) { G_SetHealth(ent, MIN(ent->health.max_value, ent->health.value + value)); }
 
+#ifdef WC3_DEBUG_AI
+static DWORD G_DebugGreenBuildingCount(void) {
+    DWORD count = 0;
+    FILTER_EDICTS(unit, unit->inuse && unit->s.player == 6 && G_UnitIsBuilding(unit->class_id) &&
+        unit->class_id != MAKEFOURCC('u','z','g','1') && unit->class_id != MAKEFOURCC('u','z','i','g') &&
+        unit->health.value > 0) count++;
+    return count;
+}
+
+static void G_DebugDumpGreenBuildings(void) {
+    FILTER_EDICTS(unit, unit->inuse && unit->s.player == 6 && G_UnitIsBuilding(unit->class_id) &&
+        unit->class_id != MAKEFOURCC('u','z','g','1') && unit->class_id != MAKEFOURCC('u','z','i','g') &&
+        unit->health.value > 0)
+        fprintf(stderr, "WC3_DEBUG_AI remaining green building unit=%ld id=%.4s health=%.1f origin=(%.1f,%.1f)\n",
+            (long)(unit - globals.edicts), (LPCSTR)&unit->class_id, unit->health.value,
+            unit->s.origin.x, unit->s.origin.y);
+}
+#endif
+
 void unit_die(LPEDICT self, LPEDICT attacker) {
     LPGAMECLIENT owner;
     DWORD selected_mask;
 
     if (!self || (self->svflags & SVF_DEADMONSTER)) return;
+#ifdef WC3_DEBUG_AI
+    if (self->s.player == 6 || (attacker && attacker->s.player == 6))
+        fprintf(stderr, "WC3_DEBUG_AI death begin unit=%ld id=%.4s owner=%u building=%u attacker=%ld\n",
+            (long)(self - globals.edicts), (LPCSTR)&self->class_id, self->s.player,
+            G_UnitIsBuilding(self->class_id), attacker ? (long)(attacker - globals.edicts) : -1L);
+#endif
     selected_mask = self->selected;
 
     S_AvatarExpire(self);
@@ -196,6 +229,14 @@ void unit_die(LPEDICT self, LPEDICT attacker) {
      * Hero's reviving flag and refunds what this Altar charged. */
     G_CancelHeroRevives(self);
     if (self->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
+#ifdef WC3_DEBUG_AI
+    if (self->s.player == 6) {
+        DWORD const count = G_DebugGreenBuildingCount();
+        fprintf(stderr, "WC3_DEBUG_AI death published unit=%ld id=%.4s owner=6 qualifying_buildings=%u\n",
+            (long)(self - globals.edicts), (LPCSTR)&self->class_id, count);
+        if (count <= 1) G_DebugDumpGreenBuildings();
+    }
+#endif
     /* Award experience to the killer's nearby heroes (enemy kills only). */
     if (attacker && attacker != self && attacker->s.player != self->s.player) {
         G_GrantKillXP(self, attacker);
@@ -829,7 +870,10 @@ BOOL unit_issueimmediateorder(LPEDICT self, LPCSTR order) {
 /* Create a new runtime unit; explicit JASS creation must not reuse a nearby
  * entity because ReplaceUnitBJ destroys the returned replacement handle. */
 LPEDICT unit_create(DWORD player, DWORD unitid, LPCVECTOR2 location, FLOAT facing) {
-    LPEDICT unit = SP_SpawnAtLocation(unitid, player, location);
+    /* CreateUnit returns an immediately usable unit. SP_SpawnAtLocation's
+     * presentation birth is for callers that own a spawn lifecycle; applying
+     * it here left a stale birth wait behind the explicit stand transition. */
+    LPEDICT unit = SP_SpawnAtLocationNoBirth(unitid, player, location);
     if (!unit) {
         return NULL;
     }
@@ -1644,6 +1688,14 @@ void SP_monster_unit(LPEDICT self) {
     self->birth = unit_birth;
     
     unit_setmove(self, &unit_move_stand);
+#ifdef WC3_DEBUG_AI
+    if (G_DebugTownHall(self->class_id))
+        fprintf(stderr, "WC3_DEBUG_AI townhall spawn unit=%ld id=%.4s frame=%u move=%s animation=%s hold=%u construction=%u health=%.1f\n",
+            (long)(self - globals.edicts), (LPCSTR)&self->class_id, self->s.frame,
+            self->currentmove && self->currentmove->animation ? self->currentmove->animation : "null",
+            self->animation ? self->animation->name : "null",
+            self->aiflags & AI_HOLD_FRAME, self->construction.active, self->health.value);
+#endif
     S_GoldMineInitUnit(self);
     monster_start(self);
 }

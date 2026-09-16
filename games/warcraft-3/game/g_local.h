@@ -49,6 +49,13 @@ ENT++) if (CONDITION)
 #define PLAYER_ENT(PLAYER) G_GetPlayerEntityByNumber(PLAYER_NUM(PLAYER))
 #define PLAYER_CLIENT(PLAYER) G_GetPlayerClientByNumber(PLAYER_NUM(PLAYER))
 
+#ifdef WC3_DEBUG_AI
+static inline BOOL G_DebugTownHall(DWORD id) {
+    return id == MAKEFOURCC('h','t','o','w') || id == MAKEFOURCC('h','k','e','e') ||
+        id == MAKEFOURCC('h','c','a','s');
+}
+#endif
+
 #define UI_CHILD_VALUE(NAME, PARENT, VALUE, ...) \
 LPFRAMEDEF NAME = UI_FindChildFrame(PARENT, #NAME); \
 if (NAME) { \

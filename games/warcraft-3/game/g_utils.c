@@ -54,6 +54,13 @@ void G_SetPlayerText(LPGAMECLIENT client, PLAYERTEXT index, LPCSTR text) {
 
 void G_FreeEdict(LPEDICT ent) {
     if (!ent) return;
+#ifdef WC3_DEBUG_AI
+    if (G_DebugTownHall(ent->class_id))
+        fprintf(stderr, "WC3_DEBUG_AI townhall free unit=%ld id=%.4s inuse=%u frame=%u move=%s animation=%s\n",
+            (long)(ent - globals.edicts), (LPCSTR)&ent->class_id, ent->inuse, ent->s.frame,
+            ent->currentmove && ent->currentmove->animation ? ent->currentmove->animation : "null",
+            ent->animation ? ent->animation->name : "null");
+#endif
     G_CancelDeferredFree(ent);
     S_UnitAbilityEvent(ent, A_UNIT_REMOVE);
     /* Direct JASS RemoveUnit must release transient construction/upgrade state

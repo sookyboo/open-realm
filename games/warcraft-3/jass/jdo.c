@@ -982,10 +982,30 @@ void jass_runevents(LPJASS j) {
  * Trigger evaluation / execution
  * ========================================================================= */
 
+#ifdef WC3_DEBUG_AI
+static BOOL jass_debug_trigger(LPTRIGGER trigger) {
+    TRIGGERACTION *action;
+    LPCSTR name;
+    if (!trigger) return false;
+    for (action = trigger->actions; action; action = action->next) {
+        name = jass_functionname(action->func);
+        if (name && (strstr(name, "Cinematic") || strstr(name, "ArthasSetsOff") ||
+                     strstr(name, "Muradin_End") || strstr(name, "Level_Victory") ||
+                     strstr(name, "CheckGreenBuildings") || strstr(name, "Trig_Easy") ||
+                     strstr(name, "Trig_Normal"))) return true;
+    }
+    return false;
+}
+#endif
+
 static BOOL jass_evaluatetriggercontext(LPJASS j, jassTriggerContextParams_t const *params) {
     LPPLAYER player = jass_eventplayer(params->unit);
 
     if (params->trigger->disabled) {
+#ifdef WC3_DEBUG_AI
+        if (jass_debug_trigger(params->trigger)) fprintf(stderr, "WC3_DEBUG_AI trigger skip disabled=%p\n",
+            (void *)params->trigger);
+#endif
         return false;
     }
     JASS tmp_state;
@@ -1008,9 +1028,17 @@ static BOOL jass_evaluatetriggercontext(LPJASS j, jassTriggerContextParams_t con
         DWORD result_count = jass_call(&tmp_state, 0);
         currentunit = previous_unit;
         if (result_count != 1 || !jass_popboolean(&tmp_state)) {
+#ifdef WC3_DEBUG_AI
+            if (jass_debug_trigger(params->trigger)) fprintf(stderr, "WC3_DEBUG_AI trigger condition failed=%p func=%s unit=%p\n",
+                (void *)params->trigger, jass_functionname(cond->expr), (void *)params->unit);
+#endif
             return false;
         }
     }
+#ifdef WC3_DEBUG_AI
+    if (jass_debug_trigger(params->trigger)) fprintf(stderr, "WC3_DEBUG_AI trigger condition passed=%p unit=%p\n",
+        (void *)params->trigger, (void *)params->unit);
+#endif
     return true;
 }
 
@@ -1056,6 +1084,10 @@ BOOL jass_evaluateplayerexpr(LPJASS j, LPCJASSFUNC expr, LPPLAYER player) {
 
 static void jass_executetriggercontext(LPJASS j, jassTriggerContextParams_t const *params) {
     FOR_EACH_LIST(TRIGGERACTION, action, params->trigger->actions) {
+#ifdef WC3_DEBUG_AI
+        if (jass_debug_trigger(params->trigger)) fprintf(stderr, "WC3_DEBUG_AI trigger action=%p func=%s unit=%p\n",
+            (void *)params->trigger, jass_functionname(action->func), (void *)params->unit);
+#endif
         LPPLAYER player = jass_eventplayer(params->unit);
         LPJASSCOROUTINE co = jass_startcoroutine(j, &MAKE(JASSCONTEXT,
                                   .trigger = params->trigger,

@@ -49,6 +49,10 @@ LPCSTR weapon_type[] = {
     NULL
 };
 
+#ifdef WC3_DEBUG_AI
+static DWORD wc3_debug_townhall_log_time[MAX_ENTITIES];
+#endif
+
 DWORD FindEnumValue(LPCSTR value, LPCSTR values[]) {
     if (!value)
         return 0;
@@ -125,6 +129,14 @@ void M_MoveFrame(LPEDICT self) {
     {
         self->s.frame = anim->interval[0] ;
     } else if (next_frame >= anim->interval[1]) {
+#ifdef WC3_DEBUG_AI
+        if (G_DebugTownHall(self->class_id))
+            fprintf(stderr, "WC3_DEBUG_AI townhall animation end unit=%ld id=%.4s move=%s frame=%u next=%u interval=%u-%u hold=%u construction=%u\n",
+                (long)(self - globals.edicts), (LPCSTR)&self->class_id,
+                move && move->animation ? move->animation : "null", self->s.frame, next_frame,
+                anim->interval[0], anim->interval[1], self->aiflags & AI_HOLD_FRAME,
+                self->construction.active);
+#endif
         SAFE_CALL(move->endfunc, self);
         if (!(self->aiflags & AI_HOLD_FRAME)) {
             /* End callbacks may install a different move/animation. Restart
@@ -143,6 +155,22 @@ void M_MoveFrame(LPEDICT self) {
  * Called each game frame by G_RunEntity; drives the animation clock and
  * invokes the active umove_t think callback (e.g. ai_walk, ai_melee). */
 void monster_think(LPEDICT self) {
+#ifdef WC3_DEBUG_AI
+    if (G_DebugTownHall(self->class_id)) {
+        DWORD const entnum = (DWORD)(self - globals.edicts);
+        if (level.time >= wc3_debug_townhall_log_time[entnum] + 1000) {
+            wc3_debug_townhall_log_time[entnum] = level.time;
+            fprintf(stderr, "WC3_DEBUG_AI townhall think unit=%ld id=%.4s move=%s frame=%u anim=%s interval=%u-%u hold=%u construction=%u progress=%.1f health=%.1f\n",
+                (long)entnum, (LPCSTR)&self->class_id,
+                self->currentmove && self->currentmove->animation ? self->currentmove->animation : "null",
+                self->s.frame, self->animation ? self->animation->name : "null",
+                self->animation ? self->animation->interval[0] : 0,
+                self->animation ? self->animation->interval[1] : 0,
+                self->aiflags & AI_HOLD_FRAME, self->construction.active, self->construction.progress,
+                self->health.value);
+        }
+    }
+#endif
     S_RunAbilityUpdates(self);
     if (!self->currentmove)
         return;

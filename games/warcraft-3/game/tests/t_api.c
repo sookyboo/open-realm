@@ -1742,6 +1742,94 @@ TEST(wc3_api, createunit_allocates_fresh_nearby_unit) {
     G_FreeEdict(existing);
 }
 
+TEST(wc3_api, createunit_starts_ready_without_birth_delay) {
+    static LPCSTR const ui_slk =
+        "ID;PWXL;N;EBB;Y3;X2\n"
+        "C;Y1;X1;K\"unitUIID\"\n"
+        "C;Y1;X2;K\"file\"\n"
+        "C;Y2;X1;K\"hfoo\"\n"
+        "C;Y2;X2;K\"TestUI\\\\Models\\\\quad_sprite.mdx\"\n"
+        "E\n";
+    slkTestData_t *ui_rows, *old_ui;
+    LPEDICT unit;
+
+    G_ResetDeferredFrees();
+    reset_entities();
+    setup_test_world();
+    ui_rows = parse_slk_string(ui_slk);
+    old_ui = G_SetSLKRows("UnitUI", ui_rows);
+    unit = unit_create(0, MAKEFOURCC('h','f','o','o'), &(VECTOR2){0, 0}, 0);
+    T_NOT_NULL(unit);
+    T_NOT_NULL(unit->currentmove);
+    T_STREQ(unit->currentmove->animation, "stand");
+    T_EQ((int)unit->wait, 0);
+    G_FreeEdict(unit);
+    G_SetSLKRows("UnitUI", old_ui);
+    free_slk_rows(ui_rows);
+}
+
+TEST(wc3_api, createunit_links_building_collision_bounds) {
+    static LPCSTR const ui_slk =
+        "ID;PWXL;N;EBB;Y3;X3\n"
+        "C;Y1;X1;K\"unitUIID\"\n"
+        "C;Y1;X2;K\"file\"\n"
+        "C;Y1;X3;K\"isbldg\"\n"
+        "C;Y2;X1;K\"hpea\"\n"
+        "C;Y2;X2;K\"TestUI\\\\Models\\\\quad_sprite.mdx\"\n"
+        "C;Y2;X3;K1\n"
+        "E\n";
+    static LPCSTR const balance_slk =
+        "ID;PWXL;N;EBB;Y3;X3\n"
+        "C;Y1;X1;K\"unitBalanceID\"\n"
+        "C;Y1;X2;K\"collision\"\n"
+        "C;Y1;X3;K\"isbldg\"\n"
+        "C;Y2;X1;K\"hpea\"\n"
+        "C;Y2;X2;K64\n"
+        "C;Y2;X3;K1\n"
+        "E\n";
+    static LPCSTR const data_slk =
+        "ID;PWXL;N;EBB;Y1;X1\n"
+        "C;Y1;X1;K\"id\"\n"
+        "C;Y2;X1;K\"hpea\"\n"
+        "E\n";
+    slkTestData_t *ui_rows, *old_ui, *balance_rows, *old_balance, *data_rows, *old_data;
+    LPEDICT building;
+    LPEDICT found[4] = { 0 };
+    BOX2 area = { { -256.0f, -256.0f }, { 256.0f, 256.0f } };
+    BOOL linked = false;
+
+    reset_entities();
+    setup_test_world();
+    ui_rows = parse_slk_string(ui_slk);
+    balance_rows = parse_slk_string(balance_slk);
+    data_rows = parse_slk_string(data_slk);
+    old_ui = G_SetSLKRows("UnitUI", ui_rows);
+    old_balance = G_SetSLKRows("UnitBalance", balance_rows);
+    old_data = G_SetSLKRows("UnitData", data_rows);
+    T_ASSERT(G_UnitIsBuilding(MAKEFOURCC('h', 'p', 'e', 'a')));
+    T_EQ((int)G_UnitCollision(MAKEFOURCC('h', 'p', 'e', 'a')), 64);
+    building = unit_create(0, MAKEFOURCC('h', 'p', 'e', 'a'), &(VECTOR2){0, 0}, 0);
+    T_NOT_NULL(building);
+    if (!building) return;
+    T_ASSERT(building->data.UnitUI->modelFile);
+    T_ASSERT(building->data.UnitBalance->isBuilding);
+    T_EQ((int)building->data.UnitBalance->collision, 64);
+    T_ASSERT(building->s.flags & EF_BUILDING);
+    T_ASSERT(building->collision > 0.0f);
+    T_EQ(building->bounds.min.x, -building->collision - 1.0f);
+    T_EQ(building->bounds.max.x, building->collision + 1.0f);
+    FOR_LOOP(i, gi.BoxEdicts(&area, found, 4, NULL))
+        if (found[i] == building) linked = true;
+    T_ASSERT(linked);
+    G_FreeEdict(building);
+    G_SetSLKRows("UnitUI", old_ui);
+    G_SetSLKRows("UnitBalance", old_balance);
+    G_SetSLKRows("UnitData", old_data);
+    free_slk_rows(ui_rows);
+    free_slk_rows(balance_rows);
+    free_slk_rows(data_rows);
+}
+
 TEST(wc3_api, message_log_is_bounded_and_evicts_oldest_entry) {
     LPGAMECLIENT gc = &game.clients[0];
     EDICT ent = { .client = gc };

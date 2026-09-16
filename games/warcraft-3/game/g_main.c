@@ -21,6 +21,7 @@
  *   4. G_RunClients()     — interpolate camera positions for smooth panning.
  *   5. G_RunEntities()    — call G_RunEntity() on every live entity.
  *   6. G_SolveCollisions() — resolve entity overlaps (g_phys.c).
+ *   7. G_RunDeferredFrees() — retire JASS RemoveUnit handles after the frame.
  */
 #include "common/common.h"
 #include "g_local.h"
@@ -887,6 +888,7 @@ static void G_RunFrame(void) {
     UI_FlushPendingGameResults();
 
     G_SolveCollisions();
+    G_RunDeferredFrees();
     G_FowUpdate();
     G_UpdateClientSelections();
     G_FowSendDeltas();
@@ -940,6 +942,12 @@ GAMEEVENT *G_PublishEventWithValue(LPEDICT edict, EVENTTYPE type, LPEDICT source
     evt->edict = edict;
     evt->source = source;
     evt->value = value;
+#ifdef WC3_DEBUG_AI
+    if (type == EVENT_PLAYER_UNIT_DEATH && edict && edict->s.player == 6)
+        fprintf(stderr, "WC3_DEBUG_AI publish player-death unit=%ld id=%.4s owner=%u source=%ld read=%u write=%u\n",
+            (long)(edict - globals.edicts), (LPCSTR)&edict->class_id, edict->s.player,
+            source ? (long)(source - globals.edicts) : -1L, level.events.read, level.events.write);
+#endif
     if (type == EVENT_PLAYER_VICTORY || type == EVENT_PLAYER_DEFEAT) {
         G_GameResultDebug("publish event type=%s ordinal=%u subject_ent=%ld owner=%u read=%u write=%u",
             type == EVENT_PLAYER_VICTORY ? "VICTORY" : "DEFEAT",

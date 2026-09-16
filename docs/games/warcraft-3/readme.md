@@ -108,6 +108,8 @@ File formats, renderer notes, UI/FDF behavior, and gameplay coverage work used b
 - [Persistent Hero And Idle-Worker Shortcuts](unit-shortcuts.md)
 - [Pathfinding And Harvest Reachability](pathfinding.md)
 - [Inventory And World Items](inventory-and-items.md)
+- [Runtime Unit Spawn Lifecycle](unit-spawn-lifecycle.md)
+- [Human07 Mission Troubleshooting](human07-troubleshooting.md): mission-end, AI assault, removal, spawn, collision, and Birth regressions.
 - [Neutral Item Shops](neutral-shops.md)
 - [Ability And Item Effects](ability-and-item-effects.md)
 - [Adding Warcraft III Abilities](ability-implementation-plan.md): data, procedure macros, registration, and tests.

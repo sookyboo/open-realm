@@ -19,6 +19,14 @@ static BOOL unit_is_active_repair_move(LPEDICT self) {
 void unit_setmove(LPEDICT self, umove_t *move) {
     BOOL was_idle = G_UnitIsIdleWorker(self);
 
+#ifdef WC3_DEBUG_AI
+    if (G_DebugTownHall(self->class_id))
+        fprintf(stderr, "WC3_DEBUG_AI townhall move unit=%ld id=%.4s old=%s new=%s frame=%u hold=%u construction=%u progress=%.1f\n",
+            (long)(self - globals.edicts), (LPCSTR)&self->class_id,
+            self->currentmove && self->currentmove->animation ? self->currentmove->animation : "null",
+            move && move->animation ? move->animation : "null", self->s.frame,
+            self->aiflags & AI_HOLD_FRAME, self->construction.active, self->construction.progress);
+#endif
     self->animation_override = false;
 
     /* buildwork.ability is staged before Repair switches from the worker's

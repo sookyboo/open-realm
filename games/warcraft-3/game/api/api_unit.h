@@ -113,6 +113,12 @@ DWORD KillUnit(LPJASS j) {
 }
 DWORD RemoveUnit(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
+#ifdef WC3_DEBUG_AI
+    fprintf(stderr, "WC3_DEBUG_AI remove unit=%ld id=%.4s owner=%u inuse=%u\n",
+        whichUnit ? (long)(whichUnit - globals.edicts) : -1L,
+        whichUnit ? (LPCSTR)&whichUnit->class_id : "null",
+        whichUnit ? whichUnit->s.player : 0, whichUnit ? whichUnit->inuse : 0);
+#endif
     if (whichUnit) {
         LPGAMECLIENT owner = G_GetPlayerClientByNumber(whichUnit->s.player);
         if (owner && owner->ps.number == whichUnit->s.player) G_InvalidateCommands(owner);
