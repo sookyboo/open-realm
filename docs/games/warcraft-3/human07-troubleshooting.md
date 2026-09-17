@@ -64,6 +64,9 @@ map-placed entities.
 - [`g_utils.c`](../../../games/warcraft-3/game/g_utils.c) owns deferred edict
   retirement; [`g_main.c`](../../../games/warcraft-3/game/g_main.c) drains it after
   the frame's entity iteration and collision solve.
+- [`api_group.h`](../../../games/warcraft-3/game/api/api_group.h) keeps deferred
+  removals out of JASS unit enumerations while their edicts remain live for the
+  rest of the frame.
 - [`g_bot.c`](../../../games/warcraft-3/game/g_bot.c), [`api_ai.h`](../../../games/warcraft-3/game/api/api_ai.h),
   and [`api_module.c`](../../../games/warcraft-3/game/api/api_module.c) own the
   `SuicidePlayer` native implementation and registration.
@@ -86,9 +89,12 @@ The following evidence is reproducible in the current tree:
   handles are removed, deferred state is checked before the drain, and a replacement
   building is selected afterward. Its paired `...cvar_reproduces_synchronous_release`
   test verifies the diagnostic legacy mode.
+- `wc3_jass_map.human07_normal_removal_is_absent_from_green_building_count` follows
+  Human07's Normal-difficulty `usep` removal and its `CheckGreenBuildings` query;
+  it verifies the Crypt handle remains deferred but is absent from the count.
 - The focused API tests passed 4/4 for the no-birth lifecycle and 11/11 for the
   building-link contract in each data mode.
-- `make test-wc3-engine` passed `25739/25739` assertions in `1232` tests.
+- `make test-wc3-engine` passed `25779/25779` assertions in `1235` tests.
 - `make -B openwarcraft3` completed successfully and `git diff --check` reported no
   whitespace errors.
 - A bounded Human07 run made during the investigation progressed to Human08, which
@@ -96,8 +102,10 @@ The following evidence is reproducible in the current tree:
   and AI-native work. This is runtime evidence for that particular data set and
   scenario, not a replacement for the automated lifecycle tests.
 
-The permanent regression tests are in
-[`games/warcraft-3/game/tests/t_api.c`](../../../games/warcraft-3/game/tests/t_api.c);
+The lifecycle regression tests are in
+[`games/warcraft-3/game/tests/t_api.c`](../../../games/warcraft-3/game/tests/t_api.c)
+and
+[`games/warcraft-3/game/tests/t_jass_map.c`](../../../games/warcraft-3/game/tests/t_jass_map.c);
 the AI behavior tests are in
 [`games/warcraft-3/game/tests/t_bot.c`](../../../games/warcraft-3/game/tests/t_bot.c).
 
@@ -170,6 +178,7 @@ Run focused tests independently when diagnosing either lifecycle issue:
 ```sh
 make test-wc3-engine WC3_PATTERN='wc3_api.createunit_starts_ready_without_birth_delay'
 make test-wc3-engine WC3_PATTERN='wc3_api.createunit_links_building_collision_bounds'
+make test-wc3-engine WC3_PATTERN='wc3_jass_map.human07_normal_removal_is_absent_from_green_building_count'
 make test-wc3-engine
 ```
 

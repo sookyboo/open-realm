@@ -82,7 +82,7 @@ DWORD GroupEnumUnitsOfPlayer(LPJASS j) {
     }
     FOR_LOOP(i, globals.num_edicts) {
         LPEDICT ent = &globals.edicts[i];
-        if (IS_UNIT(ent) && ent->s.player == PLAYER_NUM(whichPlayer) && jass_evaluateboolexpr(j, filter, ent)) {
+        if (IS_UNIT(ent) && !G_IsDeferredFree(ent) && ent->s.player == PLAYER_NUM(whichPlayer) && jass_evaluateboolexpr(j, filter, ent)) {
             group_add_entity(whichGroup, ent);
         }
     }
@@ -107,7 +107,7 @@ DWORD GroupEnumUnitsInRect(LPJASS j) {
     }
     FOR_LOOP(i, globals.num_edicts) {
         LPEDICT ent = &globals.edicts[i];
-        if (IS_UNIT(ent) && Box2_containsPoint(r, &ent->s.origin2) &&
+        if (IS_UNIT(ent) && !G_IsDeferredFree(ent) && Box2_containsPoint(r, &ent->s.origin2) &&
             jass_evaluateboolexpr(j, filter, ent)) {
             group_add_entity(whichGroup, ent);
         }
@@ -125,7 +125,7 @@ DWORD GroupEnumUnitsInRectCounted(LPJASS j) {
     }
     FOR_LOOP(i, globals.num_edicts) {
         LPEDICT ent = &globals.edicts[i];
-        if (countLimit > 0 && IS_UNIT(ent) && Box2_containsPoint(r, &ent->s.origin2) &&
+        if (countLimit > 0 && IS_UNIT(ent) && !G_IsDeferredFree(ent) && Box2_containsPoint(r, &ent->s.origin2) &&
             jass_evaluateboolexpr(j, filter, ent)) {
             group_add_entity(whichGroup, ent);
             countLimit--;
@@ -144,7 +144,7 @@ DWORD GroupEnumUnitsInRange(LPJASS j) {
     }
     FOR_LOOP(i, globals.num_edicts) {
         LPEDICT ent = &globals.edicts[i];
-        if (IS_UNIT(ent) && Vector2_distance(&ent->s.origin2, &MAKE(VECTOR2, x, y)) <= radius &&
+        if (IS_UNIT(ent) && !G_IsDeferredFree(ent) && Vector2_distance(&ent->s.origin2, &MAKE(VECTOR2, x, y)) <= radius &&
             jass_evaluateboolexpr(j, filter, ent)) {
             group_add_entity(whichGroup, ent);
         }
@@ -161,7 +161,7 @@ DWORD GroupEnumUnitsInRangeOfLoc(LPJASS j) {
     }
     FOR_LOOP(i, globals.num_edicts) {
         LPEDICT ent = &globals.edicts[i];
-        if (IS_UNIT(ent) && Vector2_distance(&ent->s.origin2, whichLocation) <= radius &&
+        if (IS_UNIT(ent) && !G_IsDeferredFree(ent) && Vector2_distance(&ent->s.origin2, whichLocation) <= radius &&
             jass_evaluateboolexpr(j, filter, ent)) {
             group_add_entity(whichGroup, ent);
         }
@@ -180,7 +180,7 @@ DWORD GroupEnumUnitsInRangeCounted(LPJASS j) {
     }
     FOR_LOOP(i, globals.num_edicts) {
         LPEDICT ent = &globals.edicts[i];
-        if (countLimit > 0 && IS_UNIT(ent) && Vector2_distance(&ent->s.origin2, &MAKE(VECTOR2, x, y)) <= radius &&
+        if (countLimit > 0 && IS_UNIT(ent) && !G_IsDeferredFree(ent) && Vector2_distance(&ent->s.origin2, &MAKE(VECTOR2, x, y)) <= radius &&
             jass_evaluateboolexpr(j, filter, ent)) {
             group_add_entity(whichGroup, ent);
             countLimit--;
@@ -199,7 +199,7 @@ DWORD GroupEnumUnitsInRangeOfLocCounted(LPJASS j) {
     }
     FOR_LOOP(i, globals.num_edicts) {
         LPEDICT ent = &globals.edicts[i];
-        if (countLimit > 0 && IS_UNIT(ent) && Vector2_distance(&ent->s.origin2, whichLocation) <= radius &&
+        if (countLimit > 0 && IS_UNIT(ent) && !G_IsDeferredFree(ent) && Vector2_distance(&ent->s.origin2, whichLocation) <= radius &&
             jass_evaluateboolexpr(j, filter, ent)) {
             group_add_entity(whichGroup, ent);
             countLimit--;
@@ -214,7 +214,7 @@ DWORD GroupEnumUnitsSelected(LPJASS j) {
     if (!G_JassGroupValid(whichGroup) || !whichPlayer) return 0;
     FOR_LOOP(i, globals.num_edicts) {
         LPEDICT ent = &globals.edicts[i];
-        if (IS_UNIT(ent) && ent->selected & (1 << PLAYER_NUM(whichPlayer)) && jass_evaluateboolexpr(j, filter, ent))
+        if (IS_UNIT(ent) && !G_IsDeferredFree(ent) && ent->selected & (1 << PLAYER_NUM(whichPlayer)) && jass_evaluateboolexpr(j, filter, ent))
             group_add_entity(whichGroup, ent);
     }
     return 0;

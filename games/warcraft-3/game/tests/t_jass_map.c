@@ -28,6 +28,7 @@
 
 BOOL run_test_jass(LPCSTR src);
 BOOL run_test_jass_error(LPCSTR src, LPCSTR expected);
+void setup_test_world(void);
 
 /* =========================================================================
  * Helper: scan the event queue for a given type.
@@ -63,6 +64,10 @@ static void victory_noop_unicast(LPEDICT ent) {
 
 static LPCSTR result_cheats_cvar(LPCSTR name, LPCSTR fallback) {
     return !strcmp(name, "sv_cheats") ? "1" : fallback;
+}
+
+static LPCSTR deferred_release_cvar(LPCSTR name, LPCSTR fallback) {
+    return !strcmp(name, "wc3_defer_release") ? "1" : fallback;
 }
 
 static char cheat_console_text[8192];
@@ -231,6 +236,92 @@ TEST(wc3_jass_map, map_metadata_and_start_priority_persist) {
     ));
     T_STREQ(level.setup.name, "Native Test Map");
     T_STREQ(level.setup.description, "Native setup state");
+}
+
+/* Human07 creates the Player 6 Crypt gg_unit_usep_0049, removes it from the
+ * Normal difficulty branch, then later counts Player 6 structures through the
+ * stock GetUnitsOfPlayerMatching/CountUnitsInGroup wrappers. The one-client
+ * harness uses Player 0 for that authored slot. Keep the exact trigger order:
+ * the removed Crypt must not satisfy CheckGreenBuildings, even while its
+ * deferred edict is still alive for the current frame. */
+TEST(wc3_jass_map, human07_normal_removal_is_absent_from_green_building_count) {
+    LPCSTR (*old_cvar)(LPCSTR, LPCSTR) = gi.CvarString;
+    LPEDICT crypt = NULL, town_hall = NULL;
+
+    setup_test_world();
+    gi.CvarString = deferred_release_cvar;
+    T_ASSERT(run_test_jass(
+        "globals\n"
+        "  unit gg_unit_usep_0049 = null\n"
+        "endglobals\n"
+        "function GetUnitsOfPlayerMatching takes player whichPlayer, boolexpr filter returns group\n"
+        "  local group g = CreateGroup()\n"
+        "  call GroupEnumUnitsOfPlayer(g, whichPlayer, filter)\n"
+        "  call DestroyBoolExpr(filter)\n"
+        "  return g\n"
+        "endfunction\n"
+        "function CountUnitsInGroup takes group g returns integer\n"
+        "  local integer count = 0\n"
+        "  local unit u\n"
+        "  loop\n"
+        "    set u = FirstOfGroup(g)\n"
+        "    exitwhen u == null\n"
+        "    set count = count + 1\n"
+        "    call GroupRemoveUnit(g, u)\n"
+        "  endloop\n"
+        "  return count\n"
+        "endfunction\n"
+        "function Human07GreenBuildingFilter takes nothing returns boolean\n"
+        "  local unit u = GetFilterUnit()\n"
+        "  return IsUnitType(u, UNIT_TYPE_STRUCTURE) and GetUnitTypeId(u) != 'uzg1' and\n"
+        "      GetUnitTypeId(u) != 'uzig' and IsUnitAliveBJ(u)\n"
+        "endfunction\n"
+        "function Human07CountGreenBuildings takes nothing returns integer\n"
+        "  return CountUnitsInGroup(GetUnitsOfPlayerMatching(Player(0),\n"
+        "      Condition(function Human07GreenBuildingFilter)))\n"
+        "endfunction\n"
+        "function Human07NormalInitialization takes nothing returns nothing\n"
+        "  call BJassAssert(Human07CountGreenBuildings() == 2, \"both Human07 buildings are initially counted\")\n"
+        "  call SetGameDifficulty(MAP_DIFFICULTY_NORMAL)\n"
+        "  call BJassAssert(GetGameDifficulty() == MAP_DIFFICULTY_NORMAL, \"Human07 difficulty is Normal\")\n"
+        "  if GetGameDifficulty() == MAP_DIFFICULTY_NORMAL then\n"
+        "    call RemoveUnit(gg_unit_usep_0049)\n"
+        "  endif\n"
+        "  call BJassAssert(GetUnitTypeId(gg_unit_usep_0049) == 'usep', \"removed Crypt handle survives the trigger\")\n"
+        "  call BJassAssert(Human07CountGreenBuildings() == 1, \"removed Crypt must not be counted\")\n"
+        "endfunction\n"
+        "function main takes nothing returns nothing\n"
+        "  local unit survivingBuilding = CreateUnit(Player(0), 'hbar', 0.0, 0.0, 0.0)\n"
+        "  set gg_unit_usep_0049 = CreateUnit(Player(0), 'usep', 128.0, 0.0, 0.0)\n"
+        "  call BJassAssert(IsUnitType(survivingBuilding, UNIT_TYPE_STRUCTURE), \"surviving Town Hall is a structure\")\n"
+        "endfunction\n"
+    ));
+
+    FOR_LOOP(i, globals.num_edicts) {
+        if (g_edicts[i].class_id == MAKEFOURCC('u','s','e','p')) crypt = &g_edicts[i];
+        if (g_edicts[i].class_id == MAKEFOURCC('h','b','a','r')) town_hall = &g_edicts[i];
+    }
+    T_NOT_NULL(crypt); T_NOT_NULL(town_hall);
+    if (!crypt || !town_hall) goto cleanup;
+    T_ASSERT(G_UnitIsBuilding(crypt->class_id));
+    T_ASSERT(G_UnitIsBuilding(town_hall->class_id));
+    /* The fixture has simulation metadata for these structures but no model
+     * rows, so provide the live-unit state that SP_SpawnUnit supplies. */
+    crypt->svflags |= SVF_MONSTER;
+    town_hall->svflags |= SVF_MONSTER;
+    T_STREQ(gi.CvarString("wc3_defer_release", "0"), "1");
+    crypt->health.value = crypt->health.max_value = 1000.0f;
+    town_hall->health.value = town_hall->health.max_value = 1000.0f;
+    jass_callbyname(level.vm, "Human07NormalInitialization", false);
+    jass_runevents(level.vm);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+    T_ASSERT(crypt->inuse);
+    T_ASSERT(G_IsDeferredFree(crypt));
+    G_RunDeferredFrees();
+    T_ASSERT(!crypt->inuse);
+
+cleanup:
+    gi.CvarString = old_cvar;
 }
 
 TEST(wc3_jass_map, player_technology_roundtrip_uses_declared_types) {
