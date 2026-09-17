@@ -308,14 +308,24 @@ selectionRelation_t G_SelectionRelation(DWORD viewer, LPCEDICT ent) {
 }
 
 BOOL G_UnitCanBeSelected(LPGAMECLIENT client, LPCEDICT ent) {
+    BOOL result;
     if (!client || !ent || !ent->inuse || !(ent->svflags & SVF_MONSTER)) {
         return false;
     }
-    if ((ent->svflags & SVF_DEADMONSTER) || ent->health.value <= 0.0f ||
-        (ent->s.flags & EF_NOT_SELECTABLE) || (ent->s.renderfx & RF_HIDDEN)) {
-        return false;
-    }
-    return G_FowPlayerCanHoverEntity(client->ps.number, ent);
+    result = !(ent->svflags & SVF_DEADMONSTER) && ent->health.value > 0.0f &&
+        !(ent->s.flags & EF_NOT_SELECTABLE) && !(ent->s.renderfx & RF_HIDDEN) &&
+        G_FowPlayerCanHoverEntity(client->ps.number, ent);
+#ifdef WC3_DEBUG_AI
+    if (G_DebugTownHall(ent->class_id))
+        fprintf(stderr,
+            "WC3_DEBUG_AI select-check client=%u unit=%ld id=%.4s spawn=%u result=%u inuse=%u dead=%u "
+            "health=%.1f unselectable=%u hidden=%u fow=%u player=%u\n",
+            (unsigned)client->ps.number, (long)(ent - globals.edicts), (LPCSTR)&ent->class_id,
+            (unsigned)ent->spawn_time, result, ent->inuse, !!(ent->svflags & SVF_DEADMONSTER),
+            ent->health.value, !!(ent->s.flags & EF_NOT_SELECTABLE), !!(ent->s.renderfx & RF_HIDDEN),
+            G_FowPlayerCanHoverEntity(client->ps.number, ent), (unsigned)ent->s.player);
+#endif
+    return result;
 }
 
 BOOL G_UnitCanControl(LPGAMECLIENT client, LPCEDICT ent) {

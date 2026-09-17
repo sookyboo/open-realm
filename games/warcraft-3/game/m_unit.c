@@ -157,11 +157,23 @@ void unit_die(LPEDICT self, LPEDICT attacker) {
     DWORD selected_mask;
 
     if (!self || (self->svflags & SVF_DEADMONSTER)) return;
+#ifdef WC3_DEBUG_MINING
+    if (self->class_id == MAKEFOURCC('u','g','o','l'))
+        fprintf(stderr, "WC3_MINING death-source unit=%ld time=%u health=%.1f active=%u type=%u progress=%.1f "
+                "worker=%ld worker_spawn=%u build=%ld parent=%ld parent_spawn=%u think=%p move=%s\n",
+            (long)(self - globals.edicts), (unsigned)G_Time(), self->health.value, self->construction.active,
+            (unsigned)self->construction.type, self->construction.progress,
+            self->construction.worker ? (long)(self->construction.worker - globals.edicts) : -1L,
+            (unsigned)self->construction.worker_spawn_time, self->build ? (long)(self->build - globals.edicts) : -1L,
+            self->mineoverlay.parent ? (long)(self->mineoverlay.parent - globals.edicts) : -1L,
+            (unsigned)self->mineoverlay.parent_spawn_time, (void *)self->think,
+            self->currentmove && self->currentmove->animation ? self->currentmove->animation : "null");
+#endif
 #ifdef WC3_DEBUG_AI
     if (self->s.player == 6 || (attacker && attacker->s.player == 6))
-        fprintf(stderr, "WC3_DEBUG_AI death begin unit=%ld id=%.4s owner=%u building=%u attacker=%ld\n",
+        fprintf(stderr, "WC3_DEBUG_AI death begin unit=%ld id=%.4s owner=%u building=%u attacker=%ld time=%u\n",
             (long)(self - globals.edicts), (LPCSTR)&self->class_id, self->s.player,
-            G_UnitIsBuilding(self->class_id), attacker ? (long)(attacker - globals.edicts) : -1L);
+            G_UnitIsBuilding(self->class_id), attacker ? (long)(attacker - globals.edicts) : -1L, (unsigned)G_Time());
 #endif
     selected_mask = self->selected;
 

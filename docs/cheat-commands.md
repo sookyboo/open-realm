@@ -69,6 +69,8 @@ in the latter checkout. That main includes `0059057e`, which fixes the older PR 
 
 All `sv_cheats 1` Warcraft III cheat commands print their result to the issuing player's in-game console. This includes successful state changes as well as disabled-cheat, usage, and validation feedback. The same text is retained on stderr for terminal/debug logs; console delivery is presentation-only and is skipped for disconnected test/reserved clients.
 
+For comparing the JASS `RemoveUnit` lifecycle during Human07/Human04 diagnostics, `wc3_defer_release` defaults to `1` and retires removed edicts after the current simulation frame. Set it to `0` before loading a map to reproduce the legacy synchronous release path; this is diagnostic-only and should not be used as the normal runtime behavior.
+
 `hero max` raises the selected friendly Hero to the active map's `Misc/MaxHeroLevel` and grants the skill points associated with that level:
 
 ```

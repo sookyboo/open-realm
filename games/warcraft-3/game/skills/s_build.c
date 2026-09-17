@@ -221,6 +221,16 @@ void build_build(LPEDICT ent) {
         ent->stand(ent);
         return;
     }
+#ifdef WC3_DEBUG_MINING
+    if (building_id == MAKEFOURCC('u','g','o','l'))
+        fprintf(stderr,
+            "WC3_MINING build-spawn worker=%ld building=%ld id=%.4s spawn=%u health=%.1f "
+            "move=%s anim=%s construction=%u\n",
+            (long)(ent - globals.edicts), (long)(building - globals.edicts), (LPCSTR)&building_id,
+            (unsigned)building->spawn_time, building->health.value,
+            building->currentmove && building->currentmove->animation ? building->currentmove->animation : "null",
+            building->animation ? building->animation->name : "null", building->construction.active);
+#endif
 #ifdef WC3_DEBUG_AI
     fprintf(stderr, "WC3_DEBUG_AI build started worker=%ld building=%ld id=%.4s\n",
         (long)(ent - g_edicts), (long)(building - g_edicts), (LPCSTR)&ent->build_project);
@@ -245,6 +255,16 @@ void build_build(LPEDICT ent) {
         ent->stand(ent);
         return;
     }
+#ifdef WC3_DEBUG_MINING
+    if (building_id == MAKEFOURCC('u','g','o','l'))
+        fprintf(stderr,
+            "WC3_MINING build-bound worker=%ld building=%ld parent=%ld parent_spawn=%u hidden=%u paused=%u\n",
+            (long)(ent - globals.edicts), (long)(building - globals.edicts),
+            building->mineoverlay.parent ? (long)(building->mineoverlay.parent - globals.edicts) : -1L,
+            (unsigned)building->mineoverlay.parent_spawn_time,
+            building->mineoverlay.parent ? !!(building->mineoverlay.parent->s.renderfx & RF_HIDDEN) : 0,
+            building->mineoverlay.parent ? building->mineoverlay.parent->paused : 0);
+#endif
 
     /* The structure blocks pathing as soon as construction starts. Bake its
      * authored footprint before relocating the worker so the egress search

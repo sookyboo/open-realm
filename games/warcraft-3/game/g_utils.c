@@ -8,6 +8,33 @@ typedef struct {
 static deferred_free_t deferred_frees[MAX_ENTITIES];
 static DWORD deferred_free_count;
 
+#ifdef WC3_DEBUG_MINING
+static BOOL G_DebugMiningEntity(DWORD id) {
+    static DWORD const ids[] = {
+        MAKEFOURCC('n','g','o','l'), MAKEFOURCC('u','g','o','l'),
+        MAKEFOURCC('u','a','c','o'), MAKEFOURCC('h','t','o','w'),
+    };
+    FOR_LOOP(i, sizeof(ids) / sizeof(*ids)) if (ids[i] == id) return true;
+    return false;
+}
+
+static void G_DebugMiningLifecycle(LPCSTR phase, LPCEDICT ent) {
+    if (!ent || !G_DebugMiningEntity(ent->class_id)) return;
+    fprintf(stderr,
+        "WC3_MINING lifecycle=%s unit=%ld id=%.4s spawn=%u inuse=%u health=%.1f dead=%u hidden=%u "
+        "noclient=%u flags=%08x svflags=%08x wait=%.1f construction=%u type=%u progress=%.1f "
+        "parent=%ld parent_spawn=%u goldmine=%ld goldmine_spawn=%u\n",
+        phase, (long)(ent - globals.edicts), (LPCSTR)&ent->class_id, (unsigned)ent->spawn_time,
+        ent->inuse, ent->health.value, M_IsDead(ent), !!(ent->s.renderfx & RF_HIDDEN),
+        !!(ent->svflags & SVF_NOCLIENT), (unsigned)ent->s.flags, (unsigned)ent->svflags, ent->wait,
+        ent->construction.active, (unsigned)ent->construction.type, ent->construction.progress,
+        ent->mineoverlay.parent ? (long)(ent->mineoverlay.parent - globals.edicts) : -1L,
+        (unsigned)ent->mineoverlay.parent_spawn_time,
+        ent->goldmine.mine ? (long)(ent->goldmine.mine - globals.edicts) : -1L,
+        (unsigned)ent->goldmine.mine_spawn_time);
+}
+#endif
+
 /* Drop a queued removal when another lifecycle path frees the same edict first. */
 static void G_CancelDeferredFree(LPEDICT ent) {
     FOR_LOOP(i, deferred_free_count) {
@@ -54,6 +81,9 @@ void G_SetPlayerText(LPGAMECLIENT client, PLAYERTEXT index, LPCSTR text) {
 
 void G_FreeEdict(LPEDICT ent) {
     if (!ent) return;
+#ifdef WC3_DEBUG_MINING
+    G_DebugMiningLifecycle("free-begin", ent);
+#endif
 #ifdef WC3_DEBUG_AI
     if (G_DebugTownHall(ent->class_id))
         fprintf(stderr, "WC3_DEBUG_AI townhall free unit=%ld id=%.4s inuse=%u frame=%u move=%s animation=%s\n",
@@ -100,6 +130,9 @@ void G_FreeEdict(LPEDICT ent) {
 /* Match Warsmash RemoveUnit: hide now, then retire the handle after this simulation tick. */
 void G_DeferFreeEdict(LPEDICT ent) {
     if (!ent || !ent->inuse) return;
+#ifdef WC3_DEBUG_MINING
+    G_DebugMiningLifecycle("defer-request", ent);
+#endif
     FOR_LOOP(i, deferred_free_count)
         if (deferred_frees[i].ent == ent && deferred_frees[i].spawn_time == ent->spawn_time) return;
     if (deferred_free_count >= MAX_ENTITIES) {
@@ -111,13 +144,25 @@ void G_DeferFreeEdict(LPEDICT ent) {
     G_InvalidateCommands(G_GetPlayerClientByNumber(ent->s.player));
     G_RemoveEntityFromJassGroups(ent);
     deferred_frees[deferred_free_count++] = (deferred_free_t){ .ent = ent, .spawn_time = ent->spawn_time };
+#ifdef WC3_DEBUG_MINING
+    G_DebugMiningLifecycle("defer-queued", ent);
+#endif
 }
 
 /* Complete queued JASS removals after entity iteration and before the next snapshot. */
 void G_RunDeferredFrees(void) {
     while (deferred_free_count) {
         deferred_free_t pending = deferred_frees[--deferred_free_count];
+#ifdef WC3_DEBUG_MINING
+        G_DebugMiningLifecycle("defer-drain", pending.ent);
+#endif
         if (pending.ent->inuse && pending.ent->spawn_time == pending.spawn_time) G_FreeEdict(pending.ent);
+#ifdef WC3_DEBUG_MINING
+        else if (pending.ent->inuse)
+            fprintf(stderr, "WC3_MINING lifecycle=defer-stale unit=%ld queued_spawn=%u current_spawn=%u\n",
+                (long)(pending.ent - globals.edicts), (unsigned)pending.spawn_time,
+                (unsigned)pending.ent->spawn_time);
+#endif
     }
 }
 

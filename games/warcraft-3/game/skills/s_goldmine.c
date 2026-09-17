@@ -277,6 +277,11 @@ static LPEDICT goldmine_unregister_miner(LPEDICT worker) {
 static void goldmine_deplete(LPEDICT mine) {
     if (!mine || !mine->inuse || mine->resources > 0 || M_IsDead(mine))
         return;
+#ifdef WC3_DEBUG_MINING
+    fprintf(stderr, "WC3_MINING deplete unit=%ld id=%.4s spawn=%u resources=%u die=%u\n",
+        (long)(mine - globals.edicts), (LPCSTR)&mine->class_id, (unsigned)mine->spawn_time,
+        (unsigned)mine->resources, mine->die != NULL);
+#endif
     G_SetHealth(mine, 0);
     if (mine->die)
         mine->die(mine, NULL);

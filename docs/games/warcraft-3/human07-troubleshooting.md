@@ -81,6 +81,11 @@ The following evidence is reproducible in the current tree:
 - `wc3_api.createunit_links_building_collision_bounds` passes in both Classic and
   TFT data modes. It verifies collision-sized linked bounds and that `BoxEdicts()`
   returns the runtime-created building.
+- `wc3_api.human04_intro_cancel_preserves_unit_lifecycle_until_frame_end` reproduces
+  the Human04 cancellation order: a temporary `ugol` is killed, the worker/building
+  handles are removed, deferred state is checked before the drain, and a replacement
+  building is selected afterward. Its paired `...cvar_reproduces_synchronous_release`
+  test verifies the diagnostic legacy mode.
 - The focused API tests passed 4/4 for the no-birth lifecycle and 11/11 for the
   building-link contract in each data mode.
 - `make test-wc3-engine` passed `25739/25739` assertions in `1232` tests.

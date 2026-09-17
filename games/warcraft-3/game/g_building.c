@@ -1256,9 +1256,22 @@ BOOL G_StartOrcConstruction(LPEDICT builder, LPEDICT building) {
 }
 
 BOOL G_StartUndeadConstruction(LPEDICT builder, LPEDICT building) {
-    if (!builder || !G_StartConstruction(building, CONSTRUCTION_UNDEAD, false)) return false;
+    BOOL started;
+    if (!builder || !(started = G_StartConstruction(building, CONSTRUCTION_UNDEAD, false))) return false;
     G_AssignConstructionWorker(building, builder, false);
     building->construction.worker_release_time = G_Time() + WC3_UNDEAD_BUILD_WORK_MS;
+#ifdef WC3_DEBUG_MINING
+    if (building->class_id == MAKEFOURCC('u','g','o','l'))
+        fprintf(stderr,
+            "WC3_MINING undead-construction building=%ld worker=%ld id=%.4s active=%u type=%u "
+            "progress=%.1f move=%s anim=%s release=%u\n",
+            (long)(building - globals.edicts), (long)(builder - globals.edicts),
+            (LPCSTR)&building->class_id, building->construction.active,
+            (unsigned)building->construction.type, building->construction.progress,
+            building->currentmove && building->currentmove->animation ? building->currentmove->animation : "null",
+            building->animation ? building->animation->name : "null",
+            (unsigned)building->construction.worker_release_time);
+#endif
     return true;
 }
 

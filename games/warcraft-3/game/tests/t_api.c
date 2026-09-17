@@ -61,6 +61,10 @@ static LPCSTR group_debug_cvar(LPCSTR name, LPCSTR fallback) {
     return !strcmp(name, "wc3_group_debug") ? "1" : fallback;
 }
 
+static LPCSTR immediate_release_cvar(LPCSTR name, LPCSTR fallback) {
+    return !strcmp(name, "wc3_defer_release") ? "0" : fallback;
+}
+
 static DWORD presentation_write_count;
 static DWORD presentation_unicast_count;
 static pfWriteType_t indicator_types[4];
@@ -1712,6 +1716,131 @@ TEST(wc3_api, removeunit_hides_before_deferred_edict_release) {
     T_ASSERT(unit->s.renderfx & RF_HIDDEN);
     G_RunDeferredFrees();
     T_ASSERT(!unit->inuse);
+}
+
+/* Human04's intro-cancel path kills the temporary Haunted Gold Mine and then
+ * removes its workers/buildings from JASS while the trigger is still running.
+ * Keep that authored event order here: the mine gets a death transition, while
+ * RemoveUnit hides the other widgets and retires them only after the callback. */
+TEST(wc3_api, human04_intro_cancel_preserves_unit_lifecycle_until_frame_end) {
+    LPCSTR (*old_cvar)(LPCSTR, LPCSTR) = gi.CvarString;
+    LPEDICT mine = NULL, worker = NULL, building = NULL, replacement;
+    ggroup_t *cancel_group;
+    DWORD const bit = 1u << game.clients[0].ps.number;
+    char number[16];
+    LPCSTR select[] = { "select", number };
+
+    setup_test_world();
+    currentplayer = &game.clients[0].ps;
+    T_ASSERT(run_test_jass(
+        "globals\n"
+        "  unit hauntedMine = null\n"
+        "  unit acolyte = null\n"
+        "  unit townHall = null\n"
+        "  group cancelUnits = null\n"
+        "endglobals\n"
+        "function cancelIntro takes nothing returns nothing\n"
+        "  call KillUnit(hauntedMine)\n"
+        "  call RemoveUnit(acolyte)\n"
+        "  call BJassAssert(GetUnitTypeId(acolyte) == 'hpea', \"worker handle must survive cancellation action\")\n"
+        "  call RemoveUnit(townHall)\n"
+        "  call BJassAssert(GetUnitTypeId(townHall) == 'hbar', \"building handle must survive cancellation action\")\n"
+        "endfunction\n"
+        "function main takes nothing returns nothing\n"
+        "  set hauntedMine = CreateUnit(Player(0), 'ugol', 0.0, 0.0, 0.0)\n"
+        "  set acolyte = CreateUnit(Player(0), 'hpea', 64.0, 0.0, 0.0)\n"
+        "  set townHall = CreateUnit(Player(0), 'hbar', 128.0, 0.0, 0.0)\n"
+        "  set cancelUnits = CreateGroup()\n"
+        "  call GroupAddUnit(cancelUnits, acolyte)\n"
+        "  call GroupAddUnit(cancelUnits, townHall)\n"
+        "endfunction\n"));
+
+    FOR_LOOP(i, globals.num_edicts) {
+        if (g_edicts[i].class_id == MAKEFOURCC('u','g','o','l')) mine = &g_edicts[i];
+        if (g_edicts[i].class_id == MAKEFOURCC('h','p','e','a')) worker = &g_edicts[i];
+        if (g_edicts[i].class_id == MAKEFOURCC('h','b','a','r')) building = &g_edicts[i];
+    }
+    T_NOT_NULL(mine); T_NOT_NULL(worker); T_NOT_NULL(building);
+    if (!mine || !worker || !building) goto cleanup;
+    mine->birth(mine);
+    T_ASSERT(G_StartUndeadConstruction(worker, mine));
+    T_ASSERT(mine->construction.active);
+    T_STREQ(mine->currentmove->animation, "birth");
+
+    jass_callbyname(level.vm, "cancelIntro", false);
+    jass_runevents(level.vm);
+    T_ASSERT(mine->svflags & SVF_DEADMONSTER);
+    T_STREQ(mine->currentmove->animation, "death");
+    T_ASSERT(!mine->construction.active);
+    T_ASSERT(worker->inuse);
+    T_ASSERT(G_IsDeferredFree(worker));
+    T_ASSERT(G_IsDeferredFree(building));
+    T_ASSERT(worker->s.renderfx & RF_HIDDEN);
+    T_ASSERT(building->s.renderfx & RF_HIDDEN);
+    cancel_group = level.groups[0];
+    T_EQ(cancel_group->num_units, 0);
+    T_ASSERT(!G_UnitCanBeSelected(&game.clients[0], worker));
+
+    G_RunDeferredFrees();
+    T_ASSERT(!worker->inuse);
+    T_ASSERT(!building->inuse);
+    replacement = alloc_test_unit(MAKEFOURCC('h','b','a','r'), 128.0f, 0.0f);
+    T_NOT_NULL(replacement);
+    if (replacement) {
+        replacement->s.player = 0;
+        replacement->svflags |= SVF_MONSTER;
+        T_ASSERT(replacement != building);
+        T_ASSERT(G_UnitCanBeSelected(&game.clients[0], replacement));
+        snprintf(number, sizeof(number), "%u", replacement->s.number);
+        globals.ClientCommand(&g_edicts[0], 2, select);
+        T_ASSERT(replacement->selected & bit);
+        G_DeselectEntity(&game.clients[0], replacement);
+        G_FreeEdict(replacement);
+    }
+
+cleanup:
+    currentplayer = NULL;
+    gi.CvarString = old_cvar;
+}
+
+/* The cvar is deliberately a differential harness: it must reproduce the old
+ * synchronous release so a lifecycle trace can be compared against the fixed
+ * default without changing the production default. */
+TEST(wc3_api, human04_intro_cancel_cvar_reproduces_synchronous_release) {
+    LPCSTR (*old_cvar)(LPCSTR, LPCSTR) = gi.CvarString;
+    LPEDICT worker = NULL, building = NULL;
+
+    setup_test_world();
+    currentplayer = &game.clients[0].ps;
+    gi.CvarString = immediate_release_cvar;
+    T_ASSERT(run_test_jass(
+        "globals\n"
+        "  unit acolyte = null\n"
+        "  unit townHall = null\n"
+        "endglobals\n"
+        "function cancelIntro takes nothing returns nothing\n"
+        "  call RemoveUnit(acolyte)\n"
+        "  call RemoveUnit(townHall)\n"
+        "endfunction\n"
+        "function main takes nothing returns nothing\n"
+        "  set acolyte = CreateUnit(Player(0), 'hpea', 64.0, 0.0, 0.0)\n"
+        "  set townHall = CreateUnit(Player(0), 'hbar', 128.0, 0.0, 0.0)\n"
+        "endfunction\n"));
+    FOR_LOOP(i, globals.num_edicts) {
+        if (g_edicts[i].class_id == MAKEFOURCC('h','p','e','a')) worker = &g_edicts[i];
+        if (g_edicts[i].class_id == MAKEFOURCC('h','b','a','r')) building = &g_edicts[i];
+    }
+    T_NOT_NULL(worker); T_NOT_NULL(building);
+    if (worker && building) {
+        jass_callbyname(level.vm, "cancelIntro", false);
+        jass_runevents(level.vm);
+        T_ASSERT(!worker->inuse);
+        T_ASSERT(!building->inuse);
+        T_ASSERT(!G_IsDeferredFree(worker));
+        T_ASSERT(!G_IsDeferredFree(building));
+    }
+    currentplayer = NULL;
+    gi.CvarString = old_cvar;
 }
 
 TEST(wc3_api, createunit_does_not_reuse_deferred_dead_unit) {

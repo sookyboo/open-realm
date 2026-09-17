@@ -106,6 +106,13 @@ DWORD SetUnitFacingTimed(LPJASS j) {
 DWORD KillUnit(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
     /* KillUnit is a death transition, not a raw life write; unit_die owns the death animation, events, and cleanup. */
+#ifdef WC3_DEBUG_MINING
+    if (whichUnit && whichUnit->class_id == MAKEFOURCC('u','g','o','l'))
+        fprintf(stderr, "WC3_MINING KillUnit unit=%ld id=%.4s time=%u inuse=%u health=%.1f caller=%s\n",
+            (long)(whichUnit - globals.edicts), (LPCSTR)&whichUnit->class_id, (unsigned)G_Time(),
+            whichUnit->inuse, whichUnit->health.value,
+            jass_currentfunctionname(j) ? jass_currentfunctionname(j) : "(native/root)");
+#endif
     if (whichUnit && whichUnit->inuse && !(whichUnit->svflags & SVF_DEADMONSTER)) {
         unit_die(whichUnit, NULL);
     }
@@ -113,16 +120,21 @@ DWORD KillUnit(LPJASS j) {
 }
 DWORD RemoveUnit(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
+    BOOL deferred = atoi(gi.CvarString("wc3_defer_release", "1")) != 0;
 #ifdef WC3_DEBUG_AI
-    fprintf(stderr, "WC3_DEBUG_AI remove unit=%ld id=%.4s owner=%u inuse=%u\n",
+    fprintf(stderr, "WC3_DEBUG_AI remove unit=%ld id=%.4s owner=%u inuse=%u release=%s caller=%s\n",
         whichUnit ? (long)(whichUnit - globals.edicts) : -1L,
         whichUnit ? (LPCSTR)&whichUnit->class_id : "null",
-        whichUnit ? whichUnit->s.player : 0, whichUnit ? whichUnit->inuse : 0);
+        whichUnit ? whichUnit->s.player : 0, whichUnit ? whichUnit->inuse : 0, deferred ? "deferred" : "immediate",
+        jass_currentfunctionname(j) ? jass_currentfunctionname(j) : "(native/root)");
 #endif
     if (whichUnit) {
         LPGAMECLIENT owner = G_GetPlayerClientByNumber(whichUnit->s.player);
         if (owner && owner->ps.number == whichUnit->s.player) G_InvalidateCommands(owner);
-        G_DeferFreeEdict(whichUnit);
+        /* wc3_defer_release=0 is a diagnostic comparison mode for the pre-fix
+         * synchronous RemoveUnit lifecycle; retail/default behavior is deferred. */
+        if (deferred) G_DeferFreeEdict(whichUnit);
+        else G_FreeEdict(whichUnit);
     }
     return 0;
 }
