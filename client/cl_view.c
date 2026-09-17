@@ -243,7 +243,7 @@ static void V_AddClientEntity(centity_t const *ent) {
     re.scale = LerpNumber(ent->prev.scale, ent->current.scale, cl.viewDef.lerpfrac);
     /* Entity scale defaults to one; an omitted replacement delta must not
      * collapse the rendered model and its collision shape to zero. */
-    if (re.scale <= 0.0f) re.scale = 1.0f;
+    re.scale = cl_normalize_entity_scale(re.scale);
     re.frame = ent->current.frame;
     re.oldframe = ent->prev.frame;
     re.health = ent->current.stats[ENT_HEALTH];
@@ -291,7 +291,6 @@ static void V_AddClientEntity(centity_t const *ent) {
     re.tint_valid = ent->tint_valid;
     re.tint = ent->tint_valid ? ent->tint : COLOR32_WHITE;
     re.number = ent->current.number;
-    re.class_id = ent->current.class_id;
     re.splat = cl.pics[ent->current.splat & 0xffff];
     re.splatsize = ent->current.splat >> 16;
 #ifndef USE_SHADOWMAPS

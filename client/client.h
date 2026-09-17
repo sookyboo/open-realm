@@ -182,6 +182,7 @@ void CL_MovieShutdown(void);
 void CL_RequestUnitUI(DWORD num_selected, DWORD *entity_nums);
 VECTOR2 CL_ClampCameraPosition(VECTOR2 position);
 void CL_PredictCameraPosition(VECTOR2 position);
+static inline FLOAT cl_normalize_entity_scale(FLOAT scale) { return scale > 0.0f ? scale : 1.0f; }
 
 void V_RenderView(void);
 void V_Shutdown(void);

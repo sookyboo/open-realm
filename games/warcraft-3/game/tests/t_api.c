@@ -1751,9 +1751,9 @@ TEST(wc3_api, human04_intro_cancel_preserves_unit_lifecycle_until_frame_end) {
         "endfunction\n"));
 
     FOR_LOOP(i, globals.num_edicts) {
-        if (g_edicts[i].class_id == MAKEFOURCC('u','g','o','l')) mine = &g_edicts[i];
-        if (g_edicts[i].class_id == MAKEFOURCC('h','p','e','a')) worker = &g_edicts[i];
-        if (g_edicts[i].class_id == MAKEFOURCC('h','b','a','r')) building = &g_edicts[i];
+        if (g_edicts[i].class_id == BZ_WC3_UNIT_HAUNTED_GOLD_MINE) mine = &g_edicts[i];
+        if (g_edicts[i].class_id == BZ_WC3_UNIT_PEASANT) worker = &g_edicts[i];
+        if (g_edicts[i].class_id == BZ_WC3_UNIT_BARRACKS) building = &g_edicts[i];
     }
     T_NOT_NULL(mine); T_NOT_NULL(worker); T_NOT_NULL(building);
     if (!mine || !worker || !building) goto cleanup;
@@ -1776,10 +1776,10 @@ TEST(wc3_api, human04_intro_cancel_preserves_unit_lifecycle_until_frame_end) {
     T_EQ(cancel_group->num_units, 0);
     T_ASSERT(!G_UnitCanBeSelected(&game.clients[0], worker));
 
-    G_RunDeferredFrees();
+    level.started = true; level.scriptsStarted = true; globals.RunFrame();
     T_ASSERT(!worker->inuse);
     T_ASSERT(!building->inuse);
-    replacement = alloc_test_unit(MAKEFOURCC('h','b','a','r'), 128.0f, 0.0f);
+    replacement = alloc_test_unit(BZ_WC3_UNIT_BARRACKS, 128.0f, 0.0f);
     T_NOT_NULL(replacement);
     if (replacement) {
         replacement->s.player = 0;
@@ -1841,7 +1841,7 @@ TEST(wc3_api, createunit_starts_ready_without_birth_delay) {
     setup_test_world();
     ui_rows = parse_slk_string(ui_slk);
     old_ui = G_SetSLKRows("UnitUI", ui_rows);
-    unit = unit_create(0, MAKEFOURCC('h','f','o','o'), &(VECTOR2){0, 0}, 0);
+    unit = unit_create(0, BZ_WC3_UNIT_FOOTMAN, &(VECTOR2){0, 0}, 0);
     T_NOT_NULL(unit);
     T_NOT_NULL(unit->currentmove);
     T_STREQ(unit->currentmove->animation, "stand");
@@ -1889,9 +1889,9 @@ TEST(wc3_api, createunit_links_building_collision_bounds) {
     old_ui = G_SetSLKRows("UnitUI", ui_rows);
     old_balance = G_SetSLKRows("UnitBalance", balance_rows);
     old_data = G_SetSLKRows("UnitData", data_rows);
-    T_ASSERT(G_UnitIsBuilding(MAKEFOURCC('h', 'p', 'e', 'a')));
-    T_EQ((int)G_UnitCollision(MAKEFOURCC('h', 'p', 'e', 'a')), 64);
-    building = unit_create(0, MAKEFOURCC('h', 'p', 'e', 'a'), &(VECTOR2){0, 0}, 0);
+    T_ASSERT(G_UnitIsBuilding(BZ_WC3_UNIT_PEASANT));
+    T_EQ((int)G_UnitCollision(BZ_WC3_UNIT_PEASANT), 64);
+    building = unit_create(0, BZ_WC3_UNIT_PEASANT, &(VECTOR2){0, 0}, 0);
     T_NOT_NULL(building);
     if (!building) return;
     T_ASSERT(building->data.UnitUI->modelFile);

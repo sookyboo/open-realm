@@ -51,8 +51,7 @@ ENT++) if (CONDITION)
 
 #ifdef WC3_DEBUG_AI
 static inline BOOL G_DebugTownHall(DWORD id) {
-    return id == MAKEFOURCC('h','t','o','w') || id == MAKEFOURCC('h','k','e','e') ||
-        id == MAKEFOURCC('h','c','a','s');
+    return id == BZ_WC3_UNIT_TOWN_HALL || id == BZ_WC3_UNIT_KEEP || id == BZ_WC3_UNIT_CASTLE;
 }
 #endif
 

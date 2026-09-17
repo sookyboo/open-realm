@@ -94,7 +94,8 @@ BOOL unit_affectingcombat(LPEDICT self) {
 void unit_stand(LPEDICT self) {
 #ifdef WC3_DEBUG_AI
     if (G_DebugTownHall(self->class_id))
-        fprintf(stderr, "WC3_DEBUG_AI townhall stand unit=%ld id=%.4s move=%s frame=%u hold=%u construction=%u upgrade=%u health=%.1f\n",
+        fprintf(stderr, "WC3_DEBUG_AI townhall stand unit=%ld id=%.4s move=%s frame=%u hold=%u "
+            "construction=%u upgrade=%u health=%.1f\n",
             (long)(self - globals.edicts), (LPCSTR)&self->class_id,
             self->currentmove && self->currentmove->animation ? self->currentmove->animation : "null",
             self->s.frame, self->aiflags & AI_HOLD_FRAME, self->construction.active,
@@ -137,14 +138,14 @@ void G_AddHealth(LPEDICT ent, FLOAT value) { G_SetHealth(ent, MIN(ent->health.ma
 static DWORD G_DebugGreenBuildingCount(void) {
     DWORD count = 0;
     FILTER_EDICTS(unit, unit->inuse && unit->s.player == 6 && G_UnitIsBuilding(unit->class_id) &&
-        unit->class_id != MAKEFOURCC('u','z','g','1') && unit->class_id != MAKEFOURCC('u','z','i','g') &&
+        unit->class_id != BZ_WC3_UNIT_ZIGGURAT && unit->class_id != BZ_WC3_UNIT_ZIGGURAT_UPGRADED &&
         unit->health.value > 0) count++;
     return count;
 }
 
 static void G_DebugDumpGreenBuildings(void) {
     FILTER_EDICTS(unit, unit->inuse && unit->s.player == 6 && G_UnitIsBuilding(unit->class_id) &&
-        unit->class_id != MAKEFOURCC('u','z','g','1') && unit->class_id != MAKEFOURCC('u','z','i','g') &&
+        unit->class_id != BZ_WC3_UNIT_ZIGGURAT && unit->class_id != BZ_WC3_UNIT_ZIGGURAT_UPGRADED &&
         unit->health.value > 0)
         fprintf(stderr, "WC3_DEBUG_AI remaining green building unit=%ld id=%.4s health=%.1f origin=(%.1f,%.1f)\n",
             (long)(unit - globals.edicts), (LPCSTR)&unit->class_id, unit->health.value,
@@ -158,7 +159,7 @@ void unit_die(LPEDICT self, LPEDICT attacker) {
 
     if (!self || (self->svflags & SVF_DEADMONSTER)) return;
 #ifdef WC3_DEBUG_MINING
-    if (self->class_id == MAKEFOURCC('u','g','o','l'))
+    if (self->class_id == BZ_WC3_UNIT_HAUNTED_GOLD_MINE)
         fprintf(stderr, "WC3_MINING death-source unit=%ld time=%u health=%.1f active=%u type=%u progress=%.1f "
                 "worker=%ld worker_spawn=%u build=%ld parent=%ld parent_spawn=%u think=%p move=%s\n",
             (long)(self - globals.edicts), (unsigned)G_Time(), self->health.value, self->construction.active,
@@ -1702,7 +1703,8 @@ void SP_monster_unit(LPEDICT self) {
     unit_setmove(self, &unit_move_stand);
 #ifdef WC3_DEBUG_AI
     if (G_DebugTownHall(self->class_id))
-        fprintf(stderr, "WC3_DEBUG_AI townhall spawn unit=%ld id=%.4s frame=%u move=%s animation=%s hold=%u construction=%u health=%.1f\n",
+        fprintf(stderr, "WC3_DEBUG_AI townhall spawn unit=%ld id=%.4s frame=%u move=%s animation=%s "
+            "hold=%u construction=%u health=%.1f\n",
             (long)(self - globals.edicts), (LPCSTR)&self->class_id, self->s.frame,
             self->currentmove && self->currentmove->animation ? self->currentmove->animation : "null",
             self->animation ? self->animation->name : "null",

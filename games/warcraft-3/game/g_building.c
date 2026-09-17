@@ -1261,7 +1261,7 @@ BOOL G_StartUndeadConstruction(LPEDICT builder, LPEDICT building) {
     G_AssignConstructionWorker(building, builder, false);
     building->construction.worker_release_time = G_Time() + WC3_UNDEAD_BUILD_WORK_MS;
 #ifdef WC3_DEBUG_MINING
-    if (building->class_id == MAKEFOURCC('u','g','o','l'))
+    if (building->class_id == BZ_WC3_UNIT_HAUNTED_GOLD_MINE)
         fprintf(stderr,
             "WC3_MINING undead-construction building=%ld worker=%ld id=%.4s active=%u type=%u "
             "progress=%.1f move=%s anim=%s release=%u\n",

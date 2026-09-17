@@ -131,7 +131,8 @@ void M_MoveFrame(LPEDICT self) {
     } else if (next_frame >= anim->interval[1]) {
 #ifdef WC3_DEBUG_AI
         if (G_DebugTownHall(self->class_id))
-            fprintf(stderr, "WC3_DEBUG_AI townhall animation end unit=%ld id=%.4s move=%s frame=%u next=%u interval=%u-%u hold=%u construction=%u\n",
+            fprintf(stderr, "WC3_DEBUG_AI townhall animation end unit=%ld id=%.4s move=%s frame=%u "
+                "next=%u interval=%u-%u hold=%u construction=%u\n",
                 (long)(self - globals.edicts), (LPCSTR)&self->class_id,
                 move && move->animation ? move->animation : "null", self->s.frame, next_frame,
                 anim->interval[0], anim->interval[1], self->aiflags & AI_HOLD_FRAME,
@@ -160,7 +161,8 @@ void monster_think(LPEDICT self) {
         DWORD const entnum = (DWORD)(self - globals.edicts);
         if (level.time >= wc3_debug_townhall_log_time[entnum] + 1000) {
             wc3_debug_townhall_log_time[entnum] = level.time;
-            fprintf(stderr, "WC3_DEBUG_AI townhall think unit=%ld id=%.4s move=%s frame=%u anim=%s interval=%u-%u hold=%u construction=%u progress=%.1f health=%.1f\n",
+            fprintf(stderr, "WC3_DEBUG_AI townhall think unit=%ld id=%.4s move=%s frame=%u anim=%s "
+                "interval=%u-%u hold=%u construction=%u progress=%.1f health=%.1f\n",
                 (long)entnum, (LPCSTR)&self->class_id,
                 self->currentmove && self->currentmove->animation ? self->currentmove->animation : "null",
                 self->s.frame, self->animation ? self->animation->name : "null",

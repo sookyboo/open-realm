@@ -11,8 +11,8 @@ static DWORD deferred_free_count;
 #ifdef WC3_DEBUG_MINING
 static BOOL G_DebugMiningEntity(DWORD id) {
     static DWORD const ids[] = {
-        MAKEFOURCC('n','g','o','l'), MAKEFOURCC('u','g','o','l'),
-        MAKEFOURCC('u','a','c','o'), MAKEFOURCC('h','t','o','w'),
+        BZ_WC3_UNIT_GOLD_MINE, BZ_WC3_UNIT_HAUNTED_GOLD_MINE,
+        BZ_WC3_UNIT_ACOLYTE, BZ_WC3_UNIT_TOWN_HALL,
     };
     FOR_LOOP(i, sizeof(ids) / sizeof(*ids)) if (ids[i] == id) return true;
     return false;
@@ -131,11 +131,13 @@ void G_FreeEdict(LPEDICT ent) {
 void G_DeferFreeEdict(LPEDICT ent) {
     if (!ent || !ent->inuse) return;
 #ifdef WC3_DEBUG_AI
-    if (ent->s.class_id == MAKEFOURCC('h','t','o','w') || ent->s.class_id == MAKEFOURCC('u','s','e','p'))
-        fprintf(stderr, "WC3_DEBUG_AI lifetime defer-queue time=%u unit=%ld id=%.4s spawn=%u inuse=%d hidden=%d model=%u frame=%u move=%s animation=%s\n",
+    if (ent->s.class_id == BZ_WC3_UNIT_TOWN_HALL || ent->s.class_id == BZ_WC3_UNIT_CRYPT)
+        fprintf(stderr, "WC3_DEBUG_AI lifetime defer-queue time=%u unit=%ld id=%.4s spawn=%u "
+            "inuse=%d hidden=%d model=%u frame=%u move=%s animation=%s\n",
             (unsigned)level.time, (long)(ent - globals.edicts), (LPCSTR)&ent->s.class_id,
             (unsigned)ent->spawn_time, ent->inuse, !!(ent->s.renderfx & RF_HIDDEN), (unsigned)ent->s.model,
-            (unsigned)ent->s.frame, ent->currentmove && ent->currentmove->animation ? ent->currentmove->animation : "null",
+            (unsigned)ent->s.frame,
+            ent->currentmove && ent->currentmove->animation ? ent->currentmove->animation : "null",
             ent->animation ? ent->animation->name : "null");
 #endif
 #ifdef WC3_DEBUG_MINING
@@ -162,8 +164,9 @@ void G_RunDeferredFrees(void) {
     while (deferred_free_count) {
         deferred_free_t pending = deferred_frees[--deferred_free_count];
 #ifdef WC3_DEBUG_AI
-        if (pending.ent->s.class_id == MAKEFOURCC('h','t','o','w') || pending.ent->s.class_id == MAKEFOURCC('u','s','e','p'))
-            fprintf(stderr, "WC3_DEBUG_AI lifetime defer-drain time=%u unit=%ld id=%.4s spawn=%u inuse=%d hidden=%d model=%u frame=%u\n",
+        if (pending.ent->s.class_id == BZ_WC3_UNIT_TOWN_HALL || pending.ent->s.class_id == BZ_WC3_UNIT_CRYPT)
+            fprintf(stderr, "WC3_DEBUG_AI lifetime defer-drain time=%u unit=%ld id=%.4s spawn=%u "
+                "inuse=%d hidden=%d model=%u frame=%u\n",
                 (unsigned)level.time, (long)(pending.ent - globals.edicts), (LPCSTR)&pending.ent->s.class_id,
                 (unsigned)pending.spawn_time, pending.ent->inuse, !!(pending.ent->s.renderfx & RF_HIDDEN),
                 (unsigned)pending.ent->s.model, (unsigned)pending.ent->s.frame);

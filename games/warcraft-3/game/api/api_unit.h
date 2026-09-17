@@ -1,7 +1,7 @@
 extern LPPLAYER currentplayer;
 
-static DWORD const order_ugol = MAKEFOURCC('u','g','o','l');
-static DWORD const unit_ngol = MAKEFOURCC('n','g','o','l');
+static DWORD const order_ugol = BZ_WC3_UNIT_HAUNTED_GOLD_MINE;
+static DWORD const unit_ngol = BZ_WC3_UNIT_GOLD_MINE;
 
 #define UNIT_TYPED_ACCESS(NAME, FIELD, TYPE) \
 DWORD SetUnit##NAME(LPJASS j) {  \
@@ -107,7 +107,7 @@ DWORD KillUnit(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
     /* KillUnit is a death transition, not a raw life write; unit_die owns the death animation, events, and cleanup. */
 #ifdef WC3_DEBUG_MINING
-    if (whichUnit && whichUnit->class_id == MAKEFOURCC('u','g','o','l'))
+    if (whichUnit && whichUnit->class_id == BZ_WC3_UNIT_HAUNTED_GOLD_MINE)
         fprintf(stderr, "WC3_MINING KillUnit unit=%ld id=%.4s time=%u inuse=%u health=%.1f caller=%s\n",
             (long)(whichUnit - globals.edicts), (LPCSTR)&whichUnit->class_id, (unsigned)G_Time(),
             whichUnit->inuse, whichUnit->health.value,

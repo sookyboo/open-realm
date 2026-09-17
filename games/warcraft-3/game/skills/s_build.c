@@ -222,7 +222,7 @@ void build_build(LPEDICT ent) {
         return;
     }
 #ifdef WC3_DEBUG_MINING
-    if (building_id == MAKEFOURCC('u','g','o','l'))
+    if (building_id == BZ_WC3_UNIT_HAUNTED_GOLD_MINE)
         fprintf(stderr,
             "WC3_MINING build-spawn worker=%ld building=%ld id=%.4s spawn=%u health=%.1f "
             "move=%s anim=%s construction=%u\n",
@@ -256,7 +256,7 @@ void build_build(LPEDICT ent) {
         return;
     }
 #ifdef WC3_DEBUG_MINING
-    if (building_id == MAKEFOURCC('u','g','o','l'))
+    if (building_id == BZ_WC3_UNIT_HAUNTED_GOLD_MINE)
         fprintf(stderr,
             "WC3_MINING build-bound worker=%ld building=%ld parent=%ld parent_spawn=%u hidden=%u paused=%u\n",
             (long)(ent - globals.edicts), (long)(building - globals.edicts),

@@ -339,7 +339,8 @@ BOOL G_BotSuicidePlayer(LPPLAYER player, LPPLAYER target, BOOL check_full) {
     captain = bot->captains + BOT_CAPTAIN_ATTACK;
     if (!G_BotCaptainGroupSize(player) || (check_full && !G_BotCaptainIsFull(player))) {
 #ifdef WC3_DEBUG_AI
-        fprintf(stderr, "WC3_DEBUG_AI suicide reject player=%u target=%u check_full=%u size=%u desired=%u reason=not_ready\n",
+        fprintf(stderr, "WC3_DEBUG_AI suicide reject player=%u target=%u check_full=%u size=%u "
+            "desired=%u reason=not_ready\n",
             PLAYER_NUM(player), PLAYER_NUM(target), check_full, G_BotCaptainGroupSize(player), captain->desired);
 #endif
         return false;

@@ -133,7 +133,6 @@ typedef struct {
     LPCTEXTURE splat;
     LPCSTR name;                      /* server-authored world label (NULL = none) */
     DWORD number;
-    DWORD class_id;                   /* server entity class for game-specific renderer diagnostics */
     DWORD team;
 #ifdef WOW
     DWORD display_id;

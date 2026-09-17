@@ -281,19 +281,21 @@ TEST(wc3_jass_map, human07_normal_removal_is_absent_from_green_building_count) {
         "  if GetGameDifficulty() == MAP_DIFFICULTY_NORMAL then\n"
         "    call RemoveUnit(gg_unit_usep_0049)\n"
         "  endif\n"
-        "  call BJassAssert(GetUnitTypeId(gg_unit_usep_0049) == 'usep', \"removed Crypt handle survives the trigger\")\n"
+        "  call BJassAssert(GetUnitTypeId(gg_unit_usep_0049) == 'usep', "
+        "\"removed Crypt handle survives the trigger\")\n"
         "  call BJassAssert(Human07CountGreenBuildings() == 1, \"removed Crypt must not be counted\")\n"
         "endfunction\n"
         "function main takes nothing returns nothing\n"
         "  local unit survivingBuilding = CreateUnit(Player(0), 'hbar', 0.0, 0.0, 0.0)\n"
         "  set gg_unit_usep_0049 = CreateUnit(Player(0), 'usep', 128.0, 0.0, 0.0)\n"
-        "  call BJassAssert(IsUnitType(survivingBuilding, UNIT_TYPE_STRUCTURE), \"surviving Town Hall is a structure\")\n"
+        "  call BJassAssert(IsUnitType(survivingBuilding, UNIT_TYPE_STRUCTURE), "
+        "\"surviving Town Hall is a structure\")\n"
         "endfunction\n"
     ));
 
     FOR_LOOP(i, globals.num_edicts) {
-        if (g_edicts[i].class_id == MAKEFOURCC('u','s','e','p')) crypt = &g_edicts[i];
-        if (g_edicts[i].class_id == MAKEFOURCC('h','b','a','r')) town_hall = &g_edicts[i];
+        if (g_edicts[i].class_id == BZ_WC3_UNIT_CRYPT) crypt = &g_edicts[i];
+        if (g_edicts[i].class_id == BZ_WC3_UNIT_BARRACKS) town_hall = &g_edicts[i];
     }
     T_NOT_NULL(crypt); T_NOT_NULL(town_hall);
     if (!crypt || !town_hall) goto cleanup;
@@ -310,7 +312,7 @@ TEST(wc3_jass_map, human07_normal_removal_is_absent_from_green_building_count) {
     T_ASSERT(!jass_rterror_pending(level.vm));
     T_ASSERT(crypt->inuse);
     T_ASSERT(G_IsDeferredFree(crypt));
-    G_RunDeferredFrees();
+    level.started = true; level.scriptsStarted = true; globals.RunFrame();
     T_ASSERT(!crypt->inuse);
 
 cleanup:
@@ -370,8 +372,8 @@ TEST(wc3_jass_map, human04_cancel_replaces_townhall_after_difficulty_removal) {
     ));
 
     FOR_LOOP(i, globals.num_edicts) {
-        if (g_edicts[i].class_id == MAKEFOURCC('u','s','e','p')) crypt = &g_edicts[i];
-        if (g_edicts[i].class_id == MAKEFOURCC('h','b','a','r')) old_town_hall = &g_edicts[i];
+        if (g_edicts[i].class_id == BZ_WC3_UNIT_CRYPT) crypt = &g_edicts[i];
+        if (g_edicts[i].class_id == BZ_WC3_UNIT_BARRACKS) old_town_hall = &g_edicts[i];
     }
     T_NOT_NULL(crypt); T_NOT_NULL(old_town_hall);
     if (!crypt || !old_town_hall) goto cleanup;
@@ -387,7 +389,7 @@ TEST(wc3_jass_map, human04_cancel_replaces_townhall_after_difficulty_removal) {
     jass_runevents(level.vm);
 
     FOR_LOOP(i, globals.num_edicts)
-        if (g_edicts[i].class_id == MAKEFOURCC('h','t','o','w') && g_edicts[i].inuse)
+        if (g_edicts[i].class_id == BZ_WC3_UNIT_TOWN_HALL && g_edicts[i].inuse)
             replacement = &g_edicts[i];
     T_NOT_NULL(replacement);
     T_ASSERT(G_IsDeferredFree(crypt));
@@ -400,7 +402,7 @@ TEST(wc3_jass_map, human04_cancel_replaces_townhall_after_difficulty_removal) {
         T_ASSERT(G_UnitCanBeSelected(&game.clients[0], replacement));
         T_ASSERT(!(replacement->selected & bit));
     }
-    G_RunDeferredFrees();
+    level.started = true; level.scriptsStarted = true; globals.RunFrame();
     T_ASSERT(!crypt->inuse);
     T_ASSERT(!old_town_hall->inuse);
 

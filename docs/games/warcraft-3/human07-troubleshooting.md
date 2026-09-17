@@ -105,7 +105,8 @@ The following evidence is reproducible in the current tree:
   it verifies the Crypt handle remains deferred but is absent from the count.
 - The focused API tests passed 4/4 for the no-birth lifecycle and 11/11 for the
   building-link contract in each data mode.
-- `make test-wc3-engine` passed `25779/25779` assertions in `1235` tests.
+- `make test-wc3-engine` passed `25784/25784` assertions in `1235` tests in both
+  Classic and TFT modes.
 - `make -B openwarcraft3` completed successfully and `git diff --check` reported no
   whitespace errors.
 - A bounded Human07 run made during the investigation progressed to Human08, which
