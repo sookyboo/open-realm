@@ -52,23 +52,53 @@ bool R_TraceEntity(viewDef_t const *viewdef, float x, float y, LPDWORD number) {
     LINE3 const line = R_LineForScreenPoint(viewdef, x, y);
     FLOAT best = FLT_MAX;
     DWORD best_number = 0;
+#ifdef WC3_DEBUG_AI
+    BOOL townhall_trace = false;
+#endif
 
     FOR_LOOP(i, viewdef->num_entities) {
         renderEntity_t *ent = &viewdef->entities[i];
         FLOAT distance;
+#ifdef WC3_DEBUG_AI
+        BOOL const townhall = ent->class_id == MAKEFOURCC('h','t','o','w');
+        townhall_trace |= townhall;
+        if (townhall)
+            fprintf(stderr, "WC3_DEBUG_AI trace candidate ent=%u model=%p flags=%u origin=(%.1f %.1f %.1f)\n",
+                (unsigned)ent->number, (void *)ent->model, (unsigned)ent->flags,
+                ent->origin.x, ent->origin.y, ent->origin.z);
+#endif
 
         if (!ent->number || !ent->model || (ent->flags & (RF_HIDDEN | RF_NOT_SELECTABLE))) {
+#ifdef WC3_DEBUG_AI
+            if (townhall)
+                fprintf(stderr, "WC3_DEBUG_AI trace reject ent=%u reason=missing-or-hidden model=%d hidden=%d notselectable=%d\n",
+                    (unsigned)ent->number, !!ent->model, !!(ent->flags & RF_HIDDEN),
+                    !!(ent->flags & RF_NOT_SELECTABLE));
+#endif
             continue;
         }
-        if (R_TraceModel(ent, &line, &distance) && distance < best) {
+        BOOL const hit = R_TraceModel(ent, &line, &distance);
+#ifdef WC3_DEBUG_AI
+        if (townhall)
+            fprintf(stderr, "WC3_DEBUG_AI trace result ent=%u hit=%d distance=%.1f best=%.1f\n",
+                (unsigned)ent->number, hit, hit ? distance : -1.0f, best);
+#endif
+        if (hit && distance < best) {
             best = distance;
             best_number = ent->number;
         }
     }
     if (best_number) {
         *number = best_number;
+#ifdef WC3_DEBUG_AI
+        if (townhall_trace)
+            fprintf(stderr, "WC3_DEBUG_AI trace final hit=%u\n", (unsigned)best_number);
+#endif
         return true;
     }
+#ifdef WC3_DEBUG_AI
+    if (townhall_trace) fprintf(stderr, "WC3_DEBUG_AI trace final hit=none\n");
+#endif
     return false;
 }
 

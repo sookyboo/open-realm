@@ -159,6 +159,19 @@ static void G_ExecuteEvent(GAMEEVENT *evt) {
                     BOOL owner_match = subject &&
                         e->subject == G_GetPlayerEntityByNumber(subject->s.player);
 #ifdef WC3_DEBUG_AI
+                    if (evt->type == EVENT_PLAYER_END_CINEMATIC)
+                        fprintf(stderr,
+                            "WC3_DEBUG_AI end-cinematic dispatch trigger=%ld subject=%ld handler_subject=%ld "
+                            "disabled=%u direct=%u owner_match=%u cond=%s action=%s now=%u\n",
+                            e->trigger ? (long)(e->trigger - level.triggers) : -1L,
+                            subject ? (long)(subject - globals.edicts) : -1L,
+                            e->subject ? (long)(e->subject - globals.edicts) : -1L,
+                            e->trigger ? (unsigned)e->trigger->disabled : 0u, direct, owner_match,
+                            e->trigger && e->trigger->conditions ? jass_functionname(e->trigger->conditions->expr) : "none",
+                            e->trigger && e->trigger->actions ? jass_functionname(e->trigger->actions->func) : "none",
+                            (unsigned)level.time);
+#endif
+#ifdef WC3_DEBUG_AI
                     if (evt->type == EVENT_PLAYER_UNIT_DEATH && subject && subject->s.player == 6)
                         fprintf(stderr, "WC3_DEBUG_AI death handler trigger=%ld subject=%ld handler_subject=%ld direct=%u owner_match=%u disabled=%u cond=%s action=%s\n",
                             e->trigger ? (long)(e->trigger - level.triggers) : -1L,

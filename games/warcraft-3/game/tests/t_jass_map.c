@@ -324,6 +324,101 @@ cleanup:
     gi.CvarString = old_cvar;
 }
 
+/* Human04 initializes difficulty before the opening cinematic, removes the
+ * Player 6 Crypt, and later runs OpeningCancelled after EVENT_PLAYER_END_CINEMATIC.
+ * OpeningCancelled removes the old Town Hall and creates a replacement.  Keep
+ * the authored order and verify the replacement is the only counted/selectable
+ * building before deferred handles are finally released. */
+TEST(wc3_jass_map, human04_cancel_replaces_townhall_after_difficulty_removal) {
+    LPCSTR (*old_cvar)(LPCSTR, LPCSTR) = gi.CvarString;
+    LPEDICT crypt = NULL, old_town_hall = NULL, replacement = NULL;
+    DWORD const bit = 1u << game.clients[0].ps.number;
+
+    setup_test_world();
+    gi.CvarString = deferred_release_cvar;
+    currentplayer = &game.clients[0].ps;
+    T_ASSERT(run_test_jass(
+        "globals\n"
+        "  unit gg_unit_usep_0087 = null\n"
+        "  unit udg_Townhall = null\n"
+        "endglobals\n"
+        "function Human04BuildingFilter takes nothing returns boolean\n"
+        "  local unit u = GetFilterUnit()\n"
+        "  return GetUnitTypeId(u) == 'hbar' or GetUnitTypeId(u) == 'htow'\n"
+        "endfunction\n"
+        "function Human04BuildingCount takes nothing returns integer\n"
+        "  local group g = CreateGroup()\n"
+        "  local unit u\n"
+        "  local integer count = 0\n"
+        "  call GroupEnumUnitsOfPlayer(g, Player(0), Condition(function Human04BuildingFilter))\n"
+        "  loop\n"
+        "    set u = FirstOfGroup(g)\n"
+        "    exitwhen u == null\n"
+        "    set count = count + 1\n"
+        "    call GroupRemoveUnit(g, u)\n"
+        "  endloop\n"
+        "  call DestroyGroup(g)\n"
+        "  return count\n"
+        "endfunction\n"
+        "function Human04DifficultyNormal takes nothing returns nothing\n"
+        "  call RemoveUnit(gg_unit_usep_0087)\n"
+        "  call BJassAssert(Human04BuildingCount() == 1, \"difficulty removal excludes Crypt\")\n"
+        "endfunction\n"
+        "function Human04OpeningCancelled takes nothing returns nothing\n"
+        "  call RemoveUnit(udg_Townhall)\n"
+        "  set udg_Townhall = CreateUnit(Player(0), 'htow', 128.0, 0.0, 0.0)\n"
+        "  call BJassAssert(Human04BuildingCount() == 1, \"cancel count has only replacement Town Hall\")\n"
+        "  call BJassAssert(IsUnitAliveBJ(udg_Townhall), \"replacement Town Hall is alive\")\n"
+        "endfunction\n"
+        "function main takes nothing returns nothing\n"
+        "  local trigger endCinematic = CreateTrigger()\n"
+        "  set gg_unit_usep_0087 = CreateUnit(Player(0), 'usep', -128.0, 0.0, 0.0)\n"
+        "  set udg_Townhall = CreateUnit(Player(0), 'hbar', 0.0, 0.0, 0.0)\n"
+        "  call TriggerRegisterPlayerEvent(endCinematic, Player(0), EVENT_PLAYER_END_CINEMATIC)\n"
+        "  call TriggerAddAction(endCinematic, function Human04OpeningCancelled)\n"
+        "endfunction\n"
+    ));
+
+    FOR_LOOP(i, globals.num_edicts) {
+        if (g_edicts[i].class_id == MAKEFOURCC('u','s','e','p')) crypt = &g_edicts[i];
+        if (g_edicts[i].class_id == MAKEFOURCC('h','b','a','r')) old_town_hall = &g_edicts[i];
+    }
+    T_NOT_NULL(crypt); T_NOT_NULL(old_town_hall);
+    if (!crypt || !old_town_hall) goto cleanup;
+    crypt->svflags |= SVF_MONSTER;
+    old_town_hall->svflags |= SVF_MONSTER;
+    game.clients[0].ps.rdflags |= RDF_NOFOG;
+    jass_callbyname(level.vm, "Human04DifficultyNormal", false);
+    jass_runevents(level.vm);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+    T_ASSERT(G_IsDeferredFree(crypt));
+    G_PublishEvent(&g_edicts[0], EVENT_PLAYER_END_CINEMATIC);
+    G_RunEvents();
+    jass_runevents(level.vm);
+
+    FOR_LOOP(i, globals.num_edicts)
+        if (g_edicts[i].class_id == MAKEFOURCC('h','t','o','w') && g_edicts[i].inuse)
+            replacement = &g_edicts[i];
+    T_NOT_NULL(replacement);
+    T_ASSERT(G_IsDeferredFree(crypt));
+    T_ASSERT(G_IsDeferredFree(old_town_hall));
+    T_ASSERT(replacement && replacement->inuse);
+    if (replacement) {
+        replacement->s.player = 0;
+        replacement->svflags |= SVF_MONSTER;
+        replacement->health.value = replacement->health.max_value = 1000.0f;
+        T_ASSERT(G_UnitCanBeSelected(&game.clients[0], replacement));
+        T_ASSERT(!(replacement->selected & bit));
+    }
+    G_RunDeferredFrees();
+    T_ASSERT(!crypt->inuse);
+    T_ASSERT(!old_town_hall->inuse);
+
+cleanup:
+    currentplayer = NULL;
+    gi.CvarString = old_cvar;
+}
+
 TEST(wc3_jass_map, player_technology_roundtrip_uses_declared_types) {
     T_ASSERT(run_test_jass(
         "function main takes nothing returns nothing\n"

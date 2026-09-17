@@ -989,7 +989,10 @@ static BOOL jass_debug_trigger(LPTRIGGER trigger) {
     if (!trigger) return false;
     for (action = trigger->actions; action; action = action->next) {
         name = jass_functionname(action->func);
-        if (name && (strstr(name, "Cinematic") || strstr(name, "ArthasSetsOff") ||
+        if (name && (strstr(name, "Cinematic") || strstr(name, "Opening") ||
+                     strstr(name, "Difficulty") || strstr(name, "Acolytes") ||
+                     strstr(name, "PeasantTownhall") || strstr(name, "Constructing") ||
+                     strstr(name, "ArthasSetsOff") ||
                      strstr(name, "Muradin_End") || strstr(name, "Level_Victory") ||
                      strstr(name, "CheckGreenBuildings") || strstr(name, "Trig_Easy") ||
                      strstr(name, "Trig_Normal"))) return true;
@@ -1029,7 +1032,8 @@ static BOOL jass_evaluatetriggercontext(LPJASS j, jassTriggerContextParams_t con
         currentunit = previous_unit;
         if (result_count != 1 || !jass_popboolean(&tmp_state)) {
 #ifdef WC3_DEBUG_AI
-            if (jass_debug_trigger(params->trigger)) fprintf(stderr, "WC3_DEBUG_AI trigger condition failed=%p func=%s unit=%p\n",
+            if (jass_debug_trigger(params->trigger)) fprintf(stderr,
+                "WC3_DEBUG_AI trigger condition failed=%p func=%s unit=%p\n",
                 (void *)params->trigger, jass_functionname(cond->expr), (void *)params->unit);
 #endif
             return false;

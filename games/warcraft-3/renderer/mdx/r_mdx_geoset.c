@@ -157,6 +157,12 @@ static bool MDLX_IsGeosetVisible(mdxModel_t const *model,
     return true;
 }
 
+#ifdef WC3_DEBUG_AI
+static bool MDLX_IsTownHallTrace(renderEntity_t const *entity) {
+    return entity && (entity->class_id == MAKEFOURCC('h','t','o','w') || entity->class_id == MAKEFOURCC('u','s','e','p'));
+}
+#endif
+
 static mdxTextureAnim_t *MDLX_GetTextureAnimAtIndex(mdxModel_t const *model, DWORD textureAnimId) {
     mdxTextureAnim_t *textureAnim = model->textureAnims;
     if (textureAnimId == 0xFFFFFFFF) {
@@ -589,10 +595,18 @@ static void MDLX_RenderGeosets(const renderEntity_t *entity,
     mdxGeosetDrawOrder_t stackDrawOrder[MDLX_STACK_DRAW_ORDER];
     mdxGeosetDrawOrder_t *drawOrder;
 
+    DWORD geosetIndex = 0;
     FOR_EACH_LIST(mdxGeoset_t, geoset, model->geosets) {
         mdxMaterial_t const *material;
-        geosetCount++;
-        if (!MDLX_IsGeosetVisible(model, geoset, entity->frame)) {
+        BOOL const visible = MDLX_IsGeosetVisible(model, geoset, entity->frame);
+        geosetCount++; geosetIndex++;
+#ifdef WC3_DEBUG_AI
+        if (MDLX_IsTownHallTrace(entity))
+            fprintf(stderr, "WC3_DEBUG_AI mdx geoset entity=%u id=%.4s index=%u pass=opaque visible=%d anim=%d group=%d material=%d tris=%d\n",
+                (unsigned)entity->number, (LPCSTR)&entity->class_id, (unsigned)(geosetIndex - 1), visible,
+                !!geoset->geosetAnim, geoset->group, geoset->materialID, geoset->num_triangles);
+#endif
+        if (!visible) {
             continue;
         }
         material = MDLX_GetMaterialAtIndex(geoset, model);
@@ -675,6 +689,16 @@ void MDX_RenderModel(renderEntity_t const *entity,
                      mdxModel_t const *model,
                      LPCMATRIX4 transform)
 {
+#ifdef WC3_DEBUG_AI
+    if (MDLX_IsTownHallTrace(entity)) {
+        mdxSequence_t const *seq = R_FindSequenceAtTime(model, entity->frame);
+        fprintf(stderr, "WC3_DEBUG_AI mdx render entity=%u id=%.4s model=%p name=%s version=%u frame=%u oldframe=%u seq=%s interval=%u-%u geosets=%p phase=%d flags=%u\n",
+            (unsigned)entity->number, (LPCSTR)&entity->class_id, (void *)model, model->info.name,
+            (unsigned)model->version, (unsigned)entity->frame, (unsigned)entity->oldframe,
+            seq ? seq->name : "none", seq ? (unsigned)seq->interval[0] : 0, seq ? (unsigned)seq->interval[1] : 0,
+            (void *)model->geosets, tr.render_phase, (unsigned)entity->flags);
+    }
+#endif
     if (!(tr.viewDef.rdflags & RDF_NOFRUSTUMCULL)) {
         VECTOR3 const center = Box3_Center(&model->bounds.box);
         SPHERE3 const sphere = {

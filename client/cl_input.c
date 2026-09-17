@@ -745,6 +745,10 @@ void IN_SelectUp(void) {
         if (!CL_ClickTravel(delta) || (input.look && !CL_ClickTravel(input.travel))) return;
         DWORD entnum = 0;
         BOOL hit = re.TraceEntity(&cl.viewDef, mouse.origin.x, mouse.origin.y, &entnum);
+#ifdef WC3_DEBUG_AI
+        fprintf(stderr, "WC3_DEBUG_AI client select-click x=%.1f y=%.1f hit=%d ent=%u\n",
+            mouse.origin.x, mouse.origin.y, hit, (unsigned)entnum);
+#endif
         CL_ApplySelection(&entnum, hit ? 1 : 0);
         return;
     }

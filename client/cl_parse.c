@@ -106,6 +106,12 @@ static void CL_ReadPacketEntities(LPSIZEBUF msg) {
         centity_t *ent = &cl.ents[nument];
         entityState_t old = ent->current;
         if (bits & (1u << U_REMOVE)) {
+#ifdef WC3_DEBUG_AI
+            if (old.class_id == MAKEFOURCC('h','t','o','w') || old.class_id == MAKEFOURCC('u','s','e','p'))
+                fprintf(stderr, "WC3_DEBUG_AI client packet remove frame=%d ent=%d id=%.4s model=%u frame=%u flags=%u renderfx=%u\n",
+                    cl.frame.serverframe, nument, (LPCSTR)&old.class_id, (unsigned)old.model, (unsigned)old.frame,
+                    (unsigned)old.flags, (unsigned)old.renderfx);
+#endif
             if (debug_entities && old.model) {
                 fprintf(stderr,
                         "CL entity remove frame=%d ent=%d model=%u class=%u origin=(%.1f %.1f %.1f)\n",
@@ -133,6 +139,15 @@ static void CL_ReadPacketEntities(LPSIZEBUF msg) {
         }
         ent->prev = ent->current;
         MSG_ReadDeltaEntity(msg, &ent->current, nument, bits);
+#ifdef WC3_DEBUG_AI
+        if (old.class_id == MAKEFOURCC('h','t','o','w') || old.class_id == MAKEFOURCC('u','s','e','p') ||
+            ent->current.class_id == MAKEFOURCC('h','t','o','w') || ent->current.class_id == MAKEFOURCC('u','s','e','p'))
+            fprintf(stderr, "WC3_DEBUG_AI client packet delta frame=%d ent=%d old=%.4s/%u/%u/%u new=%.4s/%u/%u/%u bits=0x%x\n",
+                cl.frame.serverframe, nument, (LPCSTR)&old.class_id, (unsigned)old.model, (unsigned)old.frame,
+                (unsigned)old.renderfx, (LPCSTR)&ent->current.class_id,
+                (unsigned)ent->current.model, (unsigned)ent->current.frame,
+                (unsigned)ent->current.renderfx, (unsigned)bits);
+#endif
         /* Keep the active list in sync with current.model on both transitions:
          * a model-less entity may gain a model (add) or lose it to a sound/event
          * (remove) without a U_REMOVE. */
@@ -827,6 +842,13 @@ static void CL_ParseSetSelection(LPSIZEBUF msg) {
         }
     }
     cl.selection.num_selected = selected;
+#ifdef WC3_DEBUG_AI
+    FOR_LOOP(i, selected)
+        if (cl.selection.entity_nums[i] < MAX_CLIENT_ENTITIES &&
+            cl.ents[cl.selection.entity_nums[i]].current.class_id == MAKEFOURCC('h','t','o','w'))
+            fprintf(stderr, "WC3_DEBUG_AI client selection authoritative ent=%u selected=1\n",
+                (unsigned)cl.selection.entity_nums[i]);
+#endif
     if (menu.UpdateUnitUI) menu.UpdateUnitUI(0, NULL);
 }
 
