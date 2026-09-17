@@ -120,21 +120,17 @@ DWORD KillUnit(LPJASS j) {
 }
 DWORD RemoveUnit(LPJASS j) {
     LPEDICT whichUnit = jass_checkhandle(j, 1, "unit");
-    BOOL deferred = atoi(gi.CvarString("wc3_defer_release", "1")) != 0;
 #ifdef WC3_DEBUG_AI
     fprintf(stderr, "WC3_DEBUG_AI remove unit=%ld id=%.4s owner=%u inuse=%u release=%s caller=%s\n",
         whichUnit ? (long)(whichUnit - globals.edicts) : -1L,
         whichUnit ? (LPCSTR)&whichUnit->class_id : "null",
-        whichUnit ? whichUnit->s.player : 0, whichUnit ? whichUnit->inuse : 0, deferred ? "deferred" : "immediate",
+        whichUnit ? whichUnit->s.player : 0, whichUnit ? whichUnit->inuse : 0, "deferred",
         jass_currentfunctionname(j) ? jass_currentfunctionname(j) : "(native/root)");
 #endif
     if (whichUnit) {
         LPGAMECLIENT owner = G_GetPlayerClientByNumber(whichUnit->s.player);
         if (owner && owner->ps.number == whichUnit->s.player) G_InvalidateCommands(owner);
-        /* wc3_defer_release=0 is a diagnostic comparison mode for the pre-fix
-         * synchronous RemoveUnit lifecycle; retail/default behavior is deferred. */
-        if (deferred) G_DeferFreeEdict(whichUnit);
-        else G_FreeEdict(whichUnit);
+        G_DeferFreeEdict(whichUnit);
     }
     return 0;
 }

@@ -66,10 +66,6 @@ static LPCSTR result_cheats_cvar(LPCSTR name, LPCSTR fallback) {
     return !strcmp(name, "sv_cheats") ? "1" : fallback;
 }
 
-static LPCSTR deferred_release_cvar(LPCSTR name, LPCSTR fallback) {
-    return !strcmp(name, "wc3_defer_release") ? "1" : fallback;
-}
-
 static char cheat_console_text[8192];
 static LONG cheat_console_opcode;
 static DWORD cheat_console_unicasts;
@@ -245,11 +241,9 @@ TEST(wc3_jass_map, map_metadata_and_start_priority_persist) {
  * the removed Crypt must not satisfy CheckGreenBuildings, even while its
  * deferred edict is still alive for the current frame. */
 TEST(wc3_jass_map, human07_normal_removal_is_absent_from_green_building_count) {
-    LPCSTR (*old_cvar)(LPCSTR, LPCSTR) = gi.CvarString;
     LPEDICT crypt = NULL, town_hall = NULL;
 
     setup_test_world();
-    gi.CvarString = deferred_release_cvar;
     T_ASSERT(run_test_jass(
         "globals\n"
         "  unit gg_unit_usep_0049 = null\n"
@@ -309,7 +303,6 @@ TEST(wc3_jass_map, human07_normal_removal_is_absent_from_green_building_count) {
      * rows, so provide the live-unit state that SP_SpawnUnit supplies. */
     crypt->svflags |= SVF_MONSTER;
     town_hall->svflags |= SVF_MONSTER;
-    T_STREQ(gi.CvarString("wc3_defer_release", "0"), "1");
     crypt->health.value = crypt->health.max_value = 1000.0f;
     town_hall->health.value = town_hall->health.max_value = 1000.0f;
     jass_callbyname(level.vm, "Human07NormalInitialization", false);
@@ -321,7 +314,6 @@ TEST(wc3_jass_map, human07_normal_removal_is_absent_from_green_building_count) {
     T_ASSERT(!crypt->inuse);
 
 cleanup:
-    gi.CvarString = old_cvar;
 }
 
 /* Human04 initializes difficulty before the opening cinematic, removes the
@@ -330,12 +322,10 @@ cleanup:
  * the authored order and verify the replacement is the only counted/selectable
  * building before deferred handles are finally released. */
 TEST(wc3_jass_map, human04_cancel_replaces_townhall_after_difficulty_removal) {
-    LPCSTR (*old_cvar)(LPCSTR, LPCSTR) = gi.CvarString;
     LPEDICT crypt = NULL, old_town_hall = NULL, replacement = NULL;
     DWORD const bit = 1u << game.clients[0].ps.number;
 
     setup_test_world();
-    gi.CvarString = deferred_release_cvar;
     currentplayer = &game.clients[0].ps;
     T_ASSERT(run_test_jass(
         "globals\n"
@@ -416,7 +406,6 @@ TEST(wc3_jass_map, human04_cancel_replaces_townhall_after_difficulty_removal) {
 
 cleanup:
     currentplayer = NULL;
-    gi.CvarString = old_cvar;
 }
 
 TEST(wc3_jass_map, player_technology_roundtrip_uses_declared_types) {

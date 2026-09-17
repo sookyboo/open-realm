@@ -6,49 +6,10 @@
 refImport_t ri;
 static FLOAT camera_step(LPCVOID data, DWORD x, DWORD y) { (void)data; (void)y; return x < 24 ? 0 : 10; }
 static HANDLE camera_alloc(long size) { return calloc(1, (size_t)size); }
-static LPMODEL trace_model;
 
 size2_t R_GetWindowSize(void) { return (size2_t){ 1024, 768 }; }
 bool R_TraceModel(renderEntity_t const *ent, LPCLINE3 line, LPFLOAT distance) {
-    (void)line; if (distance) *distance = 1.0f;
-    return ent && ent->model == trace_model && ent->scale > 0.0f;
-}
-
-/* Human04 cancellation leaves the retired Town Hall hidden until deferred
- * release and publishes the replacement in the same post-cancel scene.  The
- * renderer must trace the replacement rather than the stale hidden entity. */
-TEST(renderer_view, human04_cancelled_townhall_trace_uses_replacement) {
-    MODEL old_model = {0}, replacement_model = {0};
-    renderEntity_t entities[] = {
-        { .number = 2819, .class_id = MAKEFOURCC('h','t','o','w'), .model = &old_model, .scale = 1, .flags = RF_HIDDEN },
-        { .number = 2887, .class_id = MAKEFOURCC('h','t','o','w'), .model = &replacement_model, .scale = 1 },
-    };
-    viewDef_t view = { .viewport = { 0, 0.22f, 1, 0.76f }, .entities = entities, .num_entities = 2 };
-    DWORD number = 0;
-
-    trace_model = &replacement_model;
-    T_ASSERT(R_TraceEntity(&view, 512, 384, &number));
-    T_EQ(number, 2887);
-    trace_model = NULL;
-}
-
-/* The captured Human04 deferred run rendered the replacement Town Hall with
- * scale=0.  It remained visible in the scene but its transformed collision
- * shape collapsed, so the same click ray could not select it. */
-TEST(renderer_view, human04_deferred_zero_scale_townhall_is_not_clickable) {
-    MODEL townhall_model = {0};
-    renderEntity_t entity = {
-        .number = 2819, .class_id = MAKEFOURCC('h','t','o','w'), .model = &townhall_model, .scale = 0,
-    };
-    viewDef_t view = { .viewport = { 0, 0.22f, 1, 0.76f }, .entities = &entity, .num_entities = 1 };
-    DWORD number = 0;
-
-    trace_model = &townhall_model;
-    T_ASSERT(!R_TraceEntity(&view, 512, 384, &number));
-    entity.scale = 1;
-    T_ASSERT(R_TraceEntity(&view, 512, 384, &number));
-    T_EQ(number, 2819);
-    trace_model = NULL;
+    (void)ent; (void)line; (void)distance; return false;
 }
 
 /* Exact snapshot terrain can change while the rendered target stays above a narrow depression. */

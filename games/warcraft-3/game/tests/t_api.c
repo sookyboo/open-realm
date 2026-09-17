@@ -61,10 +61,6 @@ static LPCSTR group_debug_cvar(LPCSTR name, LPCSTR fallback) {
     return !strcmp(name, "wc3_group_debug") ? "1" : fallback;
 }
 
-static LPCSTR immediate_release_cvar(LPCSTR name, LPCSTR fallback) {
-    return !strcmp(name, "wc3_defer_release") ? "0" : fallback;
-}
-
 static DWORD presentation_write_count;
 static DWORD presentation_unicast_count;
 static pfWriteType_t indicator_types[4];
@@ -1723,7 +1719,6 @@ TEST(wc3_api, removeunit_hides_before_deferred_edict_release) {
  * Keep that authored event order here: the mine gets a death transition, while
  * RemoveUnit hides the other widgets and retires them only after the callback. */
 TEST(wc3_api, human04_intro_cancel_preserves_unit_lifecycle_until_frame_end) {
-    LPCSTR (*old_cvar)(LPCSTR, LPCSTR) = gi.CvarString;
     LPEDICT mine = NULL, worker = NULL, building = NULL, replacement;
     ggroup_t *cancel_group;
     DWORD const bit = 1u << game.clients[0].ps.number;
@@ -1800,47 +1795,6 @@ TEST(wc3_api, human04_intro_cancel_preserves_unit_lifecycle_until_frame_end) {
 
 cleanup:
     currentplayer = NULL;
-    gi.CvarString = old_cvar;
-}
-
-/* The cvar is deliberately a differential harness: it must reproduce the old
- * synchronous release so a lifecycle trace can be compared against the fixed
- * default without changing the production default. */
-TEST(wc3_api, human04_intro_cancel_cvar_reproduces_synchronous_release) {
-    LPCSTR (*old_cvar)(LPCSTR, LPCSTR) = gi.CvarString;
-    LPEDICT worker = NULL, building = NULL;
-
-    setup_test_world();
-    currentplayer = &game.clients[0].ps;
-    gi.CvarString = immediate_release_cvar;
-    T_ASSERT(run_test_jass(
-        "globals\n"
-        "  unit acolyte = null\n"
-        "  unit townHall = null\n"
-        "endglobals\n"
-        "function cancelIntro takes nothing returns nothing\n"
-        "  call RemoveUnit(acolyte)\n"
-        "  call RemoveUnit(townHall)\n"
-        "endfunction\n"
-        "function main takes nothing returns nothing\n"
-        "  set acolyte = CreateUnit(Player(0), 'hpea', 64.0, 0.0, 0.0)\n"
-        "  set townHall = CreateUnit(Player(0), 'hbar', 128.0, 0.0, 0.0)\n"
-        "endfunction\n"));
-    FOR_LOOP(i, globals.num_edicts) {
-        if (g_edicts[i].class_id == MAKEFOURCC('h','p','e','a')) worker = &g_edicts[i];
-        if (g_edicts[i].class_id == MAKEFOURCC('h','b','a','r')) building = &g_edicts[i];
-    }
-    T_NOT_NULL(worker); T_NOT_NULL(building);
-    if (worker && building) {
-        jass_callbyname(level.vm, "cancelIntro", false);
-        jass_runevents(level.vm);
-        T_ASSERT(!worker->inuse);
-        T_ASSERT(!building->inuse);
-        T_ASSERT(!G_IsDeferredFree(worker));
-        T_ASSERT(!G_IsDeferredFree(building));
-    }
-    currentplayer = NULL;
-    gi.CvarString = old_cvar;
 }
 
 TEST(wc3_api, createunit_does_not_reuse_deferred_dead_unit) {

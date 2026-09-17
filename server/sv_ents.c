@@ -18,20 +18,6 @@
 #define HIGH_NUMBER 9999
 #define OWNED_ENTITY_SCORE_BIAS 1000000000.0f
 
-#ifdef WC3_DEBUG_AI
-static bool SV_IsTownHallTrace(LPCENTITYSTATE state) {
-    return state && (state->class_id == MAKEFOURCC('h','t','o','w') || state->class_id == MAKEFOURCC('u','s','e','p'));
-}
-
-static void SV_LogTownHallState(LPCSTR phase, LPCENTITYSTATE state) {
-    if (!SV_IsTownHallTrace(state)) return;
-    fprintf(stderr, "WC3_DEBUG_AI snapshot %s frame=%u ent=%d id=%.4s model=%u frame=%u flags=%u renderfx=%u origin=(%.1f %.1f %.1f)\n",
-        phase, (unsigned)sv.framenum, state->number, (LPCSTR)&state->class_id, (unsigned)state->model,
-        (unsigned)state->frame, (unsigned)state->flags, (unsigned)state->renderfx,
-        state->origin.x, state->origin.y, state->origin.z);
-}
-#endif
-
 typedef struct {
     edict_t *edict;
     FLOAT score;
@@ -209,9 +195,6 @@ void SV_BuildClientFrame(LPCLIENT client) {
         if (edict->selected & (1 << clent->client->ps.number)) {
             state->renderfx |= RF_SELECTED;
         }
-#ifdef WC3_DEBUG_AI
-        SV_LogTownHallState("add", state);
-#endif
         frame->num_entities++;
     }
 }
@@ -250,12 +233,6 @@ void SV_EmitPacketEntities(LPCCLIENTFRAME from, LPCCLIENTFRAME to, LPSIZEBUF msg
             oldnum = oldent->number;
         }
         if (newnum == oldnum) {
-#ifdef WC3_DEBUG_AI
-            if (SV_IsTownHallTrace(newent) || SV_IsTownHallTrace(oldent)) {
-                SV_LogTownHallState("delta-old", oldent);
-                SV_LogTownHallState("delta-new", newent);
-            }
-#endif
             if (debug_entities && oldent && newent &&
                 (oldent->model != newent->model ||
                  oldent->class_id != newent->class_id)) {
@@ -292,9 +269,6 @@ void SV_EmitPacketEntities(LPCCLIENTFRAME from, LPCCLIENTFRAME to, LPSIZEBUF msg
                         newent->radius);
                 added++;
             }
-#ifdef WC3_DEBUG_AI
-            SV_LogTownHallState("packet-add", newent);
-#endif
             MSG_WriteDeltaEntity(msg, base, newent, false);
             newindex++;
             continue;
@@ -312,9 +286,6 @@ void SV_EmitPacketEntities(LPCCLIENTFRAME from, LPCCLIENTFRAME to, LPSIZEBUF msg
                         oldent->origin.z);
                 removed++;
             }
-#ifdef WC3_DEBUG_AI
-            SV_LogTownHallState("packet-remove", oldent);
-#endif
             MSG_WriteLong(msg, 1u << U_REMOVE);
             MSG_WriteShort(msg, oldnum);
             oldindex++;
