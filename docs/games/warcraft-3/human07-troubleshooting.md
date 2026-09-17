@@ -50,6 +50,7 @@ and callers that own a Birth or construction lifecycle continue to use
 | The campaign script could not launch its authored assault | OpenRealm did not expose the `SuicidePlayer` AI native used by the campaign AI path. | Implement and register `G_BotSuicidePlayer`: validate the AI player, target player, captain, and `check_full`; issue attack orders toward the target player's authored start location; launch live captain members and update captain state. |
 | A runtime-created building could be walked through | `SP_SpawnAtLocationInternal()` linked the entity before `SP_CallSpawn()`. `SP_SpawnUnit()` populated building collision during spawn, but `SV_LinkEntity()` had already calculated zero-sized broad-phase bounds. `BoxEdicts()` consequently could not return the building as a blocker. | Call `SP_CallSpawn()` first and link afterward. This preserves the authored collision in the server spatial index. |
 | The Town Hall could remain on the Birth model or retain a birth delay | `unit_create()` used the presentation-aware Birth path and then immediately requested Stand. Stand changed the animation but did not clear `edict.wait`, which still contained the authored build time. | Use `SP_SpawnAtLocationNoBirth()` in `unit_create()`, request Stand once, apply facing, and activate food. Immediate JASS creation now starts ready. |
+| The deferred replacement Town Hall could render as an unselectable construction-shaped model | A replacement entity could receive an entity delta without an explicit scale. The client baseline and interpolated render state then treated the omitted scale as zero, collapsing the model and its picking shape. | Seed client baselines with scale `1.0` and clamp interpolated non-positive scales to `1.0` in `V_AddClientEntity()`. This preserves the normal model and selection behavior when deferred-release entities are replaced. |
 
 The map-placed spawn path already called `SP_CallSpawn()` before linking. The
 link-order defect therefore affected dynamically created units, not ordinary
@@ -70,6 +71,9 @@ map-placed entities.
 - [`g_bot.c`](../../../games/warcraft-3/game/g_bot.c), [`api_ai.h`](../../../games/warcraft-3/game/api/api_ai.h),
   and [`api_module.c`](../../../games/warcraft-3/game/api/api_module.c) own the
   `SuicidePlayer` native implementation and registration.
+- [`cl_parse.c`](../../../client/cl_parse.c) seeds entity baseline scale and
+  [`cl_view.c`](../../../client/cl_view.c) protects interpolated render scale so
+  deferred replacement entities retain their normal presentation and picking.
 
 ## Confirmed fixes
 
@@ -87,14 +91,15 @@ The following evidence is reproducible in the current tree:
 - `wc3_api.human04_intro_cancel_preserves_unit_lifecycle_until_frame_end` reproduces
   the Human04 cancellation order: a temporary `ugol` is killed, the worker/building
   handles are removed, deferred state is checked before the drain, and a replacement
-  building is selected afterward. Its paired `...cvar_reproduces_synchronous_release`
-  test verifies the diagnostic legacy mode.
+  building is selected afterward.
 - `wc3_jass_map.human04_cancel_replaces_townhall_after_difficulty_removal` follows
   the extracted Human04 `war3map.j` order: Normal difficulty removes
   `gg_unit_usep_0087`, `EVENT_PLAYER_END_CINEMATIC` dispatches the cancellation
   trigger, and that trigger removes the old building before creating a replacement
   `htow`. It counts buildings from inside the cancellation callback and verifies the
   replacement remains selectable while both removed handles await deferred release.
+  The client baseline/render-scale fix is required for the same replacement to remain
+  visible and selectable in the live renderer; it is not controlled by a runtime cvar.
 - `wc3_jass_map.human07_normal_removal_is_absent_from_green_building_count` follows
   Human07's Normal-difficulty `usep` removal and its `CheckGreenBuildings` query;
   it verifies the Crypt handle remains deferred but is absent from the count.
