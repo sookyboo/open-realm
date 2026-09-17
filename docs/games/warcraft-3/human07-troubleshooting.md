@@ -89,6 +89,12 @@ The following evidence is reproducible in the current tree:
   handles are removed, deferred state is checked before the drain, and a replacement
   building is selected afterward. Its paired `...cvar_reproduces_synchronous_release`
   test verifies the diagnostic legacy mode.
+- `wc3_jass_map.human04_cancel_replaces_townhall_after_difficulty_removal` follows
+  the extracted Human04 `war3map.j` order: Normal difficulty removes
+  `gg_unit_usep_0087`, `EVENT_PLAYER_END_CINEMATIC` dispatches the cancellation
+  trigger, and that trigger removes the old building before creating a replacement
+  `htow`. It counts buildings from inside the cancellation callback and verifies the
+  replacement remains selectable while both removed handles await deferred release.
 - `wc3_jass_map.human07_normal_removal_is_absent_from_green_building_count` follows
   Human07's Normal-difficulty `usep` removal and its `CheckGreenBuildings` query;
   it verifies the Crypt handle remains deferred but is absent from the count.
@@ -178,6 +184,8 @@ Run focused tests independently when diagnosing either lifecycle issue:
 ```sh
 make test-wc3-engine WC3_PATTERN='wc3_api.createunit_starts_ready_without_birth_delay'
 make test-wc3-engine WC3_PATTERN='wc3_api.createunit_links_building_collision_bounds'
+make test-wc3-engine WC3_PATTERN='wc3_api.human04_intro_cancel_preserves_unit_lifecycle_until_frame_end'
+make test-wc3-engine WC3_PATTERN='wc3_jass_map.human04_cancel_replaces_townhall_after_difficulty_removal'
 make test-wc3-engine WC3_PATTERN='wc3_jass_map.human07_normal_removal_is_absent_from_green_building_count'
 make test-wc3-engine
 ```
