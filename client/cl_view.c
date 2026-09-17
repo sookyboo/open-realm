@@ -241,6 +241,9 @@ static void V_AddClientEntity(centity_t const *ent) {
     re.rotation = Vector3_lerp(&ent->prev.rotation, &ent->current.rotation, cl.viewDef.lerpfrac);
 #endif
     re.scale = LerpNumber(ent->prev.scale, ent->current.scale, cl.viewDef.lerpfrac);
+    /* Entity scale defaults to one; an omitted replacement delta must not
+     * collapse the rendered model and its collision shape to zero. */
+    if (re.scale <= 0.0f) re.scale = 1.0f;
     re.frame = ent->current.frame;
     re.oldframe = ent->prev.frame;
     re.health = ent->current.stats[ENT_HEALTH];
@@ -310,10 +313,10 @@ static void V_AddClientEntity(centity_t const *ent) {
 #ifdef WC3_DEBUG_AI
     if (ent->current.class_id == MAKEFOURCC('h','t','o','w') || ent->current.class_id == MAKEFOURCC('u','s','e','p')) {
         LPCSTR model_name = ent->current.model < MAX_MODELS ? cl.configstrings[CS_MODELS + ent->current.model] : NULL;
-        fprintf(stderr, "WC3_DEBUG_AI client render frame=%d ent=%d id=%.4s model=%u path=%s ptr=%p type=%u mdx=%p cur=%u prev=%u flags=%u/%u origin=(%.1f %.1f %.1f) lerp=%.3f\n",
+        fprintf(stderr, "WC3_DEBUG_AI client render frame=%d ent=%d id=%.4s model=%u path=%s ptr=%p type=%u mdx=%p cur=%u prev=%u scale=%.3f flags=%u/%u origin=(%.1f %.1f %.1f) lerp=%.3f\n",
             cl.frame.serverframe, ent->current.number, (LPCSTR)&ent->current.class_id, (unsigned)ent->current.model,
             model_name && *model_name ? model_name : "<none>", (void *)re.model, re.model ? re.model->modeltype : 0,
-            re.model ? (void *)re.model->mdx : NULL, (unsigned)re.frame, (unsigned)re.oldframe, (unsigned)ent->current.renderfx,
+            re.model ? (void *)re.model->mdx : NULL, (unsigned)re.frame, (unsigned)re.oldframe, re.scale, (unsigned)ent->current.renderfx,
             (unsigned)ent->current.flags, re.origin.x, re.origin.y, re.origin.z, cl.viewDef.lerpfrac);
     }
 #endif
