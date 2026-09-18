@@ -795,6 +795,7 @@ void MDX_RenderModel(renderEntity_t const *entity,
     MDLX_RenderGeosets(entity, model);
     
     MDLX_RenderParticleEmitters(entity, model, transform);
+    MDLX_RenderRibbonEmitters(entity, model, transform);
 
     if ((entity->flags & RF_NO_FOGOFWAR) && tr.world) {
         R_Call(glActiveTexture, GL_TEXTURE2);

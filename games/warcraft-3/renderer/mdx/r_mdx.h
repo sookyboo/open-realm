@@ -287,6 +287,40 @@ static inline BLEND_MODE MDLX_ParticleBlendMode(DWORD filter_mode) {
     }
 }
 
+typedef struct mdxRibbonInstance_s {
+    int entity_number;
+    DWORD last_seen;
+    VECTOR3 previous_origin;
+    BOOL have_previous;
+    float accumulator;
+    struct mdxRibbonInstance_s *next;
+} mdxRibbonInstance_t;
+
+typedef struct mdxRibbonEmitter_s {
+    mdxNode_t node;
+    float HeightAbove;
+    float HeightBelow;
+    float Alpha;
+    VECTOR3 Color;
+    float LifeSpan;
+    DWORD TextureSlot;
+    DWORD EmissionRate;
+    DWORD Rows;
+    DWORD Columns;
+    LONG MaterialID;
+    float Gravity;
+    struct {
+        mdxKeyTrack_t *HeightAbove;
+        mdxKeyTrack_t *HeightBelow;
+        mdxKeyTrack_t *Alpha;
+        mdxKeyTrack_t *Color;
+        mdxKeyTrack_t *TextureSlot;
+        mdxKeyTrack_t *Visibility;
+    } keytracks;
+    mdxRibbonInstance_t *instances;
+    struct mdxRibbonEmitter_s *next;
+} mdxRibbonEmitter_t;
+
 typedef struct mdxParticleEmitter_s {
     mdxNode_t node;
     float Speed;
@@ -393,6 +427,7 @@ typedef struct mdxModel_s {
     mdxCamera_t *cameras;
     mdxGlobalSequence_t *globalSequences;
     mdxParticleEmitter_t *emitters;
+    mdxRibbonEmitter_t *ribbonEmitters;
     mdxSprite_t *sprites;
     mdxAttachment_t *attachments;
     mdxLight_t *lights;
@@ -445,5 +480,6 @@ void MDLX_DrawSpriteTinted(LPCMODEL model, LPCSTR anim, float x, float y, COLOR3
 
 LPCTEXTURE MDLX_GetTexture(mdxModel_t const *, DWORD, DWORD, DWORD, LPCTEXTURE);
 void MDLX_RenderParticleEmitters(renderEntity_t const *, mdxModel_t const *, LPCMATRIX4);
+void MDLX_RenderRibbonEmitters(renderEntity_t const *, mdxModel_t const *, LPCMATRIX4);
 
 #endif

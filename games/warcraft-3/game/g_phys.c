@@ -54,7 +54,10 @@ void G_StartProjectilePresentation(LPEDICT ent) {
     LPCANIMATION anim;
 
     if (!ent) return;
-    ent->s.flags |= EF_NOT_SELECTABLE;
+    /* Projectile edicts are not gameplay units and selection already ignores
+     * them. Do not reuse EF_NOT_SELECTABLE here: the MDX renderer historically
+     * uses RF_NOT_SELECTABLE to stop held death-sequence emitters on corpses,
+     * which can suppress particle-only missile models between snapshots. */
     ent->s.renderfx |= RF_NO_SHADOW;
     if (!ent->s.model) return;
 

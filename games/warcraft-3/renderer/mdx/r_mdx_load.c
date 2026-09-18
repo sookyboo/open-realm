@@ -61,6 +61,12 @@ enum {
     ID_KP2L = MAKEFOURCC('K','P','2','L'),
     ID_KP2G = MAKEFOURCC('K','P','2','G'),
     ID_KP2R = MAKEFOURCC('K','P','2','R'),
+    ID_KRHA = MAKEFOURCC('K','R','H','A'),
+    ID_KRHB = MAKEFOURCC('K','R','H','B'),
+    ID_KRAL = MAKEFOURCC('K','R','A','L'),
+    ID_KRCO = MAKEFOURCC('K','R','C','O'),
+    ID_KRTX = MAKEFOURCC('K','R','T','X'),
+    ID_KRVS = MAKEFOURCC('K','R','V','S'),
     ID_KATV = MAKEFOURCC('K','A','T','V'),
     ID_KLAV = MAKEFOURCC('K','L','A','V'),
     ID_KLAC = MAKEFOURCC('K','L','A','C'),
@@ -375,6 +381,35 @@ void ReadParticleEmitter(LPSIZEBUF buffer, mdxParticleEmitter_t *pe) {
     }
 }
 
+void ReadRibbonEmitter(LPSIZEBUF buffer, mdxRibbonEmitter_t *ribbon) {
+    DWORD emitterSize = MSG_ReadLong(buffer), header;
+    ReadNode(buffer, &ribbon->node, emitterSize - sizeof(emitterSize));
+    MSG_READ(buffer, ribbon->HeightAbove);
+    MSG_READ(buffer, ribbon->HeightBelow);
+    MSG_READ(buffer, ribbon->Alpha);
+    MSG_READ(buffer, ribbon->Color);
+    MSG_READ(buffer, ribbon->LifeSpan);
+    MSG_READ(buffer, ribbon->TextureSlot);
+    MSG_READ(buffer, ribbon->EmissionRate);
+    MSG_READ(buffer, ribbon->Rows);
+    MSG_READ(buffer, ribbon->Columns);
+    MSG_READ(buffer, ribbon->MaterialID);
+    MSG_READ(buffer, ribbon->Gravity);
+    while (MSG_Read(buffer, &header, 4)) {
+        switch (header) {
+            case ID_KRHA: ReadKeyTrack(buffer, TDATA_FLOAT1, &ribbon->keytracks.HeightAbove); break;
+            case ID_KRHB: ReadKeyTrack(buffer, TDATA_FLOAT1, &ribbon->keytracks.HeightBelow); break;
+            case ID_KRAL: ReadKeyTrack(buffer, TDATA_FLOAT1, &ribbon->keytracks.Alpha); break;
+            case ID_KRCO: ReadKeyTrack(buffer, TDATA_FLOAT3, &ribbon->keytracks.Color); break;
+            case ID_KRTX: ReadKeyTrack(buffer, TDATA_INT1, &ribbon->keytracks.TextureSlot); break;
+            case ID_KRVS: ReadKeyTrack(buffer, TDATA_FLOAT1, &ribbon->keytracks.Visibility); break;
+            default:
+                PrintTag(header);
+                break;
+        }
+    }
+}
+
 void ReadCamera(LPSIZEBUF buffer, mdxCamera_t *camera) {
     DWORD blockHeader;
     MSG_Read(buffer, &camera->name, sizeof(mdxObjectName_t));
@@ -590,6 +625,11 @@ blockReadCode_t MDLX_ReadPRE2(LPSIZEBUF sb, mdxModel_t *model) {
     return BLOCKREAD_OK;
 }
 
+blockReadCode_t MDLX_ReadRIBB(LPSIZEBUF sb, mdxModel_t *model) {
+    MODEL_READ_LIST(sb, RibbonEmitter, ribbonEmitters);
+    return BLOCKREAD_OK;
+}
+
 blockReadCode_t MDLX_ReadATCH(LPSIZEBUF sb, mdxModel_t *model) {
     MODEL_READ_LIST(sb, Attachment, attachments);
     return BLOCKREAD_OK;
@@ -617,6 +657,7 @@ blockReader_t R_MDLX[] = {
     { "TEXS", (blockReaderFunc_t)MDLX_ReadTEXS },
     { "CLID", (blockReaderFunc_t)MDLX_ReadCLID },
     { "PRE2", (blockReaderFunc_t)MDLX_ReadPRE2 },
+    { "RIBB", (blockReaderFunc_t)MDLX_ReadRIBB },
     { "ATCH", (blockReaderFunc_t)MDLX_ReadATCH },
     { "LITE", (blockReaderFunc_t)MDLX_ReadLITE },
     { NULL },
@@ -665,6 +706,7 @@ mdxModel_t *R_LoadModelMDLX(void *data, DWORD size) {
     FOR_EACH_LIST(mdxHelper_t, helper, model->helpers) MDLX_AddNode(model, &helper->node);
     FOR_EACH_LIST(mdxCollisionShape_t, shape, model->collisionShapes) MDLX_AddNode(model, &shape->node);
     FOR_EACH_LIST(mdxParticleEmitter_t, emitter, model->emitters) MDLX_AddNode(model, &emitter->node);
+    FOR_EACH_LIST(mdxRibbonEmitter_t, ribbon, model->ribbonEmitters) MDLX_AddNode(model, &ribbon->node);
     FOR_EACH_LIST(mdxAttachment_t, attachment, model->attachments) MDLX_AddNode(model, &attachment->node);
     FOR_EACH_LIST(mdxLight_t, light, model->lights) MDLX_AddNode(model, &light->node);
     FOR_LOOP(i, model->num_textures) {
@@ -773,6 +815,30 @@ void MDLX_ReleaseModelLight(mdxLight_t *light) {
     SAFE_DELETE(light, ri.MemFree);
 }
 
+static void MDLX_ReleaseRibbonInstances(mdxRibbonInstance_t *state) {
+    while (state) {
+        mdxRibbonInstance_t *next = state->next;
+        ri.MemFree(state);
+        state = next;
+    }
+}
+
+static void MDLX_ReleaseRibbonEmitters(mdxRibbonEmitter_t *ribbon) {
+    while (ribbon) {
+        mdxRibbonEmitter_t *next = ribbon->next;
+        MDLX_ReleaseModelNode(&ribbon->node);
+        SAFE_DELETE(ribbon->keytracks.HeightAbove, ri.MemFree);
+        SAFE_DELETE(ribbon->keytracks.HeightBelow, ri.MemFree);
+        SAFE_DELETE(ribbon->keytracks.Alpha, ri.MemFree);
+        SAFE_DELETE(ribbon->keytracks.Color, ri.MemFree);
+        SAFE_DELETE(ribbon->keytracks.TextureSlot, ri.MemFree);
+        SAFE_DELETE(ribbon->keytracks.Visibility, ri.MemFree);
+        MDLX_ReleaseRibbonInstances(ribbon->instances);
+        ri.MemFree(ribbon);
+        ribbon = next;
+    }
+}
+
 void MDLX_Release(mdxModel_t *model) {
     MDLX_ReleaseSprites(model);
     SAFE_DELETE(model->geosets, MDLX_ReleaseModelGeoset);
@@ -783,6 +849,7 @@ void MDLX_Release(mdxModel_t *model) {
     SAFE_DELETE(model->geosetAnims, MDLX_ReleaseModelGeosetAnim);
     SAFE_DELETE(model->helpers, MDLX_ReleaseModelHelper);
     SAFE_DELETE(model->lights, MDLX_ReleaseModelLight);
+    SAFE_DELETE(model->ribbonEmitters, MDLX_ReleaseRibbonEmitters);
     SAFE_DELETE(model->textures, ri.MemFree);
     SAFE_DELETE(model->sequences, ri.MemFree);
     SAFE_DELETE(model->globalSequences, ri.MemFree);

@@ -203,6 +203,14 @@ The current implementation intentionally does not invent the larger Warsmash com
 
 Attack-target validation takes both the attacker and target, including the animationless building recovery checks used by Orc Burrows. Those recovery checks apply the same weapon target mask as initial attack orders and attack windup validation.
 
+## Missile and attack-model presentation
+
+Warcraft attack visuals may be geometry, `PRE2` particles, or `RIBB` ribbon emitters inside the authored MDX. The renderer therefore cannot treat a valid attack model as "visible" merely because its geoset list is non-empty. OpenRealm loads and renders both `PRE2` and `RIBB`; ribbon samples follow their animated MDX node and are submitted through the shared transparent particle/trail path with authored lifetime, emission rate, width, colour, alpha, gravity, material texture, and blend mode. This is used generically by projectile models and unit attack animations rather than by unit-specific Spirit Tower/Acolyte code.
+
+Projectile edicts use `RF_NO_SHADOW`, but they are not marked `EF_NOT_SELECTABLE` solely for presentation. Selection already excludes non-unit projectile edicts, while `RF_NOT_SELECTABLE` is also used by the MDX renderer to stop held death-sequence emitters on dead destructables; coupling missiles to that flag can suppress particle-only projectile art.
+
+Remaining MDX presentation gaps include event-object (`EVTS`) side effects beyond parsing and exact ribbon texture-slot/UV semantics. These should stay renderer features rather than attack-system special cases.
+
 ## Verification
 
 Relevant source/tests:

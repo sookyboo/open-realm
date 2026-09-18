@@ -453,6 +453,57 @@ TEST(renderer_model, mdx_ui_particles_preserve_pivot_sizes_and_both_quads) {
     tr.viewDef = saved;
 }
 
+TEST(renderer_model, mdx_ribbon_emitter_creates_trail_segments_for_moving_node) {
+    mdxMaterialLayer_t layer = { .blendMode = BLEND_MODE_ADD, .textureId = 0 };
+    mdxMaterial_t material = { .num_layers = 1, .layers = &layer };
+    mdxTexture_t texture = {0};
+    mdxRibbonInstance_t state = { .entity_number = 7 };
+    mdxRibbonEmitter_t ribbon = {
+        .node.node_id = 0,
+        .HeightAbove = 2.0f,
+        .HeightBelow = 2.0f,
+        .Alpha = 1.0f,
+        .Color = {1.0f, 0.5f, 0.25f},
+        .LifeSpan = 0.5f,
+        .EmissionRate = 100,
+        .Rows = 1,
+        .Columns = 1,
+        .MaterialID = 0,
+        .instances = &state,
+    };
+    VECTOR3 pivot = {0, 0, 0};
+    mdxModel_t model = {
+        .materials = &material,
+        .textures = &texture,
+        .num_textures = 1,
+        .ribbonEmitters = &ribbon,
+        .pivots = &pivot,
+        .num_pivots = 1,
+    };
+    renderEntity_t entity = { .number = 7, .frame = 100, .oldframe = 90, .team = 2 };
+    MATRIX4 matrix;
+    viewDef_t saved = tr.viewDef;
+
+    Matrix4_identity(&matrix);
+    Matrix4_identity(&node_matrices[0]);
+    tr.viewDef.time = 1000;
+    tr.viewDef.deltaTime = 20;
+    emit_count = 0;
+    MDLX_RenderRibbonEmitters(&entity, &model, &matrix);
+    T_EQ(emit_count, 0);
+
+    node_matrices[0].v[12] = 4.0f;
+    tr.viewDef.time = 1020;
+    MDLX_RenderRibbonEmitters(&entity, &model, &matrix);
+    T_EQ(emit_count, 2);
+    T_FEQ(emitted[0].org.x, 4.0f, 0.0001f);
+    T_FEQ(emitted[0].tail.x, 4.0f, 0.0001f);
+    T_FEQ(emitted[0].size[0] * emitted[0].size_value_scale, 4.0f, 0.01f);
+    T_EQ(emitted[0].blend_mode, BLEND_MODE_ADD);
+    T_EQ(emitted[0].color[0].a, 255);
+    tr.viewDef = saved;
+}
+
 TEST(renderer_model, mdx_particle_filter_modes_preserve_authored_blending) {
     T_EQ(MDLX_ParticleBlendMode(MDX_PRE2_FILTER_BLEND), BLEND_MODE_BLEND);
     T_EQ(MDLX_ParticleBlendMode(MDX_PRE2_FILTER_ADDITIVE), BLEND_MODE_ADD);
