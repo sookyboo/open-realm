@@ -70,7 +70,7 @@ enum {
 
 static DWORD const save_magic = MAKEFOURCC('W', '3', 'S', 'V');
 static DWORD const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
-static DWORD const save_version = 30; // format version; persists multiboard and texttag registries
+static DWORD const save_version = 30; // format version; persists multiboard, texttag, and trigger wait-on-sleeps state
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
 #define UMOVE_RELOC_RANGE (64 << 20) // bytes; every umove_t is static data in libgame, so a valid offset from the anchor stays well inside one module image
@@ -238,6 +238,7 @@ static field_t const group_fields[] = {
 
 static field_t const trigger_fields[] = {
     F(gtrigger_s, disabled, F_INT),
+    F(gtrigger_s, wait_on_sleeps, F_INT),
     F(gtrigger_s, actions, F_FUNCTION_LIST),
     F(gtrigger_s, conditions, F_FUNCTION_LIST),
     { NULL, 0, 0, 0, 0, 0 }

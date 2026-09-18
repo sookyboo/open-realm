@@ -172,7 +172,11 @@ See [build/platform contracts](../../build-and-renderer-platforms.md) for increm
 `ForceEnumPlayers` must populate the force for `IsPlayerInForce(GetLocalPlayer(), ...)` guards in `Blizzard.j`. If empty, all transmissions are skipped silently.
 
 **Transmissions flash too fast:**
-`TriggerWaitForSound` must sleep the full millisecond duration, not a fraction.
+`TriggerWaitForSound` must sleep in milliseconds using the sound wait contract,
+not a fractional duration. The offset is subtracted from the available sound
+duration, matching current Warsmash; adding it stretches authored cinematic
+dialogue timing. A trigger with `TriggerWaitOnSleeps(trigger, false)` skips the
+wait entirely without blocking sibling cinematic trigger coroutines.
 
 **Cinematic HUD layers hidden:**
 `CLIENT_UI_CINEMATIC` hides portrait, console, command bar, info panel, inventory via `UI_LayoutShouldSkipLayoutLayer` in `client/cl_unit_layout.c`.

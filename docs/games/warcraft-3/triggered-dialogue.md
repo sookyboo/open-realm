@@ -217,6 +217,17 @@ or UI mode.
 
 A wait issued by a native called from a scripted helper such as `WaitForSoundBJ` must suspend the **same** trigger coroutine as a direct `TriggerSleepAction`. The helper frame must remain on that coroutine until the wake time, resume first, and only then return to its caller. Campaign queue helpers rely on this ordering: a narration action can call `WaitForSoundBJ`, inspect its trigger state after the wait, and finally remove itself from Blizzard's queued-trigger list. Treating the scripted helper as a detached/synchronous call, or losing its frame across the yield, can leave the queue permanently blocked even though the dialogue was displayed. In-engine coverage includes a synthetic nested-script sleep regression in `t_game.c`.
 
+That same-coroutine rule must not be confused with a global cinematic wait.
+`TriggerExecute` starts target trigger actions as independent coroutines, so
+Human09-style camera and actor branches can sleep concurrently and resume at
+their own absolute wake deadlines. `TriggerWaitOnSleeps` is per trigger; when
+disabled, current Warsmash skips both `TriggerSleepAction` and
+`TriggerWaitForSound` for that trigger's action. OpenRealm mirrors that state
+and persists it across saves. `TriggerWaitForSound` also follows Warsmash's
+`duration - offset` direction; OpenRealm currently uses the authored sound
+duration because its JASS sound descriptor does not expose live mixer remaining
+time.
+
 ## Verification
 
 Relevant in-engine tests are under `games/warcraft-3/game/tests/t_api.c`:

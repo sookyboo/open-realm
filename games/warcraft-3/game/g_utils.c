@@ -435,7 +435,9 @@ void G_ClearJassGroupRegistry(void) {
 LPTRIGGER G_AllocJassTrigger(void) {
     if (level.num_triggers >= MAX_TRIGGERS) return NULL;
     LPTRIGGER trigger = &level.triggers[level.num_triggers++];
-    memset(trigger, 0, sizeof(*trigger)); return trigger;
+    memset(trigger, 0, sizeof(*trigger));
+    trigger->wait_on_sleeps = true;
+    return trigger;
 }
 
 BOOL G_RegionContains(LPCREGION region, LPCVECTOR2 point) {

@@ -3536,6 +3536,7 @@ TEST(wc3_save, round_trip_jass_globals) {
         "  set savedTrigger = CreateTrigger()\n"
         "  set savedTriggerAlias = savedTrigger\n"
         "  call DisableTrigger(savedTrigger)\n"
+        "  call TriggerWaitOnSleeps(savedTrigger, false)\n"
         "  set savedSound = CreateSound(\"test.wav\", false, false, false, 0, 0, \"\")\n"
         "  set savedSoundAlias = savedSound\n"
         "  call SetSoundDuration(savedSound, 1234)\n"
@@ -3572,6 +3573,7 @@ TEST(wc3_save, round_trip_jass_globals) {
         "  set savedQuestItemAlias = null\n"
         "  call GroupClear(savedGroup)\n"
         "  call EnableTrigger(savedTrigger)\n"
+        "  call TriggerWaitOnSleeps(savedTrigger, true)\n"
         "  call SetSoundDuration(savedSound, 1)\n"
         "  call CameraSetupSetDestPosition(savedCamera, 1.0, 1.0, 0.0)\n"
         "  call SetRect(savedRect, 0.0, 0.0, 0.0, 0.0)\n"
@@ -3600,6 +3602,7 @@ TEST(wc3_save, round_trip_jass_globals) {
         "  call BJassAssert(FirstOfGroup(savedGroup) == savedUnit, \"group membership mismatch\")\n"
         "  call BJassAssert(savedTrigger == savedTriggerAlias, \"trigger alias mismatch\")\n"
         "  call BJassAssert(not IsTriggerEnabled(savedTrigger), \"trigger state mismatch\")\n"
+        "  call BJassAssert(not IsTriggerWaitOnSleeps(savedTrigger), \"trigger wait-on-sleeps state mismatch\")\n"
         "  call BJassAssert(savedSound == savedSoundAlias, \"sound alias mismatch\")\n"
         "  call BJassAssert(GetSoundDuration(savedSound) == 1234, \"sound payload mismatch\")\n"
         "  call BJassAssert(savedCamera == savedCameraAlias, \"camera alias mismatch\")\n"
@@ -3917,6 +3920,177 @@ TEST(wc3_jass, nested_script_sleep_resumes_child_before_parent) {
     T_ASSERT(!jass_rterror_pending(level.vm));
     jass_runevents(level.vm);
     jass_callbyname(level.vm, "verifyResumed", false);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+}
+
+TEST(wc3_jass, trigger_execute_sleep_branches_resume_independently) {
+    T_ASSERT(run_test_jass(
+        "globals\n"
+        "  trigger cameraTrigger = null\n"
+        "  trigger actorTrigger = null\n"
+        "  integer cameraStage = 0\n"
+        "  integer actorStage = 0\n"
+        "endglobals\n"
+        "function CameraBranch takes nothing returns nothing\n"
+        "  set cameraStage = 1\n"
+        "  call TriggerSleepAction(1.0)\n"
+        "  set cameraStage = 2\n"
+        "  call TriggerSleepAction(7.5)\n"
+        "  set cameraStage = 3\n"
+        "endfunction\n"
+        "function ActorBranch takes nothing returns nothing\n"
+        "  set actorStage = 1\n"
+        "  call TriggerSleepAction(3.0)\n"
+        "  set actorStage = 2\n"
+        "  call TriggerSleepAction(4.0)\n"
+        "  set actorStage = 3\n"
+        "endfunction\n"
+        "function main takes nothing returns nothing\n"
+        "  set cameraTrigger = CreateTrigger()\n"
+        "  set actorTrigger = CreateTrigger()\n"
+        "  call TriggerAddAction(cameraTrigger, function CameraBranch)\n"
+        "  call TriggerAddAction(actorTrigger, function ActorBranch)\n"
+        "  call TriggerExecute(cameraTrigger)\n"
+        "  call TriggerExecute(actorTrigger)\n"
+        "endfunction\n"
+        "function VerifyInitial takes nothing returns nothing\n"
+        "  call BJassAssert(cameraStage == 1, \"camera branch did not begin\")\n"
+        "  call BJassAssert(actorStage == 1, \"actor branch did not begin\")\n"
+        "endfunction\n"
+        "function VerifyOneSecond takes nothing returns nothing\n"
+        "  call BJassAssert(cameraStage == 2, \"camera branch did not resume independently\")\n"
+        "  call BJassAssert(actorStage == 1, \"actor branch resumed before its own wake time\")\n"
+        "endfunction\n"
+        "function VerifyThreeSeconds takes nothing returns nothing\n"
+        "  call BJassAssert(cameraStage == 2, \"camera branch advanced on actor wake\")\n"
+        "  call BJassAssert(actorStage == 2, \"actor branch did not resume independently\")\n"
+        "endfunction\n"
+        "function VerifySevenSeconds takes nothing returns nothing\n"
+        "  call BJassAssert(cameraStage == 2, \"camera branch resumed before 8.5 seconds\")\n"
+        "  call BJassAssert(actorStage == 3, \"actor branch did not finish at 7 seconds\")\n"
+        "endfunction\n"
+        "function VerifyEightPointFiveSeconds takes nothing returns nothing\n"
+        "  call BJassAssert(cameraStage == 3, \"camera branch did not finish at 8.5 seconds\")\n"
+        "  call BJassAssert(actorStage == 3, \"actor branch regressed after completion\")\n"
+        "endfunction\n"));
+
+    jass_callbyname(level.vm, "VerifyInitial", false);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+
+    level.time = 1000;
+    jass_runevents(level.vm);
+    jass_callbyname(level.vm, "VerifyOneSecond", false);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+
+    level.time = 3000;
+    jass_runevents(level.vm);
+    jass_callbyname(level.vm, "VerifyThreeSeconds", false);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+
+    level.time = 7000;
+    jass_runevents(level.vm);
+    jass_callbyname(level.vm, "VerifySevenSeconds", false);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+
+    level.time = 8500;
+    jass_runevents(level.vm);
+    jass_callbyname(level.vm, "VerifyEightPointFiveSeconds", false);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+}
+
+TEST(wc3_jass, trigger_wait_on_sleeps_controls_action_sleep) {
+    T_ASSERT(run_test_jass(
+        "globals\n"
+        "  trigger noWaitTrigger = null\n"
+        "  integer noWaitStage = 0\n"
+        "endglobals\n"
+        "function NoWaitAction takes nothing returns nothing\n"
+        "  set noWaitStage = 1\n"
+        "  call TriggerSleepAction(5.0)\n"
+        "  set noWaitStage = 2\n"
+        "endfunction\n"
+        "function main takes nothing returns nothing\n"
+        "  set noWaitTrigger = CreateTrigger()\n"
+        "  call BJassAssert(IsTriggerWaitOnSleeps(noWaitTrigger), \"new trigger did not default to waiting on sleeps\")\n"
+        "  call TriggerAddAction(noWaitTrigger, function NoWaitAction)\n"
+        "  call TriggerWaitOnSleeps(noWaitTrigger, false)\n"
+        "  call BJassAssert(not IsTriggerWaitOnSleeps(noWaitTrigger), \"TriggerWaitOnSleeps(false) was not stored\")\n"
+        "  call TriggerExecute(noWaitTrigger)\n"
+        "endfunction\n"
+        "function verify takes nothing returns nothing\n"
+        "  call BJassAssert(noWaitStage == 2, \"disabled trigger sleeps still yielded the action\")\n"
+        "endfunction\n"));
+
+    jass_callbyname(level.vm, "verify", false);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+}
+
+TEST(wc3_jass, trigger_execute_wait_reenables_action_sleeps) {
+    T_ASSERT(run_test_jass(
+        "globals\n"
+        "  trigger executeWaitTrigger = null\n"
+        "  integer executeWaitStage = 0\n"
+        "endglobals\n"
+        "function ExecuteWaitAction takes nothing returns nothing\n"
+        "  set executeWaitStage = 1\n"
+        "  call TriggerSleepAction(1.0)\n"
+        "  set executeWaitStage = 2\n"
+        "endfunction\n"
+        "function main takes nothing returns nothing\n"
+        "  set executeWaitTrigger = CreateTrigger()\n"
+        "  call TriggerAddAction(executeWaitTrigger, function ExecuteWaitAction)\n"
+        "  call TriggerWaitOnSleeps(executeWaitTrigger, false)\n"
+        "  call TriggerExecuteWait(executeWaitTrigger)\n"
+        "  call BJassAssert(IsTriggerWaitOnSleeps(executeWaitTrigger), \"TriggerExecuteWait did not re-enable waits\")\n"
+        "endfunction\n"
+        "function VerifyYielded takes nothing returns nothing\n"
+        "  call BJassAssert(executeWaitStage == 1, \"TriggerExecuteWait action did not yield\")\n"
+        "endfunction\n"
+        "function VerifyResumed takes nothing returns nothing\n"
+        "  call BJassAssert(executeWaitStage == 2, \"TriggerExecuteWait action did not resume\")\n"
+        "endfunction\n"));
+
+    jass_callbyname(level.vm, "VerifyYielded", false);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+    level.time = 1000;
+    jass_runevents(level.vm);
+    jass_callbyname(level.vm, "VerifyResumed", false);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+}
+
+TEST(wc3_jass, trigger_wait_for_sound_uses_duration_minus_offset) {
+    T_ASSERT(run_test_jass(
+        "globals\n"
+        "  trigger soundWaitTrigger = null\n"
+        "  sound waitedSound = null\n"
+        "  integer soundWaitStage = 0\n"
+        "endglobals\n"
+        "function SoundWaitAction takes nothing returns nothing\n"
+        "  set soundWaitStage = 1\n"
+        "  call TriggerWaitForSound(waitedSound, 1.0)\n"
+        "  set soundWaitStage = 2\n"
+        "endfunction\n"
+        "function main takes nothing returns nothing\n"
+        "  set waitedSound = CreateSound(\"test.wav\", false, false, false, 0, 0, \"\")\n"
+        "  call SetSoundDuration(waitedSound, 3000)\n"
+        "  set soundWaitTrigger = CreateTrigger()\n"
+        "  call TriggerAddAction(soundWaitTrigger, function SoundWaitAction)\n"
+        "  call TriggerExecute(soundWaitTrigger)\n"
+        "endfunction\n"
+        "function VerifyWaiting takes nothing returns nothing\n"
+        "  call BJassAssert(soundWaitStage == 1, \"sound wait completed too early\")\n"
+        "endfunction\n"
+        "function VerifyDone takes nothing returns nothing\n"
+        "  call BJassAssert(soundWaitStage == 2, \"sound wait did not use duration minus offset\")\n"
+        "endfunction\n"));
+
+    level.time = 1999;
+    jass_runevents(level.vm);
+    jass_callbyname(level.vm, "VerifyWaiting", false);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+    level.time = 2000;
+    jass_runevents(level.vm);
+    jass_callbyname(level.vm, "VerifyDone", false);
     T_ASSERT(!jass_rterror_pending(level.vm));
 }
 

@@ -6,7 +6,7 @@ The WC3 game module owns save/load. `GetGameAPI()` exposes `SaveGame` and `LoadG
 
 `WriteGame()` writes the current game state to a versioned binary file. The file contains:
 
-- `W3SV` magic, format version 29, canonical map path, `sizeof(edict_t)`, entity count, client count, script identity, and native-handle registry counts;
+- `W3SV` magic, format version 30, canonical map path, `sizeof(edict_t)`, entity count, client count, script identity, and native-handle registry counts;
 - level frame/time, authoritative Warcraft time-of-day state, map-global camera bounds, and started/script-started flags;
 - each client `GAMECLIENT` state, including its `PLAYER` state, JASS settings, runtime removed/result-presentation state, researched tech, text storage, camera values, messages, and HUD caches;
 - each camera target as an entity index;
@@ -40,6 +40,10 @@ Version 28 extends neutral-shop persistence with initialized `Sellunits` stock e
 Version 29 adds each neutral-shop stock entry's effective `maximum`. Runtime `AddItemToStock` / `AddUnitToStock` overrides can differ
 from the object-data maximum, so both item merchants and Mercenary Camps restore that explicit cap instead of recomputing it from SLK
 or map object data. The current count and absolute replenishment deadline continue to restore against the saved simulation clock.
+Version 30 adds the multiboard and texttag registries, and carries each
+trigger's `wait_on_sleeps` policy in the recursive trigger record. Older saves
+are rejected by the exact-version guard rather than silently restoring a
+trigger with the wrong sleep behavior.
 
 Groups use reusable stable ordinals in a growable pointer table: `level.num_groups` is the high-water mark while `level.group_capacity` is transient allocation capacity. Each `ggroup_t` is separately allocated so growing the pointer table never moves a live handle. `DestroyGroup` releases an ordinal for later reuse; `GroupClear` only clears membership. Live JASS group handles serialize as stable ordinal indexes. See [JASS Groups](jass-groups.md).
 
@@ -47,7 +51,7 @@ Groups, timers, triggers, and event handlers may grow after `main()`. The header
 
 The current format is process-independent for entity relationships: `F_EDICT` fields and camera targets are written as entity indexes and resolved back to `g_edicts[index]` by `ReadGame()`. Before raw edict records replace the freshly loaded map baseline, `ReadGame()` clears the baseline spatial tree and then links each restored entity exactly once. Client pointers are restored from player slots, player names from inline JASS name storage, and map-player rows from the loaded map plus `PLAYER.number`. Malformed headers, truncated records, and entity indexes reject the load; client pointers are never read from the file as addresses.
 
-Groups, triggers, timers, and events use deterministic handle ordinals. Group objects are dynamically allocated behind a growable pointer table; membership is stored as entity indexes and each serialized record persists `inuse` so destroyed holes remain distinguishable from live empty groups. Each trigger stores its disabled flag plus action/condition function names so a trigger created after `main()` still has its callbacks after load. Timers preserve their handler name, duration, remaining time, periodic/paused/running flags, and resume relative to the load time. Timer callbacks and timer-expire trigger actions enter the normal coroutine queue and retain `GetExpiredTimer()` context.
+Groups, triggers, timers, and events use deterministic handle ordinals. Group objects are dynamically allocated behind a growable pointer table; membership is stored as entity indexes and each serialized record persists `inuse` so destroyed holes remain distinguishable from live empty groups. Each trigger stores its disabled flag, wait-on-sleeps flag, and action/condition function names so a trigger created after `main()` still has its callbacks and wait policy after load. Timers preserve their handler name, duration, remaining time, periodic/paused/running flags, and resume relative to the load time. Timer callbacks and timer-expire trigger actions enter the normal coroutine queue and retain `GetExpiredTimer()` context.
 
 Weather effects use the same stable-slot rule. `level.weather_effects[MAX_WEATHER_EFFECTS]`, `next_weather_id`, each slot's rawcode, rectangle, enabled flag, and renderer handle ID are serialized as level state. A non-null JASS `weathereffect` snapshots as its fixed slot index, so globals keep pointer identity across load. `ReadGame()` restores the registry before the JASS snapshot and replays it to connected clients; reconnecting clients also receive the same full weather sync from `G_ClientBegin()`. See [Weather](weather.md).
 

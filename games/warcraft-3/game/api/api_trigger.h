@@ -43,6 +43,11 @@ static BOOL QuestPeonStageTrigger(LPTRIGGER trigger) {
     return ordinal >= 95 && ordinal <= 106;
 }
 
+static BOOL TriggerSleepsEnabled(LPJASS j) {
+    LPCJASSCONTEXT context = jass_getcontext(j);
+    return !context || !context->trigger || context->trigger->wait_on_sleeps;
+}
+
 static void QuestPeonStageLogRegistration(LPTRIGGER trigger, EVENTTYPE type,
                                           LPEDICT subject, LPCSTR registration) {
     SubgroupDebugLogRegistration(trigger, type, subject, registration);
@@ -140,27 +145,27 @@ DWORD IsTriggerEnabled(LPJASS j) {
     return jass_pushboolean(j, enabled);
 }
 DWORD TriggerWaitOnSleeps(LPJASS j) {
-    /* TODO: Store the per-trigger wait-on-sleeps flag once coroutine suspension exposes that state. */
     LPTRIGGER whichTrigger = jass_checkhandle(j, 1, "trigger");
     BOOL flag = jass_checkboolean(j, 2);
+    whichTrigger->wait_on_sleeps = flag;
     if (QuestPeonStageDebugEnabled() && TutorialFlowDebugTrigger(whichTrigger)) {
         fprintf(stderr,
-                "WC3_TUTORIAL_FLOW wait-on-sleeps trigger=%ld flag=%d caller=\"%s\" implementation=stub\n",
+                "WC3_TUTORIAL_FLOW wait-on-sleeps trigger=%ld flag=%d caller=\"%s\"\n",
                 (long)QuestPeonStageTriggerOrdinal(whichTrigger), (int)flag,
                 jass_currentfunctionname(j) ? jass_currentfunctionname(j) : "(native/root)");
     }
     return 0;
 }
 DWORD IsTriggerWaitOnSleeps(LPJASS j) {
-    /* TODO: Return the stored per-trigger wait-on-sleeps flag once coroutine suspension exposes that state. */
     LPTRIGGER whichTrigger = jass_checkhandle(j, 1, "trigger");
     if (QuestPeonStageDebugEnabled() && TutorialFlowDebugTrigger(whichTrigger)) {
         fprintf(stderr,
-                "WC3_TUTORIAL_FLOW is-wait-on-sleeps trigger=%ld caller=\"%s\" result=0 implementation=stub\n",
+                "WC3_TUTORIAL_FLOW is-wait-on-sleeps trigger=%ld caller=\"%s\" result=%d\n",
                 (long)QuestPeonStageTriggerOrdinal(whichTrigger),
-                jass_currentfunctionname(j) ? jass_currentfunctionname(j) : "(native/root)");
+                jass_currentfunctionname(j) ? jass_currentfunctionname(j) : "(native/root)",
+                (int)whichTrigger->wait_on_sleeps);
     }
-    return jass_pushboolean(j, 0);
+    return jass_pushboolean(j, whichTrigger->wait_on_sleeps);
 }
 DWORD GetTriggeringTrigger(LPJASS j) {
     LPCJASSCONTEXT ctx = jass_getcontext(j);
@@ -493,6 +498,7 @@ DWORD TriggerClearActions(LPJASS j) {
 DWORD TriggerSleepAction(LPJASS j) {
     FLOAT timeout = jass_checknumber(j, 1);
     LPCJASSCONTEXT ctx = jass_getcontext(j);
+    if (!TriggerSleepsEnabled(j)) return 0;
     if (G_SkipCutscene()) {
         timeout = MIN(timeout, 0.001f);
     }
@@ -511,7 +517,12 @@ DWORD TriggerWaitForSound(LPJASS j) {
     gsound_t *s = jass_checkhandle(j, 1, "sound");
     FLOAT offset = jass_checknumber(j, 2);
     LPCJASSCONTEXT ctx = jass_getcontext(j);
-    DWORD wait_msec = G_SkipCutscene() ? 1 : s->duration + (DWORD)(offset * 1000.0f);
+    LONG offset_msec;
+    DWORD wait_msec;
+    if (!TriggerSleepsEnabled(j)) return 0;
+    offset_msec = (LONG)(offset * 1000.0f);
+    wait_msec = s ? (DWORD)MAX(0, (LONG)s->duration - offset_msec) : 0;
+    if (G_SkipCutscene()) wait_msec = MIN(wait_msec, 1u);
     if (QuestPeonStageDebugEnabled() && ctx && TutorialFlowDebugTrigger(ctx->trigger)) {
         char chain[256];
         jass_formatcallchain(j, chain, sizeof(chain));
@@ -582,14 +593,20 @@ DWORD TriggerExecute(LPJASS j) {
     return 0;
 }
 DWORD TriggerExecuteWait(LPJASS j) {
-    /* TODO: Execute and yield until the trigger finishes once the coroutine scheduler supports waits. */
     LPTRIGGER whichTrigger = jass_checkhandle(j, 1, "trigger");
+    LPCJASSCONTEXT context = jass_getcontext(j);
+    /* Match Warsmash's current contract: this variant forces the target
+     * trigger to honor sleeps before queueing its actions.  Trigger actions
+     * remain independent coroutines; the caller is not converted into the
+     * child's coroutine. */
+    whichTrigger->wait_on_sleeps = true;
     if (QuestPeonStageDebugEnabled() && TutorialFlowDebugTrigger(whichTrigger)) {
         fprintf(stderr,
-                "WC3_TUTORIAL_FLOW direct trigger=%ld op=execute-wait caller=\"%s\" implementation=stub\n",
+                "WC3_TUTORIAL_FLOW direct trigger=%ld op=execute-wait caller=\"%s\"\n",
                 (long)QuestPeonStageTriggerOrdinal(whichTrigger),
                 jass_currentfunctionname(j) ? jass_currentfunctionname(j) : "(native/root)");
     }
+    jass_executetrigger(j, whichTrigger, context ? context->unit : NULL);
     return 0;
 }
 DWORD GetTriggerUnit(LPJASS j) {

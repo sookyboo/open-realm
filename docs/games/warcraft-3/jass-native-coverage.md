@@ -337,12 +337,35 @@ Trigger ownership is split deliberately:
   limit condition. Destroying a trigger must detach or invalidate registrations.
 - Evaluation and execution counts belong to `TRIGGER`; reset clears both counts
   and transient execution state without deleting registered actions.
-- `TriggerSleepAction` yields the current JASS coroutine. `TriggerWaitOnSleeps`
-  controls whether `TriggerExecuteWait` waits for yielded actions; it is not a
-  global scheduler switch.
+- `TriggerExecute` queues each target action as an independent JASS coroutine.
+  Sibling trigger actions and separately executed cinematic triggers therefore
+  keep independent wake deadlines: a 1-second camera wait and a 3-second actor
+  wait both start from their own execution time rather than becoming a global
+  4-second chain. Scripted helper/function calls made inside one action stay on
+  that action's coroutine, so successive waits in the same call stack remain
+  sequential and cumulative.
+- New triggers default `wait_on_sleeps` to true, matching current Warsmash.
+  `TriggerWaitOnSleeps(trigger, false)` makes `TriggerSleepAction` and
+  `TriggerWaitForSound` no-ops while an action of that trigger is running; it
+  does not pause or alter the global scheduler. `IsTriggerWaitOnSleeps` reports
+  the stored flag.
+- Current Warsmash's `TriggerExecuteWait` forces the target trigger's
+  wait-on-sleeps flag back to true and executes its actions through the normal
+  trigger thread queue. OpenRealm mirrors that behavior: the target actions can
+  yield, but they remain separate coroutines rather than being grafted onto the
+  caller's stack.
+- `TriggerWaitForSound(sound, offset)` uses `sound duration - offset` rather
+  than adding the offset. Warsmash can query live remaining playback time;
+  OpenRealm's JASS sound handle currently retains only the authored duration,
+  so that duration is the available compatibility basis until mixer playback
+  position is exposed to the game module.
 - Timer, game-state, player-state, and unit-state events need edge-aware limit
   checks. Polling a condition true every frame must not repeatedly fire unless
   Warcraft's event contract for that event says it should.
+
+In-engine coverage in `games/warcraft-3/game/tests/t_game.c` includes the
+Human09-shaped camera/actor overlap, wait-on-sleeps suppression,
+`TriggerExecuteWait`, nested same-coroutine waits, and sound-offset timing.
 
 ## Collections And Regions
 

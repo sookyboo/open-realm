@@ -870,6 +870,7 @@ struct gtrigger_s {
     TRIGGERACTION *actions;
     TRIGGERCONDITION *conditions;
     BOOL disabled;
+    BOOL wait_on_sleeps;
 };
 
 struct gtimer_s {
