@@ -498,6 +498,8 @@ DWORD TriggerClearActions(LPJASS j) {
 DWORD TriggerSleepAction(LPJASS j) {
     FLOAT timeout = jass_checknumber(j, 1);
     LPCJASSCONTEXT ctx = jass_getcontext(j);
+    /* A trigger with waits disabled advances through this native immediately;
+     * the old implementation always yielded the action coroutine here. */
     if (!TriggerSleepsEnabled(j)) return 0;
     if (G_SkipCutscene()) {
         timeout = MIN(timeout, 0.001f);
@@ -519,6 +521,8 @@ DWORD TriggerWaitForSound(LPJASS j) {
     LPCJASSCONTEXT ctx = jass_getcontext(j);
     LONG offset_msec;
     DWORD wait_msec;
+    /* Wait-on-sleeps suppresses the authored sound wait just like a plain
+     * TriggerSleepAction; previously every sound wait yielded unconditionally. */
     if (!TriggerSleepsEnabled(j)) return 0;
     offset_msec = (LONG)(offset * 1000.0f);
     wait_msec = s ? (DWORD)MAX(0, (LONG)s->duration - offset_msec) : 0;
