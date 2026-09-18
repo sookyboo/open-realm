@@ -48,6 +48,19 @@ void fire_rocket(LPEDICT ent, rocketDesc_t const *desc) {
     rocket->owner = ent;
     rocket->movetype = MOVETYPE_FLYMISSILE;
     G_StartProjectilePresentation(rocket);
+    if (gi.CvarString && atoi(gi.CvarString("wc3_attack_fx_debug", "0"))) {
+        LPCSTR model = desc->model ? gi.GetConfigstring(CS_MODELS + desc->model) : "";
+        fprintf(stderr,
+                "[wc3fx][server][missile-spawn] time=%u ent=%u owner=%u unit=%.4s model=%u path=\"%s\" scale=%.3f frame=%u anim=\"%s\" interval=%u-%u speed=%u start=(%.2f,%.2f,%.2f) target=%u targetpos=(%.2f,%.2f,%.2f)\n",
+                (unsigned)level.time, (unsigned)rocket->s.number, (unsigned)ent->s.number,
+                (char const *)&ent->class_id, (unsigned)desc->model, model ? model : "", rocket->s.scale,
+                (unsigned)rocket->s.frame, rocket->animation ? rocket->animation->name : "<none>",
+                rocket->animation ? (unsigned)rocket->animation->interval[0] : 0u,
+                rocket->animation ? (unsigned)rocket->animation->interval[1] : 0u,
+                (unsigned)desc->speed, desc->start.x, desc->start.y, desc->start.z,
+                (unsigned)desc->target->s.number, desc->target->s.origin.x, desc->target->s.origin.y,
+                desc->target->s.origin.z);
+    }
 //    rocket->clipmask = MASK_SHOT;
 //    rocket->solid = SOLID_BBOX;
 //    rocket->s.effects |= EF_ROCKET;

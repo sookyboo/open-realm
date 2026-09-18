@@ -13,6 +13,7 @@ typedef struct {
     mdxModel_t const *model; mdxParticleEmitter_t const *emitter;
     LPCMATRIX4 matrix; DWORD team_id;
     float speed, varia, lat, grav, life, length, width;
+    DWORD spawned;
 } mdx_pctx_t;
 
 static COLOR32 MDLX_GetEmitterColor(mdxParticleEmitter_t const *emitter, DWORD seg) {
@@ -27,6 +28,7 @@ static COLOR32 MDLX_GetEmitterColor(mdxParticleEmitter_t const *emitter, DWORD s
 static void mdx_spawn_particle(void *raw) {
     mdx_pctx_t *ctx = (mdx_pctx_t *)raw;
     cparticle_t *p = R_SpawnParticle(); if (!p) return;
+    ctx->spawned++;
     float r = (float)rand() / (float)RAND_MAX;
     VECTOR3 origin = {
         (r - 0.5f) * ctx->length,
@@ -52,7 +54,7 @@ static void mdx_spawn_particle(void *raw) {
     R_EncodeParticleSize(p, ctx->emitter->ParticleScaling);
     if (ctx->emitter->FrameFlags == BZ_MDX_PARTICLE_BOTH) {
         cparticle_t *tail = R_SpawnParticle();
-        if (tail) { cparticle_t *next = tail->next; *tail = *p; tail->next = next; p = tail; }
+        if (tail) { cparticle_t *next = tail->next; *tail = *p; tail->next = next; p = tail; ctx->spawned++; }
         else return;
     }
     if (ctx->emitter->FrameFlags != BZ_MDX_PARTICLE_HEAD)
@@ -62,7 +64,7 @@ static void mdx_spawn_particle(void *raw) {
 /* Frame-relative accumulator emission via R_EmitParticles — replaces the old
    whole-second time-anchored loop.  Uses emitter->accumulator to track fractional
    emission across frames (same pattern as WoW's M2_DrawParticles). */
-static void MDLX_RenderHeadEmitter(mdxModel_t const *model,
+static DWORD MDLX_RenderHeadEmitter(mdxModel_t const *model,
                                    mdxParticleEmitter_t *emitter,
                                    LPCMATRIX4 modelMatrix,
                                    float frame,
@@ -75,13 +77,14 @@ static void MDLX_RenderHeadEmitter(mdxModel_t const *model,
     GET_PARTICLE_ANIM_PARAM(model, emitter, Gravity);
     GET_PARTICLE_ANIM_PARAM(model, emitter, Width);
     GET_PARTICLE_ANIM_PARAM(model, emitter, Length);
-    if (EmissionRate <= 0.0f) return;
-    if (emitter->node.node_id >= MDX_MAX_NODES) return;
+    if (EmissionRate <= 0.0f) return 0;
+    if (emitter->node.node_id >= MDX_MAX_NODES) return 0;
     MATRIX4 matrix;
     Matrix4_multiply(modelMatrix, &node_matrices[emitter->node.node_id], &matrix);
     mdx_pctx_t ctx = { model, emitter, &matrix, teamID,
         Speed, Variation, Latitude, Gravity, emitter->LifeSpan, Length, Width };
     R_EmitParticles(EmissionRate, &emitter->accumulator, tr.viewDef.deltaTime, mdx_spawn_particle, &ctx);
+    return ctx.spawned;
 }
 
 void MDLX_RenderParticleEmitters(const renderEntity_t *entity, const mdxModel_t *model, LPCMATRIX4 model_matrix) {
@@ -100,18 +103,34 @@ void MDLX_RenderParticleEmitters(const renderEntity_t *entity, const mdxModel_t 
         return;
     }
     float const frame = LerpNumber(entity->oldframe, entity->frame, tr.viewDef.lerpfrac);
+    DWORD total = 0, visible = 0, active = 0, spawned = 0;
+    static DWORD last_log[MAX_GAME_ENTITIES];
 
     FOR_EACH_LIST(mdxParticleEmitter_t, emitter, model->emitters) {
         float visibility = 1.0f, rate = emitter->EmissionRate;
+        total++;
 
         if (emitter->keytracks.Visibility) {
             MDLX_GetModelKeytrackValue(model, emitter->keytracks.Visibility, entity->frame, &visibility);
             if (visibility < EPSILON)
                 continue;
         }
+        visible++;
         if (emitter->keytracks.EmissionRate)
             MDLX_GetModelKeytrackValue(model, emitter->keytracks.EmissionRate, frame, &rate);
-        MDLX_RenderHeadEmitter(model, emitter, model_matrix, frame, entity->team&TEAM_MASK);
+        if (rate > 0.0f) active++;
+        spawned += MDLX_RenderHeadEmitter(model, emitter, model_matrix, frame, entity->team&TEAM_MASK);
+    }
+    if (atoi(ri.CvarString ? ri.CvarString("wc3_attack_fx_debug", "0") : "0") >= 2 && total &&
+        entity->number >= 0 && entity->number < MAX_GAME_ENTITIES &&
+        (tr.viewDef.time >= last_log[entity->number] + 250 || !last_log[entity->number])) {
+        mdxSequence_t const *seq = R_FindSequenceAtTime(model, entity->frame);
+        fprintf(stderr,
+                "[wc3fx][renderer][pre2] time=%u ent=%d seq=\"%s\" frame=%u total=%u visible=%u active=%u spawned=%u\n",
+                (unsigned)tr.viewDef.time, entity->number, seq ? seq->name : "<none>",
+                (unsigned)entity->frame, (unsigned)total, (unsigned)visible, (unsigned)active,
+                (unsigned)spawned);
+        last_log[entity->number] = tr.viewDef.time;
     }
 }
 
@@ -157,6 +176,7 @@ typedef struct {
     float alpha;
     float width;
     DWORD team;
+    DWORD *spawned;
 } mdx_ribbon_spawn_t;
 
 static void MDLX_SpawnRibbonSegment(void *raw) {
@@ -173,6 +193,7 @@ static void MDLX_SpawnRibbonSegment(void *raw) {
     texture = &ctx->mdx->textures[texture_id];
     particle = R_SpawnParticle();
     if (!particle) return;
+    if (ctx->spawned) (*ctx->spawned)++;
     particle->org = ctx->origin;
     particle->tail = ctx->tail;
     particle->lifespan = ctx->emitter->LifeSpan;
@@ -206,9 +227,12 @@ static void MDLX_SpawnRibbonSegment(void *raw) {
 void MDLX_RenderRibbonEmitters(renderEntity_t const *entity, mdxModel_t const *model,
                                LPCMATRIX4 model_matrix) {
     float const frame = LerpNumber(entity->oldframe, entity->frame, tr.viewDef.lerpfrac);
+    DWORD total = 0, visible_count = 0, configured = 0, spawned = 0;
+    static DWORD last_log[MAX_GAME_ENTITIES];
     (void)model_matrix; /* node_matrices already contain the model transform */
 
     FOR_EACH_LIST(mdxRibbonEmitter_t, emitter, model->ribbonEmitters) {
+        total++;
         mdxRibbonInstance_t *state;
         mdxMaterial_t const *material;
         mdxMaterialLayer_t const *layer;
@@ -227,6 +251,7 @@ void MDLX_RenderRibbonEmitters(renderEntity_t const *entity, mdxModel_t const *m
             if (state) { state->have_previous = false; state->accumulator = 0.0f; }
             continue;
         }
+        visible_count++;
         if (emitter->keytracks.HeightAbove)
             MDLX_GetModelKeytrackValue(model, emitter->keytracks.HeightAbove, frame, &height_above);
         if (emitter->keytracks.HeightBelow)
@@ -245,16 +270,28 @@ void MDLX_RenderRibbonEmitters(renderEntity_t const *entity, mdxModel_t const *m
             VECTOR3 tail = Vector3_sub(&origin, &state->previous_origin);
             material = MDLX_RibbonMaterial(model, emitter->MaterialID);
             layer = material && material->num_layers > 0 ? &material->layers[0] : NULL;
+            if (layer && emitter->EmissionRate > 0 && emitter->LifeSpan > 0.0f) configured++;
             mdx_ribbon_spawn_t ctx = {
                 .mdx = model, .emitter = emitter, .layer = layer,
                 .origin = origin, .tail = tail, .color = color,
                 .alpha = alpha * visibility, .width = width,
-                .team = entity->team & TEAM_MASK,
+                .team = entity->team & TEAM_MASK, .spawned = &spawned,
             };
             R_EmitParticles((float)emitter->EmissionRate, &state->accumulator,
                             tr.viewDef.deltaTime, MDLX_SpawnRibbonSegment, &ctx);
         }
         state->previous_origin = origin;
         state->have_previous = true;
+    }
+    if (atoi(ri.CvarString ? ri.CvarString("wc3_attack_fx_debug", "0") : "0") >= 2 && total &&
+        entity->number >= 0 && entity->number < MAX_GAME_ENTITIES &&
+        (tr.viewDef.time >= last_log[entity->number] + 250 || !last_log[entity->number])) {
+        mdxSequence_t const *seq = R_FindSequenceAtTime(model, entity->frame);
+        fprintf(stderr,
+                "[wc3fx][renderer][ribb] time=%u ent=%d seq=\"%s\" frame=%u total=%u visible=%u configured=%u spawned=%u\n",
+                (unsigned)tr.viewDef.time, entity->number, seq ? seq->name : "<none>",
+                (unsigned)entity->frame, (unsigned)total, (unsigned)visible_count,
+                (unsigned)configured, (unsigned)spawned);
+        last_log[entity->number] = tr.viewDef.time;
     }
 }

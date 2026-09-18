@@ -671,20 +671,103 @@ static int MDLX_CollectModelLights(mdxModel_t const *model,
     return MIN(count, maxLights);
 }
 
+static DWORD MDLX_DebugCountGeosets(mdxModel_t const *model) {
+    DWORD count = 0;
+    FOR_EACH_LIST(mdxGeoset_t, geoset, model->geosets) count++;
+    return count;
+}
+
+static DWORD MDLX_DebugCountEmitters(mdxModel_t const *model) {
+    DWORD count = 0;
+    FOR_EACH_LIST(mdxParticleEmitter_t, emitter, model->emitters) count++;
+    return count;
+}
+
+static DWORD MDLX_DebugCountRibbons(mdxModel_t const *model) {
+    DWORD count = 0;
+    FOR_EACH_LIST(mdxRibbonEmitter_t, emitter, model->ribbonEmitters) count++;
+    return count;
+}
+
+static DWORD MDLX_DebugCountEvents(mdxModel_t const *model) {
+    DWORD count = 0;
+    FOR_EACH_LIST(mdxEvent_t, event, model->events) count++;
+    return count;
+}
+
+typedef struct {
+    mdxModel_t const *model;
+    mdxSequence_t const *sequence;
+} mdxFxDebugEntityState_t;
+
+static mdxFxDebugEntityState_t mdx_fx_debug_entities[MAX_GAME_ENTITIES];
+
+static BOOL MDLX_DebugAttackFxTransition(renderEntity_t const *entity, mdxModel_t const *model,
+                                         mdxSequence_t const *sequence) {
+    mdxFxDebugEntityState_t *state;
+    if (!entity || entity->number < 0 || entity->number >= MAX_GAME_ENTITIES) return true;
+    state = &mdx_fx_debug_entities[entity->number];
+    if (state->model == model && state->sequence == sequence) return false;
+    state->model = model;
+    state->sequence = sequence;
+    return true;
+}
+
+static void MDLX_DebugAttackFx(renderEntity_t const *entity, mdxModel_t const *model,
+                               LPCSTR stage) {
+    int debug = atoi(ri.CvarString ? ri.CvarString("wc3_attack_fx_debug", "0") : "0");
+    mdxSequence_t const *sequence;
+    BOOL interesting;
+    if (!debug || !entity || !model) return;
+    sequence = R_FindSequenceAtTime(model, entity->frame);
+    interesting = (sequence && (strstr(sequence->name, "Attack") || strstr(sequence->name, "attack"))) ||
+                  (entity->flags & RF_NO_SHADOW) || model->emitters || model->ribbonEmitters || model->events;
+    if (!interesting || !MDLX_DebugAttackFxTransition(entity, model, sequence)) return;
+    fprintf(stderr,
+            "[wc3fx][renderer][mdx] stage=%s time=%u ent=%d handle=%p seq=\"%s\" interval=%u-%u frame=%u old=%u scale=%.3f flags=0x%x geosets=%u textures=%u pre2=%u ribb=%u events=%u bounds_radius=%.2f\n",
+            stage, (unsigned)tr.viewDef.time, entity->number, (void *)model,
+            sequence ? sequence->name : "<none>", sequence ? (unsigned)sequence->interval[0] : 0u,
+            sequence ? (unsigned)sequence->interval[1] : 0u, (unsigned)entity->frame,
+            (unsigned)entity->oldframe, entity->scale, (unsigned)entity->flags,
+            (unsigned)MDLX_DebugCountGeosets(model), (unsigned)model->num_textures,
+            (unsigned)MDLX_DebugCountEmitters(model), (unsigned)MDLX_DebugCountRibbons(model),
+            (unsigned)MDLX_DebugCountEvents(model), model->bounds.radius);
+    if (debug >= 2 && model->events) {
+        FOR_EACH_LIST(mdxEvent_t, event, model->events) {
+            fprintf(stderr,
+                    "[wc3fx][renderer][event-object] ent=%d node=%u name=\"%s\" keys=%u global_seq=%u first_key=%u\n",
+                    entity->number, (unsigned)event->node.node_id, event->node.name,
+                    (unsigned)event->num_keys, (unsigned)event->globalSeqId,
+                    event->num_keys && event->keys ? (unsigned)event->keys[0] : 0u);
+        }
+    }
+}
+
 void MDX_RenderModel(renderEntity_t const *entity,
                      mdxModel_t const *model,
                      LPCMATRIX4 transform)
 {
+    MDLX_DebugAttackFx(entity, model, "enter");
     if (!(tr.viewDef.rdflags & RDF_NOFRUSTUMCULL)) {
         VECTOR3 const center = Box3_Center(&model->bounds.box);
         SPHERE3 const sphere = {
             .center = Matrix4_multiply_vector3(transform, &center),
             .radius = model->bounds.radius * entity->scale,
         };
-        if (!Frustum_ContainsSphere(&tr.viewDef.frustum, &sphere))
+        if (!Frustum_ContainsSphere(&tr.viewDef.frustum, &sphere)) {
+            if (atoi(ri.CvarString ? ri.CvarString("wc3_attack_fx_debug", "0") : "0") >= 2 &&
+                (entity->flags & RF_NO_SHADOW))
+                fprintf(stderr, "[wc3fx][renderer][cull] time=%u ent=%d reason=sphere frame=%u scale=%.3f radius=%.2f\n",
+                        (unsigned)tr.viewDef.time, entity->number, (unsigned)entity->frame, entity->scale, sphere.radius);
             return;
-        if (!Frustum_ContainsBox(&tr.viewDef.frustum, &model->bounds.box, transform))
+        }
+        if (!Frustum_ContainsBox(&tr.viewDef.frustum, &model->bounds.box, transform)) {
+            if (atoi(ri.CvarString ? ri.CvarString("wc3_attack_fx_debug", "0") : "0") >= 2 &&
+                (entity->flags & RF_NO_SHADOW))
+                fprintf(stderr, "[wc3fx][renderer][cull] time=%u ent=%d reason=box frame=%u scale=%.3f\n",
+                        (unsigned)tr.viewDef.time, entity->number, (unsigned)entity->frame, entity->scale);
             return;
+        }
     }
 
     renderEntity_t remappedEntity;

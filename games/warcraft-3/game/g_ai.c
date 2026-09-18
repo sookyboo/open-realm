@@ -65,6 +65,18 @@ void unit_setmove(LPEDICT self, umove_t *move) {
     } else if (strstr(move->animation, "attack ")) {
         G_SetUnitAnimation(self, "attack");
     }
+    if (gi.CvarString && atoi(gi.CvarString("wc3_attack_fx_debug", "0")) &&
+        move->proc == CAbilityAttack) {
+        LPCSTR model = self->s.model ? gi.GetConfigstring(CS_MODELS + self->s.model) : "";
+        LPCANIMATION anim = self->animation;
+        fprintf(stderr,
+                "[wc3fx][server][attack-sequence] time=%u ent=%u unit=%.4s model=%u path=\"%s\" move=\"%s\" requested=\"%s\" selected=\"%s\" interval=%u-%u frame=%u\n",
+                (unsigned)level.time, (unsigned)self->s.number, (char const *)&self->class_id,
+                (unsigned)self->s.model, model ? model : "", move->animation ? move->animation : "",
+                move->animation ? move->animation : "", anim ? anim->name : "<none>",
+                anim ? (unsigned)anim->interval[0] : 0u, anim ? (unsigned)anim->interval[1] : 0u,
+                (unsigned)self->s.frame);
+    }
     if (was_idle != G_UnitIsIdleWorker(self)) {
         G_InvalidateUnitShortcutsForUnit(self);
     }

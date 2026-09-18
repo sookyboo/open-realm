@@ -61,6 +61,13 @@ static LPMODEL R_LoadRegisteredModelPath(LPCSTR modelFilename, BOOL cache_missin
         return cache_missing ? R_LoadEmptyModel(modelFilename, "model registry exhausted") : NULL;
     }
     model = R_LoadModel(modelFilename);
+#ifdef WC3
+    if (atoi(ri.CvarString ? ri.CvarString("wc3_attack_fx_debug", "0") : "0") >= 2)
+        fprintf(stderr,
+                "[wc3fx][renderer][model-load] path=\"%s\" raw=%p found=%s type=%u mdx=%p\n",
+                modelFilename, (void *)model, model ? "yes" : "no",
+                model ? (unsigned)model->modeltype : 0u, model ? (void *)model->mdx : NULL);
+#endif
     if (!model && !cache_missing) return NULL;
     if (!model) model = R_LoadEmptyModel(modelFilename, "not found");
     snprintf(entry->name, sizeof(entry->name), "%s", modelFilename);

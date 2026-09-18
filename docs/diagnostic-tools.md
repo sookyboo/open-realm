@@ -263,3 +263,30 @@ This differs from `ability_map.c`, whose rawcode relationships are manually tran
 ## Galaxy Native Coverage Audit
 
 `python3 tools/galaxy_audit.py <MapScript.galaxy> <NativeLib.galaxy> <LibertyLib.galaxy> <CampaignLib.galaxy>` inventories reachable missing bindings and obvious placeholder candidates without executing scripts. See [Galaxy native coverage](games/starcraft-2/galaxy-native-coverage.md) for exact MPQ extraction commands, audit limits, and the complete Markdown snapshot. Use [bounded runtime traces](games/starcraft-2/galaxy-scripting.md#reproducing-detailed-traces) to distinguish static coverage from executed callbacks.
+
+## Warcraft III attack visual diagnostics
+
+`wc3_attack_fx_debug` traces the WC3 attack-presentation path without changing simulation behavior.
+Use it when an attack deals damage but its authored missile, particles, ribbons, or melee attack effect is not visible.
+
+- `wc3_attack_fx_debug 0` disables the trace (default).
+- `wc3_attack_fx_debug 1` logs server attack sequence selection, missile model/configstring identity, and MDX sequence transitions.
+- `wc3_attack_fx_debug 2` additionally logs client model registration/submission, renderer model-load success/type, projectile culling, PRE2 particle activity, RIBB ribbon activity, and MDX event-object metadata.
+
+For a one-run diagnosis, launch with the CVar already enabled so model-registration logs are not missed, for example:
+
+```text
++wc3_attack_fx_debug 2
+```
+
+Then reproduce one melee attack and one affected missile attack. Relevant lines all begin with `[wc3fx]`. Correlate the server model index/path and entity number through these stages:
+
+```text
+[server][attack-sequence] / [server][missile-spawn]
+    -> [client][model-load] / [renderer][model-load]
+    -> [client][entity-submit]
+    -> [renderer][mdx]
+    -> [renderer][pre2] / [renderer][ribb] / [renderer][event-object]
+```
+
+A non-null client model handle alone does not prove the source asset loaded: the renderer intentionally caches an empty model for missing files. `[renderer][model-load] found=no` or `mdx=(nil)` identifies that case. `events>0` with no corresponding implemented presentation is evidence that the missing visual depends on an MDX event object rather than PRE2/RIBB geometry. `spawned=0` on an otherwise visible/active PRE2 or RIBB path narrows the failure to emitter timing/allocation rather than attack simulation or snapshot delivery.
