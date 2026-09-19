@@ -19,6 +19,9 @@ typedef struct {
     LPCVECTOR2 from, target;
     FLOAT radius;
     BYTE blocked_flags; /* 0 preserves the legacy UNWALKABLE contract */
+    BOOL (*is_pathable)(void *context, LPCVECTOR2 from, LPCVECTOR2 target,
+                        FLOAT radius, BYTE blocked_flags);
+    void *context;
 } pathAccelParams_t;
 
 struct War3MapVertex {

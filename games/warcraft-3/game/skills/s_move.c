@@ -174,8 +174,8 @@ static FLOAT point_segment_distance(LPCVECTOR2 a, LPCVECTOR2 b, LPCVECTOR2 p) {
 /* Is the position 'cand' free for 'self' (static world + other units)?  On a
  * unit rejection, records the blocking unit in trymove_blocker (NULL otherwise)
  * so the slide can apply speed-priority give-way. */
-static BOOL move_is_valid_policy(LPEDICT self, LPCVECTOR2 cand,
-                                 moveCollisionPolicy_t collision_policy) {
+static BOOL move_is_valid_policy_from(LPEDICT self, LPCVECTOR2 origin, LPCVECTOR2 cand,
+                                      moveCollisionPolicy_t collision_policy) {
     BYTE const blocked_flags = M_UnitStaticPathingFlags(self);
     trymove_blocker = NULL;
     /* Pathing-disabled units (SetUnitPathing(false), scripted moves) ignore
@@ -189,8 +189,8 @@ static BOOL move_is_valid_policy(LPEDICT self, LPCVECTOR2 cand,
     /* WC3's pathing grid rejects a swept step that cuts a diagonal corner. Keep
      * the escape case for units spawned inside stale/changed pathing, where the
      * endpoint remains the authoritative legal position. */
-    if (CM_PointIsPathableForRadiusFlags(&self->s.origin2, self->collision, blocked_flags) &&
-        !CM_LineIsPathableForRadiusFlags(&self->s.origin2, cand, self->collision, blocked_flags))
+    if (CM_PointIsPathableForRadiusFlags(origin, self->collision, blocked_flags) &&
+        !CM_LineIsPathableForRadiusFlags(origin, cand, self->collision, blocked_flags))
         return false;
 
     if (collision_policy == MOVE_IGNORE_UNITS)
@@ -207,7 +207,7 @@ static BOOL move_is_valid_policy(LPEDICT self, LPCVECTOR2 cand,
      * already extend by its own collision radius), so inflating by self's radius
      * is enough to catch any blocker within rr of the corridor. */
     FLOAT const reach = self->collision + 1.0f;
-    FLOAT const ox = self->s.origin2.x, oy = self->s.origin2.y;
+    FLOAT const ox = origin->x, oy = origin->y;
     BOX2 const box = {
         { (ox < cand->x ? ox : cand->x) - reach, (oy < cand->y ? oy : cand->y) - reach },
         { (ox > cand->x ? ox : cand->x) + reach, (oy > cand->y ? oy : cand->y) + reach },
@@ -221,10 +221,10 @@ static BOOL move_is_valid_policy(LPEDICT self, LPCVECTOR2 cand,
          * clear b, not just the endpoint — otherwise a fast unit (step ~one
          * cell) jumps clean over a smaller unit between ticks.  Mirrors WC3's
          * swept-circle collision. */
-        FLOAT const seg_d = point_segment_distance(&self->s.origin2, cand, &b->s.origin2);
+        FLOAT const seg_d = point_segment_distance(origin, cand, &b->s.origin2);
         if (seg_d >= rr)
             continue;  /* the swept path clears b */
-        FLOAT const cur_d = Vector2_distance(&self->s.origin2, &b->s.origin2);
+        FLOAT const cur_d = Vector2_distance(origin, &b->s.origin2);
         if (cur_d < rr && seg_d >= cur_d - 0.5f)
             continue;  /* already overlapping b: allow only a step whose path does
                         * not go deeper into b — lets it separate, never slide
@@ -233,6 +233,22 @@ static BOOL move_is_valid_policy(LPEDICT self, LPCVECTOR2 cand,
         return false;
     }
     return true;
+}
+
+static BOOL move_is_valid_policy(LPEDICT self, LPCVECTOR2 cand,
+                                 moveCollisionPolicy_t collision_policy) {
+    return move_is_valid_policy_from(self, &self->s.origin2, cand, collision_policy);
+}
+
+/* The generic router cannot know Warcraft's live edict set.  Warsmash passes
+ * that dynamic query into each path search; keep the same boundary here while
+ * retaining static terrain ownership in the shared router. */
+static BOOL move_route_is_pathable(void *context, LPCVECTOR2 from, LPCVECTOR2 target,
+                                   FLOAT radius, BYTE blocked_flags) {
+    LPEDICT const self = context;
+    (void)radius;
+    (void)blocked_flags;
+    return move_is_valid_policy_from(self, from, target, MOVE_COLLIDE_UNITS);
 }
 
 static BOOL move_is_valid(LPEDICT self, LPCVECTOR2 cand) {
@@ -427,15 +443,17 @@ static FLOAT unit_worker_desired_heading(LPEDICT self, FLOAT goal_angle, FLOAT d
  * units retain speed-priority block-and-slide; resource workers use the
  * queue/pass-right policy above. */
 static FLOAT unit_desired_heading(LPEDICT self, FLOAT goal_angle, FLOAT dist,
-                                  moveAvoidPolicy_t policy) {
+                                  moveAvoidPolicy_t policy, LPCVECTOR2 target) {
     moveCollisionPolicy_t const collision_policy =
         policy == MOVE_AVOID_STATIC_ONLY ? MOVE_IGNORE_UNITS : MOVE_COLLIDE_UNITS;
     VECTOR2 const straight = Vector2_mad(&self->s.origin2, dist,
                                          &MAKE(VECTOR2, cosf(goal_angle), sinf(goal_angle)));
     if (policy == MOVE_AVOID_RESOURCE_WORKER)
         return unit_worker_desired_heading(self, goal_angle, dist);
-    if (move_is_valid_policy(self, &straight, collision_policy))
+    if (move_is_valid_policy(self, &straight, collision_policy)) {
+        self->movement.dynamic_path.valid = false;
         return goal_angle;
+    }
 
     int max_rings = MOVE_SLIDE_RINGS;
     LPEDICT const b = trymove_blocker;
@@ -445,10 +463,25 @@ static FLOAT unit_desired_heading(LPEDICT self, FLOAT goal_angle, FLOAT dist,
     }
     ROUTESLIDE slide = { .ent = self, .angle = goal_angle, .dist = dist, .rings = max_rings,
         .valid = collision_policy == MOVE_IGNORE_UNITS ? move_static_is_valid : move_is_valid };
-    return CM_SlideRoute(&slide);
+    FLOAT const slid = CM_SlideRoute(&slide);
+    /* Moving blockers use the existing speed-priority give-way policy.  A
+     * stationary unit is the case that needs Warsmash's persistent dynamic
+     * re-path: local slide rings can keep selecting a legal-looking tangent
+     * without ever opening a route around a wall. */
+    if (policy != MOVE_AVOID_GENERIC || !target || !b || unit_is_walking(b))
+        return slid;
+    {
+        VECTOR2 route_dir;
+        pathAccelParams_t params = { &self->s.origin2, target, self->collision,
+            M_UnitStaticPathingFlags(self), move_route_is_pathable, self };
+        if (CM_AccelerateRoute(&self->movement.dynamic_path, &params, &route_dir))
+            return atan2f(route_dir.y, route_dir.x);
+    }
+    return slid;
 }
 
-static void unit_apply_heading(LPEDICT self, LPCVECTOR2 dir, moveAvoidPolicy_t policy) {
+static void unit_apply_heading(LPEDICT self, LPCVECTOR2 dir, moveAvoidPolicy_t policy,
+                               LPCVECTOR2 target) {
     FLOAT const dirlen = Vector2_len(dir);
     if (dirlen <= 0.001f)
         return;  /* no meaningful heading this tick: hold current facing */
@@ -458,7 +491,7 @@ static void unit_apply_heading(LPEDICT self, LPCVECTOR2 dir, moveAvoidPolicy_t p
      * aligned (no second, disagreeing search). */
     FLOAT const goal_angle = atan2f(dir->y, dir->x);
     FLOAT const desired = unit_desired_heading(self, goal_angle,
-                                                unit_movedistance(self), policy);
+                                                unit_movedistance(self), policy, target);
     self->movement.heading = desired;
     unit_turn_toward(self, desired);
 }
@@ -475,7 +508,7 @@ static void unit_changeangle_towards_point_policy(LPEDICT self, LPCVECTOR2 point
     self->movement.flow_unreachable = false;
     self->movement.flow_direct = true;
     dir = Vector2_sub(point, &self->s.origin2);
-    unit_apply_heading(self, &dir, policy);
+    unit_apply_heading(self, &dir, policy, point);
 }
 
 /* Keep the bounded point-route turn until it is reached; retail likewise owns
@@ -525,7 +558,7 @@ BOOL unit_changeangle_towards_point_ignore_units(LPEDICT self, LPCVECTOR2 point)
         return false;
     }
 
-    unit_apply_heading(self, &dir, MOVE_AVOID_STATIC_ONLY);
+    unit_apply_heading(self, &dir, MOVE_AVOID_STATIC_ONLY, point);
     return true;
 }
 
@@ -562,7 +595,7 @@ static void unit_changeangle_policy(LPEDICT self, moveAvoidPolicy_t policy) {
                 return; /* long incremental route is still building; keep the order */
             /* path_valid resolves the heading while the shared field builds;
              * this is not a direct line to the requested destination. */
-            unit_apply_heading(self, &dir, policy);
+            unit_apply_heading(self, &dir, policy, &self->goalentity->s.origin2);
             return;
         }
         self->movement.path.valid = false;
@@ -608,7 +641,7 @@ static void unit_changeangle_policy(LPEDICT self, moveAvoidPolicy_t policy) {
         }
     }
 
-    unit_apply_heading(self, &dir, policy);
+    unit_apply_heading(self, &dir, policy, &self->goalentity->s.origin2);
 }
 
 void unit_changeangle(LPEDICT self) {
@@ -649,7 +682,7 @@ static void unit_changeangle_for_radius_policy(LPEDICT self, FLOAT radius,
         if (!heatmap) {
             if (!unit_accel_direction(self, radius, &dir))
                 return; /* long incremental route is still building */
-            unit_apply_heading(self, &dir, policy);
+            unit_apply_heading(self, &dir, policy, &self->goalentity->s.origin2);
             return;
         }
         self->movement.path.valid = false;
@@ -674,7 +707,7 @@ static void unit_changeangle_for_radius_policy(LPEDICT self, FLOAT radius,
         }
     }
 
-    unit_apply_heading(self, &dir, policy);
+    unit_apply_heading(self, &dir, policy, &self->goalentity->s.origin2);
 }
 
 void unit_changeangle_for_radius(LPEDICT self, FLOAT radius) {
@@ -969,6 +1002,7 @@ void move_reset_progress(LPEDICT self) {
     self->movement.flow_goal_reached = false;
     self->movement.flow_unreachable = false;
     self->movement.flow_direct = false;
+    self->movement.dynamic_path.valid = false;
     self->movement.flow_fallback_goal = NULL;
     self->movement.flow_fallback_state = MOVE_FALLBACK_NONE;
     self->movement.worker_avoid_origin = self->s.origin2;

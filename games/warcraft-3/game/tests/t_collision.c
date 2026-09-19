@@ -322,6 +322,36 @@ TEST(wc3_collision, fast_unit_cannot_jump_through) {
     T_FEQ(blocker->s.origin2.x, 40.0f, 0.001f);  /* blocker never pushed */
 }
 
+/* A short local slide cannot get around a broad dynamic wall.  Retail keeps
+ * the move order alive and searches a detour through the live collision map;
+ * this guards that behavior instead of accepting a permanent stand at the
+ * first blocked step. */
+TEST(wc3_collision, mover_repaths_around_dynamic_wall) {
+    reset_collision_world();
+    LPEDICT blockers[5];
+    LPEDICT mover = make_collision_unit(0.0f, 0.0f, 16.0f);
+    VECTOR2 dest = {300.0f, 0.0f};
+    int passed = 0;
+    FLOAT max_lateral = 0.0f;
+
+    FOR_LOOP(i, 5)
+        blockers[i] = make_collision_unit(80.0f, -64.0f + i * 32.0f, 16.0f);
+    unit_issueorder(mover, "move", &dest);
+    FOR_LOOP(i, 120) {
+        if (!mover->currentmove || strcmp(mover->currentmove->animation, "walk") != 0)
+            break;
+        mover->currentmove->think(mover);
+        max_lateral = MAX(max_lateral, fabsf(mover->s.origin2.y));
+    }
+    FOR_LOOP(i, 5)
+        if (mover->s.origin2.x > blockers[i]->s.origin2.x)
+            passed++;
+
+    T_EQ(passed, 5);
+    T_ASSERT(mover->s.origin2.x > 240.0f);
+    T_ASSERT(max_lateral > 16.0f);
+}
+
 /* -----------------------------------------------------------------------
  * LoadTGA — pathfinding texture decoding
  * --------------------------------------------------------------------- */

@@ -1049,7 +1049,22 @@ BOOL CM_FindPathWaypoint(pathAccelParams_t const *params, LPVECTOR2 out) {
             DWORD count = 0;
             for (int at = (int)current; at >= 0 && count < cells; at = pathmap.pathnodes[at].parent)
                 pathmap.pathheap[count++] = (DWORD)at;
-            for (DWORD i = 0; i + 1 < count; i++) {
+            if (params->is_pathable) {
+                /* Dynamic routes need the first reachable node after the
+                 * mover; the furthest visible node can cross a live unit on
+                 * the way even though the A* chain itself is valid. */
+                for (DWORD i = count - 1; i > 0; i--) {
+                    DWORD const at = pathmap.pathheap[i - 1];
+                    VECTOR2 candidate = CM_GetDenormalizedMapPosition(((FLOAT)(at % pathmap.width) + 0.5f) / pathmap.width,
+                        ((FLOAT)(at / pathmap.width) + 0.5f) / pathmap.height);
+                    if (CM_LineIsPathableForRadiusFlags(params->from, &candidate, params->radius, blocked_flags) &&
+                        params->is_pathable(params->context, params->from, &candidate,
+                                            params->radius, blocked_flags)) {
+                        *out = candidate;
+                        return true;
+                    }
+                }
+            } else for (DWORD i = 0; i + 1 < count; i++) {
                 DWORD const at = pathmap.pathheap[i];
                 VECTOR2 candidate = CM_GetDenormalizedMapPosition(((FLOAT)(at % pathmap.width) + 0.5f) / pathmap.width,
                     ((FLOAT)(at / pathmap.width) + 0.5f) / pathmap.height);
@@ -1067,6 +1082,16 @@ BOOL CM_FindPathWaypoint(pathAccelParams_t const *params, LPVECTOR2 out) {
                 BOOL const side_x = path_ok(nx, cy, radius_cells, blocked_flags);
                 BOOL const side_y = path_ok(cx, ny, radius_cells, blocked_flags);
                 if (!(side_x && side_y)) continue;
+            }
+            if (params->is_pathable) {
+                VECTOR2 from = CM_GetDenormalizedMapPosition(((FLOAT)cx + 0.5f) / pathmap.width,
+                    ((FLOAT)cy + 0.5f) / pathmap.height);
+                VECTOR2 target = CM_GetDenormalizedMapPosition(((FLOAT)nx + 0.5f) / pathmap.width,
+                    ((FLOAT)ny + 0.5f) / pathmap.height);
+                if (current == start_index)
+                    from = *params->from;
+                if (!params->is_pathable(params->context, &from, &target, params->radius, blocked_flags))
+                    continue;
             }
             DWORD const next = (DWORD)nx + (DWORD)ny * pathmap.width;
             pathNode_t *next_node = &pathmap.pathnodes[next];
@@ -1685,7 +1710,9 @@ BOOL CM_AccelerateRoute(LPROUTEPATH path, pathAccelParams_t const *params, LPVEC
     if (path->valid && (Vector2_distance(&path->target, params->target) >= 1.0f ||
         fabsf(path->radius - params->radius) >= 0.01f ||
         Vector2_distance(params->from, &path->waypoint) <= reached ||
-        !CM_LineIsPathableForRadiusFlags(params->from, &path->waypoint, params->radius, blocked_flags)))
+        !CM_LineIsPathableForRadiusFlags(params->from, &path->waypoint, params->radius, blocked_flags) ||
+        (params->is_pathable && !params->is_pathable(params->context, params->from, &path->waypoint,
+                                                      params->radius, blocked_flags))))
         path->valid = false;
     if (!path->valid) {
         if (!CM_FindPathWaypoint(params, &path->waypoint)) return false;
