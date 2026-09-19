@@ -2753,6 +2753,9 @@ TEST(wc3_save, round_trip_edict_and_player_state) {
     first->s.origin.y = 128.0f;
     first->owner = second;
     first->movement.follow_target = second;
+    first->movement.dynamic_path = (ROUTEPATH){
+        .waypoint = { 160.0f, 192.0f }, .target = { 320.0f, 384.0f }, .radius = 42.5f, .valid = true
+    };
     first->inventory[2] = second;
     first->cargo.units[3] = second;
     first->stand = unit_stand; first->birth = unit_birth; first->die = unit_die; first->think = monster_think;
@@ -2839,6 +2842,7 @@ TEST(wc3_save, round_trip_edict_and_player_state) {
     first->sleep.sleeping = false;
     first->owner = NULL;
     first->movement.follow_target = NULL;
+    memset(&first->movement.dynamic_path, 0, sizeof(first->movement.dynamic_path));
     first->inventory[2] = NULL;
     first->cargo.units[3] = NULL;
     first->animation_props[0] = '\0';
@@ -2877,6 +2881,12 @@ TEST(wc3_save, round_trip_edict_and_player_state) {
     T_EQ(g_edicts[first - g_edicts].collision, 42.5f);
     T_EQ(g_edicts[first - g_edicts].s.origin.x, 96.0f);
     T_EQ(g_edicts[first - g_edicts].s.origin.y, 128.0f);
+    T_FEQ(g_edicts[first - g_edicts].movement.dynamic_path.waypoint.x, 160.0f, 0.001f);
+    T_FEQ(g_edicts[first - g_edicts].movement.dynamic_path.waypoint.y, 192.0f, 0.001f);
+    T_FEQ(g_edicts[first - g_edicts].movement.dynamic_path.target.x, 320.0f, 0.001f);
+    T_FEQ(g_edicts[first - g_edicts].movement.dynamic_path.target.y, 384.0f, 0.001f);
+    T_FEQ(g_edicts[first - g_edicts].movement.dynamic_path.radius, 42.5f, 0.001f);
+    T_ASSERT(g_edicts[first - g_edicts].movement.dynamic_path.valid);
     T_EQ(g_edicts[first - g_edicts].abilstatus[0].code, MAKEFOURCC('B','m','i','l'));
     T_EQ(g_edicts[first - g_edicts].abilstatus[0].timestamp, 40000);
     T_EQ(g_edicts[first - g_edicts].abilstatus[0].duration_ms, 45000);

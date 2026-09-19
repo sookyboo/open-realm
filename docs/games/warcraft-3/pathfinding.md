@@ -91,6 +91,31 @@ Ordinary destination fields remain incremental and frame-budgeted. The mover-com
 
 The current router is now deliberately hybrid. Direct collision-sized lines handle open ground, bounded per-mover A* handles nearby static detours, destination-cached integration fields amortize long routes shared by groups, and local avoidance handles live units. This is closer to retail's split between mover-owned route state and a global pathing system without claiming its unrecovered accelerator implementation.
 
+### Dynamic-unit rerouting
+
+Live units are not baked into the shared static heatmap. When a generic move is
+blocked by a stationary same-layer unit, `skills/s_move.c` supplies the router
+with a dynamic pathability callback and keeps the resulting short route in
+`movement.dynamic_path`. The bounded A* then tests each candidate edge against
+both static pathing and the live edict collision set. The first waypoint uses
+the mover's exact current position; later waypoints use path-cell centres so a
+cell-centred route cannot skip a blocker between the mover and its first node.
+
+The dynamic route is invalidated when the order target changes, the waypoint
+is reached, a direct step becomes clear, or the live collision query rejects
+the cached segment. Moving blockers retain the existing speed-priority
+give-way and local slide behavior, because a moving unit should not cause a
+stationary detour route to be rebuilt every tick. This keeps dynamic collision
+out of shared flow-field cache identity while allowing a broad live-unit wall
+to be bypassed and the original move order to remain active.
+
+This follows the behavior split observed in Warsmash: `CBehaviorMove` keeps
+per-mover path progress while `CPathfindingProcessor` performs the bounded
+search and `CWorldCollision` supplies live collision queries. Those sources
+are [CBehaviorMove.java](https://github.com/Retera/WarsmashModEngine/blob/master/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/behaviors/CBehaviorMove.java),
+[CPathfindingProcessor.java](https://github.com/Retera/WarsmashModEngine/blob/master/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/pathing/CPathfindingProcessor.java),
+and [CWorldCollision.java](https://github.com/Retera/WarsmashModEngine/blob/master/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CWorldCollision.java).
+
 ### Retail Game.dll path audit
 
 The ROC demo `data/Warcraft3demo/Game.dll` (build 4486, SHA-256 `286823c37a1083e91f07d040e46a9df7af4c4952e01fcbba460589bd4e297654`) retains RTTI for `CAbilityMove`, `NIpse::CLrPathingSys`, and `NIpse::CLrPathingAcc`. `CAbilityMove` installs its vtable at `Game.dll+0x102898`. The path constructor at `+0x458040` initializes a roughly 0xb0-byte persistent object, including two 32-byte containers at `+0x2c` and `+0x4c`, coordinate/state fields, and a pathing-system pointer. Mover setup at `+0x466aa0` allocates and stores one such object. Submission at `+0x458670` resets route state and copies the requested coordinate into both current and destination fields.
@@ -113,7 +138,7 @@ progress while retaining OpenRealm's group-friendly cache for long routes.
 | Open ground | Route setup can retain or reset mover path state by destination and mode | Collision-sized Bresenham line; no search |
 | Nearby detour | Persistent mover path object emits coordinate pairs; global accelerator is consulted | Bounded octile A* emits one smoothed, persistent waypoint |
 | Long/shared route | Global `CLrPathingSys` and `CLrPathingAcc`; exact sharing policy unrecovered | Four LRU destination/radius integration fields, built backward with SPFA |
-| Dynamic units | Per-mover path flags and updates | Swept-circle movement plus deterministic local avoidance; not baked into static routes |
+| Dynamic units | Per-mover path flags and updates | Stationary blockers use a per-mover bounded A* callback route; moving blockers use deterministic local avoidance; neither is baked into static routes |
 | Scheduling | Countdown/pending and multiple result states prove resumable progress | A* is capped at 2,048 expansions; complete fields get a configurable per-frame queue budget |
 
 The speed difference was primarily work selection. Before the accelerator, one nearby cache miss cleared every route
@@ -210,6 +235,7 @@ Focused tests live in `games/warcraft-3/game/tests/t_pathfinding.c` and `t_movem
 - rejection of a corridor too narrow for the mover;
 - collision-sized Move, Patrol, and Attack-move route selection;
 - collision-sized Move routing around a long wall;
+- generic Move rerouting around a broad wall of stationary live units;
 - exact reachable clicks and closest reachable points across a disconnected wall;
 - collision-radius expansion of the closest reachable boundary;
 - end-to-end settling at the nearest reachable point for a disconnected click;

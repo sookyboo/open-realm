@@ -530,6 +530,8 @@ static field_t const ensnare_fields[] = {
 };
 
 static field_t const movement_fields[] = {
+    /* Value-only movement state, including path and dynamic_path, is already
+     * serialized in the raw edict record; only pointer fields need fixups here. */
     TF(edictMovement_s, attackmove_waypoint, F_EDICT, 0, FIELD_NONE),
     TF(edictMovement_s, patrol_a, F_EDICT, 0, FIELD_NONE),
     TF(edictMovement_s, patrol_b, F_EDICT, 0, FIELD_NONE),
