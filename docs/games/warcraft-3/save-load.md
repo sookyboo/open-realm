@@ -6,7 +6,7 @@ The WC3 game module owns save/load. `GetGameAPI()` exposes `SaveGame` and `LoadG
 
 `WriteGame()` writes the current game state to a versioned binary file. The file contains:
 
-- `W3SV` magic, format version 31, canonical map path, `sizeof(edict_t)`, entity count, client count, script identity, and native-handle registry counts;
+- `W3SV` magic, format version 33, canonical map path, `sizeof(edict_t)`, entity count, client count, script identity, and native-handle registry counts;
 - level frame/time, authoritative Warcraft time-of-day state, map-global camera bounds, and started/script-started flags;
 - each client `GAMECLIENT` state, including its `PLAYER` state, JASS settings, runtime removed/result-presentation state, researched tech, text storage, camera values, messages, and HUD caches;
 - each camera target as an entity index;
@@ -20,6 +20,19 @@ The WC3 game module owns save/load. `GetGameAPI()` exposes `SaveGame` and `LoadG
 Quest objects and items are restored in place so the running JASS VM's light handles keep their object identity. Events use `MAX_EVENTS` fixed slots, quests use `MAX_QUESTS` slots, and each quest owns `MAX_QUESTITEMS` item slots; `inuse` marks lifecycle state without moving live pointers during removal. Loading rejects a quest or item count mismatch instead of leaving those handles dangling. Loading completely reloads the saved map first, then applies state.
 
 The versioned layout retains the authoritative `level.timeofday` record and game-state event condition fields (`state`, `limitop`, `limitval`) and the client removal/pending-result fields used by victory/defeat presentation. Quest and event records are written by the recursive field schema. Counted descriptors write the count followed by the array prefix. Since version 13 the dynamic JASS group registry is written immediately after the level-field stream: every handle ordinal through `level.num_groups` writes `ggroup_t.inuse`, `num_units`, and that many `F_EDICT` indexes. Inactive holes remain serialized so higher live handle ordinals do not shift. Version 14 adds `GAMEEVENT.value`, the scalar callback payload used by research events, and pairs it with JASS snapshot format 3 so a sleeping callback preserves `JASSCONTEXT.eventValue` across save/load. Version 17 adds `GAMEEVENT.point` / `has_point` and pairs it with JASS snapshot format 4 so point-target spell response context survives unread event queues and yielded trigger coroutines.
+
+Version 32 adds `edict_t.permanent_health_bonus`, the persistent ledger for
+research-owned maximum-life effects such as `UpgradeData.slk` `rhpx`. The field
+is serialized explicitly and the version/`sizeof(edict_t)` guard rejects older
+records rather than allowing shifted edict state. Hero stat recomputation uses
+the restored ledger so a later Strength change cannot erase an upgrade-owned
+maximum-health bonus.
+
+Version 33 adds `edict_t.projectile_reflected` for basic attack missiles. A
+Defend-returned projectile can therefore be saved while travelling back to its
+source without becoming eligible for a second reflection after load. The field
+is part of the normal edict schema and follows the existing `goalentity` /
+`owner` entity-index relocation contract.
 
 The version 3 layout expands the fixed-size `GAMECLIENT` cinematic camera state with target Z offset, near/far clipping planes, and target-controller orientation inheritance. Version 2 saves are rejected because the raw client record layout changed; this prevents older saves from being misread with shifted fields.
 

@@ -1381,6 +1381,7 @@ struct edict_s {
     EDICTSTAT health;
     EDICTSTAT mana;
     MOVETYPE movetype;
+    BOOL projectile_reflected; /* basic attack missile has already been returned by Defend */
     TARGTYPE targtype;
     LPEDICT goalentity;
     LPEDICT item_drop; /* inventory item owned by an active point-drop behavior */
@@ -1409,6 +1410,7 @@ struct edict_s {
     FLOAT armor_value;    /* computed armor ('realdef', incl. hero AGI/modifiers) */
     FLOAT permanent_armor_bonus; /* research/permanent modifiers preserved across hero recompute */
     FLOAT temporary_armor_bonus; /* item/temporary modifiers preserved across hero recompute */
+    FLOAT permanent_health_bonus; /* research/permanent maximum-health modifiers preserved across hero recompute */
     FLOAT temporary_health_bonus; /* temporary maximum-health modifiers restored on expiration */
     FLOAT mana_regen_bonus; /* research/permanent mana regeneration modifiers */
     struct {
@@ -1507,6 +1509,7 @@ struct game_locals {
         FLOAT agiDefenseBonus;
         FLOAT agiAttackSpeedBonus;
         FLOAT damageBonus[8][8];
+        BOOL defendDeflection; /* Misc.DefendDeflection: permits Defend/Elune projectile returns */
         BOOL combatConstantsLoaded;
         LONG foodCeiling;
         DWORD upkeepUsageCount;
@@ -2238,6 +2241,7 @@ void G_StopBuildingUpgrade(LPEDICT building, BOOL refund);
 void G_RunBuildingUpgradeFrame(LPEDICT building);
 void G_UpdateBuildingUpgradeAnimation(LPEDICT building);
 void G_ApplyPlayerUpgradesToUnit(LPEDICT unit);
+BOOL G_UnitAbilityResearchAvailable(LPCEDICT unit, DWORD ability_id);
 DWORD G_GetUnitUpgradeForClass(LPCEDICT unit, LPCSTR wanted_class);
 BOOL G_ChargeBuilding(LPGAMECLIENT client, DWORD building_id);
 void G_RefundBuilding(LPGAMECLIENT client, DWORD building_id);
@@ -2724,6 +2728,10 @@ void G_DrainPausedResultEvents(void);
 void SP_SpawnItem(LPEDICT);
 BOOL G_IsItem(LPCEDICT item);
 DWORD G_InventoryCapacity(LPCEDICT unit);
+BOOL G_InventoryCanUseItems(LPCEDICT unit);
+BOOL G_InventoryCanGetItems(LPCEDICT unit);
+BOOL G_InventoryCanDropItems(LPCEDICT unit);
+void G_DropInventoryOnDeath(LPEDICT unit);
 BOOL G_UnitHasInventory(LPEDICT unit);
 DWORD G_ItemCharges(LPCEDICT item);
 void G_SetItemCharges(LPEDICT item, DWORD charges);
