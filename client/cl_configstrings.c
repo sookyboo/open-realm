@@ -34,9 +34,6 @@ static void CL_RegisterModelConfigString(DWORD index, BOOL replace, LPCSTR olds)
     }
     cl.models[model] = re.LoadModel(name);
     if (!cl.models[model]) fprintf(stderr, "CL_RegisterModelConfigString: failed to load %s\n", name);
-    if (atoi(Cvar_String("wc3_attack_fx_debug", "0")) >= 2)
-        fprintf(stderr, "[wc3fx][client][model-load] index=%u path=\"%s\" handle=%p loaded=%s\n",
-                (unsigned)model, name, (void *)cl.models[model], cl.models[model] ? "yes" : "no");
     if (portrait[0] && FS_FileExists(portrait)) cl.portraits[model] = re.LoadModel(portrait);
 }
 

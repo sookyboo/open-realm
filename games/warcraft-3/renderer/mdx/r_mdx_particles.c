@@ -1,5 +1,6 @@
 #include "r_mdx.h"
 #include "renderer/r_emit.h"
+#include <strings.h>
 
 #define GET_PARTICLE_ANIM_PARAM(MODEL, EMITTER, NAME) \
 float NAME = EMITTER->NAME; \
@@ -125,12 +126,16 @@ void MDLX_RenderParticleEmitters(const renderEntity_t *entity, const mdxModel_t 
         entity->number >= 0 && entity->number < MAX_GAME_ENTITIES &&
         (tr.viewDef.time >= last_log[entity->number] + 250 || !last_log[entity->number])) {
         mdxSequence_t const *seq = R_FindSequenceAtTime(model, entity->frame);
-        fprintf(stderr,
-                "[wc3fx][renderer][pre2] time=%u ent=%d seq=\"%s\" frame=%u total=%u visible=%u active=%u spawned=%u\n",
-                (unsigned)tr.viewDef.time, entity->number, seq ? seq->name : "<none>",
-                (unsigned)entity->frame, (unsigned)total, (unsigned)visible, (unsigned)active,
-                (unsigned)spawned);
-        last_log[entity->number] = tr.viewDef.time;
+        BOOL interesting = (entity->flags & RF_NO_SHADOW) ||
+            (seq && !strncasecmp(seq->name, "Attack", 6));
+        if (interesting) {
+            fprintf(stderr,
+                    "[wc3fx][renderer][pre2] time=%u ent=%d seq=\"%s\" frame=%u total=%u visible=%u active=%u spawned=%u\n",
+                    (unsigned)tr.viewDef.time, entity->number, seq ? seq->name : "<none>",
+                    (unsigned)entity->frame, (unsigned)total, (unsigned)visible, (unsigned)active,
+                    (unsigned)spawned);
+            last_log[entity->number] = tr.viewDef.time;
+        }
     }
 }
 
@@ -176,6 +181,7 @@ typedef struct {
     float alpha;
     float width;
     DWORD team;
+    int entity_number;
     DWORD *spawned;
 } mdx_ribbon_spawn_t;
 
@@ -193,6 +199,9 @@ static void MDLX_SpawnRibbonSegment(void *raw) {
     texture = &ctx->mdx->textures[texture_id];
     particle = R_SpawnParticle();
     if (!particle) return;
+#ifdef WC3
+    R_DebugTrackAttackFxParticle(particle, ctx->entity_number);
+#endif
     if (ctx->spawned) (*ctx->spawned)++;
     particle->org = ctx->origin;
     particle->tail = ctx->tail;
@@ -228,7 +237,9 @@ void MDLX_RenderRibbonEmitters(renderEntity_t const *entity, mdxModel_t const *m
                                LPCMATRIX4 model_matrix) {
     float const frame = LerpNumber(entity->oldframe, entity->frame, tr.viewDef.lerpfrac);
     DWORD total = 0, visible_count = 0, configured = 0, spawned = 0;
+    BOOL logged_detail = false;
     static DWORD last_log[MAX_GAME_ENTITIES];
+    static DWORD last_detail_log[MAX_GAME_ENTITIES];
     (void)model_matrix; /* node_matrices already contain the model transform */
 
     FOR_EACH_LIST(mdxRibbonEmitter_t, emitter, model->ribbonEmitters) {
@@ -241,6 +252,7 @@ void MDLX_RenderRibbonEmitters(renderEntity_t const *entity, mdxModel_t const *m
         float height_below = emitter->HeightBelow;
         float alpha = emitter->Alpha;
         float visibility = 1.0f;
+        LONG texture_slot = (LONG)emitter->TextureSlot;
         float width;
 
         if (emitter->node.node_id >= MDX_MAX_NODES) continue;
@@ -260,6 +272,8 @@ void MDLX_RenderRibbonEmitters(renderEntity_t const *entity, mdxModel_t const *m
             MDLX_GetModelKeytrackValue(model, emitter->keytracks.Alpha, frame, &alpha);
         if (emitter->keytracks.Color)
             MDLX_GetModelKeytrackValue(model, emitter->keytracks.Color, frame, &color);
+        if (emitter->keytracks.TextureSlot)
+            MDLX_GetModelKeytrackValue(model, emitter->keytracks.TextureSlot, frame, &texture_slot);
         if (emitter->node.node_id < (DWORD)model->num_pivots)
             pivot = model->pivots[emitter->node.node_id];
         origin = Matrix4_multiply_vector3(&node_matrices[emitter->node.node_id], &pivot);
@@ -271,11 +285,42 @@ void MDLX_RenderRibbonEmitters(renderEntity_t const *entity, mdxModel_t const *m
             material = MDLX_RibbonMaterial(model, emitter->MaterialID);
             layer = material && material->num_layers > 0 ? &material->layers[0] : NULL;
             if (layer && emitter->EmissionRate > 0 && emitter->LifeSpan > 0.0f) configured++;
+            if (atoi(ri.CvarString ? ri.CvarString("wc3_attack_fx_debug", "0") : "0") >= 2 &&
+                (entity->flags & RF_NO_SHADOW) && entity->number >= 0 && entity->number < MAX_GAME_ENTITIES &&
+                (tr.viewDef.time >= last_detail_log[entity->number] + 250 || !last_detail_log[entity->number])) {
+                DWORD texture_id = layer ? layer->textureId : UINT32_MAX;
+                mdxTexture_t const *model_texture = texture_id < (DWORD)model->num_textures
+                    ? &model->textures[texture_id] : NULL;
+                LPCTEXTURE resolved = model_texture
+                    ? MDLX_GetTexture(model, entity->team & TEAM_MASK, texture_id,
+                                      model_texture->replaceableID, NULL) : NULL;
+                fprintf(stderr,
+                        "[wc3fx][renderer][ribb-detail] time=%u ent=%d node=%u name=\"%s\" material=%ld material_found=%s layers=%d layer0_texture=%u texture_slot=%ld rows=%u cols=%u blend=%u texture_path=\"%s\" replaceable=%u resolved=%p texid=%u texsize=%ux%u visibility=%.3f alpha=%.3f width=%.3f emission=%u lifespan=%.3f gravity=%.3f tail_len=%.3f reason=%s\n",
+                        (unsigned)tr.viewDef.time, entity->number, (unsigned)emitter->node.node_id,
+                        emitter->node.name, (long)emitter->MaterialID, material ? "yes" : "no",
+                        material ? material->num_layers : 0, (unsigned)texture_id, (long)texture_slot,
+                        (unsigned)emitter->Rows, (unsigned)emitter->Columns,
+                        layer ? (unsigned)layer->blendMode : 0u,
+                        model_texture ? model_texture->path : "",
+                        model_texture ? (unsigned)model_texture->replaceableID : 0u,
+                        (void *)resolved, resolved ? (unsigned)resolved->texid : 0u,
+                        resolved ? (unsigned)resolved->width : 0u, resolved ? (unsigned)resolved->height : 0u,
+                        visibility, alpha, width, (unsigned)emitter->EmissionRate, emitter->LifeSpan,
+                        emitter->Gravity, Vector3_len(&tail),
+                        !material ? "missing-material" : !layer ? "missing-layer" :
+                        texture_id >= (DWORD)model->num_textures ? "bad-texture-id" :
+                        !resolved ? "unresolved-texture" : width <= 0.0f ? "zero-width" :
+                        alpha * visibility <= 0.0f ? "zero-alpha" :
+                        emitter->EmissionRate == 0 ? "zero-emission" :
+                        emitter->LifeSpan <= 0.0f ? "zero-lifespan" : "configured");
+                logged_detail = true;
+            }
             mdx_ribbon_spawn_t ctx = {
                 .mdx = model, .emitter = emitter, .layer = layer,
                 .origin = origin, .tail = tail, .color = color,
                 .alpha = alpha * visibility, .width = width,
-                .team = entity->team & TEAM_MASK, .spawned = &spawned,
+                .team = entity->team & TEAM_MASK, .entity_number = entity->number,
+                .spawned = &spawned,
             };
             R_EmitParticles((float)emitter->EmissionRate, &state->accumulator,
                             tr.viewDef.deltaTime, MDLX_SpawnRibbonSegment, &ctx);
@@ -287,11 +332,17 @@ void MDLX_RenderRibbonEmitters(renderEntity_t const *entity, mdxModel_t const *m
         entity->number >= 0 && entity->number < MAX_GAME_ENTITIES &&
         (tr.viewDef.time >= last_log[entity->number] + 250 || !last_log[entity->number])) {
         mdxSequence_t const *seq = R_FindSequenceAtTime(model, entity->frame);
-        fprintf(stderr,
-                "[wc3fx][renderer][ribb] time=%u ent=%d seq=\"%s\" frame=%u total=%u visible=%u configured=%u spawned=%u\n",
-                (unsigned)tr.viewDef.time, entity->number, seq ? seq->name : "<none>",
-                (unsigned)entity->frame, (unsigned)total, (unsigned)visible_count,
-                (unsigned)configured, (unsigned)spawned);
-        last_log[entity->number] = tr.viewDef.time;
+        BOOL interesting = (entity->flags & RF_NO_SHADOW) ||
+            (seq && !strncasecmp(seq->name, "Attack", 6));
+        if (interesting) {
+            fprintf(stderr,
+                    "[wc3fx][renderer][ribb] time=%u ent=%d seq=\"%s\" frame=%u total=%u visible=%u configured=%u spawned=%u\n",
+                    (unsigned)tr.viewDef.time, entity->number, seq ? seq->name : "<none>",
+                    (unsigned)entity->frame, (unsigned)total, (unsigned)visible_count,
+                    (unsigned)configured, (unsigned)spawned);
+            last_log[entity->number] = tr.viewDef.time;
+        }
     }
+    if (logged_detail && entity->number >= 0 && entity->number < MAX_GAME_ENTITIES)
+        last_detail_log[entity->number] = tr.viewDef.time;
 }

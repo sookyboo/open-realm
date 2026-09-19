@@ -79,11 +79,40 @@ void R_ClearParticleScene(particleScene_t *scene) {
     *scene = (particleScene_t){0};
 }
 
+
+#ifdef WC3
+#define ATTACK_FX_TRACE_SLOTS 128
+typedef struct { cparticle_t *particle; int entity_number; } attackFxParticleTrace_t;
+static attackFxParticleTrace_t attack_fx_traces[ATTACK_FX_TRACE_SLOTS];
+static DWORD attack_fx_trace_cursor;
+
+static void R_DebugForgetAttackFxParticle(cparticle_t *particle) {
+    FOR_LOOP(i, ATTACK_FX_TRACE_SLOTS)
+        if (attack_fx_traces[i].particle == particle)
+            attack_fx_traces[i] = (attackFxParticleTrace_t){0};
+}
+
+void R_DebugTrackAttackFxParticle(cparticle_t *particle, int entity_number) {
+    if (!particle || atoi(ri.CvarString ? ri.CvarString("wc3_attack_fx_debug", "0") : "0") < 2) return;
+    attack_fx_traces[attack_fx_trace_cursor++ % ATTACK_FX_TRACE_SLOTS] =
+        (attackFxParticleTrace_t){ .particle = particle, .entity_number = entity_number };
+}
+
+static int R_DebugAttackFxParticleEntity(cparticle_t const *particle) {
+    FOR_LOOP(i, ATTACK_FX_TRACE_SLOTS)
+        if (attack_fx_traces[i].particle == particle) return attack_fx_traces[i].entity_number;
+    return -1;
+}
+#endif
+
 cparticle_t *R_SpawnParticle(void) {
     if (!free_particles)
 //        return NULL;
         return NULL;
     cparticle_t *p = free_particles;
+#ifdef WC3
+    R_DebugForgetAttackFxParticle(p);
+#endif
     free_particles = p->next;
     p->next = active_particles;
     active_particles = p;
@@ -337,9 +366,31 @@ void R_DrawParticles(void) {
         VECTOR3 vel = Vector3_add(&p->vel, &halfAccelT);
         VECTOR3 org = Vector3_mad(&p->org, p->time, &vel);
         COLOR32 col = FX_BlendColor(p);
+        COLOR32 uv = FX_GetFrame(p);
         float size = p->size_value_scale * FX_BlendFloat(p->size, p->time * p->size_time_scale,
                                                          BYTE2FLOAT(p->midtime));
-        pv = R_AddParticle(pv, &org, &p->tail, FX_GetFrame(p), col, size);
+#ifdef WC3
+        if (atoi(ri.CvarString ? ri.CvarString("wc3_attack_fx_debug", "0") : "0") >= 2) {
+            static DWORD last_draw_log[MAX_GAME_ENTITIES];
+            int trace_entity = R_DebugAttackFxParticleEntity(p);
+            if (trace_entity >= 0 && trace_entity < MAX_GAME_ENTITIES &&
+                (tr.viewDef.time >= last_draw_log[trace_entity] + 250 || !last_draw_log[trace_entity])) {
+                LPCTEXTURE resolved = p->texture ? p->texture : particles_resources.texture;
+                fprintf(stderr,
+                        "[wc3fx][renderer][particle-draw] time=%u ent=%d texture=%p texid=%u size=%ux%u blend=%u rows=%u cols=%u uv=%u,%u-%u,%u alpha=%u particle_size=%.3f tail_len=%.3f age=%.3f/%.3f queued_vertices=6\n",
+                        (unsigned)tr.viewDef.time, trace_entity, (void *)resolved,
+                        resolved ? (unsigned)resolved->texid : 0u,
+                        resolved ? (unsigned)resolved->width : 0u,
+                        resolved ? (unsigned)resolved->height : 0u,
+                        (unsigned)p->blend_mode, (unsigned)(p->rows ? p->rows : 1),
+                        (unsigned)(p->columns ? p->columns : 1), (unsigned)uv.r, (unsigned)uv.g,
+                        (unsigned)uv.b, (unsigned)uv.a, (unsigned)col.a, size,
+                        Vector3_len(&p->tail), p->time, p->lifespan);
+                last_draw_log[trace_entity] = tr.viewDef.time;
+            }
+        }
+#endif
+        pv = R_AddParticle(pv, &org, &p->tail, uv, col, size);
         texture = p->texture;
         blend_mode = p->blend_mode;
     }

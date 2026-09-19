@@ -5,6 +5,7 @@
 #include <float.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #define MDLX_STACK_DRAW_ORDER 64
 LPCTEXTURE MDLX_GetTexture(mdxModel_t const *model,
@@ -713,32 +714,45 @@ static BOOL MDLX_DebugAttackFxTransition(renderEntity_t const *entity, mdxModel_
     return true;
 }
 
+static BOOL MDLX_DebugIsAttackSequence(mdxSequence_t const *sequence) {
+    return sequence && (!strncasecmp(sequence->name, "Attack", 6));
+}
+
 static void MDLX_DebugAttackFx(renderEntity_t const *entity, mdxModel_t const *model,
                                LPCSTR stage) {
     int debug = atoi(ri.CvarString ? ri.CvarString("wc3_attack_fx_debug", "0") : "0");
     mdxSequence_t const *sequence;
-    BOOL interesting;
+    BOOL attack, projectile;
     if (!debug || !entity || !model) return;
     sequence = R_FindSequenceAtTime(model, entity->frame);
-    interesting = (sequence && (strstr(sequence->name, "Attack") || strstr(sequence->name, "attack"))) ||
-                  (entity->flags & RF_NO_SHADOW) || model->emitters || model->ribbonEmitters || model->events;
-    if (!interesting || !MDLX_DebugAttackFxTransition(entity, model, sequence)) return;
+    attack = MDLX_DebugIsAttackSequence(sequence);
+    projectile = (entity->flags & RF_NO_SHADOW) != 0;
+    if ((!attack && !projectile) || !MDLX_DebugAttackFxTransition(entity, model, sequence)) return;
     fprintf(stderr,
-            "[wc3fx][renderer][mdx] stage=%s time=%u ent=%d handle=%p seq=\"%s\" interval=%u-%u frame=%u old=%u scale=%.3f flags=0x%x geosets=%u textures=%u pre2=%u ribb=%u events=%u bounds_radius=%.2f\n",
-            stage, (unsigned)tr.viewDef.time, entity->number, (void *)model,
-            sequence ? sequence->name : "<none>", sequence ? (unsigned)sequence->interval[0] : 0u,
+            "[wc3fx][renderer][mdx] role=%s stage=%s time=%u ent=%d handle=%p seq=\"%s\" interval=%u-%u frame=%u old=%u scale=%.3f flags=0x%x geosets=%u textures=%u pre2=%u ribb=%u events=%u bounds_radius=%.2f\n",
+            projectile ? "projectile" : "attack", stage, (unsigned)tr.viewDef.time,
+            entity->number, (void *)model, sequence ? sequence->name : "<none>",
+            sequence ? (unsigned)sequence->interval[0] : 0u,
             sequence ? (unsigned)sequence->interval[1] : 0u, (unsigned)entity->frame,
             (unsigned)entity->oldframe, entity->scale, (unsigned)entity->flags,
             (unsigned)MDLX_DebugCountGeosets(model), (unsigned)model->num_textures,
             (unsigned)MDLX_DebugCountEmitters(model), (unsigned)MDLX_DebugCountRibbons(model),
             (unsigned)MDLX_DebugCountEvents(model), model->bounds.radius);
-    if (debug >= 2 && model->events) {
+
+    /* Event objects are parsed but there is no runtime SPL/SPN presentation
+     * dispatcher yet.  Log only event keys belonging to the active attack
+     * sequence so a single capture identifies whether a missing melee visual
+     * is authored as an unsupported event object. */
+    if (debug >= 2 && attack && model->events) {
         FOR_EACH_LIST(mdxEvent_t, event, model->events) {
-            fprintf(stderr,
-                    "[wc3fx][renderer][event-object] ent=%d node=%u name=\"%s\" keys=%u global_seq=%u first_key=%u\n",
-                    entity->number, (unsigned)event->node.node_id, event->node.name,
-                    (unsigned)event->num_keys, (unsigned)event->globalSeqId,
-                    event->num_keys && event->keys ? (unsigned)event->keys[0] : 0u);
+            FOR_LOOP(i, event->num_keys) {
+                DWORD key = event->keys ? event->keys[i] : 0;
+                if (!sequence || key < sequence->interval[0] || key > sequence->interval[1]) continue;
+                fprintf(stderr,
+                        "[wc3fx][renderer][event-gap] ent=%d seq=\"%s\" name=\"%s\" key=%u type=%.3s supported=no reason=unimplemented-mdx-event-presentation\n",
+                        entity->number, sequence->name, event->node.name, (unsigned)key,
+                        event->node.name);
+            }
         }
     }
 }

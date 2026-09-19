@@ -307,13 +307,18 @@ static void V_AddClientEntity(centity_t const *ent) {
 
     CL_ApplyIndicator(&re);
     if (atoi(Cvar_String("wc3_attack_fx_debug", "0")) >= 2 && (re.flags & RF_NO_SHADOW)) {
-        LPCSTR path = (ent->current.model > 0 && ent->current.model < MAX_MODELS)
-            ? cl.configstrings[CS_MODELS + ent->current.model] : "";
-        fprintf(stderr,
-                "[wc3fx][client][entity-submit] time=%u ent=%u model=%u path=\"%s\" handle=%p frame=%u old=%u scale=%.3f flags=0x%x origin=(%.2f,%.2f,%.2f)\n",
-                (unsigned)cl.viewDef.time, (unsigned)ent->current.number, (unsigned)ent->current.model,
-                path ? path : "", (void *)re.model, (unsigned)re.frame, (unsigned)re.oldframe, re.scale,
-                (unsigned)re.flags, re.origin.x, re.origin.y, re.origin.z);
+        static USHORT logged_model[MAX_GAME_ENTITIES];
+        DWORD number = ent->current.number;
+        if (number >= MAX_GAME_ENTITIES || logged_model[number] != ent->current.model) {
+            LPCSTR path = (ent->current.model > 0 && ent->current.model < MAX_MODELS)
+                ? cl.configstrings[CS_MODELS + ent->current.model] : "";
+            fprintf(stderr,
+                    "[wc3fx][client][projectile-submit] time=%u ent=%u model=%u path=\"%s\" handle=%p frame=%u old=%u scale=%.3f flags=0x%x origin=(%.2f,%.2f,%.2f)\n",
+                    (unsigned)cl.viewDef.time, (unsigned)ent->current.number, (unsigned)ent->current.model,
+                    path ? path : "", (void *)re.model, (unsigned)re.frame, (unsigned)re.oldframe, re.scale,
+                    (unsigned)re.flags, re.origin.x, re.origin.y, re.origin.z);
+            if (number < MAX_GAME_ENTITIES) logged_model[number] = ent->current.model;
+        }
     }
     view_state.entities[view_state.num_entities++] = re;
 

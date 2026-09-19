@@ -270,23 +270,35 @@ This differs from `ability_map.c`, whose rawcode relationships are manually tran
 Use it when an attack deals damage but its authored missile, particles, ribbons, or melee attack effect is not visible.
 
 - `wc3_attack_fx_debug 0` disables the trace (default).
-- `wc3_attack_fx_debug 1` logs server attack sequence selection, missile model/configstring identity, and MDX sequence transitions.
-- `wc3_attack_fx_debug 2` additionally logs client model registration/submission, renderer model-load success/type, projectile culling, PRE2 particle activity, RIBB ribbon activity, and MDX event-object metadata.
+- `wc3_attack_fx_debug 1` logs only server attack-sequence selection, missile spawn identity, and renderer MDX transitions for active attack/projectile models.
+- `wc3_attack_fx_debug 2` adds the minimum client/renderer detail needed for a one-run diagnosis: projectile submission/culling, PRE2/RIBB activity, per-ribbon material/texture state, queued ribbon-particle draw state, and attack-sequence MDX event gaps.
 
-For a one-run diagnosis, launch with the CVar already enabled so model-registration logs are not missed, for example:
+Run with:
 
 ```text
 +wc3_attack_fx_debug 2
 ```
 
-Then reproduce one melee attack and one affected missile attack. Relevant lines all begin with `[wc3fx]`. Correlate the server model index/path and entity number through these stages:
+Then reproduce one affected melee attack and one affected missile attack. Relevant lines all begin with `[wc3fx]`. The trace intentionally does **not** log every model registered or every emitter in the world; this keeps a single capture small enough to correlate by entity number.
+
+For missiles, follow:
 
 ```text
-[server][attack-sequence] / [server][missile-spawn]
-    -> [client][model-load] / [renderer][model-load]
-    -> [client][entity-submit]
-    -> [renderer][mdx]
-    -> [renderer][pre2] / [renderer][ribb] / [renderer][event-object]
+[server][missile-spawn]
+    -> [client][projectile-submit]
+    -> [renderer][mdx] role=projectile
+    -> [renderer][ribb-detail] / [renderer][pre2]
+    -> [renderer][particle-draw]
 ```
 
-A non-null client model handle alone does not prove the source asset loaded: the renderer intentionally caches an empty model for missing files. `[renderer][model-load] found=no` or `mdx=(nil)` identifies that case. `events>0` with no corresponding implemented presentation is evidence that the missing visual depends on an MDX event object rather than PRE2/RIBB geometry. `spawned=0` on an otherwise visible/active PRE2 or RIBB path narrows the failure to emitter timing/allocation rather than attack simulation or snapshot delivery.
+`[ribb-detail] reason=` identifies missing material/layer/texture, zero width/alpha/emission/lifetime, or a fully configured ribbon. When configured, it also records the material layer texture, evaluated texture slot, blend mode, resolved GL texture id/dimensions, and trail length. `[particle-draw]` proves that a spawned ribbon particle survived into the shared draw queue and records its resolved texture, UV cell, alpha, size, blend mode, and six queued vertices.
+
+For melee visuals, follow:
+
+```text
+[server][attack-sequence]
+    -> [renderer][mdx] role=attack
+    -> [renderer][event-gap]
+```
+
+`[event-gap]` is emitted only for event keys inside the active Attack sequence. It names the authored event (for example `SPL...` or `SPN...`) and states that OpenRealm currently has no MDX event-presentation dispatcher for it. This distinguishes a genuinely unsupported event-driven visual from missing projectile/particle data without flooding the log with unrelated model events.

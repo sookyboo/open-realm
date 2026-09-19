@@ -488,6 +488,9 @@ void R_InitParticles(void);
 void R_ShutdownParticles(void);
 void R_DrawParticles(void);
 cparticle_t *R_SpawnParticle(void);
+#ifdef WC3
+void R_DebugTrackAttackFxParticle(cparticle_t *particle, int entity_number);
+#endif
 void R_DrawBillboardSprite(LPCTEXTURE texture, LPCVECTOR3 origin, float size, COLOR32 color);
 
 extern struct render_globals tr;
