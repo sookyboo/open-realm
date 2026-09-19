@@ -66,23 +66,36 @@ static BOOL G_ClientReceivesVertexColor(LPEDICT client_ent, LPCEDICT unit) {
 
 /* Serialize authoritative weather and vertex-colour state so dropped frames converge without widening entityState_t. */
 DWORD G_WriteClientDatagram(LPEDICT ent, LPBYTE data, DWORD size) {
-    DWORD weather_count = 0, tint_count = 0;
+    DWORD weather_count = 0, lightning_count = 0, tint_count = 0;
     DWORD const tint_wire_size = sizeof(USHORT) + sizeof(COLOR32);
+    DWORD const lightning_header_size = sizeof(USHORT);
     BYTE *out = data;
     USHORT wire_count;
-    BOOL emit_tints;
+    BOOL emit_lightning, emit_tints;
+    DWORD now = G_Time();
 
     if (!data || size < sizeof(wire_count)) return 0;
     FOR_LOOP(i, MAX_WEATHER_EFFECTS) if (level.weather_effects[i].inuse) weather_count++;
-    FOR_LOOP(i, globals.num_edicts) if (G_ClientReceivesVertexColor(ent, &g_edicts[i])) tint_count++;
-    emit_tints = sizeof(wire_count) + weather_count * sizeof(wc3WeatherEffect_t) +
-        sizeof(USHORT) + tint_count * tint_wire_size <= size;
-    if (!emit_tints && tint_count) {
-        fprintf(stderr, "G_WriteClientDatagram: tint snapshot needs %u bytes, buffer has %u; omitting tints\n",
-            (unsigned)(sizeof(wire_count) + weather_count * sizeof(wc3WeatherEffect_t) + sizeof(USHORT) +
-            tint_count * tint_wire_size), (unsigned)size);
+    FOR_LOOP(i, MAX_LIGHTNING_EFFECTS) {
+        LPGLIGHTNING effect = level.lightning_effects + i;
+        if (!effect->inuse) continue;
+        if (effect->state.end_time && now >= effect->state.end_time) {
+            G_LightningRemove(effect);
+            continue;
+        }
+        lightning_count++;
     }
-    wire_count = (USHORT)weather_count | (emit_tints ? BZ_GAME_DATAGRAM_ENTITY_TINTS : 0);
+    FOR_LOOP(i, globals.num_edicts) if (G_ClientReceivesVertexColor(ent, &g_edicts[i])) tint_count++;
+
+    emit_lightning = lightning_count && sizeof(wire_count) + weather_count * sizeof(wc3WeatherEffect_t) +
+        lightning_header_size + lightning_count * sizeof(wc3LightningEffect_t) <= size;
+    emit_tints = sizeof(wire_count) + weather_count * sizeof(wc3WeatherEffect_t) +
+        (emit_lightning ? lightning_header_size + lightning_count * sizeof(wc3LightningEffect_t) : 0) +
+        sizeof(USHORT) + tint_count * tint_wire_size <= size;
+
+    wire_count = (USHORT)weather_count |
+        (emit_lightning ? BZ_GAME_DATAGRAM_LIGHTNING : 0) |
+        (emit_tints ? BZ_GAME_DATAGRAM_ENTITY_TINTS : 0);
     memcpy(out, &wire_count, sizeof(wire_count));
     out += sizeof(wire_count);
     FOR_LOOP(i, MAX_WEATHER_EFFECTS) {
@@ -94,6 +107,17 @@ DWORD G_WriteClientDatagram(LPEDICT ent, LPBYTE data, DWORD size) {
         if ((DWORD)(out - data) + sizeof(state) > size) return 0;
         memcpy(out, &state, sizeof(state));
         out += sizeof(state);
+    }
+    if (emit_lightning) {
+        USHORT wire_lightning_count = (USHORT)lightning_count;
+        memcpy(out, &wire_lightning_count, sizeof(wire_lightning_count));
+        out += sizeof(wire_lightning_count);
+        FOR_LOOP(i, MAX_LIGHTNING_EFFECTS) {
+            LPCGLIGHTNING effect = level.lightning_effects + i;
+            if (!effect->inuse) continue;
+            memcpy(out, &effect->state, sizeof(effect->state));
+            out += sizeof(effect->state);
+        }
     }
     if (emit_tints) {
         USHORT wire_tint_count = (USHORT)tint_count;
