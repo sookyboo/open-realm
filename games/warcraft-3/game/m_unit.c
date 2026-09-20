@@ -832,7 +832,7 @@ BOOL unit_issueimmediateorder(LPEDICT self, LPCSTR order) {
     }
     ability_t const *ability = FindAbilityByOrder(order);
     if (ability) {
-        abilityitem_t item = MAKE(abilityitem_t, .ability = ability);
+        abilityitem_t item = MAKE(abilityitem_t, .code = FS_SLKKey(ability->classname), .ability = ability);
         abilityCall_t call = MAKE(abilityCall_t, .item = &item, .order = order);
         return S_AbilityMessage(self, A_ORDER, &call);
     }
@@ -844,6 +844,8 @@ BOOL unit_issueimmediateorder(LPEDICT self, LPCSTR order) {
         return harvest_auto_start_gold(self);
     if (!strcmp(order, "autoharvestlumber"))
         return harvest_auto_start_lumber(self);
+    fprintf(stderr, "WC3: unrecognized immediate order \"%s\" for unit %u (%.4s)\n",
+            order, self->s.number, (LPCSTR)&self->class_id);
     return false;
 }
 

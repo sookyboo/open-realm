@@ -428,6 +428,11 @@ static BOOL human_autocast_acquire(LPEDICT caster, DWORD code, BOOL friendly, BO
         case A_AUTOCAST_ON: return ent && ent->autocast_code == code; \
         case A_AUTOCAST_SET: return true; \
         case A_AUTOCAST_ACQUIRE: return human_autocast_acquire(ent, code, FRIENDLY, WOUNDED); \
+        case A_ORDER: \
+            if (!call || !call->order) return false; \
+            if (!strcmp(call->order, "slowon")) return G_SetUnitAutocast(ent, code, true); \
+            if (!strcmp(call->order, "slowoff")) return G_SetUnitAutocast(ent, code, false); \
+            return false; \
         default: return CAbilitySimpleSpell(ent, msg, call); \
         } \
     }

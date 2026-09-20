@@ -11,6 +11,7 @@ int G_AutocastDebugLevel(void) {
 
 LPCSTR const raven_orders[] = { "ravenform", "unravenform", NULL };
 static LPCSTR const mana_shield_orders[] = { "manashieldon", "manashieldoff", NULL };
+static LPCSTR const slow_orders[] = { "slowon", "slowoff", NULL };
 
 static ability_t abilitylist[] = {
     { STR_CmdStop, CAbilityStop, AB_COMMAND },  // Stop — engine command
@@ -127,7 +128,7 @@ static ability_t abilitylist[] = {
     { "Ainf", CAbilityInnerFire, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Inner Fire */
     { "Adis", CAbilityDispelMagic, AB_SPELL, SPELL_TARGET_POINT },  /* Dispel Magic */
     { "Ahea", CAbilityHeal, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Heal */
-    { "Aslo", CAbilitySlow, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Slow */
+    { "Aslo", CAbilitySlow, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT, slow_orders },  /* Slow */
     { "Aivs", CAbilityInvisibility, AB_SPELL, SPELL_TARGET_UNIT },  /* Invisibility */
     { "Aply", CAbilityPolymorph, AB_SPELL, SPELL_TARGET_UNIT },  /* Polymorph */
     { "ACpy", CAbilityPolymorph, AB_SPELL, SPELL_TARGET_UNIT },  /* Polymorph (creep) */

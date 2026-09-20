@@ -8,6 +8,7 @@ void reset_entities(void);
 void setup_test_world(void);
 slkTestData_t *parse_slk_string(const char *slk_text);
 void free_slk_rows(slkTestData_t *rows);
+BOOL unit_issueimmediateorder(LPEDICT, LPCSTR);
 
 /* An object-data Heal alias must retain its authored amount and cost under autocast. */
 TEST(wc3_ability_dispatch, autocast_keeps_authored_alias) {
@@ -91,6 +92,25 @@ TEST(wc3_ability_dispatch, autocast_boolean_messages_switch_and_remove) {
     T_ASSERT(!(caster->aiflags & AI_AUTOCAST_ACTIVE));
     T_ASSERT(!(caster->aiflags & AI_AUTOCAST_REPAIR));
     T_EQ(caster->autocast_code, 0);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_ability_dispatch, slowon_and_slowoff_orders_control_autocast) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X2\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
+        "C;Y2;X1;K\"Aslo\"\nC;Y2;X2;K\"Aslo\"\nE\n";
+    UnitAbilities_t list = { .abilList = "" };
+    slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+    reset_entities(); setup_test_world();
+    LPEDICT caster = alloc_test_unit(MAKEFOURCC('h','s','o','r'), 0, 0);
+    caster->data.UnitAbilities = &list;
+    T_ASSERT(G_ActorAddSkill(caster, FS_SLKKey("Aslo")));
+    T_ASSERT(!G_UnitAutocastIsOn(caster, FS_SLKKey("Aslo")));
+    T_ASSERT(unit_issueimmediateorder(caster, "slowon"));
+    T_ASSERT(G_UnitAutocastIsOn(caster, FS_SLKKey("Aslo")));
+    T_ASSERT(unit_issueimmediateorder(caster, "slowoff"));
+    T_ASSERT(!G_UnitAutocastIsOn(caster, FS_SLKKey("Aslo")));
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
