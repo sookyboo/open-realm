@@ -75,6 +75,13 @@ This lets a worker with an attack prefer a valid Auto Repair target over an enem
 
 The current implementation only integrates this with ordinary idle/default stand. Hold Position, Attack-Move, Patrol, Follow, and other behaviors need explicit resume/movement semantics before they should call generic autocast.
 
+Human Slow is the authored `ATTACKINGALLY` exception. Its acquisition only considers
+an enemy whose active Attack behavior targets the caster or one of the caster's allies,
+then runs the ordinary Slow target validator and cast path. A nearby enemy that is not
+currently attacking an ally is not a Slow autocast target. This matches Warsmash's
+`humanUnitActives.json` contract and prevents cinematic wizards from repeatedly
+starting unsupported Slow casts.
+
 ## Auto Repair target policy
 
 Repair implements Warsmash's `NEARESTVALID` policy for units:

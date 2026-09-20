@@ -420,6 +420,25 @@ static BOOL human_autocast_acquire(LPEDICT caster, DWORD code, BOOL friendly, BO
     return best && S_CastUnitTargetSpell(caster, code, best);
 }
 
+/* Warsmash's Aslo data uses ATTACKINGALLY: Slow only acquires an enemy that is
+ * currently attacking one of the caster's allies, not the nearest enemy. */
+static BOOL slow_autocast_acquire(LPEDICT caster, DWORD code) {
+    LPEDICT best = NULL;
+    FLOAT range = S_SpellRange(code, S_SpellLevel(caster, code));
+    FLOAT best_distance = FLT_MAX;
+    if (range <= 0.0f) range = HUMAN_AUTOCAST_RADIUS;
+    FILTER_EDICTS(target, target != caster && S_SpellIsAliveTarget(target) &&
+                  S_SpellIsEnemy(caster, target) && target->currentmove &&
+                  target->currentmove->proc == CAbilityAttack && target->combatentity &&
+                  S_SpellIsFriend(caster, target->combatentity)) {
+        FLOAT distance = Vector2_distance(&target->s.origin2, &caster->s.origin2);
+        if (distance <= range && distance < best_distance && S_SpellAllowsTarget(code, caster, target)) {
+            best = target; best_distance = distance;
+        }
+    }
+    return best && S_CastUnitTargetSpell(caster, code, best);
+}
+
 /* The message selects the union member: boolean toggles must never be decoded as target pointers. */
 #define BZ_HUMAN_AUTOCAST_SPELL(NAME, VALIDATE, EXECUTE, FRIENDLY, WOUNDED) \
     BZ_ABILITY_PROC(C##NAME) { \
@@ -524,7 +543,7 @@ BZ_ABILITY_PROC(CAbilitySlow) {
     case A_EXECUTE: human_status_execute(ent, target, call ? call->item : NULL); return true;
     case A_AUTOCAST_ON: return ent && ent->autocast_code == code;
     case A_AUTOCAST_SET: return true;
-    case A_AUTOCAST_ACQUIRE: return human_autocast_acquire(ent, code, false, false);
+    case A_AUTOCAST_ACQUIRE: return slow_autocast_acquire(ent, code);
     case A_ORDER:
         if (!call || !call->order) return false;
         if (!strcmp(call->order, "slowon")) return G_SetUnitAutocast(ent, code, true);

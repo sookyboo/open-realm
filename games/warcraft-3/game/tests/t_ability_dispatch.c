@@ -114,6 +114,41 @@ TEST(wc3_ability_dispatch, slowon_and_slowoff_orders_control_autocast) {
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+TEST(wc3_ability_dispatch, slow_autocast_only_targets_enemy_attacking_an_ally) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X8\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\n"
+        "C;Y1;X4;K\"Cost1\"\nC;Y1;X5;K\"Rng1\"\nC;Y1;X6;K\"Dur1\"\n"
+        "C;Y1;X7;K\"BuffID1\"\nC;Y1;X8;K\"DataA1\"\n"
+        "C;Y2;X1;K\"Aslo\"\nC;Y2;X2;K\"Aslo\"\nC;Y2;X3;K\"air,ground,enemy\"\n"
+        "C;Y2;X4;K\"0\"\nC;Y2;X5;K\"600\"\nC;Y2;X6;K\"5\"\n"
+        "C;Y2;X7;K\"Bslo\"\nC;Y2;X8;K\"0.25\"\nE\n";
+    UnitAbilities_t list = { .abilList = "" };
+    slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+    reset_entities(); setup_test_world();
+    ((LPMAPINFO)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((LPMAPINFO)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    LPEDICT caster = alloc_test_unit(MAKEFOURCC('h','s','o','r'), 0, 0);
+    LPEDICT ally = alloc_test_unit(MAKEFOURCC('h','p','r','i'), 50, 0);
+    LPEDICT enemy = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 100, 0);
+    caster->data.UnitAbilities = &list; caster->s.player = ally->s.player = 0; enemy->s.player = 1;
+    caster->mana.value = caster->mana.max_value = 200;
+    caster->svflags |= SVF_MONSTER; ally->svflags |= SVF_MONSTER; enemy->svflags |= SVF_MONSTER;
+    enemy->attack1.type = ATK_NORMAL; enemy->attack1.targetsAllowed = WC3_TARGET_FLAG_GROUND;
+    ally->targtype = TARG_GROUND; enemy->targtype = TARG_GROUND;
+    T_ASSERT(G_ActorAddSkill(caster, FS_SLKKey("Aslo")));
+    T_ASSERT(G_SetUnitAutocast(caster, FS_SLKKey("Aslo"), true));
+    T_ASSERT(!G_TryUnitAutocast(caster));
+    order_attack(enemy, ally);
+    T_ASSERT(enemy->currentmove && enemy->currentmove->proc == CAbilityAttack);
+    T_ASSERT(S_SpellIsEnemy(caster, enemy));
+    T_ASSERT(S_SpellIsFriend(caster, enemy->combatentity));
+    T_ASSERT(S_SpellAllowsTarget(FS_SLKKey("Aslo"), caster, enemy));
+    T_ASSERT(G_TryUnitAutocast(caster));
+    T_ASSERT(G_UnitStatusLevel(enemy, FS_SLKKey("Bslo")) != 0);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_ability_dispatch, human_autocast_on_and_off_orders_control_autocast) {
     const char slk[] =
         "ID;PWXL;N;EBB;Y3;X2\n"
