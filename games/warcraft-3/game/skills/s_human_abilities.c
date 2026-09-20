@@ -428,11 +428,6 @@ static BOOL human_autocast_acquire(LPEDICT caster, DWORD code, BOOL friendly, BO
         case A_AUTOCAST_ON: return ent && ent->autocast_code == code; \
         case A_AUTOCAST_SET: return true; \
         case A_AUTOCAST_ACQUIRE: return human_autocast_acquire(ent, code, FRIENDLY, WOUNDED); \
-        case A_ORDER: \
-            if (!call || !call->order) return false; \
-            if (!strcmp(call->order, "slowon")) return G_SetUnitAutocast(ent, code, true); \
-            if (!strcmp(call->order, "slowoff")) return G_SetUnitAutocast(ent, code, false); \
-            return false; \
         default: return CAbilitySimpleSpell(ent, msg, call); \
         } \
     }
@@ -509,7 +504,24 @@ BZ_SIMPLE_SPELL_PROC(AbilityDispelMagic) {
 /* Name=Heal; Ubertip="Heals a target friendly non-mechanical wounded unit for <Ahea,DataA1> hit points." */
 BZ_HUMAN_AUTOCAST_SPELL(AbilityHeal, heal_validate(ent, target, call ? call->item : NULL), heal_execute, true, true)
 /* Name=Slow; Untip="Right-click to activate auto-casting." */
-BZ_HUMAN_AUTOCAST_SPELL(AbilitySlow, slow_validate(ent, target, call ? call->item : NULL), human_status_execute, false, false)
+BZ_ABILITY_PROC(CAbilitySlow) {
+    spellTarget_t target = (msg == A_VALIDATE || msg == A_EXECUTE) && call && call->target ?
+        *call->target : MAKE(spellTarget_t, .type = SPELL_TARGET_NONE);
+    DWORD code = call && call->item ? call->item->code : 0;
+    switch (msg) {
+    case A_VALIDATE: return slow_validate(ent, target, call ? call->item : NULL);
+    case A_EXECUTE: human_status_execute(ent, target, call ? call->item : NULL); return true;
+    case A_AUTOCAST_ON: return ent && ent->autocast_code == code;
+    case A_AUTOCAST_SET: return true;
+    case A_AUTOCAST_ACQUIRE: return human_autocast_acquire(ent, code, false, false);
+    case A_ORDER:
+        if (!call || !call->order) return false;
+        if (!strcmp(call->order, "slowon")) return G_SetUnitAutocast(ent, code, true);
+        if (!strcmp(call->order, "slowoff")) return G_SetUnitAutocast(ent, code, false);
+        return false;
+    default: return CAbilitySimpleSpell(ent, msg, call);
+    }
+}
 /* Name=Invisibility; Ubertip="Makes a unit invisible. If the unit attacks, uses an ability or casts a spell, it will become visible." */
 BZ_VALIDATED_SPELL_PROC(AbilityInvisibility, invisibility_validate, invisibility_execute)
 /* Name=Polymorph; Ubertip="Turns a target enemy unit into a sheep. Cannot be cast on Heroes. Lasts <Aply,Dur1> seconds." */

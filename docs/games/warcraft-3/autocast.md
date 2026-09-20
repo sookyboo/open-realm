@@ -46,6 +46,13 @@ The server toggles all controllable selected units that carry the requested auth
 
 JASS/string immediate orders `repairon` and `repairoff` use the same toggle path. The canonical order table also exposes `repair=852024`, `repairon=852025`, and `repairoff=852026`, so numeric `IssueTargetOrderById` / `IssueImmediateOrderById` resolve through the same ordinary order paths.
 
+Human Slow has the same explicit JASS toggle contract through `slowon` and
+`slowoff`. The Human02 interlude uses `slowoff` when it creates both wizard
+units before its scripted one-shot `slow` → `polymorph` exchange. These orders
+must dispatch through the `Aslo` ability with its authored rawcode; otherwise
+the campaign falls through to the normal autocast/AI path and the duel can
+repeat magic casts instead of matching retail.
+
 ## Acquisition ordering
 
 `ai_stand()` retains the existing staggered acquisition cadence. At an acquisition slot it now performs:
@@ -126,3 +133,7 @@ Focused coverage lives primarily in `games/warcraft-3/game/tests/t_building.c` a
 - Shift-queued Repair;
 - moving away while repairing without losing the replacement goal;
 - normal Repair cleanup still clearing a Repair-owned goal.
+
+`games/warcraft-3/game/tests/t_ability_dispatch.c` also verifies that the real
+immediate-order dispatcher accepts `slowon` and `slowoff` and changes the
+`Aslo` autocast state in both directions.
