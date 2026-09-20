@@ -123,7 +123,7 @@ TEST(wc3_ability_dispatch, human_autocast_on_and_off_orders_control_autocast) {
     UnitAbilities_t list = { .abilList = "" };
     slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
     reset_entities(); setup_test_world();
-    LPEDICT caster = alloc_test_unit(MAKEFOURCC('h', 'p', 'r', 'i'), 0, 0);
+    LPEDICT caster = alloc_test_unit(MAKEFOURCC('h', 'm', 'p', 'r'), 0, 0);
     caster->data.UnitAbilities = &list;
     T_ASSERT(G_ActorAddSkill(caster, FS_SLKKey("Ainf")));
     T_ASSERT(G_ActorAddSkill(caster, FS_SLKKey("Ahea")));
