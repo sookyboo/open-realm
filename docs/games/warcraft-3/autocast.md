@@ -53,6 +53,13 @@ must dispatch through the `Aslo` ability with its authored rawcode; otherwise
 the campaign falls through to the normal autocast/AI path and the duel can
 repeat magic casts instead of matching retail.
 
+Human Priest support spells use the same ability-owned immediate-order path:
+`innerfireon` / `innerfireoff` dispatch through `Ainf`, and `healon` /
+`healoff` dispatch through `Ahea`. Their order tables are part of the ability
+registry, so `FindAbilityByOrder()` resolves the JASS orders before the generic
+unknown-order diagnostic. The `A_ORDER` handler then changes the shared
+autocast selection without casting a target spell.
+
 ## Acquisition ordering
 
 `ai_stand()` retains the existing staggered acquisition cadence. At an acquisition slot it now performs:
@@ -136,4 +143,5 @@ Focused coverage lives primarily in `games/warcraft-3/game/tests/t_building.c` a
 
 `games/warcraft-3/game/tests/t_ability_dispatch.c` also verifies that the real
 immediate-order dispatcher accepts `slowon` and `slowoff` and changes the
-`Aslo` autocast state in both directions.
+`Aslo` autocast state in both directions, as well as the equivalent
+`innerfireon`/`innerfireoff` and `healon`/`healoff` Priest orders.

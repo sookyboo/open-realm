@@ -114,6 +114,30 @@ TEST(wc3_ability_dispatch, slowon_and_slowoff_orders_control_autocast) {
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+TEST(wc3_ability_dispatch, human_autocast_on_and_off_orders_control_autocast) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y3;X2\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
+        "C;Y2;X1;K\"Ainf\"\nC;Y2;X2;K\"Ainf\"\n"
+        "C;Y3;X1;K\"Ahea\"\nC;Y3;X2;K\"Ahea\"\nE\n";
+    UnitAbilities_t list = { .abilList = "" };
+    slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+    reset_entities(); setup_test_world();
+    LPEDICT caster = alloc_test_unit(MAKEFOURCC('h', 'p', 'r', 'i'), 0, 0);
+    caster->data.UnitAbilities = &list;
+    T_ASSERT(G_ActorAddSkill(caster, FS_SLKKey("Ainf")));
+    T_ASSERT(G_ActorAddSkill(caster, FS_SLKKey("Ahea")));
+    T_ASSERT(unit_issueimmediateorder(caster, "innerfireon"));
+    T_ASSERT(G_UnitAutocastIsOn(caster, FS_SLKKey("Ainf")));
+    T_ASSERT(unit_issueimmediateorder(caster, "innerfireoff"));
+    T_ASSERT(!G_UnitAutocastIsOn(caster, FS_SLKKey("Ainf")));
+    T_ASSERT(unit_issueimmediateorder(caster, "healon"));
+    T_ASSERT(G_UnitAutocastIsOn(caster, FS_SLKKey("Ahea")));
+    T_ASSERT(unit_issueimmediateorder(caster, "healoff"));
+    T_ASSERT(!G_UnitAutocastIsOn(caster, FS_SLKKey("Ahea")));
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 /* Stock Shackles supplies separate caster/target buffs; cancellation must release only this cast's target. */
 TEST(wc3_ability_dispatch, shackles_locks_target_until_its_channel_ends) {
     const char slk[] =

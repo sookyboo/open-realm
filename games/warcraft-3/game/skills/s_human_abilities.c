@@ -428,6 +428,13 @@ static BOOL human_autocast_acquire(LPEDICT caster, DWORD code, BOOL friendly, BO
         case A_AUTOCAST_ON: return ent && ent->autocast_code == code; \
         case A_AUTOCAST_SET: return true; \
         case A_AUTOCAST_ACQUIRE: return human_autocast_acquire(ent, code, FRIENDLY, WOUNDED); \
+        /* JASS autocast toggles arrive as ability orders, not target spells. */ \
+        case A_ORDER: \
+            if (!call || !call->order || !call->item || !call->item->ability || \
+                !call->item->ability->orders) return false; \
+            if (!strcmp(call->order, call->item->ability->orders[0])) return G_SetUnitAutocast(ent, code, true); \
+            if (!strcmp(call->order, call->item->ability->orders[1])) return G_SetUnitAutocast(ent, code, false); \
+            return false; \
         default: return CAbilitySimpleSpell(ent, msg, call); \
         } \
     }
