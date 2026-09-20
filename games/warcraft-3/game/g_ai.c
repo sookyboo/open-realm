@@ -187,6 +187,8 @@ void ai_stand(LPEDICT self) {
      * abilities/orders are construction-disabled in Warcraft/Warsmash. */
     if (G_BuildingUpgradeActive(self))
         return;
+    if (S_UnitPolymorphed(self))
+        return;
     if (S_UnitAbilityEvent(self, A_IDLE))
         return;
     /* Neutral creeps sleep until an enemy enters acquisition range, then wake

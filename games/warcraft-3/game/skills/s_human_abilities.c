@@ -190,6 +190,12 @@ BOOL S_UnitPolymorphed(LPCEDICT unit) {
     return unit && unit->polymorph.active;
 }
 
+static void polymorph_stand(LPEDICT unit) {
+    unit->animation = NULL;
+    unit_stand(unit);
+    if (unit->animation) unit->s.frame = unit->animation->interval[0];
+}
+
 /* Select the authored Ply2-Ply5 form from the target's movement class. */
 static DWORD polymorph_form_type(LPCEDICT target, DWORD level, DWORD code) {
     LPCSTR movetp;
@@ -244,13 +250,12 @@ void S_PolymorphRemove(LPEDICT unit) {
     unit->s.scale = unit->polymorph.original_scale;
     unit->unitinfo.MoveSpeed = unit->polymorph.original_move_speed;
     memset(&unit->polymorph, 0, sizeof(unit->polymorph));
-    unit->animation = NULL;
     if (!M_IsDead(unit)) {
         G_ClearUnitOrderQueue(unit);
         unit_leavecombat(unit);
         unit->goalentity = NULL;
         unit->secondarygoal = NULL;
-        unit_stand(unit);
+        polymorph_stand(unit);
     }
     client = G_GetPlayerClientByNumber(unit->s.player);
     if (client) G_InvalidateCommands(client);
@@ -324,8 +329,7 @@ static void polymorph_execute(LPEDICT caster, spellTarget_t st, abilityitem_t co
     unit_leavecombat(st.entity);
     st.entity->goalentity = NULL;
     st.entity->secondarygoal = NULL;
-    st.entity->animation = NULL;
-    unit_stand(st.entity);
+    polymorph_stand(st.entity);
     {
         LPGAMECLIENT client = G_GetPlayerClientByNumber(st.entity->s.player);
         if (client) G_InvalidateCommands(client);

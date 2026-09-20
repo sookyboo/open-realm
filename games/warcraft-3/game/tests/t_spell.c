@@ -1750,6 +1750,13 @@ TEST(wc3_spell, polymorph_validates_creep_limit_summons_and_restores_runtime_sta
         .original_scale = 1.25f, .original_move_speed = 234.0f, .active = true);
     target->s.model = 99; target->s.scale = 0.75f; target->unitinfo.MoveSpeed = 120.0f;
     T_ASSERT(S_UnitPolymorphed(target));
+    target->svflags |= SVF_MONSTER;
+    target->s.player = 1; caster->s.player = 0;
+    target->attack1.type = ATK_NORMAL; target->attack1.damageBase = 10;
+    unit_stand(target);
+    ai_stand(target);
+    T_NULL(target->combatentity); /* Polymorph does not let idle AI acquire or replace the action. */
+    T_STREQ(target->currentmove->animation, "stand");
     S_PolymorphRemove(target);
     T_ASSERT(!S_UnitPolymorphed(target));
     T_EQ(target->s.model, 17); T_FEQ(target->s.scale, 1.25f, 0.001f);
