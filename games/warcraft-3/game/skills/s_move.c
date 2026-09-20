@@ -275,6 +275,8 @@ BOOL M_MoveIsValid(LPEDICT self, LPCVECTOR2 pos) {
 static void unit_commit_step(LPEDICT self, LPCVECTOR2 cand) {
     if (self->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
     self->s.origin2 = *cand;
+    self->s.origin.x = cand->x;
+    self->s.origin.y = cand->y;
     gi.LinkEntity(self);
 }
 
@@ -306,9 +308,20 @@ static void unit_moveindirection_policy(LPEDICT self,
         return;
 
     FLOAT const dist = unit_movedistance(self);
+    VECTOR2 const facing_dir = MAKE(VECTOR2, cosf(self->s.angle), sinf(self->s.angle));
+    VECTOR2 const heading_dir = MAKE(VECTOR2, cosf(self->movement.heading), sinf(self->movement.heading));
+    VECTOR2 const origin = self->s.origin2;
+    VECTOR2 const progress_goal = self->movement.displacement_active ?
+        self->movement.displacement_target : self->goalentity->s.origin2;
     VECTOR2 const by_facing = Vector2_mad(&self->s.origin2, dist,
-                                          &MAKE(VECTOR2, cosf(self->s.angle), sinf(self->s.angle)));
-    if (move_is_valid_policy(self, &by_facing, collision_policy)) {
+                                          &facing_dir);
+    BOOL const facing_progress = !self->goalentity ||
+        Vector2_distance(&by_facing, &progress_goal) <=
+        Vector2_distance(&origin, &progress_goal) + 0.001f;
+    /* A lagging facing is useful while turning around an obstacle, but it must
+     * not carry a unit away from the heading selected by the route solver. */
+    if (Vector2_dot(&facing_dir, &heading_dir) >= 0.0f && facing_progress &&
+        move_is_valid_policy(self, &by_facing, collision_policy)) {
         unit_commit_step(self, &by_facing);
         return;
     }
@@ -1394,6 +1407,8 @@ static void ai_move_walk(LPEDICT ent) {
          * stop where we are rather than overlapping it. */
         if (M_MoveIsValid(ent, &ent->goalentity->s.origin2)) {
             ent->s.origin2 = ent->goalentity->s.origin2;
+            ent->s.origin.x = ent->s.origin2.x;
+            ent->s.origin.y = ent->s.origin2.y;
             gi.LinkEntity(ent);
         }
         ent->stand(ent);
