@@ -9,6 +9,7 @@ void setup_test_world(void);
 slkTestData_t *parse_slk_string(const char *slk_text);
 void free_slk_rows(slkTestData_t *rows);
 void SV_Physics_Toss(LPEDICT ent);
+BOOL unit_issuetargetorder(LPEDICT self, LPCSTR order, LPEDICT target);
 
 static intptr_t test_ability_message(LPEDICT ent, abilityMsg_t msg, abilityitem_t const *item, spellTarget_t const *target) {
     abilityCall_t call = MAKE(abilityCall_t, .item = item, .target = target);
@@ -1082,17 +1083,21 @@ TEST(wc3_spell, human_support_spells_use_authored_status_and_heal_values) {
 		"C;Y3;X1;K\"Ainf\"\nC;Y3;X2;K\"Ainf\"\nC;Y3;X3;K\"ground,friend\"\nC;Y3;X4;K\"500\"\nC;Y3;X5;K\"60\"\nC;Y3;X6;K\"60\"\nC;Y3;X7;K\"0.1\"\nC;Y3;X8;K\"5\"\nC;Y3;X9;K\"Binf\"\n"
 		"C;Y4;X1;K\"Aslo\"\nC;Y4;X2;K\"Aslo\"\nC;Y4;X3;K\"ground,enemy\"\nC;Y4;X4;K\"700\"\nC;Y4;X5;K\"60\"\nC;Y4;X6;K\"10\"\nC;Y4;X7;K\"0.6\"\nC;Y4;X8;K\"0.25\"\nC;Y4;X9;K\"Bslo\"\nE\n";
 	slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
-	LPEDICT caster = make_hero(MAKEFOURCC('h','p','r','i'), 300, 300, 0, 0);
-	LPEDICT ally = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 50, 0);
-	LPEDICT enemy = alloc_test_unit(MAKEFOURCC('o','g','r','u'), 100, 0);
-	caster->s.player = ally->s.player = 0; enemy->s.player = 1;
-	ally->health.value = 60; ally->health.max_value = 100; ally->armor_value = 2;
-	ally->svflags |= SVF_MONSTER; enemy->svflags |= SVF_MONSTER;
+    LPEDICT caster = make_hero(MAKEFOURCC('h','p','r','i'), 300, 300, 0, 0);
+    LPEDICT ally = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 50, 0);
+    LPEDICT enemy = alloc_test_unit(MAKEFOURCC('o','g','r','u'), 100, 0);
+    caster->s.player = ally->s.player = 0; enemy->s.player = 1;
+    ((LPMAPINFO)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((LPMAPINFO)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    ally->health.value = 60; ally->health.max_value = 100; ally->armor_value = 2;
+    ally->svflags |= SVF_MONSTER; enemy->svflags |= SVF_MONSTER;
+    enemy->targtype = TARG_GROUND;
+    T_ASSERT(G_ActorAddSkill(caster, FS_SLKKey("Aslo")));
 	test_execute_code(caster, "Ahea", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = ally));
 	T_FEQ(ally->health.value, 85.0f, 0.001f);
 	test_execute_code(caster, "Ainf", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = ally));
 	T_ASSERT(S_UnitHasStatus(ally, MAKEFOURCC('B','i','n','f'))); T_FEQ(G_UnitArmorValue(ally), 7.0f, 0.001f);
-	test_execute_code(caster, "Aslo", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = enemy));
+    T_ASSERT(unit_issuetargetorder(caster, "slow", enemy));
 	T_ASSERT(S_UnitHasStatus(enemy, MAKEFOURCC('B','s','l','o'))); T_FEQ(S_HumanMoveFactor(enemy), 0.4f, 0.001f);
 
 	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);

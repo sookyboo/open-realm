@@ -334,6 +334,7 @@ static unitOrderDef_t const unit_order_defs[] = {
     { "frostarmor", 852225, MAKEFOURCC('A','U','f','u') },
     { "frostnova", 852226, MAKEFOURCC('A','U','f','n') },
     { "sleep", 852227, MAKEFOURCC('A','U','s','l') },
+    { "slow", 852075, MAKEFOURCC('A','s','l','o') },
     { "polymorph", WC3_ORDER_ID_POLYMORPH, MAKEFOURCC('A','p','l','y') },
     { "firebolt", 852231, MAKEFOURCC('A','N','f','b') },
     { "inferno", 852232, MAKEFOURCC('A','U','i','n') },
