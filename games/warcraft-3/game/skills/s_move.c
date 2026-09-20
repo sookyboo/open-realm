@@ -311,8 +311,8 @@ static void unit_moveindirection_policy(LPEDICT self,
     VECTOR2 const facing_dir = MAKE(VECTOR2, cosf(self->s.angle), sinf(self->s.angle));
     VECTOR2 const heading_dir = MAKE(VECTOR2, cosf(self->movement.heading), sinf(self->movement.heading));
     VECTOR2 const origin = self->s.origin2;
-    VECTOR2 const progress_goal = self->movement.displacement_active ?
-        self->movement.displacement_target : self->goalentity->s.origin2;
+    VECTOR2 const progress_goal = self->movement.displacement_active ? self->movement.displacement_target :
+        self->goalentity ? self->goalentity->s.origin2 : self->s.origin2;
     VECTOR2 const by_facing = Vector2_mad(&self->s.origin2, dist,
                                           &facing_dir);
     BOOL const facing_progress = !self->goalentity ||

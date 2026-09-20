@@ -1239,9 +1239,7 @@ TEST(wc3_movement, turn_lag_does_not_step_away_from_route_heading) {
     FLOAT before, after;
 
     CM_SetupTestPathmap(CELLS, CELLS, pathmap);
-    CM_SetupTestWorldBounds(&MAKE(BOX2,
-        .min = {-1024.0f, -1024.0f},
-        .max = { 1024.0f,  1024.0f}));
+    CM_SetupTestWorldBounds(&MAKE(BOX2, .min = {-1024.0f, -1024.0f}, .max = {1024.0f, 1024.0f}));
     unit->unitinfo.MoveSpeed = 190.0f;
     unit->s.angle = 0.0f;
     order_move(unit, Waypoint_add(&dest));
