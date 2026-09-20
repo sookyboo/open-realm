@@ -10,7 +10,6 @@ static umove_t wc3_effect_temp_birth;
 static umove_t wc3_effect_temp_stand;
 static umove_t wc3_effect_birth;
 static umove_t wc3_effect_stand;
-static umove_t wc3_effect_death;
 
 static void G_EffectEnterStand(LPEDICT effect);
 static void G_EffectLoopStand(LPEDICT effect);
@@ -19,7 +18,6 @@ static umove_t wc3_effect_temp_birth = { "birth", NULL, G_FreeEdict };
 static umove_t wc3_effect_temp_stand = { "stand", NULL, G_FreeEdict };
 static umove_t wc3_effect_birth = { "birth", NULL, G_EffectEnterStand };
 static umove_t wc3_effect_stand = { "stand", NULL, G_EffectLoopStand };
-static umove_t wc3_effect_death = { "death", NULL, G_FreeEdict };
 
 static LPCSTR G_EffectFieldName(wc3EffectType_t type, BOOL alternate) {
     switch (type) {
@@ -410,12 +408,8 @@ void G_DestroyOwnedEffects(LPEDICT owner) {
 
 void G_DestroyEffect(LPEDICT effect) {
     if (!effect || !effect->inuse) return;
-    effect->prethink = NULL;
-    effect->s.sound = 0;
-    effect->goalentity = NULL;
-    effect->movetype = MOVETYPE_NONE;
-    effect->wait = 0.0f;
-    effect->think = G_EffectThink;
-    unit_setmove(effect, &wc3_effect_death);
-    if (!effect->animation) G_FreeEdict(effect);
+    /* JASS DestroyEffect removes the presentation immediately. Playing the
+     * model's Death sequence here can leave one-shot effect art visible for
+     * many seconds after the handle has been destroyed. */
+    G_FreeEdict(effect);
 }
