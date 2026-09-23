@@ -88,6 +88,12 @@ measure the post-fix cycle share.
 
 Profile-driven optimizations across the renderer, client, and server. The five sampled hot spots and the fixes applied to each are listed below so a future reader understands *why* each path is shaped the way it is.
 
+## Undead05/06 path-job profiles and neighbor-check reuse
+
+`build/perf-full-Undead05.txt` and `build/perf-full-Undead06.txt` show `CM_ProcessPathJobs` at 16.10% and 11.69% inclusive sampled cost; `step_heatmap_build` accounts for 14.94% and 10.56%. The Undead05 tree attributes substantial work to radius-aware pathability checks during neighbor expansion. These reports contain 5K and 3K samples respectively with no lost samples, but lack capture/build metadata; treat the shares as inclusive profile evidence, not wall-time or a controlled A/B.
+
+The expansion checked each of eight neighbor cells, then repeated up to two cardinal pathability checks for each legal diagonal to enforce the no-corner-cut rule. `step_heatmap_build` now caches the four cardinal checks for the current queue cell and reuses them for those diagonal side tests. Diagonal candidates keep their own check, and queue insertion order and path costs are unchanged. The focused `wc3_pathfinding.heatmap_reuses_cardinal_pathability_for_diagonals` regression failed before the change and now enforces eight pathability checks per popped cell on an open map. This bounds the redundant work in the fixture; take a new matched weighted profile to measure total job-time impact. Full-map heatmap initialization and cache publication remain separate possible costs and should only be changed if the new profile shows they matter.
+
 ## Client frame-rate limiter
 
 OpenWarcraft3 registers the archived `com_maxfps` cvar with a default of `64`, matching the intended classic-Warcraft presentation target. `0` disables the limiter. The same engine main loop is shared with the other game binaries, but their built-in default remains `0` unless their own configuration overrides it.

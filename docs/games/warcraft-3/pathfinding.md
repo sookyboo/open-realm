@@ -78,6 +78,8 @@ Return Resources uses a stronger endpoint contract. `CM_FindInnerApproachPointTo
 
 The approach mask stores a small footprint-proximity rank so the inner ring can be selected without rescanning every authored footprint pixel for every candidate. Do not replace it with a simple footprint bounding box: sparse and irregular pathing textures require distance to the actual blocked pixels.
 
+During each heatmap queue pop, the four cardinal pathability results are computed once and reused for diagonal corner checks. Diagonal destination cells still receive their own radius/flags-aware test, and the direction/enqueue order is unchanged. This removes duplicate summed-area-table footprint queries without changing the corner rule or shortest-path prices. `wc3_pathfinding.heatmap_reuses_cardinal_pathability_for_diagonals` keeps the open-field work to eight pathability checks per popped cell.
+
 ## Retail Move Destination Behavior
 
 Two defects explained the Human01 fence report and units getting stuck behind trees or towers:

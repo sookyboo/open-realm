@@ -324,6 +324,19 @@ TEST(wc3_pathfinding, heatmap_cache_perf_same_target_builds_once) {
     T_ASSERT(stats.flow_cells_computed <= 4);
 }
 
+TEST(wc3_pathfinding, heatmap_reuses_cardinal_pathability_for_diagonals) {
+    build_open_map();
+    setup_test_pathmap(MAP_W, MAP_H, open_map);
+    reset_entities();
+    CM_ResetTestPathPerfStats();
+
+    T_ASSERT(CM_BuildHeatmap(make_waypoint(5.0f, 5.0f)) != 0);
+
+    struct routePerfStats_s stats = CM_GetTestPathPerfStats();
+    T_EQ(stats.heatmap_iterations, MAP_W * MAP_H);
+    T_EQ(stats.heatmap_pathability_checks, stats.heatmap_iterations * 8);
+}
+
 TEST(wc3_pathfinding, heatmap_cache_miss_different_goal) {
     build_open_map();
     setup_test_pathmap(MAP_W, MAP_H, open_map);

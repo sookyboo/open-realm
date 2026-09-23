@@ -113,19 +113,22 @@ static void heatmap_job_cancel(void) {
 #if defined(TOOL_COMMON_NO_MPQ) || defined(BZ_TESTS)
 /* Per-call perf counters; only tracked in test builds to avoid overhead. */
 static struct {
-    DWORD cache_hits, cache_misses, heatmap_iterations, flow_cells_computed, closest_reachable_calls;
+    DWORD cache_hits, cache_misses, heatmap_iterations, heatmap_pathability_checks;
+    DWORD flow_cells_computed, closest_reachable_calls;
 } g_perf;
 
 void CM_ResetTestPathPerfStats(void) { memset(&g_perf, 0, sizeof(g_perf)); }
 
 typedef struct routePerfStats_s {
-    DWORD cache_hits, cache_misses, heatmap_iterations, flow_cells_computed, closest_reachable_calls;
+    DWORD cache_hits, cache_misses, heatmap_iterations, heatmap_pathability_checks;
+    DWORD flow_cells_computed, closest_reachable_calls;
 } routePerfStats_t;
 
 routePerfStats_t CM_GetTestPathPerfStats(void) {
     return (routePerfStats_t){
         g_perf.cache_hits, g_perf.cache_misses,
-        g_perf.heatmap_iterations, g_perf.flow_cells_computed, g_perf.closest_reachable_calls,
+        g_perf.heatmap_iterations, g_perf.heatmap_pathability_checks,
+        g_perf.flow_cells_computed, g_perf.closest_reachable_calls,
     };
 }
 #define PERF_INC(field) g_perf.field++
@@ -389,14 +392,28 @@ static BOOL step_heatmap_build(heatmapJob_t *job, DWORD work_budget) {
         int const up = un->price;
         int const ux = (int)(u % width);
         int const uy = (int)(u / width);
+        BOOL cardinal_pathable[4];
+        FOR_LOOP(i, 4) {
+            PERF_INC(heatmap_pathability_checks);
+            cardinal_pathable[i] = is_pathable_node_original_for_radius_cells_flags(
+                ux + dx[i], uy + dy[i], job->radius_cells, job->blocked_flags);
+        }
         FOR_LOOP(i, 8) {
             int const nx = ux + dx[i];
             int const ny = uy + dy[i];
-            if (!is_pathable_node_original_for_radius_cells_flags(nx, ny, job->radius_cells, job->blocked_flags))
-                continue;
+            BOOL neighbor_pathable;
             if (i >= 4) {
-                BOOL const side_x = path_ok(nx, uy, job->radius_cells, job->blocked_flags);
-                BOOL const side_y = path_ok(ux, ny, job->radius_cells, job->blocked_flags);
+                PERF_INC(heatmap_pathability_checks);
+                neighbor_pathable = is_pathable_node_original_for_radius_cells_flags(
+                    nx, ny, job->radius_cells, job->blocked_flags);
+            } else
+                neighbor_pathable = cardinal_pathable[i];
+            if (!neighbor_pathable) continue;
+            if (i >= 4) {
+                int const x_side = dx[i] < 0 ? 0 : 1;
+                int const y_side = dy[i] < 0 ? 2 : 3;
+                BOOL const side_x = cardinal_pathable[x_side];
+                BOOL const side_y = cardinal_pathable[y_side];
                 if (!(side_x && side_y)) continue;
             }
             DWORD const v = (DWORD)nx + (DWORD)ny * width;
