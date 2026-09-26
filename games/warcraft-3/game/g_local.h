@@ -2439,6 +2439,7 @@ bool G_SetRallyPoint(edict_t *producer, vec2_t const *point);
 bool G_SetRallyEntity(edict_t *producer, edict_t *target);
 rallyTargetType_t G_ResolveRallyTarget(edict_t *producer, vec2_t *point, edict_t * *target);
 bool G_ApplyRallyOrder(edict_t *producer, edict_t *produced);
+bool G_UnitFollowingSelfRally(edict_t const *unit);
 void G_InvalidateRallyTarget(edict_t *target);
 void G_UpdateRallyIndicator(gameClient_t *client);
 

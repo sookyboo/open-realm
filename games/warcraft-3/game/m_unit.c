@@ -866,6 +866,10 @@ bool G_IssueUnitTargetOrder(edict_t *self, cstring_t order, edict_t *target,
         return false;
     }
 
+    /* A newly trained unit's self-rally Smart order is persistent Follow.
+     * It stays active at the producer, so the first Shift command must release
+     * that rally behavior and start the FIFO before later Shift orders append. */
+    if (queue && G_UnitFollowingSelfRally(self)) unit_stand(self);
     if (queue && G_UnitHasActiveOrder(self)) {
         bool const accepted = G_QueueUnitOrder(self, order, UNIT_ORDER_TARGET_ENTITY, NULL, target,
                                                issuer_player, 0.0f, 0);
@@ -915,6 +919,7 @@ bool G_IssueUnitPointOrder(edict_t *self, cstring_t order, vec2_t const *point,
     if (strcmp(order, "smart") && strcmp(order, "move") && strcmp(order, "attack") &&
         strcmp(order, "attackground")) return false;
 
+    if (queue && G_UnitFollowingSelfRally(self)) unit_stand(self);
     if (queue && G_UnitHasActiveOrder(self)) {
         bool const accepted = G_QueueUnitOrder(self, order, UNIT_ORDER_TARGET_POINT, point, NULL,
                                                issuer_player, group_speed, 0);

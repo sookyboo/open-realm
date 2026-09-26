@@ -13,6 +13,7 @@ The current implementation deliberately covers the high-confidence Warsmash-comp
 - Shift + Attack queues either an entity attack or point attack-move;
 - Shift + construction keeps the same placement ghost armed, appends later building sites to the worker FIFO, and shows an owner-only Construction Site Indicator for every accepted queued site;
 - an idle/Stop/Hold unit starts the first Shift order immediately instead of leaving it pending;
+- the first Shift order on a freshly produced unit releases its persistent default self-rally Follow, then later Shift orders queue behind the started order;
 - a busy unit appends Shift orders in FIFO order;
 - a normal Move/Attack/Smart replacement clears pending Shift orders;
 - Stop and Hold Position clear pending Shift orders;

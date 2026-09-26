@@ -112,12 +112,11 @@ TEST(wc3_rally, default_orc_barracks_rally_stops_trained_unit_outside_footprint)
     unit_stand(trained);
     T_ASSERT(G_ApplyRallyOrder(producer, trained));
 
-    /* Exit placement has already satisfied the default self-rally. Do not turn
-     * it into a persistent Follow-to-producer order: a freshly trained unit
-     * must be idle so its first Shift command can begin immediately. */
-    T_NULL(trained->movement.follow_target);
-    T_NULL(trained->goalentity);
-    T_ASSERT(!G_UnitHasActiveOrder(trained));
+    /* The default target remains the producer, as in Warsmash. The resulting
+     * persistent Follow ends only when the player starts a queued order. */
+    T_ASSERT(trained->movement.follow_target == producer);
+    T_ASSERT(trained->goalentity == producer);
+    T_ASSERT(G_UnitHasActiveOrder(trained));
 
     producer->pathtex = NULL;
     gi.MemFree(pathtex);
@@ -153,14 +152,19 @@ TEST(wc3_rally, default_self_rally_allows_fresh_unit_shift_queue) {
 
     T_ASSERT(!trained->training);
     T_ASSERT(!(trained->s.renderfx & RF_HIDDEN));
-    T_NULL(trained->movement.follow_target);
-    T_ASSERT(!G_UnitHasActiveOrder(trained));
+    T_ASSERT(trained->movement.follow_target == producer);
+    T_ASSERT(trained->goalentity == producer);
+    T_ASSERT(G_UnitHasActiveOrder(trained));
 
-    /* Shift on the freshly completed idle unit starts the first order now and
-     * appends later orders to the FIFO. */
+    /* The default rally order remains active until the first Shift order
+     * replaces it. Later Shift orders append to the FIFO. */
     T_ASSERT(G_IssueUnitPointOrder(trained, "move", &first, true, 0, 0.0f));
     T_ASSERT(G_UnitHasActiveOrder(trained));
     T_EQ(G_UnitQueuedOrderCount(trained), 0);
+    T_NULL(trained->movement.follow_target);
+    T_NOT_NULL(trained->goalentity);
+    T_FEQ(trained->goalentity->s.origin2.x, first.x, 0.01f);
+    T_FEQ(trained->goalentity->s.origin2.y, first.y, 0.01f);
     T_ASSERT(G_IssueUnitPointOrder(trained, "move", &second, true, 0, 0.0f));
     T_EQ(G_UnitQueuedOrderCount(trained), 1);
 
