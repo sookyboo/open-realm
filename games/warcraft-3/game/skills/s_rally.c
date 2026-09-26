@@ -167,9 +167,15 @@ bool G_ApplyRallyOrder(edict_t *producer, edict_t *produced) {
 
     if (!producer || !produced || !produced->inuse) return false;
     type = G_ResolveRallyTarget(producer, &point, &target);
+    /* Training/revival has already placed the result at a legal exit before
+     * this handoff. The default self-rally therefore has no remaining travel
+     * to perform. Installing Smart-to-producer here creates a persistent Follow
+     * behavior that never completes and strands later Shift orders behind it.
+     * Explicit widget rallies remain persistent so a produced unit can follow a
+     * moving Hero/unit as authored. */
+    if (type == RALLY_TARGET_SELF) return true;
     if (type == RALLY_TARGET_POINT) return unit_issueorder(produced, "smart", &point);
-    if (type == RALLY_TARGET_SELF || type == RALLY_TARGET_ENTITY)
-        return unit_issuetargetorder(produced, "smart", target);
+    if (type == RALLY_TARGET_ENTITY) return unit_issuetargetorder(produced, "smart", target);
     return false;
 }
 

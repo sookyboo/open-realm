@@ -109,22 +109,66 @@ TEST(wc3_rally, default_orc_barracks_rally_stops_trained_unit_outside_footprint)
     T_ASSERT(Vector2_distance(&producer->s.origin2, &exit) >
              G_FollowStopRange(trained, producer));
 
+    unit_stand(trained);
     T_ASSERT(G_ApplyRallyOrder(producer, trained));
-    T_ASSERT(trained->movement.follow_target == producer);
-    T_ASSERT(trained->goalentity == producer);
-    trained->animation = &(animation_t){ .name = "stand", .interval = { 0, 300 } };
-    trained->currentmove->think(trained);
 
-    /* The default Smart-to-producer order remains active, but the trained unit
-     * recognizes that its legal exit is already close enough to the authored
-     * footprint instead of walking back toward the blocked building centre. */
-    T_ASSERT(trained->movement.follow_target == producer);
-    T_ASSERT(G_AnimationHasPrimary(trained->animation, "stand"));
+    /* Exit placement has already satisfied the default self-rally. Do not turn
+     * it into a persistent Follow-to-producer order: a freshly trained unit
+     * must be idle so its first Shift command can begin immediately. */
+    T_NULL(trained->movement.follow_target);
+    T_NULL(trained->goalentity);
+    T_ASSERT(!G_UnitHasActiveOrder(trained));
 
     producer->pathtex = NULL;
     gi.MemFree(pathtex);
     CM_BakeStaticObstacles();
     game.constants.structureFollowRange = old_structure;
+}
+
+TEST(wc3_rally, default_self_rally_allows_fresh_unit_shift_queue) {
+    UnitBalance_t balance = { .buildTime = 1, .foodUsed = 0, .foodMade = 0 };
+    edict_t *producer;
+    edict_t *trained;
+    vec2_t first = { 256.0f, 64.0f };
+    vec2_t second = { 512.0f, 64.0f };
+
+    reset_entities();
+    setup_test_world();
+    producer = rally_unit(MAKEFOURCC('h','t','o','w'), 64.0f, 64.0f);
+    trained = rally_unit(MAKEFOURCC('h','p','e','a'), 64.0f, 64.0f);
+    producer->data.UnitProfile = &rally_train_profile;
+    producer->s.player = trained->s.player = 0;
+    producer->movetype = MOVETYPE_NONE;
+    producer->collision = 64.0f;
+    producer->stand = unit_stand;
+    trained->movetype = MOVETYPE_STEP;
+    trained->collision = 16.0f;
+    trained->stand = unit_stand;
+    trained->data.UnitBalance = &balance;
+    trained->training = true;
+    trained->s.renderfx |= RF_HIDDEN;
+    producer->build = trained;
+
+    ai_train_build(producer);
+
+    T_ASSERT(!trained->training);
+    T_ASSERT(!(trained->s.renderfx & RF_HIDDEN));
+    T_NULL(trained->movement.follow_target);
+    T_ASSERT(!G_UnitHasActiveOrder(trained));
+
+    /* Shift on the freshly completed idle unit starts the first order now and
+     * appends later orders to the FIFO. */
+    T_ASSERT(G_IssueUnitPointOrder(trained, "move", &first, true, 0, 0.0f));
+    T_ASSERT(G_UnitHasActiveOrder(trained));
+    T_EQ(G_UnitQueuedOrderCount(trained), 0);
+    T_ASSERT(G_IssueUnitPointOrder(trained, "move", &second, true, 0, 0.0f));
+    T_EQ(G_UnitQueuedOrderCount(trained), 1);
+
+    unit_stand(trained);
+    T_EQ(G_UnitQueuedOrderCount(trained), 0);
+    T_NOT_NULL(trained->goalentity);
+    T_FEQ(trained->goalentity->s.origin2.x, second.x, 0.01f);
+    T_FEQ(trained->goalentity->s.origin2.y, second.y, 0.01f);
 }
 
 TEST(wc3_rally, setrally_and_smart_store_point_and_widget_targets) {

@@ -39,12 +39,15 @@ Setting Rally back onto the producer normalizes to `RALLY_TARGET_SELF`.
 
 ## Production handoff
 
-`G_ApplyRallyOrder(producer, produced)` is the single post-production handoff. It resolves the producer's *current* rally state when completion occurs and issues ordinary Smart semantics to the resulting unit:
+`G_ApplyRallyOrder(producer, produced)` is the single post-production handoff. It resolves the producer's *current* rally state when completion occurs. The default self-rally is already satisfied by the legal exit placement and leaves the produced unit idle; explicit point/widget targets issue ordinary Smart semantics:
 
 ```text
+default self  -> no additional order (unit remains idle at its legal exit)
 point target  -> unit_issueorder(produced, "smart", point)
 widget target -> unit_issuetargetorder(produced, "smart", widget)
 ```
+
+Keeping the default self-rally idle is also required by the Shift FIFO contract: installing a persistent Smart/Follow back to the producer would never complete while the producer remains alive, so commands queued immediately after training would be stranded behind it. Explicit widget rallies remain persistent and may intentionally follow a moving unit.
 
 Normal training calls this only after `SP_FindUnitExitPosition` has found a legal location, the queued unit has been revealed, and the existing train-finish event has been published. Hero revival calls the same helper after `G_ReviveHero` and the Hero revive-finish events.
 
@@ -95,7 +98,8 @@ Focused in-engine tests live in `games/warcraft-3/game/tests/t_rally.c` and cove
 
 - train/revive capability vs research-only structures;
 - `CmdRally` handler registration;
-- default self-rally;
+- default self-rally and idle post-production handoff;
+- first Shift order on a freshly produced/default-rallied unit starts immediately and later Shift orders queue;
 - point and widget storage through `setrally`/Smart;
 - moving widget coordinates;
 - reset by clicking the producer;
