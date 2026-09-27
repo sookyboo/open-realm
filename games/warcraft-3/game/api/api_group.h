@@ -77,18 +77,30 @@ uint32_t GroupEnumUnitsOfPlayer(jass_t *j) {
     ggroup_t *whichGroup = jass_checkhandle(j, 1, "group");
     player_t *whichPlayer = jass_checkhandle(j, 2, "player");
     jassFunc_t const *filter = jass_checkhandle(j, 3, "boolexpr");
+    uint32_t before = G_JassGroupValid(whichGroup) ? whichGroup->num_units : 0;
+    uint32_t candidates = 0, accepted = 0;
     if (!G_JassGroupValid(whichGroup) || !whichPlayer) {
         return 0;
     }
     FOR_LOOP(i, globals.num_edicts) {
         edict_t *ent = &globals.edicts[i];
-        if (IS_UNIT(ent) && !G_IsDeferredFree(ent) && ent->s.player == PLAYER_NUM(whichPlayer) &&
-            jass_evaluateboolexpr(j, filter, ent)) {
-            group_add_entity(whichGroup, ent);
+        if (IS_UNIT(ent) && !G_IsDeferredFree(ent) && ent->s.player == PLAYER_NUM(whichPlayer)) {
+            candidates++;
+            bool match = jass_evaluateboolexpr(j, filter, ent);
+            if (match) {
+                if (group_add_entity(whichGroup, ent)) accepted++;
+            }
         }
+    }
+    if (WC3_TUTORIAL_DEBUG_ENABLED() && PLAYER_NUM(whichPlayer) == 1) {
+        fprintf(stderr,
+                "WC3_HORN_TRACE enum-player player=%d filter=%p group=%p before=%u candidates=%u accepted=%u after=%u\n",
+                PLAYER_NUM(whichPlayer), (void const *)filter, (void *)whichGroup, before,
+                candidates, accepted, whichGroup->num_units);
     }
     return 0;
 }
+
 uint32_t GroupEnumUnitsOfTypeCounted(jass_t *j) {
     //ggroup_t *whichGroup = jass_checkhandle(j, 1, "group");
     //cstring_t unitname = jass_checkstring(j, 2);

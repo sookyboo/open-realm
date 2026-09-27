@@ -272,11 +272,35 @@ static void G_TouchTriggers(edict_t *ent) {
                 handle_t event_handle = G_EventHandle(evt), region_handle = evt->region;
                 region_t *region = G_RegionFromHandle(evt->region);
                 uint32_t spawn_time = ent->spawn_time;
-                if (region && G_RegionContains(region, &ent->s.origin2) &&
-                    !G_RegionContains(region, &ent->old_origin) && jass_evaluateboolexpr(level.vm, evt->filter, ent) &&
+                bool contains_now = region && G_RegionContains(region, &ent->s.origin2);
+                bool contains_old = region && G_RegionContains(region, &ent->old_origin);
+                bool moonglade = region && region->num_rects &&
+                    region->rects[0].min.x == 2112.0f && region->rects[0].min.y == 2688.0f;
+                bool filter_match = contains_now && !contains_old && jass_evaluateboolexpr(level.vm, evt->filter, ent);
+                if (WC3_TUTORIAL_DEBUG_ENABLED() && moonglade && ent->class_id == *(uint32_t *)"Etyr") {
+                    fprintf(stderr,
+                            "WC3_MOONGLADE_TRACE touch tyrande=%ld pos=(%.1f,%.1f) old=(%.1f,%.1f) now=%d old-in=%d filter=%p pass=%d spawn=%u\n",
+                            (long)(ent - globals.edicts), ent->s.origin2.x, ent->s.origin2.y,
+                            ent->old_origin.x, ent->old_origin.y, (int)contains_now,
+                            (int)contains_old, (void const *)evt->filter, (int)filter_match,
+                            ent->spawn_time);
+                }
+                if (WC3_TUTORIAL_DEBUG_ENABLED() && moonglade && contains_now && !contains_old &&
+                    ent->class_id != *(uint32_t *)"Etyr") {
+                    fprintf(stderr,
+                            "WC3_MOONGLADE_TRACE touch other-unit=%ld type=%.4s owner=%d pos=(%.1f,%.1f) pass=%d\n",
+                            (long)(ent - globals.edicts), (char *)&ent->class_id, ent->s.player,
+                            ent->s.origin2.x, ent->s.origin2.y, (int)filter_match);
+                }
+                if (region && contains_now &&
+                    !contains_old && filter_match &&
                     ent->inuse && ent->spawn_time == spawn_time && !G_IsDeferredFree(ent) &&
                     G_EventFromHandle(event_handle) == evt && evt->region == region_handle)
                 {
+                    if (WC3_TUTORIAL_DEBUG_ENABLED() && moonglade) {
+                        fprintf(stderr, "WC3_MOONGLADE_TRACE publish unit=%ld trigger=%p\n",
+                                (long)(ent - globals.edicts), (void *)evt->trigger);
+                    }
                     G_PublishEventResponse(ent, EVENT_GAME_ENTER_REGION, evt);
                 }
                 break;

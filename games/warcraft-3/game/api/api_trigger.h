@@ -213,6 +213,10 @@ uint32_t TriggerRegisterTimerEvent(jass_t *j) {
     G_TimerStart(timer, (uint32_t)(MAX(0.0f, timeout) * 1000.0f), periodic, NULL);
     evt = G_MakeEvent(EVENT_GAME_TIMER_EXPIRED); evt->trigger = whichTrigger; evt->timer = timer;
     QuestPeonStageLogRegistration(whichTrigger, EVENT_GAME_TIMER_EXPIRED, NULL, "timer");
+    if (WC3_TUTORIAL_DEBUG_ENABLED()) {
+        fprintf(stderr, "WC3_HORN_TRACE timer-register trigger=%p timeout=%.3f periodic=%d disabled=%d\n",
+                (void *)whichTrigger, timeout, (int)periodic, (int)whichTrigger->disabled);
+    }
     return jass_pushlighthandle(j, evt, "event");
 }
 uint32_t TriggerRegisterTimerExpireEvent(jass_t *j) {
@@ -264,6 +268,15 @@ uint32_t TriggerRegisterEnterRegion(jass_t *j) {
     evt->filter = filter;
     evt->region = region;
     QuestPeonStageLogRegistration(whichTrigger, EVENT_GAME_ENTER_REGION, NULL, "enter-region");
+    if (WC3_TUTORIAL_DEBUG_ENABLED() && whichRegion->num_rects &&
+        whichRegion->rects[0].min.x == 2112.0f && whichRegion->rects[0].min.y == 2688.0f) {
+        fprintf(stderr,
+                "WC3_MOONGLADE_TRACE register trigger=%p region=%p rects=%u bounds=(%.1f,%.1f)-(%.1f,%.1f) filter=%p result=event\n",
+                (void *)whichTrigger, region, whichRegion->num_rects,
+                whichRegion->rects[0].min.x, whichRegion->rects[0].min.y,
+                whichRegion->rects[0].max.x, whichRegion->rects[0].max.y,
+                (void const *)filter);
+    }
     return jass_pushlighthandle(j, G_EventHandle(evt), "event");
 }
 uint32_t GetTriggeringRegion(jass_t *j) {
@@ -323,6 +336,11 @@ uint32_t TriggerRegisterPlayerUnitEvent(jass_t *j) {
     G_SetPlayerEventSubject(evt, PLAYER_ENT(whichPlayer));
     evt->trigger = whichTrigger;
     QuestPeonStageLogRegistration(whichTrigger, *whichPlayerUnitEvent, evt->subject, "player-unit");
+    if (WC3_TUTORIAL_DEBUG_ENABLED() && *whichPlayerUnitEvent == EVENT_PLAYER_UNIT_DEATH) {
+        fprintf(stderr, "WC3_HORN_TRACE death-register trigger=%p player=%d disabled=%d\n",
+                (void *)whichTrigger, whichPlayer ? PLAYER_NUM(whichPlayer) : -1,
+                (int)whichTrigger->disabled);
+    }
     if (WC3_TUTORIAL_DEBUG_ENABLED() &&
         (*whichPlayerUnitEvent == EVENT_PLAYER_UNIT_CONSTRUCT_START ||
          *whichPlayerUnitEvent == EVENT_PLAYER_UNIT_CONSTRUCT_FINISH)) {

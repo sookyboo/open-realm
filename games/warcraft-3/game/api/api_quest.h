@@ -105,6 +105,27 @@ uint32_t QuestItemSetCompleted(jass_t *j) {
     questItem_t *whichQuestItem = jass_checkhandle(j, 1, "questitem");
     if (!G_QuestItemValid(whichQuestItem)) return 0;
     whichQuestItem->completed = jass_checkboolean(j, 2);
+    if (WC3_TUTORIAL_DEBUG_ENABLED()) {
+        uint32_t quest_index = UINT32_MAX, item_index = UINT32_MAX;
+        FOR_LOOP(qi, MAX_QUESTS) {
+            FOR_LOOP(ii, level.quests[qi].num_items) {
+                if (&level.quests[qi].items[ii] == whichQuestItem) {
+                    quest_index = qi; item_index = ii; break;
+                }
+            }
+            if (quest_index != UINT32_MAX) break;
+        }
+        fprintf(stderr, "WC3_HORN_TRACE quest-item-complete quest-index=%u title=\"%s\" item-index=%u item=%p completed=%d\n",
+                quest_index, quest_index != UINT32_MAX && level.quests[quest_index].title ?
+                    level.quests[quest_index].title : "(unknown)", item_index,
+                (void *)whichQuestItem, (int)whichQuestItem->completed);
+        if (quest_index != UINT32_MAX && item_index == 3) {
+            fprintf(stderr,
+                    "WC3_MOONGLADE_TRACE quest-item item-index=3 title=\"%s\" completed=%d\n",
+                    level.quests[quest_index].title ? level.quests[quest_index].title : "(unknown)",
+                    (int)whichQuestItem->completed);
+        }
+    }
     return 0;
 }
 uint32_t IsQuestItemCompleted(jass_t *j) {

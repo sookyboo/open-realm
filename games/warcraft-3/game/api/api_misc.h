@@ -533,6 +533,11 @@ uint32_t Not(jass_t *j) {
 }
 uint32_t Condition(jass_t *j) {
     jassFunc_t const *func = jass_checkcode(j, 1);
+    if (WC3_TUTORIAL_DEBUG_ENABLED()) {
+        cstring_t name = func ? jass_functionname(func) : NULL;
+        fprintf(stderr, "WC3_HORN_TRACE condition function=%s code=%p return=conditionfunc\n",
+                name ? name : "(anonymous)", (void const *)func);
+    }
     return jass_pushlighthandle(j, (handle_t)func, "conditionfunc");
 }
 uint32_t DestroyCondition(jass_t *j) {
