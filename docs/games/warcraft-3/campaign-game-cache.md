@@ -81,7 +81,9 @@ Heroes retain their exact cached current health, including values below 25%.
 Before JASS compilation, OpenRealm scans the loaded map script for each
 `GetLastRestoredUnitBJ()` assignment and its cache-hit/cache-miss branch. It
 derives the baseline from that map's own fallback Hero setup, either inline in
-the restore action or in the default-Hero trigger called on a cache miss. It
+the restore action or in the default-Hero trigger called on a cache miss. Cache
+maps are detected from their `InitGameCache` and `GetLastRestoredUnitBJ` use, so
+the analysis does not depend on the cache being named `Campaigns.w3v`. It
 recognizes both map-global and `GetLastRestoredUnitBJ()` cache-check helpers,
 and fallback progression calls that target either the Hero global or
 `GetLastCreatedUnit()`. This covers multiple restored Heroes in one action and
@@ -94,9 +96,12 @@ and unit data. It raises level, XP, skill ranks, unspent points, current health,
 and mana only when the authored cache-miss baseline is higher. This avoids
 creating an extra unit, so the merge does not fire unit-creation behavior or
 leave temporary side effects. Cache-miss fallback code remains the map's
-original path. If a restore branch or baseline expression cannot be evaluated
-safely, OpenRealm logs the Hero and skips that merge rather than inventing
-baseline values.
+original path. Restore-condition parsing accounts for the complete
+`if`/`else`/`endif` block, so only the matching cache-miss branch supplies the
+baseline; later Hero setup in the same function is not accidentally treated as
+part of that branch. If a restore branch or baseline expression cannot be
+evaluated safely, OpenRealm logs the Hero and skips that merge rather than
+inventing baseline values.
 
 This merge is an OpenRealm compatibility behavior and has not been verified
 against retail Warcraft III; retail cache-hit behavior may differ.
@@ -208,6 +213,10 @@ includes:
 - patching and parsing multiple cached-Hero branches, including a separate
   default-Hero trigger, TFT-style restore helper, additive XP, and map-authored
   health, mana, XP, level, and skills;
+- executing the generated merge in JASS to confirm it raises an existing Hero
+  to the fallback's higher level, XP, skill, health, and mana, plus recognizing
+  a custom cache filename and isolating later Hero setup from the cache-miss
+  branch;
 - restoring a cached dead Hero at 25% of its cached maximum health so the fresh
   entity is alive and internally consistent.
 

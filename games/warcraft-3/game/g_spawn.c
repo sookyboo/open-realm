@@ -572,9 +572,8 @@ static bool G_CampaignRestoreBranch(char *script, char *function_start, char *fu
         if (!strncmp(line, "if ", 3) || !strncmp(line, "if(", 3)) depth++;
         else if (!strncmp(line, "endif", 5)) {
             if (--depth == 0) break;
-        } else if (depth == 1 && !strncmp(line, "else", 4)) {
+        } else if (depth == 1 && !else_at && !strncmp(line, "else", 4)) {
             else_at = line;
-            break;
         }
         scan = end_line < function_end ? end_line + 1 : function_end;
     }
@@ -661,11 +660,8 @@ static char *G_CampaignContainingFunction(char *script, char *position, char **f
 }
 
 static bool G_CampaignUsesCampaignCache(char *script) {
-    static cstring_t const cache_name = "Campaigns.w3v";
-    char *at;
-    for (at = script; at && *at; at++)
-        if (!strncasecmp(at, cache_name, strlen(cache_name))) return true;
-    return false;
+    return script && strstr(script, "InitGameCache") &&
+           strstr(script, "GetLastRestoredUnitBJ");
 }
 
 static bool G_CampaignAppend(char *buffer, size_t capacity, size_t *used, char *format, ...) {
@@ -924,6 +920,11 @@ static bool G_FixCampaignHeroRestoreScripts(char **script_ptr) {
                 search_after = restore + strlen("GetLastRestoredUnitBJ");
                 continue;
             }
+            fprintf(stderr,
+                    "Campaign Hero merge prepared: global=%s function=%s fallback=%.4s level=%u xp=%u skills=%u xp_calls=%u state_calls=%u\n",
+                    global, function_name, baseline.rawcode, (unsigned)baseline.level,
+                    (unsigned)baseline.xp, (unsigned)baseline.num_skills,
+                    (unsigned)baseline.num_xp_calls, (unsigned)baseline.num_state_calls);
             if (!G_CampaignBuildMerge(global, &baseline, merge, sizeof(merge))) {
                 fprintf(stderr, "G_SpawnEntities: campaign Hero %s fallback merge exceeds script buffer\n", global);
                 complete = false;

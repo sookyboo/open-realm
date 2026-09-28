@@ -17,6 +17,22 @@ extern jassModule_t jass_funcs[];
 void CM_ReadMapScript(handle_t archive);
 bool G_TestFixCampaignHeroRestoreScripts(char **script);
 bool run_test_jass(cstring_t src);
+slkTestData_t *parse_slk_string(char const *text);
+void free_slk_rows(slkTestData_t *rows);
+
+static bool replace_test_text(char **source, cstring_t from, cstring_t to) {
+    char *match = strstr(*source, from), *replacement;
+    size_t old_size = strlen(*source), from_size = strlen(from), to_size = strlen(to);
+    if (!match || (to_size > from_size && old_size > SIZE_MAX - (to_size - from_size) - 1)) return false;
+    replacement = gi.MemAlloc(old_size - from_size + to_size + 1);
+    if (!replacement) return false;
+    memcpy(replacement, *source, (size_t)(match - *source));
+    memcpy(replacement + (match - *source), to, to_size);
+    strcpy(replacement + (match - *source) + to_size, match + from_size);
+    gi.MemFree(*source);
+    *source = replacement;
+    return true;
+}
 
 static cstring_t const kMinimalMapScript =
     "function config takes nothing returns nothing\n"
@@ -270,6 +286,166 @@ TEST(wc3_mapscript, cached_campaign_hero_merge_uses_data_without_spawning_probe)
     T_ASSERT(strstr(script, "if ( GetUnitState(udg_Hero, UNIT_STATE_MANA) < ") != NULL);
     T_ASSERT(strstr(script, "campaign_fallback_hero_") == NULL);
     T_ASSERT(run_test_jass(script));
+    gi.MemFree(script);
+}
+
+TEST(wc3_mapscript, cached_campaign_hero_merge_raises_live_hero_to_fallback_state) {
+    static cstring_t const hero_balance =
+        "ID;PWXL;N;E\n"
+        "B;X49;Y2;D0\n"
+        "C;X1;Y1;K\"unitBalanceID\"\n"
+        "C;X24;K\"realHP\"\n"
+        "C;X28;K\"realM\"\n"
+        "C;X42;K\"STR\"\n"
+        "C;X43;K\"INT\"\n"
+        "C;X44;K\"AGI\"\n"
+        "C;X45;K\"STRplus\"\n"
+        "C;X46;K\"INTplus\"\n"
+        "C;X47;K\"AGIplus\"\n"
+        "C;X49;K\"Primary\"\n"
+        "C;X1;Y2;K\"Hpal\"\n"
+        "C;X24;Y2;K\"500\"\n"
+        "C;X28;Y2;K\"100\"\n"
+        "C;X42;Y2;K\"10\"\n"
+        "C;X43;Y2;K\"10\"\n"
+        "C;X44;Y2;K\"10\"\n"
+        "C;X45;Y2;K\"2\"\n"
+        "C;X46;Y2;K\"2\"\n"
+        "C;X47;Y2;K\"2\"\n"
+        "C;X49;Y2;K\"STR\"\n"
+        "E\n";
+    char source[] =
+        "globals\n"
+        "  unit udg_Hero = null\n"
+        "  unittype UNIT_TYPE_HERO = ConvertUnitType(0)\n"
+        "  unitstate UNIT_STATE_MANA = ConvertUnitState(2)\n"
+        "endglobals\n"
+        "function CacheMissHero takes nothing returns boolean\n"
+        "  return ( udg_Hero == null )\n"
+        "endfunction\n"
+        "function Trig_LoadHero_Actions takes nothing returns nothing\n"
+        "  call InitGameCacheBJ( \"Campaigns.w3v\" )\n"
+        "  call RestoreUnitLocFacingAngleBJ( \"Hero\", \"Mission01\", GetLastCreatedGameCacheBJ(), Player(0), GetRectCenter(gg_rct_Hero), 0.00 )\n"
+        "  set udg_Hero = GetLastRestoredUnitBJ()\n"
+        "  if ( CacheMissHero() ) then\n"
+        "    call CreateNUnitsAtLoc( 1, 'Hpal', Player(0), GetRectCenter(gg_rct_Hero), 0.00 )\n"
+        "    set udg_Hero = GetLastCreatedUnit()\n"
+        "    call SetHeroLevel( udg_Hero, 2, false )\n"
+        "    call SetHeroXP( udg_Hero, 500, false )\n"
+        "    call SelectHeroSkill( udg_Hero, 'AHhb' )\n"
+        "    call SetUnitState( udg_Hero, UNIT_STATE_MANA, 80.0 )\n"
+        "  else\n"
+        "    return\n"
+        "  endif\n"
+        "endfunction\n"
+        "function main takes nothing returns nothing\n"
+        "  call Trig_LoadHero_Actions()\n"
+        "  call BJassAssert(udg_Hero != null, \"cached Hero setup did not run\")\n"
+        "  call BJassAssert(GetHeroLevel(udg_Hero) >= 2, \"fallback Hero level was not merged\")\n"
+        "  call BJassAssert(GetHeroXP(udg_Hero) >= 500, \"fallback Hero XP was not merged\")\n"
+        "  call BJassAssert(GetUnitAbilityLevel(udg_Hero, 'AHhb') >= 1, \"fallback skill was not merged\")\n"
+        "  call BJassAssert(GetUnitState(udg_Hero, UNIT_STATE_MANA) >= 80.0, \"fallback mana was not merged\")\n"
+        "  call BJassAssert(GetWidgetLife(udg_Hero) > 1.0, \"fallback health was not merged\")\n"
+        "endfunction\n";
+    char *script = gi.MemAlloc(sizeof(source));
+    slkTestData_t *rows = parse_slk_string(hero_balance);
+    slkTestData_t *old_rows = G_SetSLKRows("UnitBalance", rows);
+
+    T_NOT_NULL(script);
+    T_NOT_NULL(G_UnitBalance(MAKEFOURCC('H','p','a','l')));
+    T_EQ(G_UnitBalance(MAKEFOURCC('H','p','a','l'))->strength, 10);
+    memcpy(script, source, sizeof(source));
+    T_ASSERT(G_TestFixCampaignHeroRestoreScripts(&script));
+    T_ASSERT(replace_test_text(&script, "call InitGameCacheBJ( \"Campaigns.w3v\" )", "set udg_Hero = udg_Hero"));
+    T_ASSERT(replace_test_text(&script,
+        "call RestoreUnitLocFacingAngleBJ( \"Hero\", \"Mission01\", GetLastCreatedGameCacheBJ(), Player(0), GetRectCenter(gg_rct_Hero), 0.00 )",
+        "set udg_Hero = udg_Hero"));
+    T_ASSERT(replace_test_text(&script, "set udg_Hero = GetLastRestoredUnitBJ()",
+        "set udg_Hero = udg_Hero"));
+    T_ASSERT(replace_test_text(&script, "  call Trig_LoadHero_Actions()",
+        "  set udg_Hero = CreateUnit(Player(0), 'Hpal', 0.0, 0.0, 0.0)\n"
+        "  call SetHeroLevel(udg_Hero, 1, false)\n"
+        "  call SetWidgetLife(udg_Hero, 1.0)\n"
+        "  call BJassAssert(IsUnitType(udg_Hero, UNIT_TYPE_HERO), \"test unit is not a Hero\")\n"
+        "  call Trig_LoadHero_Actions()"));
+    T_ASSERT(run_test_jass(script));
+    gi.MemFree(script);
+    G_SetSLKRows("UnitBalance", old_rows);
+    free_slk_rows(rows);
+}
+
+TEST(wc3_mapscript, cached_campaign_hero_supports_custom_cache_filename) {
+    char source[] =
+        "globals\n"
+        "  unit udg_Hero = null\n"
+        "endglobals\n"
+        "function CacheMissHero takes nothing returns boolean\n"
+        "  return ( udg_Hero == null )\n"
+        "endfunction\n"
+        "function Trig_LoadHero_Actions takes nothing returns nothing\n"
+        "  call InitGameCacheBJ( \"CustomCampaign.w3v\" )\n"
+        "  call RestoreUnitLocFacingAngleBJ( \"Hero\", \"Mission01\", GetLastCreatedGameCacheBJ(), Player(0), GetRectCenter(gg_rct_Hero), 0.00 )\n"
+        "  set udg_Hero = GetLastRestoredUnitBJ()\n"
+        "  if ( CacheMissHero() ) then\n"
+        "    call CreateNUnitsAtLoc( 1, 'Hpal', Player(0), GetRectCenter(gg_rct_Hero), 0.00 )\n"
+        "    set udg_Hero = GetLastCreatedUnit()\n"
+        "    call SetHeroLevel( udg_Hero, 2, false )\n"
+        "  else\n"
+        "    return\n"
+        "  endif\n"
+        "endfunction\n"
+        "function main takes nothing returns nothing\n"
+        "endfunction\n";
+    char *script = gi.MemAlloc(sizeof(source));
+
+    T_NOT_NULL(script);
+    memcpy(script, source, sizeof(source));
+    T_ASSERT(G_TestFixCampaignHeroRestoreScripts(&script));
+    T_ASSERT(strstr(script, "Campaign fallback merge: udg_Hero") != NULL);
+    gi.MemFree(script);
+}
+
+TEST(wc3_mapscript, cached_campaign_hero_keeps_later_hero_setup_out_of_cache_miss_branch) {
+    char source[] =
+        "globals\n"
+        "  unit udg_FirstHero = null\n"
+        "  unit udg_SecondHero = null\n"
+        "endglobals\n"
+        "function Trig_LoadHeroes_Actions takes nothing returns nothing\n"
+        "  call InitGameCacheBJ( \"Campaigns.w3v\" )\n"
+        "  call RestoreUnitLocFacingAngleBJ( \"FirstHero\", \"Mission01\", GetLastCreatedGameCacheBJ(), Player(0), GetRectCenter(gg_rct_Hero), 0.00 )\n"
+        "  set udg_FirstHero = GetLastRestoredUnitBJ()\n"
+        "  if ( udg_FirstHero != null ) then\n"
+        "    return\n"
+        "  else\n"
+        "    call DoNothing()\n"
+        "  endif\n"
+        "  call CreateNUnitsAtLoc( 1, 'Hpal', Player(0), GetRectCenter(gg_rct_Hero), 0.00 )\n"
+        "  set udg_FirstHero = GetLastCreatedUnit()\n"
+        "  call SetHeroLevel( udg_FirstHero, 2, false )\n"
+        "  call RestoreUnitLocFacingAngleBJ( \"SecondHero\", \"Mission01\", GetLastCreatedGameCacheBJ(), Player(0), GetRectCenter(gg_rct_Hero), 0.00 )\n"
+        "  set udg_SecondHero = GetLastRestoredUnitBJ()\n"
+        "  if ( udg_SecondHero != null ) then\n"
+        "    return\n"
+        "  else\n"
+        "    call DoNothing()\n"
+        "  endif\n"
+        "  call CreateNUnitsAtLoc( 1, 'Hpal', Player(0), GetRectCenter(gg_rct_Hero), 0.00 )\n"
+        "  set udg_SecondHero = GetLastCreatedUnit()\n"
+        "  call SetHeroLevel( udg_SecondHero, 7, false )\n"
+        "endfunction\n"
+        "function main takes nothing returns nothing\n"
+        "endfunction\n";
+    char *script = gi.MemAlloc(sizeof(source));
+    char *second;
+
+    T_NOT_NULL(script);
+    memcpy(script, source, sizeof(source));
+    T_ASSERT(G_TestFixCampaignHeroRestoreScripts(&script));
+    second = strstr(script, "Campaign fallback merge: udg_SecondHero");
+    T_NOT_NULL(second);
+    T_ASSERT(strstr(second, "SetHeroLevel( udg_SecondHero, 7, false )") != NULL);
+    T_ASSERT(strstr(second, "SetHeroLevel( udg_SecondHero, 2, false )") == NULL);
     gi.MemFree(script);
 }
 
