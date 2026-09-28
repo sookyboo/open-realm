@@ -6083,6 +6083,8 @@ TEST(wc3_api, gamecache_restore_preserves_hero_progression) {
     T_EQ((int)restored->hero.skillpoints, 1);
     T_EQ((int)restored->heroabilities[0].code, (int)MAKEFOURCC('A','H','h','b'));
     T_EQ((int)restored->heroabilities[0].level, 1);
+    T_ASSERT(G_ActorHasSkill(restored, "AHhb"));
+    T_ASSERT(!restored->currentmove || restored->currentmove->think != ai_birth);
 }
 
 TEST(wc3_api, gamecache_restore_dead_hero_at_quarter_health) {

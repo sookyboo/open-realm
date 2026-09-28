@@ -756,7 +756,7 @@ static bool G_CampaignBuildMerge(char *global, char *local, campaignHeroBaseline
         "        endif\n"
         "        call RemoveUnit( %s )\n"
         "        endif\n",
-        global, local, global, local, global, global, local, global, local,
+        global, local, global, global, local, global, local, global, local,
         global, local, global, local, local);
 }
 

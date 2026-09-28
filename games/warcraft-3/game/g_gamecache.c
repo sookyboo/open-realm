@@ -652,7 +652,11 @@ edict_t *G_GameCacheRestoreUnit(gameCache_t const *cache, cstring_t mission, cst
 
     if (!entry || !location) return NULL;
     saved = &entry->value.unit;
-    unit = SP_SpawnAtLocation(saved->class_id, player, location);
+    /* Campaign-restored units are already materialized gameplay state, not
+     * newly trained units. Birth presentation hides the command card while
+     * active, so restoring through the ordinary spawn path leaves a cached
+     * Hero with no visible commands until that animation completes. */
+    unit = SP_SpawnAtLocationNoBirth(saved->class_id, player, location);
     if (!unit) return NULL;
     unit->s.angle = DEG2RAD(facing);
 
@@ -661,6 +665,13 @@ edict_t *G_GameCacheRestoreUnit(gameCache_t const *cache, cstring_t mission, cst
     }
     unit->hero = saved->hero;
     memcpy(unit->heroabilities, saved->abilities, sizeof(unit->heroabilities));
+    FOR_LOOP(i, MAX_HERO_ABILITIES) {
+        uint32_t const ability = unit->heroabilities[i].code;
+        char ability_name[5] = {0};
+        if (!ability || !unit->heroabilities[i].level) continue;
+        memcpy(ability_name, &ability, sizeof(ability));
+        if (!G_ActorHasSkill(unit, ability_name)) G_ActorAddSkill(unit, ability);
+    }
     G_RecomputeHeroStats(unit);
     unit->health = saved->health;
     /* RestoreUnit creates a fresh living entity; a cached dead Hero must not

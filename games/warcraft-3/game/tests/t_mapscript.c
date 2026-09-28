@@ -189,6 +189,8 @@ TEST(wc3_mapscript, cached_campaign_heroes_get_map_authored_baseline_merge) {
     T_ASSERT(strstr(cairne, "SelectHeroSkill( campaign_fallback_hero_1, 'AOre' )") != NULL);
     T_ASSERT(strstr(script, "GetWidgetLife(campaign_fallback_hero_0)") != NULL);
     T_ASSERT(strstr(script, "UNIT_STATE_MANA") != NULL);
+    T_ASSERT(strstr(script, "call RemoveUnit( campaign_fallback_hero_0 )") != NULL);
+    T_ASSERT(strstr(script, "call RemoveUnit( udg_Thrall )") == NULL);
     T_ASSERT(run_test_jass(script));
     first = script;
     T_ASSERT(G_TestFixCampaignHeroRestoreScripts(&script));
@@ -234,6 +236,8 @@ TEST(wc3_mapscript, cached_campaign_hero_uses_separate_default_trigger) {
     T_ASSERT(strstr(script, "SetHeroLevel( campaign_fallback_hero_0, 6, false )") != NULL);
     T_ASSERT(strstr(script, "'Hart'") != NULL);
     T_ASSERT(strstr(script, "SelectHeroSkill( campaign_fallback_hero_0, 'AUau' )") != NULL);
+    T_ASSERT(strstr(script, "call RemoveUnit( campaign_fallback_hero_0 )") != NULL);
+    T_ASSERT(strstr(script, "call RemoveUnit( udg_Arthas )") == NULL);
     T_ASSERT(run_test_jass(script));
     gi.MemFree(script);
 }
