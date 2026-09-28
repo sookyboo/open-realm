@@ -109,6 +109,12 @@ typedef struct campaignHeroBaseline_s {
     uint32_t num_xp_calls;
     char state_calls[12][1024];
     uint32_t num_state_calls;
+    float health;
+    float mana;
+    bool has_health;
+    bool has_mana;
+    uint32_t merged_xp;
+    uint32_t merged_skillpoints;
     bool found;
 } campaignHeroBaseline_t;
 
@@ -674,95 +680,184 @@ static bool G_CampaignAppend(char *buffer, size_t capacity, size_t *used, char *
     return true;
 }
 
-static bool G_CampaignAppendTranslatedCall(char *buffer, size_t capacity, size_t *used,
-                                           char const *call, char *global, char *local) {
-    static cstring_t const last_created_call = "GetLastCreatedUnit()";
-    char translated[1024];
-    char const *at = call;
-    size_t translated_used = 0, global_length = strlen(global), local_length = strlen(local);
-    size_t last_created_length = strlen(last_created_call);
-    while (*at) {
-        char const *global_match = strstr(at, global);
-        char const *created_match = strstr(at, last_created_call);
-        char const *match = !global_match ? created_match :
-            (!created_match || global_match < created_match ? global_match : created_match);
-        size_t match_length = match == created_match ? last_created_length : global_length;
-        size_t part = match ? (size_t)(match - at) : strlen(at);
-        if (translated_used + part + (match ? local_length : 0) >= sizeof(translated)) return false;
-        memcpy(translated + translated_used, at, part);
-        translated_used += part;
-        if (!match) break;
-        memcpy(translated + translated_used, local, local_length);
-        translated_used += local_length;
-        at = match + match_length;
+static bool G_CampaignCallArgument(cstring_t call, uint32_t wanted, char *out, size_t capacity) {
+    char const *at = strchr(call, '('), *start;
+    uint32_t index = 0;
+    int depth = 0;
+    bool quoted = false;
+    if (!at || !out || !capacity) return false;
+    start = ++at;
+    for (; *at; at++) {
+        if (*at == '\'') quoted = !quoted;
+        else if (!quoted && *at == '(') depth++;
+        else if (!quoted && *at == ')') {
+            if (!depth) {
+                if (index == wanted) goto copy;
+                return false;
+            }
+            depth--;
+        } else if (!quoted && !depth && *at == ',') {
+            if (index == wanted) goto copy;
+            index++;
+            start = at + 1;
+        }
     }
-    translated[translated_used] = '\0';
-    return G_CampaignAppend(buffer, capacity, used, "        call %s\n", translated);
+    return false;
+copy:
+    while (start < at && isspace((unsigned char)*start)) start++;
+    while (at > start && isspace((unsigned char)at[-1])) at--;
+    if ((size_t)(at - start) >= capacity) return false;
+    memcpy(out, start, (size_t)(at - start));
+    out[at - start] = '\0';
+    return true;
 }
 
-static bool G_CampaignBuildMerge(char *global, char *local, campaignHeroBaseline_t const *baseline,
+static bool G_CampaignParseReal(cstring_t text, float *value) {
+    char *end;
+    float parsed;
+    if (!text || !*text) return false;
+    parsed = strtof(text, &end);
+    while (*end && isspace((unsigned char)*end)) end++;
+    if (end == text || *end) return false;
+    *value = parsed;
+    return true;
+}
+
+static bool G_CampaignHeroBaselineStats(campaignHeroBaseline_t *baseline) {
+    UnitBalance_t const *balance;
+    float strength, intelligence;
+    uint32_t added_xp = 0, base_xp;
+    char arg[128];
+    if (!baseline || !baseline->rawcode[0]) return false;
+    balance = G_UnitBalance(MAKEFOURCC(baseline->rawcode[0], baseline->rawcode[1],
+                                      baseline->rawcode[2], baseline->rawcode[3]));
+    base_xp = MAX(G_HeroXPForLevel(baseline->level), baseline->xp);
+    for (uint32_t i = 0; i < baseline->num_xp_calls; i++) {
+        float amount = 0.0f;
+        bool found_amount = false;
+        FOR_LOOP(argument, 3) {
+            if (G_CampaignCallArgument(baseline->xp_calls[i], argument, arg, sizeof(arg)) &&
+                G_CampaignParseReal(arg, &amount)) {
+                found_amount = true;
+                break;
+            }
+        }
+        if (!found_amount || amount < 0.0f || amount > (float)INT32_MAX) {
+            fprintf(stderr, "G_SpawnEntities: campaign Hero %.4s has unsupported XP fallback expression: %s\n",
+                    baseline->rawcode, baseline->xp_calls[i]);
+            return false;
+        }
+        if (UINT32_MAX - added_xp < (uint32_t)amount) added_xp = UINT32_MAX;
+        else added_xp += (uint32_t)amount;
+    }
+    baseline->merged_xp = UINT32_MAX - base_xp < added_xp ? UINT32_MAX : base_xp + added_xp;
+    {
+        uint32_t const final_level = MAX(baseline->level, G_HeroLevelForXP(baseline->merged_xp));
+        baseline->merged_skillpoints = final_level > baseline->num_skills
+                                     ? final_level - baseline->num_skills : 0;
+    }
+
+    if (balance) {
+        strength = MAX(0, balance->strength + (int32_t)((baseline->level - 1) * balance->strengthPerLevel));
+        intelligence = MAX(0, balance->intelligence + (int32_t)((baseline->level - 1) * balance->intelligencePerLevel));
+        baseline->health = MAX(1.0f, balance->maxHealth + (strength - balance->strength) * 25.0f);
+        /* Dynamic Hero creation starts at zero current mana. Level gains add
+         * only the mana-capacity delta; an authored SetUnitManaBJ/max-mana
+         * call below can raise this to the full capacity. */
+        baseline->mana = MAX(0.0f, (intelligence - balance->intelligence) * 15.0f);
+        baseline->has_health = true;
+        baseline->has_mana = true;
+    }
+
+    for (uint32_t i = 0; i < baseline->num_state_calls; i++) {
+        cstring_t call = baseline->state_calls[i];
+        bool life = strstr(call, "SetWidgetLife") || strstr(call, "SetUnitLifeBJ") ||
+                    strstr(call, "SetUnitLifePercentBJ");
+        bool mana = strstr(call, "SetUnitManaBJ") || strstr(call, "SetUnitManaPercentBJ");
+        uint32_t value_arg = 1;
+        if (strstr(call, "SetUnitState")) {
+            if (!G_CampaignCallArgument(call, 1, arg, sizeof(arg))) return false;
+            life = !strcmp(arg, "UNIT_STATE_LIFE");
+            mana = !strcmp(arg, "UNIT_STATE_MANA");
+            value_arg = 2;
+        }
+        if (!life && !mana) continue;
+        if (!G_CampaignCallArgument(call, value_arg, arg, sizeof(arg))) return false;
+        if (life && strstr(call, "SetUnitLifePercentBJ")) {
+            float percent;
+            if (!balance || !G_CampaignParseReal(arg, &percent)) goto unsupported_state;
+            baseline->health *= percent * 0.01f;
+        } else if (mana && strstr(call, "SetUnitManaPercentBJ")) {
+            float percent;
+            if (!balance || !G_CampaignParseReal(arg, &percent)) goto unsupported_state;
+            baseline->mana *= percent * 0.01f;
+        } else if (!G_CampaignParseReal(arg, life ? &baseline->health : &baseline->mana)) {
+            if (mana && strstr(arg, "GetUnitStateSwap(UNIT_STATE_MAX_MANA")) {
+                /* This common campaign setup fills the fallback Hero's mana. */
+                if (!balance) goto unsupported_state;
+                baseline->mana = MAX(baseline->mana,
+                    balance->maxMana + (intelligence - balance->intelligence) * 15.0f);
+            } else {
+                goto unsupported_state;
+            }
+        }
+        if (life) baseline->has_health = true;
+        if (mana) baseline->has_mana = true;
+        continue;
+unsupported_state:
+        fprintf(stderr, "G_SpawnEntities: campaign Hero %.4s has unsupported health/mana fallback expression: %s\n",
+                baseline->rawcode, call);
+        return false;
+    }
+    return true;
+}
+
+static bool G_CampaignBuildMerge(char *global, campaignHeroBaseline_t const *baseline,
                                  char *buffer, size_t capacity) {
     size_t used = 0;
-    uint32_t i;
     if (!G_CampaignAppend(buffer, capacity, &used,
         "        if ( IsUnitType(%s, UNIT_TYPE_HERO) ) then\n"
         "        // Campaign fallback merge: %s\n"
-        "        set %s = CreateUnit( GetOwningPlayer(%s), '%s', GetUnitX(%s), GetUnitY(%s), GetUnitFacing(%s) )\n"
-        "        call SetHeroLevel( %s, %u, false )\n",
-        global, global, local, global, baseline->rawcode, global, global, global, local, baseline->level)) return false;
-    if (baseline->xp && !G_CampaignAppend(buffer, capacity, &used,
-            "        call SetHeroXP( %s, %u, false )\n", local, baseline->xp)) return false;
-    for (i = 0; i < baseline->num_xp_calls; i++)
-        if (!G_CampaignAppendTranslatedCall(buffer, capacity, &used, baseline->xp_calls[i], global, local)) return false;
-    for (i = 0; i < baseline->num_skills; i++)
-        if (!G_CampaignAppend(buffer, capacity, &used, "        call SelectHeroSkill( %s, '%s' )\n", local, baseline->skills[i]))
-            return false;
-    for (i = 0; i < baseline->num_state_calls; i++)
-        if (!G_CampaignAppendTranslatedCall(buffer, capacity, &used, baseline->state_calls[i], global, local)) return false;
-    if (!G_CampaignAppend(buffer, capacity, &used,
-        "        if ( GetHeroLevel(%s) < GetHeroLevel(%s) ) then\n"
-        "            call SetHeroLevel( %s, GetHeroLevel(%s), false )\n"
+        "        if ( GetHeroLevel(%s) < %u ) then\n"
+        "            call SetHeroLevel( %s, %u, false )\n"
         "        endif\n"
-        "        if ( GetHeroXP(%s) < GetHeroXP(%s) ) then\n"
-        "            if ( IsSuspendedXP(%s) ) then\n"
-        "                call SuspendHeroXP( %s, false )\n"
-        "                call SetHeroXP( %s, GetHeroXP(%s), false )\n"
-        "                call SuspendHeroXP( %s, true )\n"
-        "            else\n"
-        "                call SetHeroXP( %s, GetHeroXP(%s), false )\n"
-        "            endif\n"
+        "        if ( GetHeroXP(%s) < %u ) then\n"
+        "            call SetHeroXP( %s, %u, false )\n"
         "        endif\n",
-            global, local, global, local, global, local, global, global, global, local, global,
-            global, local)) return false;
-    for (i = 0; i < baseline->num_skills; i++)
+        global, global, global, baseline->level, global, baseline->level,
+        global, baseline->merged_xp, global, baseline->merged_xp)) return false;
+    for (uint32_t i = 0; i < baseline->num_skills; i++) {
+        uint32_t desired_rank = 0;
+        for (uint32_t j = 0; j <= i; j++)
+            if (!strcmp(baseline->skills[j], baseline->skills[i])) desired_rank++;
         if (!G_CampaignAppend(buffer, capacity, &used,
-            "        if ( GetUnitAbilityLevel(%s, '%s') < GetUnitAbilityLevel(%s, '%s') ) then\n"
+            "        if ( GetUnitAbilityLevel(%s, '%s') < %u ) then\n"
             "            if ( GetHeroSkillPoints(%s) <= 0 ) then\n"
             "                call UnitModifySkillPoints( %s, 1 )\n"
             "            endif\n"
             "            call SelectHeroSkill( %s, '%s' )\n"
             "        endif\n",
-            global, baseline->skills[i], local, baseline->skills[i], global, global, global, baseline->skills[i]))
-            return false;
-    return G_CampaignAppend(buffer, capacity, &used,
-        "        if ( GetHeroSkillPoints(%s) < GetHeroSkillPoints(%s) ) then\n"
-        "            call UnitModifySkillPoints( %s, GetHeroSkillPoints(%s) - GetHeroSkillPoints(%s) )\n"
-        "        endif\n"
-        "        if ( GetWidgetLife(%s) < GetWidgetLife(%s) ) then\n"
-        "            call SetWidgetLife( %s, GetWidgetLife(%s) )\n"
-        "        endif\n"
-        "        if ( GetUnitState(%s, UNIT_STATE_MANA) < GetUnitState(%s, UNIT_STATE_MANA) ) then\n"
-        "            call SetUnitState( %s, UNIT_STATE_MANA, GetUnitState(%s, UNIT_STATE_MANA) )\n"
-        "        endif\n"
-        "        call RemoveUnit( %s )\n"
-        "        endif\n",
-        global, local, global, global, local, global, local, global, local,
-        global, local, global, local, local);
+            global, baseline->skills[i], desired_rank, global, global, global, baseline->skills[i])) return false;
+    }
+    if (baseline->merged_skillpoints && !G_CampaignAppend(buffer, capacity, &used,
+        "        if ( GetHeroSkillPoints(%s) < %u ) then\n"
+        "            call UnitModifySkillPoints( %s, %u - GetHeroSkillPoints(%s) )\n"
+        "        endif\n", global, baseline->merged_skillpoints, global,
+        baseline->merged_skillpoints, global)) return false;
+    if (baseline->has_health && !G_CampaignAppend(buffer, capacity, &used,
+        "        if ( GetWidgetLife(%s) < %.6g ) then\n"
+        "            call SetWidgetLife( %s, %.6g )\n"
+        "        endif\n", global, (double)baseline->health, global, (double)baseline->health)) return false;
+    if (baseline->has_mana && !G_CampaignAppend(buffer, capacity, &used,
+        "        if ( GetUnitState(%s, UNIT_STATE_MANA) < %.6g ) then\n"
+        "            call SetUnitState( %s, UNIT_STATE_MANA, %.6g )\n"
+        "        endif\n", global, (double)baseline->mana, global, (double)baseline->mana)) return false;
+    return G_CampaignAppend(buffer, capacity, &used, "        endif\n");
 }
+
 
 static bool G_FixCampaignHeroRestoreScripts(char **script_ptr) {
     char *script, *search_after;
-    uint32_t serial = 0;
     bool complete = true;
     if (!script_ptr || !(script = *script_ptr)) return false;
     if (!G_CampaignUsesCampaignCache(script)) return true;
@@ -781,10 +876,10 @@ static bool G_FixCampaignHeroRestoreScripts(char **script_ptr) {
         statement = restore;
         while (statement > function_start && statement[-1] != '\n') statement--;
         {
-            char global[192] = {0}, function_name[192] = {0}, local[64], locals[96], merge[32768];
-            char *header, *header_end, *insert_at, *fallback_start, *fallback_end;
+            char global[192] = {0}, function_name[192] = {0}, merge[32768];
+            char *insert_at, *fallback_start, *fallback_end;
             char *marker, *scan;
-            size_t merge_offset, local_offset;
+            size_t merge_offset;
             campaignHeroBaseline_t baseline;
             marker = strstr(statement, "set ");
             if (!marker || marker >= restore) {
@@ -824,29 +919,19 @@ static bool G_FixCampaignHeroRestoreScripts(char **script_ptr) {
                 search_after = restore + strlen("GetLastRestoredUnitBJ");
                 continue;
             }
-            do {
-                snprintf(local, sizeof(local), "campaign_fallback_hero_%u", serial++);
-            } while (strstr(script, local));
-            if (!G_CampaignBuildMerge(global, local, &baseline, merge, sizeof(merge))) {
+            if (!G_CampaignHeroBaselineStats(&baseline)) {
+                complete = false;
+                search_after = restore + strlen("GetLastRestoredUnitBJ");
+                continue;
+            }
+            if (!G_CampaignBuildMerge(global, &baseline, merge, sizeof(merge))) {
                 fprintf(stderr, "G_SpawnEntities: campaign Hero %s fallback merge exceeds script buffer\n", global);
                 complete = false;
                 search_after = restore + strlen("GetLastRestoredUnitBJ");
                 continue;
             }
-            header = strstr(function_start, "returns nothing");
-            header_end = header ? strchr(header, '\n') : NULL;
-            if (!header || !header_end || header_end >= function_end) return false;
             merge_offset = (size_t)(insert_at - script);
             if (!G_CampaignInsert(script_ptr, merge_offset, merge)) return false;
-            script = *script_ptr;
-            function_start = G_CampaignFindFunction(script, function_name, &function_end);
-            if (!function_start || !function_end) return false;
-            header = strstr(function_start, "returns nothing");
-            header_end = header ? strchr(header, '\n') : NULL;
-            if (!header_end || header_end >= function_end) return false;
-            snprintf(locals, sizeof(locals), "    local unit campaign_fallback_hero_%u = null\n", serial - 1);
-            local_offset = (size_t)(header_end + 1 - script);
-            if (!G_CampaignInsert(script_ptr, local_offset, locals)) return false;
             script = *script_ptr;
             function_start = G_CampaignFindFunction(script, function_name, &function_end);
             if (!function_start || !function_end) return false;

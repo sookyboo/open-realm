@@ -174,23 +174,19 @@ TEST(wc3_mapscript, cached_campaign_heroes_get_map_authored_baseline_merge) {
     T_NOT_NULL(script);
     memcpy(script, source, sizeof(source));
     T_ASSERT(G_TestFixCampaignHeroRestoreScripts(&script));
-    T_ASSERT(strstr(script, "local unit campaign_fallback_hero_0") != NULL);
-    T_ASSERT(strstr(script, "local unit campaign_fallback_hero_1") != NULL);
     thrall = strstr(script, "'Othr'");
     cairne = strstr(script, "'Ocbh'");
     T_NOT_NULL(thrall);
     T_NOT_NULL(cairne);
-    T_ASSERT(strstr(thrall, "SetHeroLevel( campaign_fallback_hero_0, 7, false )") != NULL);
-    T_ASSERT(strstr(thrall, "SetHeroXP( campaign_fallback_hero_0, 3500, false )") != NULL);
-    T_ASSERT(strstr(thrall, "SelectHeroSkill( campaign_fallback_hero_0, 'AOcl' )") != NULL);
-    T_ASSERT(strstr(thrall, "SetWidgetLife( campaign_fallback_hero_0, 250.00 )") != NULL);
-    T_ASSERT(strstr(thrall, "SetUnitState( campaign_fallback_hero_0, UNIT_STATE_MANA, 180.00 )") != NULL);
-    T_ASSERT(strstr(cairne, "SetHeroLevel( campaign_fallback_hero_1, 8, false )") != NULL);
-    T_ASSERT(strstr(cairne, "SelectHeroSkill( campaign_fallback_hero_1, 'AOre' )") != NULL);
-    T_ASSERT(strstr(script, "GetWidgetLife(campaign_fallback_hero_0)") != NULL);
+    T_ASSERT(strstr(thrall, "SetHeroLevel( udg_Thrall, 7, false )") != NULL);
+    T_ASSERT(strstr(thrall, "SetHeroXP( udg_Thrall, 3500, false )") != NULL);
+    T_ASSERT(strstr(thrall, "SelectHeroSkill( udg_Thrall, 'AOcl' )") != NULL);
+    T_ASSERT(strstr(thrall, "SetWidgetLife( udg_Thrall, 250 )") != NULL);
+    T_ASSERT(strstr(thrall, "SetUnitState( udg_Thrall, UNIT_STATE_MANA, 180 )") != NULL);
+    T_ASSERT(strstr(cairne, "SetHeroLevel( udg_Cairne, 8, false )") != NULL);
+    T_ASSERT(strstr(cairne, "SelectHeroSkill( udg_Cairne, 'AOre' )") != NULL);
     T_ASSERT(strstr(script, "UNIT_STATE_MANA") != NULL);
-    T_ASSERT(strstr(script, "call RemoveUnit( campaign_fallback_hero_0 )") != NULL);
-    T_ASSERT(strstr(script, "call RemoveUnit( udg_Thrall )") == NULL);
+    T_ASSERT(strstr(script, "campaign_fallback_hero_") == NULL);
     T_ASSERT(run_test_jass(script));
     first = script;
     T_ASSERT(G_TestFixCampaignHeroRestoreScripts(&script));
@@ -233,11 +229,46 @@ TEST(wc3_mapscript, cached_campaign_hero_uses_separate_default_trigger) {
     T_NOT_NULL(script);
     memcpy(script, source, sizeof(source));
     T_ASSERT(G_TestFixCampaignHeroRestoreScripts(&script));
-    T_ASSERT(strstr(script, "SetHeroLevel( campaign_fallback_hero_0, 6, false )") != NULL);
+    T_ASSERT(strstr(script, "SetHeroLevel( udg_Arthas, 6, false )") != NULL);
     T_ASSERT(strstr(script, "'Hart'") != NULL);
-    T_ASSERT(strstr(script, "SelectHeroSkill( campaign_fallback_hero_0, 'AUau' )") != NULL);
-    T_ASSERT(strstr(script, "call RemoveUnit( campaign_fallback_hero_0 )") != NULL);
-    T_ASSERT(strstr(script, "call RemoveUnit( udg_Arthas )") == NULL);
+    T_ASSERT(strstr(script, "SelectHeroSkill( udg_Arthas, 'AUau' )") != NULL);
+    T_ASSERT(strstr(script, "campaign_fallback_hero_") == NULL);
+    T_ASSERT(run_test_jass(script));
+    gi.MemFree(script);
+}
+
+TEST(wc3_mapscript, cached_campaign_hero_merge_uses_data_without_spawning_probe) {
+    char source[] =
+        "globals\n"
+        "  unit udg_Hero = null\n"
+        "endglobals\n"
+        "function CacheMissHero takes nothing returns boolean\n"
+        "  return ( udg_Hero == null )\n"
+        "endfunction\n"
+        "function Trig_LoadHero_Actions takes nothing returns nothing\n"
+        "  call InitGameCacheBJ( \"Campaigns.w3v\" )\n"
+        "  call RestoreUnitLocFacingAngleBJ( \"Hero\", \"Human01\", GetLastCreatedGameCacheBJ(), Player(0), GetRectCenter(gg_rct_Hero), 0.00 )\n"
+        "  set udg_Hero = GetLastRestoredUnitBJ()\n"
+        "  if ( CacheMissHero() ) then\n"
+        "    call CreateNUnitsAtLoc( 1, 'Hpal', Player(0), GetRectCenter(gg_rct_Hero), 0.00 )\n"
+        "    set udg_Hero = GetLastCreatedUnit()\n"
+        "    call SetHeroLevel( udg_Hero, 2, false )\n"
+        "    call SelectHeroSkill( udg_Hero, 'AHhb' )\n"
+        "  else\n"
+        "    return\n"
+        "  endif\n"
+        "endfunction\n"
+        "function main takes nothing returns nothing\n"
+        "endfunction\n";
+    char *script = gi.MemAlloc(sizeof(source));
+
+    T_NOT_NULL(script);
+    memcpy(script, source, sizeof(source));
+    T_ASSERT(G_TestFixCampaignHeroRestoreScripts(&script));
+    T_ASSERT(strstr(script, "SetHeroLevel( udg_Hero, 2, false )") != NULL);
+    T_ASSERT(strstr(script, "if ( GetWidgetLife(udg_Hero) < ") != NULL);
+    T_ASSERT(strstr(script, "if ( GetUnitState(udg_Hero, UNIT_STATE_MANA) < ") != NULL);
+    T_ASSERT(strstr(script, "campaign_fallback_hero_") == NULL);
     T_ASSERT(run_test_jass(script));
     gi.MemFree(script);
 }
@@ -278,8 +309,9 @@ TEST(wc3_mapscript, cached_campaign_hero_combines_fallback_create_and_setup_trig
     T_NOT_NULL(script);
     memcpy(script, source, sizeof(source));
     T_ASSERT(G_TestFixCampaignHeroRestoreScripts(&script));
-    T_ASSERT(strstr(script, "SetHeroLevel( campaign_fallback_hero_0, 7, false )") != NULL);
-    T_ASSERT(strstr(script, "SelectHeroSkill( campaign_fallback_hero_0, 'AHre' )") != NULL);
+    T_ASSERT(strstr(script, "SetHeroLevel( udg_Arthas, 7, false )") != NULL);
+    T_ASSERT(strstr(script, "SelectHeroSkill( udg_Arthas, 'AHre' )") != NULL);
+    T_ASSERT(strstr(script, "campaign_fallback_hero_") == NULL);
     T_ASSERT(run_test_jass(script));
     gi.MemFree(script);
 }
@@ -316,9 +348,10 @@ TEST(wc3_mapscript, cached_campaign_hero_supports_tft_restore_helper_and_xp_bonu
     memcpy(script, source, sizeof(source));
     T_ASSERT(G_TestFixCampaignHeroRestoreScripts(&script));
     T_ASSERT(strstr(script, "IsUnitType(udg_Kael, UNIT_TYPE_HERO)") != NULL);
-    T_ASSERT(strstr(script, "AddHeroXP( campaign_fallback_hero_0, 400, false )") != NULL);
-    T_ASSERT(strstr(script, "SelectHeroSkill( campaign_fallback_hero_0, 'AHfs' )") != NULL);
-    T_ASSERT(strstr(script, "GetHeroXP(udg_Kael) < GetHeroXP(campaign_fallback_hero_0)") != NULL);
+    T_ASSERT(strstr(script, "SetHeroXP( udg_Kael,") != NULL);
+    T_ASSERT(strstr(script, "SelectHeroSkill( udg_Kael, 'AHfs' )") != NULL);
+    T_ASSERT(strstr(script, "GetHeroXP(udg_Kael) < ") != NULL);
+    T_ASSERT(strstr(script, "campaign_fallback_hero_") == NULL);
     T_ASSERT(run_test_jass(script));
     gi.MemFree(script);
 }

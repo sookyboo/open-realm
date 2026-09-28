@@ -88,14 +88,15 @@ and fallback progression calls that target either the Hero global or
 map-authored level, XP, skill-rank, current-health, and current-mana setup
 without a per-map constants table.
 
-For each recognized restore, the generated cache-hit branch creates a
-temporary Hero of the fallback rawcode, applies the authored level, XP, learned
-skills, and direct health/mana setters, then raises the cached Hero's level,
-XP, skill ranks, unspent points, current health, and mana only where the
-temporary baseline is higher. It removes the temporary Hero before the map
-script continues. Cache-miss fallback code remains the map's original path.
-If a restore branch or baseline setup uses an unsupported form, OpenRealm logs
-the Hero and skips that merge instead of silently inventing baseline values.
+For each recognized restore, the generated cache-hit branch compares the
+cached Hero directly with scalar fallback values extracted from the map script
+and unit data. It raises level, XP, skill ranks, unspent points, current health,
+and mana only when the authored cache-miss baseline is higher. This avoids
+creating an extra unit, so the merge does not fire unit-creation behavior or
+leave temporary side effects. Cache-miss fallback code remains the map's
+original path. If a restore branch or baseline expression cannot be evaluated
+safely, OpenRealm logs the Hero and skips that merge rather than inventing
+baseline values.
 
 This merge is an OpenRealm compatibility behavior and has not been verified
 against retail Warcraft III; retail cache-hit behavior may differ.
