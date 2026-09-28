@@ -1,5 +1,6 @@
 #include "g_local.h"
 #include "jass/jass.h"
+#include <stdarg.h>
 
 #define MAX_SPAWN_ITERATIONS 10
 #define MAX_REPOSITION_BLOCKERS 256 // entities; bounded broad-phase results, any hit rejects the point
@@ -97,9 +98,770 @@ unsupported:
     return false;
 }
 
+
+typedef struct campaignHeroBaseline_s {
+    char rawcode[5];
+    uint32_t level;
+    uint32_t xp;
+    char skills[32][5];
+    uint32_t num_skills;
+    char xp_calls[8][256];
+    uint32_t num_xp_calls;
+    char state_calls[12][1024];
+    uint32_t num_state_calls;
+    bool found;
+} campaignHeroBaseline_t;
+
+static char *G_CampaignCallEnd(char *call, char *limit) {
+    char *at = strchr(call, '(');
+    int depth = 0;
+    bool quoted = false;
+    if (!at || at >= limit) return NULL;
+    for (; at < limit; at++) {
+        if (*at == '"' && (at == call || at[-1] != '\\')) quoted = !quoted;
+        if (quoted) continue;
+        if (*at == '(') depth++;
+        else if (*at == ')' && --depth == 0) return at + 1;
+    }
+    return NULL;
+}
+
+static bool G_CampaignReadUnsigned(char *start, char *limit, uint32_t *value) {
+    char *end;
+    unsigned long parsed;
+    while (start < limit && (*start == ' ' || *start == '\t' || *start == '\r' || *start == '\n')) start++;
+    if (start >= limit || *start < '0' || *start > '9') return false;
+    parsed = strtoul(start, &end, 10);
+    if (end == start || end > limit || parsed > UINT32_MAX) return false;
+    *value = (uint32_t)parsed;
+    return true;
+}
+
+static int G_CampaignNestingAt(char *start, char *position) {
+    int nesting = 0;
+    for (char *line = start; line < position;) {
+        char *line_end = strchr(line, '\n'), *text = line;
+        if (!line_end || line_end > position) line_end = position;
+        while (text < line_end && (*text == ' ' || *text == '\t' || *text == '\r')) text++;
+        if (!strncmp(text, "if ", 3) || !strncmp(text, "if(", 3)) nesting++;
+        else if (!strncmp(text, "endif", 5) && nesting > 0) nesting--;
+        line = line_end < position ? line_end + 1 : position;
+    }
+    return nesting;
+}
+
+static char *G_CampaignHeroTarget(char *call, char *call_end, char *hero_global) {
+    char *global = strstr(call, hero_global);
+    char *created = strstr(call, "GetLastCreatedUnit");
+    if (global && global >= call_end) global = NULL;
+    if (created && created >= call_end) created = NULL;
+    return !global ? created : (!created || global < created ? global : created);
+}
+
+static bool G_CampaignIsLastCreatedAssignment(char *global, char *lower_bound, char *limit) {
+    char *line = global, *line_end, *at;
+    while (line > lower_bound && line[-1] != '\n') line--;
+    line_end = strchr(global, '\n');
+    if (!line_end || line_end > limit) line_end = limit;
+    at = strstr(line, "set ");
+    if (!at || at >= global) return false;
+    at = global + strlen("udg_");
+    while (at < line_end && ((*at >= 'a' && *at <= 'z') || (*at >= 'A' && *at <= 'Z') ||
+                              (*at >= '0' && *at <= '9') || *at == '_')) at++;
+    while (at < line_end && (*at == ' ' || *at == '\t')) at++;
+    if (at >= line_end || *at++ != '=') return false;
+    while (at < line_end && (*at == ' ' || *at == '\t')) at++;
+    return (size_t)(line_end - at) >= strlen("GetLastCreatedUnit()") &&
+           !strncmp(at, "GetLastCreatedUnit()", strlen("GetLastCreatedUnit()"));
+}
+
+static bool G_CampaignIsDirectCreateAssignment(char *call, char *function_start, char *hero_global) {
+    char *line = call, *global, *set;
+    while (line > function_start && line[-1] != '\n') line--;
+    global = strstr(line, hero_global);
+    set = strstr(line, "set ");
+    return global && global < call && set && set < global;
+}
+
+static bool G_CampaignCopyHeroCalls(char *context_start, char *start, char *limit, char *hero_global,
+                                    char calls[][256], uint32_t *num_calls, uint32_t max_calls,
+                                    size_t call_capacity, cstring_t const *names, size_t num_names) {
+    char *cursor = start;
+    while (cursor < limit) {
+        char *call = NULL, *call_end, *target;
+        size_t name_index;
+        for (name_index = 0; name_index < num_names; name_index++) {
+            char *candidate = strstr(cursor, names[name_index]);
+            if (candidate && candidate < limit && (!call || candidate < call)) call = candidate;
+        }
+        if (!call) break;
+        call_end = G_CampaignCallEnd(call, limit);
+        if (!call_end) return false;
+        target = G_CampaignHeroTarget(call, call_end, hero_global);
+        if (target) {
+            size_t length = (size_t)(call_end - call);
+            if (G_CampaignNestingAt(context_start, call) > 0) return false;
+            if (*num_calls >= max_calls || length >= call_capacity) return false;
+            memcpy(calls[*num_calls], call, length);
+            calls[*num_calls][length] = '\0';
+            (*num_calls)++;
+        }
+        cursor = call_end;
+    }
+    return true;
+}
+
+static bool G_CampaignCopyGlobal(char *source, char *limit, char *global, size_t capacity) {
+    char *start = strstr(source, "udg_"), *end;
+    size_t length;
+    if (!start || start >= limit) return false;
+    end = start;
+    while (end < limit && ((*end >= 'a' && *end <= 'z') || (*end >= 'A' && *end <= 'Z') ||
+                           (*end >= '0' && *end <= '9') || *end == '_')) end++;
+    length = (size_t)(end - start);
+    if (!length || length >= capacity) return false;
+    memcpy(global, start, length);
+    global[length] = '\0';
+    return true;
+}
+
+static char *G_CampaignFindFunction(char *script, char *name, char **end_out) {
+    char needle[224];
+    char *start, *end;
+    if (end_out) *end_out = NULL;
+    if (snprintf(needle, sizeof(needle), "function %s takes", name) >= (int)sizeof(needle)) return NULL;
+    start = strstr(script, needle);
+    end = start ? strstr(start, "endfunction") : NULL;
+    if (!start || !end) return NULL;
+    if (end_out) *end_out = end;
+    return start;
+}
+
+static bool G_CampaignFindHeroBaseline(char *function_start, char *function_end,
+                                       char *hero_global, campaignHeroBaseline_t *baseline) {
+    char *create = function_start;
+    memset(baseline, 0, sizeof(*baseline));
+    while (create < function_end) {
+        char *at_loc = strstr(create, "CreateNUnitsAtLoc");
+        char *at_xy = strstr(create, "CreateUnit(");
+        char *call, *call_end, *next_create, *assignment, *raw;
+        if (at_loc && at_loc >= function_end) at_loc = NULL;
+        if (at_xy && at_xy >= function_end) at_xy = NULL;
+        call = !at_loc ? at_xy : (!at_xy || at_loc < at_xy ? at_loc : at_xy);
+        if (!call) break;
+        call_end = G_CampaignCallEnd(call, function_end);
+        if (!call_end) return false;
+        next_create = strstr(call_end, "CreateNUnitsAtLoc");
+        {
+            char *next_xy = strstr(call_end, "CreateUnit(");
+            if (next_xy && next_xy < function_end && (!next_create || next_create >= function_end || next_xy < next_create))
+                next_create = next_xy;
+        }
+        if (!next_create || next_create >= function_end) next_create = function_end;
+        assignment = call_end;
+        if (!G_CampaignIsDirectCreateAssignment(call, function_start, hero_global)) {
+            while ((assignment = strstr(assignment, hero_global)) && assignment < next_create) {
+                if (G_CampaignIsLastCreatedAssignment(assignment, function_start, next_create)) break;
+                assignment += strlen(hero_global);
+            }
+        } else assignment = call;
+        if (!assignment || assignment >= next_create) {
+            create = call_end;
+            continue;
+        }
+        for (raw = call; raw < call_end; raw++) {
+            if (*raw == '\'' && raw + 5 < call_end && raw[5] == '\'') {
+                memcpy(baseline->rawcode, raw + 1, 4);
+                baseline->rawcode[4] = '\0';
+                break;
+            }
+        }
+        if (!baseline->rawcode[0]) return false;
+        baseline->found = true;
+        {
+            char *level = call_end;
+            while ((level = strstr(level, "SetHeroLevel")) && level < next_create) {
+                char *level_end = G_CampaignCallEnd(level, next_create);
+                char *target = level_end ? G_CampaignHeroTarget(level, level_end, hero_global) : NULL;
+                char *comma;
+                if (!level_end) return false;
+                if (target && target < level_end && (comma = strchr(target, ',')) && comma < level_end &&
+                    (G_CampaignNestingAt(function_start, level) > 0 ||
+                     !G_CampaignReadUnsigned(comma + 1, level_end, &baseline->level))) return false;
+                level = level_end;
+            }
+        }
+        {
+            char *xp = call_end;
+            while ((xp = strstr(xp, "SetHeroXP")) && xp < next_create) {
+                char *xp_end = G_CampaignCallEnd(xp, next_create);
+                char *target = xp_end ? G_CampaignHeroTarget(xp, xp_end, hero_global) : NULL;
+                char *comma;
+                if (!xp_end) return false;
+                if (target && target < xp_end && (comma = strchr(target, ',')) && comma < xp_end &&
+                    (G_CampaignNestingAt(function_start, xp) > 0 ||
+                     !G_CampaignReadUnsigned(comma + 1, xp_end, &baseline->xp))) return false;
+                xp = xp_end;
+            }
+        }
+        {
+            static cstring_t const xp_calls[] = { "AddHeroXPSwapped", "AddHeroXP(" };
+            if (!G_CampaignCopyHeroCalls(function_start, call_end, next_create, hero_global, baseline->xp_calls,
+                    &baseline->num_xp_calls, sizeof(baseline->xp_calls) / sizeof(baseline->xp_calls[0]),
+                    sizeof(baseline->xp_calls[0]), xp_calls, sizeof(xp_calls) / sizeof(xp_calls[0]))) return false;
+        }
+        {
+            char *skill = call_end;
+            while ((skill = strstr(skill, "SelectHeroSkill")) && skill < next_create) {
+                char *skill_end = G_CampaignCallEnd(skill, next_create);
+                char *target = skill_end ? G_CampaignHeroTarget(skill, skill_end, hero_global) : NULL;
+                char *code;
+                if (!skill_end) return false;
+                if (target && target < skill_end) {
+                    for (code = target; code < skill_end; code++) {
+                        if (*code == '\'' && code + 5 < skill_end && code[5] == '\'') {
+                            if (G_CampaignNestingAt(function_start, skill) > 0) return false;
+                            if (baseline->num_skills >= sizeof(baseline->skills) / sizeof(baseline->skills[0])) return false;
+                            memcpy(baseline->skills[baseline->num_skills], code + 1, 4);
+                            baseline->skills[baseline->num_skills][4] = '\0';
+                            baseline->num_skills++;
+                            break;
+                        }
+                    }
+                }
+                skill = skill_end;
+            }
+        }
+        {
+            static cstring_t const setters[] = {
+                "SetWidgetLife", "SetUnitState", "SetUnitManaBJ", "SetUnitLifeBJ",
+                "SetUnitLifePercentBJ", "SetUnitManaPercentBJ", "SetUnitStateBJ"
+            };
+            char *setup = call_end;
+            char *cursor = setup;
+            int nesting;
+            if (!setup) return false;
+            while (cursor < next_create) {
+                char *setter = NULL, *setter_end = NULL;
+                size_t setter_index;
+                for (setter_index = 0; setter_index < sizeof(setters) / sizeof(setters[0]); setter_index++) {
+                    char *candidate = strstr(cursor, setters[setter_index]);
+                    if (candidate && candidate < next_create && (!setter || candidate < setter)) setter = candidate;
+                }
+                if (!setter) break;
+                setter_end = G_CampaignCallEnd(setter, next_create);
+                if (!setter_end) return false;
+                nesting = G_CampaignNestingAt(function_start, setter);
+                if (nesting == 0 && G_CampaignHeroTarget(setter, setter_end, hero_global)) {
+                    bool copy = true;
+                    if (!strncmp(setter, "SetUnitState", strlen("SetUnitState")) &&
+                        !strstr(setter, "UNIT_STATE_LIFE") && !strstr(setter, "UNIT_STATE_MANA")) copy = false;
+                    if (copy) {
+                        size_t length = (size_t)(setter_end - setter);
+                        if (baseline->num_state_calls >= sizeof(baseline->state_calls) / sizeof(baseline->state_calls[0]) ||
+                            length >= sizeof(baseline->state_calls[0])) return false;
+                        memcpy(baseline->state_calls[baseline->num_state_calls], setter, length);
+                        baseline->state_calls[baseline->num_state_calls][length] = '\0';
+                        baseline->num_state_calls++;
+                    }
+                } else if (nesting > 0 && G_CampaignHeroTarget(setter, setter_end, hero_global)) {
+                    fprintf(stderr, "G_SpawnEntities: campaign Hero %s has conditional health/mana fallback setup\n", hero_global);
+                    return false;
+                }
+                cursor = setter_end;
+            }
+        }
+        if (!baseline->level) baseline->level = 1;
+        return true;
+    }
+    return false;
+}
+
+static bool G_CampaignFindHeroProgression(char *function_start, char *function_end,
+                                          char *hero_global, campaignHeroBaseline_t *baseline) {
+    bool found = false;
+    uint32_t old_xp_calls = baseline->num_xp_calls;
+    uint32_t old_state_calls = baseline->num_state_calls;
+    static cstring_t const xp_calls[] = { "AddHeroXPSwapped", "AddHeroXP(" };
+    char *at = function_start;
+    while ((at = strstr(at, "SetHeroLevel")) && at < function_end) {
+        char *call_end = G_CampaignCallEnd(at, function_end);
+        char *target = call_end ? G_CampaignHeroTarget(at, call_end, hero_global) : NULL;
+        char *comma;
+        if (!call_end) return false;
+        if (target && target < call_end && (comma = strchr(target, ',')) && comma < call_end) {
+            if (G_CampaignNestingAt(function_start, at) > 0) return false;
+            if (!G_CampaignReadUnsigned(comma + 1, call_end, &baseline->level)) return false;
+            found = true;
+        }
+        at = call_end;
+    }
+    at = function_start;
+    while ((at = strstr(at, "SetHeroXP")) && at < function_end) {
+        char *call_end = G_CampaignCallEnd(at, function_end);
+        char *target = call_end ? G_CampaignHeroTarget(at, call_end, hero_global) : NULL;
+        char *comma;
+        if (!call_end) return false;
+        if (target && target < call_end && (comma = strchr(target, ',')) && comma < call_end) {
+            if (G_CampaignNestingAt(function_start, at) > 0) return false;
+            if (!G_CampaignReadUnsigned(comma + 1, call_end, &baseline->xp)) return false;
+            found = true;
+        }
+        at = call_end;
+    }
+    at = function_start;
+    while ((at = strstr(at, "SelectHeroSkill")) && at < function_end) {
+        char *call_end = G_CampaignCallEnd(at, function_end);
+        char *target = call_end ? G_CampaignHeroTarget(at, call_end, hero_global) : NULL;
+        char *code;
+        if (!call_end) return false;
+        if (target && target < call_end) {
+            for (code = target; code < call_end; code++) {
+                if (*code == '\'' && code + 5 < call_end && code[5] == '\'') {
+                    if (G_CampaignNestingAt(function_start, at) > 0) return false;
+                    if (baseline->num_skills >= sizeof(baseline->skills) / sizeof(baseline->skills[0])) return false;
+                    memcpy(baseline->skills[baseline->num_skills], code + 1, 4);
+                    baseline->skills[baseline->num_skills][4] = '\0';
+                    baseline->num_skills++;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        at = call_end;
+    }
+    if (!G_CampaignCopyHeroCalls(function_start, function_start, function_end, hero_global, baseline->xp_calls,
+            &baseline->num_xp_calls, sizeof(baseline->xp_calls) / sizeof(baseline->xp_calls[0]),
+            sizeof(baseline->xp_calls[0]), xp_calls, sizeof(xp_calls) / sizeof(xp_calls[0]))) return false;
+    if (baseline->num_xp_calls > old_xp_calls) found = true;
+    {
+        static cstring_t const setters[] = {
+            "SetWidgetLife", "SetUnitState", "SetUnitManaBJ", "SetUnitLifeBJ",
+            "SetUnitLifePercentBJ", "SetUnitManaPercentBJ", "SetUnitStateBJ"
+        };
+        char *cursor = function_start;
+        while (cursor < function_end) {
+            char *setter = NULL, *setter_end;
+            size_t i;
+            for (i = 0; i < sizeof(setters) / sizeof(setters[0]); i++) {
+                char *candidate = strstr(cursor, setters[i]);
+                if (candidate && candidate < function_end && (!setter || candidate < setter)) setter = candidate;
+            }
+            if (!setter) break;
+            setter_end = G_CampaignCallEnd(setter, function_end);
+            if (!setter_end) return false;
+            if (G_CampaignHeroTarget(setter, setter_end, hero_global)) {
+                bool copy = true;
+                if (G_CampaignNestingAt(function_start, setter) > 0) return false;
+                if (!strncmp(setter, "SetUnitState", strlen("SetUnitState")) &&
+                    !strstr(setter, "UNIT_STATE_LIFE") && !strstr(setter, "UNIT_STATE_MANA")) copy = false;
+                if (copy) {
+                    size_t length = (size_t)(setter_end - setter);
+                    if (baseline->num_state_calls >= sizeof(baseline->state_calls) / sizeof(baseline->state_calls[0]) ||
+                        length >= sizeof(baseline->state_calls[0])) return false;
+                    memcpy(baseline->state_calls[baseline->num_state_calls], setter, length);
+                    baseline->state_calls[baseline->num_state_calls][length] = '\0';
+                    baseline->num_state_calls++;
+                }
+            }
+            cursor = setter_end;
+        }
+    }
+    if (baseline->num_state_calls > old_state_calls) found = true;
+    return found;
+}
+
+static bool G_CampaignHasHeroSetup(char *function_start, char *function_end, char *hero_global) {
+    static cstring_t const setters[] = {
+        "SetHeroLevel", "SetHeroXP", "AddHeroXPSwapped", "AddHeroXP(", "SelectHeroSkill",
+        "SetWidgetLife", "SetUnitState", "SetUnitManaBJ", "SetUnitLifeBJ",
+        "SetUnitLifePercentBJ", "SetUnitManaPercentBJ", "SetUnitStateBJ"
+    };
+    char *cursor = function_start;
+    while (cursor < function_end) {
+        char *call = NULL, *call_end;
+        size_t i;
+        for (i = 0; i < sizeof(setters) / sizeof(setters[0]); i++) {
+            char *candidate = strstr(cursor, setters[i]);
+            if (candidate && candidate < function_end && (!call || candidate < call)) call = candidate;
+        }
+        if (!call) return false;
+        call_end = G_CampaignCallEnd(call, function_end);
+        if (!call_end) return true;
+        if (G_CampaignHeroTarget(call, call_end, hero_global)) return true;
+        cursor = call_end;
+    }
+    return false;
+}
+
+static bool G_CampaignInsert(char **script_ptr, size_t offset, char *insert) {
+    char *script = *script_ptr, *rewritten;
+    size_t old_size = strlen(script), insert_size = strlen(insert);
+    if (offset > old_size || old_size > SIZE_MAX - insert_size - 1) return false;
+    rewritten = gi.MemAlloc(old_size + insert_size + 1);
+    if (!rewritten) return false;
+    memcpy(rewritten, script, offset);
+    memcpy(rewritten + offset, insert, insert_size);
+    memcpy(rewritten + offset + insert_size, script + offset, old_size - offset + 1);
+    gi.MemFree(script);
+    *script_ptr = rewritten;
+    return true;
+}
+
+static bool G_CampaignRestoreBranch(char *script, char *function_start, char *function_end,
+                                    char *restore_at, char *global, char **insert_at,
+                                    char **fallback_start, char **fallback_end) {
+    char *if_at = strstr(restore_at, "if ("), *then, *condition_end, *open;
+    char helper[224] = {0}, needle[256], *helper_start = NULL, *helper_end = NULL, *relation, *line_end;
+    char *scan, *else_at = NULL, *endif_at, *else_body = NULL, *after_endif = NULL;
+    char *cache_start, *cache_end, *return_at;
+    int depth = 1;
+    bool then_is_null;
+    (void)function_start;
+    if (!if_at || if_at >= function_end || !(then = strstr(if_at, "then")) || then >= function_end)
+        return false;
+    condition_end = then;
+    open = strchr(if_at, '(');
+    if (open) open = strchr(open + 1, '(');
+    if (open && open < condition_end) {
+        char *name = open;
+        while (name > if_at && (name[-1] == '_' || (name[-1] >= 'a' && name[-1] <= 'z') ||
+                (name[-1] >= 'A' && name[-1] <= 'Z') || (name[-1] >= '0' && name[-1] <= '9'))) name--;
+        if (name < open && (size_t)(open - name) < sizeof(helper)) {
+            memcpy(helper, name, (size_t)(open - name));
+            helper[open - name] = '\0';
+        }
+    }
+    relation = NULL;
+    if (helper[0] && snprintf(needle, sizeof(needle), "function %s takes", helper) < (int)sizeof(needle)) {
+        helper_start = strstr(script, needle);
+        helper_end = helper_start ? strstr(helper_start, "endfunction") : NULL;
+        relation = helper_start && helper_end ? strstr(helper_start, global) : NULL;
+        if (relation && relation < helper_end) {
+            line_end = strchr(relation, '\n');
+            if (!line_end || line_end > helper_end) line_end = helper_end;
+        } else relation = NULL;
+    }
+    if (!relation) {
+        relation = strstr(if_at, global);
+        if (!relation || relation >= condition_end) relation = strstr(if_at, "GetLastRestoredUnitBJ");
+        if (relation && relation < condition_end) {
+            line_end = condition_end;
+        } else if (helper[0] && helper_start && helper_end) {
+            relation = strstr(helper_start, "GetLastRestoredUnitBJ");
+            if (!relation || relation >= helper_end) return false;
+            line_end = strchr(relation, '\n');
+            if (!line_end || line_end > helper_end) line_end = helper_end;
+        } else return false;
+    }
+    then_is_null = strstr(relation, "== null") && strstr(relation, "== null") < line_end;
+    if (!then_is_null && !(strstr(relation, "!= null") && strstr(relation, "!= null") < line_end))
+        return false;
+
+    scan = then + 4;
+    for (; scan < function_end;) {
+        char *end_line = strchr(scan, '\n'), *line = scan;
+        if (!end_line || end_line > function_end) end_line = function_end;
+        while (line < end_line && (*line == ' ' || *line == '\t' || *line == '\r')) line++;
+        if (!strncmp(line, "if ", 3) || !strncmp(line, "if(", 3)) depth++;
+        else if (!strncmp(line, "endif", 5)) {
+            if (--depth == 0) break;
+        } else if (depth == 1 && !strncmp(line, "else", 4)) {
+            else_at = line;
+            break;
+        }
+        scan = end_line < function_end ? end_line + 1 : function_end;
+    }
+    endif_at = scan;
+    scan = strchr(endif_at, '\n');
+    if (scan && scan < function_end) after_endif = scan + 1;
+    if (else_at) {
+        scan = strchr(else_at, '\n');
+        if (scan && scan < function_end) else_body = scan + 1;
+    }
+    if (then_is_null) {
+        *fallback_start = then + 4;
+        *fallback_end = else_at ? else_at : endif_at;
+        cache_start = else_at ? else_body : after_endif;
+        cache_end = else_at ? endif_at : function_end;
+    } else {
+        *fallback_start = else_at ? else_body : after_endif;
+        *fallback_end = function_end;
+        cache_start = then + 4;
+        cache_end = else_at ? else_at : endif_at;
+    }
+    if (!cache_start || !cache_end || !*fallback_start) return false;
+    return_at = strstr(cache_start, "return");
+    if (return_at && return_at < cache_end) *insert_at = return_at;
+    else if (cache_end == function_end) *insert_at = cache_start;
+    else *insert_at = cache_end;
+    return *insert_at != NULL;
+}
+
+static bool G_CampaignFallbackFromTrigger(char *script, char *branch_start, char *branch_end,
+                                          char *hero_global, campaignHeroBaseline_t *baseline,
+                                          bool *baseline_found) {
+    char *call = branch_start;
+    while ((call = strstr(call, "TriggerExecute")) && call < branch_end) {
+        char *end = G_CampaignCallEnd(call, branch_end), *trigger = end ? strstr(call, "gg_trg_") : NULL;
+        char trigger_name[192], function_name[224], *name_end, *function_end, *function_start;
+        size_t length;
+        if (!end) return false;
+        if (trigger && trigger < end) {
+            name_end = trigger;
+            while (name_end < end && ((*name_end >= 'a' && *name_end <= 'z') ||
+                   (*name_end >= 'A' && *name_end <= 'Z') || (*name_end >= '0' && *name_end <= '9') ||
+                   *name_end == '_')) name_end++;
+            length = (size_t)(name_end - trigger);
+            if (!length || length >= sizeof(trigger_name)) return false;
+            memcpy(trigger_name, trigger, length);
+            trigger_name[length] = '\0';
+            if (strncmp(trigger_name, "gg_trg_", 7)) return false;
+            snprintf(function_name, sizeof(function_name), "Trig_%s_Actions", trigger_name + 7);
+            function_start = G_CampaignFindFunction(script, function_name, &function_end);
+            if (function_start) {
+                campaignHeroBaseline_t trigger_baseline;
+                if (G_CampaignFindHeroBaseline(function_start, function_end, hero_global, &trigger_baseline)) {
+                    if (!*baseline_found) *baseline = trigger_baseline;
+                    *baseline_found = true;
+                    return true;
+                }
+                if (G_CampaignFindHeroProgression(function_start, function_end, hero_global, baseline)) {
+                    *baseline_found = true;
+                    return true;
+                }
+                if (G_CampaignHasHeroSetup(function_start, function_end, hero_global)) {
+                    fprintf(stderr, "G_SpawnEntities: campaign Hero %s fallback trigger has unsupported setup\n", hero_global);
+                    *baseline_found = false;
+                    return false;
+                }
+            }
+        }
+        call = end;
+    }
+    return false;
+}
+
+static char *G_CampaignContainingFunction(char *script, char *position, char **function_end) {
+    char *scan = strstr(script, "function "), *last = NULL, *end;
+    while (scan && scan < position) {
+        last = scan;
+        scan = strstr(scan + strlen("function "), "function ");
+    }
+    end = last ? strstr(last, "endfunction") : NULL;
+    if (!last || !end || position >= end) return NULL;
+    if (function_end) *function_end = end;
+    return last;
+}
+
+static bool G_CampaignUsesCampaignCache(char *script) {
+    static cstring_t const cache_name = "Campaigns.w3v";
+    char *at;
+    for (at = script; at && *at; at++)
+        if (!strncasecmp(at, cache_name, strlen(cache_name))) return true;
+    return false;
+}
+
+static bool G_CampaignAppend(char *buffer, size_t capacity, size_t *used, char *format, ...) {
+    va_list args;
+    int length;
+    if (*used >= capacity) return false;
+    va_start(args, format);
+    length = vsnprintf(buffer + *used, capacity - *used, format, args);
+    va_end(args);
+    if (length < 0 || (size_t)length >= capacity - *used) return false;
+    *used += (size_t)length;
+    return true;
+}
+
+static bool G_CampaignAppendTranslatedCall(char *buffer, size_t capacity, size_t *used,
+                                           char const *call, char *global, char *local) {
+    static cstring_t const last_created_call = "GetLastCreatedUnit()";
+    char translated[1024];
+    char const *at = call;
+    size_t translated_used = 0, global_length = strlen(global), local_length = strlen(local);
+    size_t last_created_length = strlen(last_created_call);
+    while (*at) {
+        char const *global_match = strstr(at, global);
+        char const *created_match = strstr(at, last_created_call);
+        char const *match = !global_match ? created_match :
+            (!created_match || global_match < created_match ? global_match : created_match);
+        size_t match_length = match == created_match ? last_created_length : global_length;
+        size_t part = match ? (size_t)(match - at) : strlen(at);
+        if (translated_used + part + (match ? local_length : 0) >= sizeof(translated)) return false;
+        memcpy(translated + translated_used, at, part);
+        translated_used += part;
+        if (!match) break;
+        memcpy(translated + translated_used, local, local_length);
+        translated_used += local_length;
+        at = match + match_length;
+    }
+    translated[translated_used] = '\0';
+    return G_CampaignAppend(buffer, capacity, used, "        call %s\n", translated);
+}
+
+static bool G_CampaignBuildMerge(char *global, char *local, campaignHeroBaseline_t const *baseline,
+                                 char *buffer, size_t capacity) {
+    size_t used = 0;
+    uint32_t i;
+    if (!G_CampaignAppend(buffer, capacity, &used,
+        "        if ( IsUnitType(%s, UNIT_TYPE_HERO) ) then\n"
+        "        // Campaign fallback merge: %s\n"
+        "        set %s = CreateUnit( GetOwningPlayer(%s), '%s', GetUnitX(%s), GetUnitY(%s), GetUnitFacing(%s) )\n"
+        "        call SetHeroLevel( %s, %u, false )\n",
+        global, global, local, global, baseline->rawcode, global, global, global, local, baseline->level)) return false;
+    if (baseline->xp && !G_CampaignAppend(buffer, capacity, &used,
+            "        call SetHeroXP( %s, %u, false )\n", local, baseline->xp)) return false;
+    for (i = 0; i < baseline->num_xp_calls; i++)
+        if (!G_CampaignAppendTranslatedCall(buffer, capacity, &used, baseline->xp_calls[i], global, local)) return false;
+    for (i = 0; i < baseline->num_skills; i++)
+        if (!G_CampaignAppend(buffer, capacity, &used, "        call SelectHeroSkill( %s, '%s' )\n", local, baseline->skills[i]))
+            return false;
+    for (i = 0; i < baseline->num_state_calls; i++)
+        if (!G_CampaignAppendTranslatedCall(buffer, capacity, &used, baseline->state_calls[i], global, local)) return false;
+    if (!G_CampaignAppend(buffer, capacity, &used,
+        "        if ( GetHeroLevel(%s) < GetHeroLevel(%s) ) then\n"
+        "            call SetHeroLevel( %s, GetHeroLevel(%s), false )\n"
+        "        endif\n"
+        "        if ( GetHeroXP(%s) < GetHeroXP(%s) ) then\n"
+        "            if ( IsSuspendedXP(%s) ) then\n"
+        "                call SuspendHeroXP( %s, false )\n"
+        "                call SetHeroXP( %s, GetHeroXP(%s), false )\n"
+        "                call SuspendHeroXP( %s, true )\n"
+        "            else\n"
+        "                call SetHeroXP( %s, GetHeroXP(%s), false )\n"
+        "            endif\n"
+        "        endif\n",
+            global, local, global, local, global, local, global, global, global, local, global,
+            global, local)) return false;
+    for (i = 0; i < baseline->num_skills; i++)
+        if (!G_CampaignAppend(buffer, capacity, &used,
+            "        if ( GetUnitAbilityLevel(%s, '%s') < GetUnitAbilityLevel(%s, '%s') ) then\n"
+            "            if ( GetHeroSkillPoints(%s) <= 0 ) then\n"
+            "                call UnitModifySkillPoints( %s, 1 )\n"
+            "            endif\n"
+            "            call SelectHeroSkill( %s, '%s' )\n"
+            "        endif\n",
+            global, baseline->skills[i], local, baseline->skills[i], global, global, global, baseline->skills[i]))
+            return false;
+    return G_CampaignAppend(buffer, capacity, &used,
+        "        if ( GetHeroSkillPoints(%s) < GetHeroSkillPoints(%s) ) then\n"
+        "            call UnitModifySkillPoints( %s, GetHeroSkillPoints(%s) - GetHeroSkillPoints(%s) )\n"
+        "        endif\n"
+        "        if ( GetWidgetLife(%s) < GetWidgetLife(%s) ) then\n"
+        "            call SetWidgetLife( %s, GetWidgetLife(%s) )\n"
+        "        endif\n"
+        "        if ( GetUnitState(%s, UNIT_STATE_MANA) < GetUnitState(%s, UNIT_STATE_MANA) ) then\n"
+        "            call SetUnitState( %s, UNIT_STATE_MANA, GetUnitState(%s, UNIT_STATE_MANA) )\n"
+        "        endif\n"
+        "        call RemoveUnit( %s )\n"
+        "        endif\n",
+        global, local, global, local, global, global, local, global, local,
+        global, local, global, local, local);
+}
+
+static bool G_FixCampaignHeroRestoreScripts(char **script_ptr) {
+    char *script, *search_after;
+    uint32_t serial = 0;
+    bool complete = true;
+    if (!script_ptr || !(script = *script_ptr)) return false;
+    if (!G_CampaignUsesCampaignCache(script)) return true;
+    search_after = script;
+    for (;;) {
+        char *function_start, *function_end, *restore = strstr(search_after, "GetLastRestoredUnitBJ");
+        char *statement;
+        if (!restore) break;
+        function_start = G_CampaignContainingFunction(script, restore, &function_end);
+        if (!function_start) {
+            fprintf(stderr, "G_SpawnEntities: RestoreUnit result appears outside a mapscript function\n");
+            complete = false;
+            search_after = restore + strlen("GetLastRestoredUnitBJ");
+            continue;
+        }
+        statement = restore;
+        while (statement > function_start && statement[-1] != '\n') statement--;
+        {
+            char global[192] = {0}, function_name[192] = {0}, local[64], locals[96], merge[32768];
+            char *header, *header_end, *insert_at, *fallback_start, *fallback_end;
+            char *marker, *scan;
+            size_t merge_offset, local_offset;
+            campaignHeroBaseline_t baseline;
+            marker = strstr(statement, "set ");
+            if (!marker || marker >= restore) {
+                search_after = restore + strlen("GetLastRestoredUnitBJ");
+                continue;
+            }
+            if (!G_CampaignCopyGlobal(statement, restore, global, sizeof(global))) {
+                fprintf(stderr, "G_SpawnEntities: mapscript has an unsupported RestoreUnit result assignment\n");
+                complete = false;
+                search_after = restore + strlen("GetLastRestoredUnitBJ");
+                continue;
+            }
+            marker = strstr(restore, "Campaign fallback merge: ");
+            if (marker && marker < function_end &&
+                !strncmp(marker + strlen("Campaign fallback merge: "), global, strlen(global)) &&
+                marker[strlen("Campaign fallback merge: ") + strlen(global)] == '\n') {
+                search_after = marker + strlen("Campaign fallback merge: ") + strlen(global);
+                continue;
+            }
+            scan = function_start + strlen("function ");
+            while (scan < function_end && *scan != ' ' && *scan != '\t' && *scan != '\n') scan++;
+            if ((size_t)(scan - (function_start + strlen("function "))) >= sizeof(function_name)) return false;
+            memcpy(function_name, function_start + strlen("function "), (size_t)(scan - (function_start + strlen("function "))));
+            function_name[scan - (function_start + strlen("function "))] = '\0';
+            if (!G_CampaignRestoreBranch(script, function_start, function_end, restore, global,
+                                         &insert_at, &fallback_start, &fallback_end)) {
+                fprintf(stderr, "G_SpawnEntities: campaign Hero %s restore has an unsupported cache branch\n", global);
+                complete = false;
+                search_after = restore + strlen("GetLastRestoredUnitBJ");
+                continue;
+            }
+            bool baseline_found = G_CampaignFindHeroBaseline(fallback_start, fallback_end, global, &baseline);
+            G_CampaignFallbackFromTrigger(script, fallback_start, fallback_end, global, &baseline, &baseline_found);
+            if (!baseline_found) {
+                fprintf(stderr, "G_SpawnEntities: campaign Hero %s has no readable cache-miss baseline\n", global);
+                complete = false;
+                search_after = restore + strlen("GetLastRestoredUnitBJ");
+                continue;
+            }
+            do {
+                snprintf(local, sizeof(local), "campaign_fallback_hero_%u", serial++);
+            } while (strstr(script, local));
+            if (!G_CampaignBuildMerge(global, local, &baseline, merge, sizeof(merge))) {
+                fprintf(stderr, "G_SpawnEntities: campaign Hero %s fallback merge exceeds script buffer\n", global);
+                complete = false;
+                search_after = restore + strlen("GetLastRestoredUnitBJ");
+                continue;
+            }
+            header = strstr(function_start, "returns nothing");
+            header_end = header ? strchr(header, '\n') : NULL;
+            if (!header || !header_end || header_end >= function_end) return false;
+            merge_offset = (size_t)(insert_at - script);
+            if (!G_CampaignInsert(script_ptr, merge_offset, merge)) return false;
+            script = *script_ptr;
+            function_start = G_CampaignFindFunction(script, function_name, &function_end);
+            if (!function_start || !function_end) return false;
+            header = strstr(function_start, "returns nothing");
+            header_end = header ? strchr(header, '\n') : NULL;
+            if (!header_end || header_end >= function_end) return false;
+            snprintf(locals, sizeof(locals), "    local unit campaign_fallback_hero_%u = null\n", serial - 1);
+            local_offset = (size_t)(header_end + 1 - script);
+            if (!G_CampaignInsert(script_ptr, local_offset, locals)) return false;
+            script = *script_ptr;
+            function_start = G_CampaignFindFunction(script, function_name, &function_end);
+            if (!function_start || !function_end) return false;
+            marker = strstr(function_start, "Campaign fallback merge: ");
+            if (!marker || marker >= function_end) return false;
+            search_after = marker + strlen("Campaign fallback merge: ") + strlen(global);
+        }
+    }
+    return complete;
+}
+
 #ifdef BZ_TESTS
 bool G_TestMapObjectCreatedByMapScript(uint32_t id) { return G_MapObjectCreatedByMapScript(id); }
 bool G_TestFixOrc07BridgeRestoreScript(char *script) { return G_FixOrc07BridgeRestoreScript(script); }
+bool G_TestFixCampaignHeroRestoreScripts(char **script) { return G_FixCampaignHeroRestoreScripts(script); }
 #endif
 
 static void G_JassCoroutineTrace(handle_t trigger_handle, cstring_t function, cstring_t phase,
@@ -834,6 +1596,13 @@ void G_SpawnEntities(void) {
     G_DumpPrologue02BurrowHandoffSource(level.mapinfo->mapscript);
     if (level.mapinfo->mapscript) {
         G_FixOrc07BridgeRestoreScript(level.mapinfo->mapscript);
+        /* mapinfo is const through level, but its owned mapscript buffer is
+         * mutable and world-owned for this load. */
+        if (strstr(level.mapinfo->mapscript, "GetLastRestoredUnitBJ")) {
+            mapInfo_t *mutable_mapinfo = (mapInfo_t *)level.mapinfo;
+            if (!G_FixCampaignHeroRestoreScripts(&mutable_mapinfo->mapscript))
+                fprintf(stderr, "G_SpawnEntities: one or more campaign Hero restore branches could not be reconciled\n");
+        }
         jass_dobuffer(level.vm, level.mapinfo->mapscript);
     } else
         fprintf(stderr, "G_SpawnEntities: missing mapscript; skipping jass_dobuffer\n");

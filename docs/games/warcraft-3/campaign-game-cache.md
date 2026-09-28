@@ -78,6 +78,28 @@ current health is zero or below, OpenRealm restores that Hero with 25% of the
 cached maximum health instead of recreating a zero-health living entity. Living
 Heroes retain their exact cached current health, including values below 25%.
 
+Before JASS compilation, OpenRealm scans the loaded map script for each
+`GetLastRestoredUnitBJ()` assignment and its cache-hit/cache-miss branch. It
+derives the baseline from that map's own fallback Hero setup, either inline in
+the restore action or in the default-Hero trigger called on a cache miss. It
+recognizes both map-global and `GetLastRestoredUnitBJ()` cache-check helpers,
+and fallback progression calls that target either the Hero global or
+`GetLastCreatedUnit()`. This covers multiple restored Heroes in one action and
+map-authored level, XP, skill-rank, current-health, and current-mana setup
+without a per-map constants table.
+
+For each recognized restore, the generated cache-hit branch creates a
+temporary Hero of the fallback rawcode, applies the authored level, XP, learned
+skills, and direct health/mana setters, then raises the cached Hero's level,
+XP, skill ranks, unspent points, current health, and mana only where the
+temporary baseline is higher. It removes the temporary Hero before the map
+script continues. Cache-miss fallback code remains the map's original path.
+If a restore branch or baseline setup uses an unsupported form, OpenRealm logs
+the Hero and skips that merge instead of silently inventing baseline values.
+
+This merge is an OpenRealm compatibility behavior and has not been verified
+against retail Warcraft III; retail cache-hit behavior may differ.
+
 The snapshot deliberately does not claim to serialize transient simulation
 objects such as buffs, cooldown timers, current orders, production/revival state,
 projectile state, or trigger-local references. Those require separate saved-game/state contracts.
@@ -171,7 +193,9 @@ semantics remain separate work.
 
 ## Verification
 
-`games/warcraft-3/game/tests/t_api.c` contains coverage for:
+`games/warcraft-3/game/tests/t_api.c` covers cache-native behavior, and
+`games/warcraft-3/game/tests/t_mapscript.c` covers script rewriting. Coverage
+includes:
 
 - typed scalar store/get/have/flush behavior;
 - disabled mode keeping stores local to one handle while `SaveGameCache()`
@@ -180,6 +204,9 @@ semantics remain separate work.
   mutations remain private;
 - restoring a level-2 Paladin with Holy Light rank 1 and exactly one remaining
   Hero skill point;
+- patching and parsing multiple cached-Hero branches, including a separate
+  default-Hero trigger, TFT-style restore helper, additive XP, and map-authored
+  health, mana, XP, level, and skills;
 - restoring a cached dead Hero at 25% of its cached maximum health so the fresh
   entity is alive and internally consistent.
 
