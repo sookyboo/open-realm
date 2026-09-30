@@ -77,9 +77,11 @@ TEST(renderer_model, production_spn_dispatch_retains_spawn_after_parent_update) 
     static mdxModel_t parent_mdx;
     static model_t parent_model;
     static renderEntity_t parent;
-    static renderEntity_t camera_parent;
+    static renderEntity_t camera_parents[40];
     wc3EventSoundState_t saved_state = event_sound_state[7];
-    wc3EventSoundState_t saved_camera_state[WC3_EVENT_CAMERA_STATE_MAX];
+    wc3EventSoundState_t *saved_camera_state = NULL;
+    size_t saved_camera_count = 0;
+    bool saved_camera_states = false;
     uint32_t saved_time = tr.viewDef.time;
     render_phase_t saved_phase = tr.render_phase;
     refImport_t saved_imports = ri;
@@ -117,24 +119,37 @@ TEST(renderer_model, production_spn_dispatch_retains_spawn_after_parent_update) 
     event_sound_state[7] = (wc3EventSoundState_t){ 0 }; R_W3ClearEventSpawns();
     test_spn_render_count = 0; tr.render_phase = RENDER_PHASE_SOLID; tr.viewDef.time = 0;
 
-    /* Two camera instances can show the same model at the same frame/time. */
-    memcpy(saved_camera_state, event_camera_sound_state, sizeof(saved_camera_state));
-    memset(event_camera_sound_state, 0, sizeof(event_camera_sound_state));
-    camera_parent = parent;
-    parent.instance_id = 7;
-    camera_parent.instance_id = 8;
+    /* More live camera instances than the old fixed cache can retain. */
+    saved_camera_count = event_camera_sound_count;
+    if (saved_camera_count) {
+        saved_camera_state = ri.MemAlloc((long)(saved_camera_count * sizeof(*saved_camera_state)));
+        T_NOT_NULL(saved_camera_state);
+        if (!saved_camera_state) goto cleanup_spn_test;
+        memcpy(saved_camera_state, event_camera_sound_state,
+               saved_camera_count * sizeof(*saved_camera_state));
+    }
+    saved_camera_states = true;
+    R_W3ClearCameraEventStates();
     tr.viewDef.rdflags = RDF_USE_ENTITY_CAMERA;
-    R_UpdateEntityPresentation(&parent);
-    R_UpdateEntityPresentation(&camera_parent);
-    parent.frame = camera_parent.frame = 150;
+    FOR_LOOP(i, 40) {
+        camera_parents[i] = parent;
+        camera_parents[i].instance_id = i + 100;
+        R_UpdateEntityPresentation(camera_parents + i);
+    }
     tr.viewDef.time = 150;
-    R_UpdateEntityPresentation(&parent);
-    R_UpdateEntityPresentation(&camera_parent);
-    T_EQ(test_spn_render_count, 2);
-    T_ASSERT(event_spawns[0].active);
-    T_ASSERT(event_spawns[1].active);
-    T_EQ(event_spawns[0].source_instance_id, 7);
-    T_EQ(event_spawns[1].source_instance_id, 8);
+    uint32_t active_camera_spawns = 0;
+    FOR_LOOP(i, 40) {
+        camera_parents[i].frame = 150;
+        R_UpdateEntityPresentation(camera_parents + i);
+    }
+    FOR_LOOP(i, WC3_EVENT_SPAWN_MAX) {
+        if (event_spawns[i].active && event_spawns[i].entity_camera) active_camera_spawns++;
+    }
+    T_EQ(test_spn_render_count, 40);
+    T_EQ(active_camera_spawns, 40);
+    R_W3DrawEventSpawns(true, &parent_model, 100);
+    T_EQ(test_spn_render_count, 41);
+    T_EQ(test_spn_render_entity.frame, 0);
 
     R_W3ClearEventSpawns();
     tr.viewDef.rdflags = 0;
@@ -166,12 +181,18 @@ TEST(renderer_model, production_spn_dispatch_retains_spawn_after_parent_update) 
 
 cleanup_spn_test:
     R_W3ClearEventSpawns();
+    if (saved_camera_states) {
+        R_W3ClearCameraEventStates();
+        event_camera_sound_state = saved_camera_state;
+        event_camera_sound_count = event_camera_sound_capacity = saved_camera_count;
+        saved_camera_state = NULL;
+    }
     R_W3FreeSpawnData(true);
     R_ShutdownModels();
     R_TestUseProductionModelLoader(false);
     if (test_renderer_archive) { SFileCloseArchive(test_renderer_archive); test_renderer_archive = NULL; }
     ri = saved_imports;
-    memcpy(event_camera_sound_state, saved_camera_state, sizeof(saved_camera_state));
+    if (saved_camera_state) ri.MemFree(saved_camera_state);
     event_sound_state[7] = saved_state; tr.viewDef.time = saved_time; tr.render_phase = saved_phase;
 }
 

@@ -8,6 +8,7 @@
 #include "common/stb_slk.h"
 #include "games/warcraft-3/common/minimap_render.h"
 #include <ctype.h>
+#include <limits.h>
 
 void _W3M_RegisterMap(cstring_t mapFileName);
 void _W3M_DrawWorld(void);
@@ -158,8 +159,8 @@ static slkField_t const spawn_data_schema[] = {
 static wc3SpawnData_t *spawn_data_rows; static uint32_t spawn_data_count;
 typedef struct { model_t const *model; uintptr_t instance_id; uint32_t frame, render_time; bool valid; } wc3EventSoundState_t;
 static wc3EventSoundState_t event_sound_state[MAX_GAME_ENTITIES];
-#define WC3_EVENT_CAMERA_STATE_MAX 32
-static wc3EventSoundState_t event_camera_sound_state[WC3_EVENT_CAMERA_STATE_MAX];
+static wc3EventSoundState_t *event_camera_sound_state;
+static size_t event_camera_sound_count, event_camera_sound_capacity;
 #define WC3_EVENT_SPAWN_MAX 128
 typedef struct {
     model_t *model; model_t const *source_model; uintptr_t source_instance_id; mat4_t transform;
@@ -178,27 +179,48 @@ static void R_W3ClearCameraSpawns(model_t const *source_model, uintptr_t source_
     }
 }
 
+static void R_W3ClearCameraEventStates(void) {
+    if (event_camera_sound_state && ri.MemFree) ri.MemFree(event_camera_sound_state);
+    event_camera_sound_state = NULL;
+    event_camera_sound_count = event_camera_sound_capacity = 0;
+}
+
 /* Entity-camera views use synthetic entity numbers (usually zero), which can
  * collide with game edicts. Keep independent event clocks for those views. */
 static wc3EventSoundState_t *R_W3EventSoundState(renderEntity_t const *entity) {
-    wc3EventSoundState_t *oldest = event_camera_sound_state;
+    wc3EventSoundState_t *state;
 
     if (!(tr.viewDef.rdflags & RDF_USE_ENTITY_CAMERA))
         return event_sound_state + entity->number;
-    FOR_LOOP(i, WC3_EVENT_CAMERA_STATE_MAX) {
-        wc3EventSoundState_t *state = event_camera_sound_state + i;
-        if (state->valid && state->model == entity->model && state->instance_id == entity->instance_id) return state;
-        if (state->valid && state->instance_id == entity->instance_id) {
+    FOR_LOOP(i, event_camera_sound_count) {
+        state = event_camera_sound_state + i;
+        if (state->instance_id != entity->instance_id) continue;
+        if (state->model != entity->model) {
             R_W3ClearCameraSpawns(state->model, state->instance_id);
             *state = (wc3EventSoundState_t){0};
-            return state;
         }
-        if (!state->valid) return state;
-        if (state->render_time < oldest->render_time) oldest = state;
+        return state;
     }
-    R_W3ClearCameraSpawns(oldest->model, oldest->instance_id);
-    *oldest = (wc3EventSoundState_t){0};
-    return oldest;
+    if (event_camera_sound_count == event_camera_sound_capacity) {
+        size_t capacity = event_camera_sound_capacity ? event_camera_sound_capacity * 2 : 16;
+        if (capacity < event_camera_sound_capacity || capacity > (size_t)LONG_MAX / sizeof(*state)) {
+            fprintf(stderr, "WC3 renderer: entity-camera event-state capacity overflow\n");
+            return NULL;
+        }
+        wc3EventSoundState_t *states = ri.MemAlloc ? ri.MemAlloc((long)(capacity * sizeof(*state))) : NULL;
+        if (!states) {
+            fprintf(stderr, "WC3 renderer: failed to grow entity-camera event-state table to %zu entries\n", capacity);
+            return NULL;
+        }
+        if (event_camera_sound_count)
+            memcpy(states, event_camera_sound_state, event_camera_sound_count * sizeof(*state));
+        if (event_camera_sound_state && ri.MemFree) ri.MemFree(event_camera_sound_state);
+        event_camera_sound_state = states;
+        event_camera_sound_capacity = capacity;
+    }
+    state = event_camera_sound_state + event_camera_sound_count++;
+    *state = (wc3EventSoundState_t){ .model = entity->model, .instance_id = entity->instance_id };
+    return state;
 }
 
 /* WorldEditData is the authoritative tileset-to-Blight-art mapping.  Keep the
@@ -422,7 +444,7 @@ void R_LoadAssets(void) {
                                   (void **)&anim_sound_rows, sizeof(wc3AnimSound_t));
     R_W3LoadSpawnData();
     memset(event_sound_state, 0, sizeof(event_sound_state));
-    memset(event_camera_sound_state, 0, sizeof(event_camera_sound_state));
+    R_W3ClearCameraEventStates();
     R_W3ClearEventSpawns();
 
     FOR_LOOP(i, NUM_SELECTION_CIRCLES) {
@@ -470,7 +492,7 @@ void R_Shutdown(void) {
     anim_sound_rows = NULL; anim_sound_count = 0;
     R_W3FreeSpawnData(false);
     memset(event_sound_state, 0, sizeof(event_sound_state));
-    memset(event_camera_sound_state, 0, sizeof(event_camera_sound_state));
+    R_W3ClearCameraEventStates();
     R_W3ClearEventSpawns();
     R_WeatherShutdown();
     R_LightningShutdown();
@@ -781,7 +803,7 @@ void R_RegisterMap(cstring_t mapFileName) {
     R_W3LoadSpawnData();
     R_W3ClearEventSpawns();
     memset(event_sound_state, 0, sizeof(event_sound_state));
-    memset(event_camera_sound_state, 0, sizeof(event_camera_sound_state));
+    R_W3ClearCameraEventStates();
     memset(&model_texture_cache, 0, sizeof(model_texture_cache));
     R_ClearMinimapSpecialAssets();
     if (mapFileName && *mapFileName) R_LoadMinimapSpecialAssets();
@@ -1131,6 +1153,7 @@ static void R_W3UpdateModelEvents(renderEntity_t const *entity) {
     model = entity->model->mdx;
     if (!model->events) return;
     state = R_W3EventSoundState(entity);
+    if (!state) return;
     if (!state->valid || state->model != entity->model) {
         *state = (wc3EventSoundState_t){ .model = entity->model, .instance_id = entity->instance_id, .frame = entity->frame,
                                    .render_time = tr.viewDef.time, .valid = true };
