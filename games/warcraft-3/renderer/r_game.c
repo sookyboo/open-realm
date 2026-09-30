@@ -156,19 +156,27 @@ static slkField_t const spawn_data_schema[] = {
     { NULL, 0, 0 },
 };
 static wc3SpawnData_t *spawn_data_rows; static uint32_t spawn_data_count;
-typedef struct { model_t const *model; uint32_t frame, render_time; bool valid; } wc3EventSoundState_t;
+typedef struct { model_t const *model; uintptr_t instance_id; uint32_t frame, render_time; bool valid; } wc3EventSoundState_t;
 static wc3EventSoundState_t event_sound_state[MAX_GAME_ENTITIES];
 #define WC3_EVENT_CAMERA_STATE_MAX 32
 static wc3EventSoundState_t event_camera_sound_state[WC3_EVENT_CAMERA_STATE_MAX];
 #define WC3_EVENT_SPAWN_MAX 128
 typedef struct {
-    model_t *model; model_t const *source_model; mat4_t transform;
+    model_t *model; model_t const *source_model; uintptr_t source_instance_id; mat4_t transform;
     uint32_t team, flags, start_time, frame, serial;
     float scale; bool active, entity_camera;
 } wc3EventSpawn_t;
 static wc3EventSpawn_t event_spawns[WC3_EVENT_SPAWN_MAX];
 static uint32_t event_spawn_serial;
-static void R_W3DrawEventSpawns(bool entity_camera, model_t const *source_model);
+static void R_W3DrawEventSpawns(bool entity_camera, model_t const *source_model, uintptr_t source_instance_id);
+
+static void R_W3ClearCameraSpawns(model_t const *source_model, uintptr_t source_instance_id) {
+    FOR_LOOP(i, WC3_EVENT_SPAWN_MAX) {
+        wc3EventSpawn_t *spawn = event_spawns + i;
+        if (spawn->active && spawn->entity_camera && spawn->source_model == source_model &&
+            spawn->source_instance_id == source_instance_id) spawn->active = false;
+    }
+}
 
 /* Entity-camera views use synthetic entity numbers (usually zero), which can
  * collide with game edicts. Keep independent event clocks for those views. */
@@ -179,10 +187,17 @@ static wc3EventSoundState_t *R_W3EventSoundState(renderEntity_t const *entity) {
         return event_sound_state + entity->number;
     FOR_LOOP(i, WC3_EVENT_CAMERA_STATE_MAX) {
         wc3EventSoundState_t *state = event_camera_sound_state + i;
-        if (state->valid && state->model == entity->model) return state;
+        if (state->valid && state->model == entity->model && state->instance_id == entity->instance_id) return state;
+        if (state->valid && state->instance_id == entity->instance_id) {
+            R_W3ClearCameraSpawns(state->model, state->instance_id);
+            *state = (wc3EventSoundState_t){0};
+            return state;
+        }
         if (!state->valid) return state;
         if (state->render_time < oldest->render_time) oldest = state;
     }
+    R_W3ClearCameraSpawns(oldest->model, oldest->instance_id);
+    *oldest = (wc3EventSoundState_t){0};
     return oldest;
 }
 
@@ -788,11 +803,11 @@ void R_SetupEnvironmentLighting(void) {
 
 void R_DrawWorld(void) {
     _W3M_DrawWorld();
-    R_W3DrawEventSpawns(false, NULL);
+    R_W3DrawEventSpawns(false, NULL, 0);
 }
 
-void R_DrawEntityCameraEventSpawns(model_t const *source_model) {
-    R_W3DrawEventSpawns(true, source_model);
+void R_DrawEntityCameraEventSpawns(model_t const *source_model, uintptr_t source_instance_id) {
+    R_W3DrawEventSpawns(true, source_model, source_instance_id);
 }
 
 void R_DrawTerrainShadows(void) {
@@ -1075,6 +1090,7 @@ static void R_W3EmitSpawnEvent(renderEntity_t const *entity, mdxModel_t const *m
     seq = child_model->mdx->sequences;
     *spawn = (wc3EventSpawn_t){
         .model = child_model, .source_model = entity->model,
+        .source_instance_id = entity->instance_id,
         .entity_camera = (tr.viewDef.rdflags & RDF_USE_ENTITY_CAMERA) != 0,
         .team = entity->team,
         .flags = entity->flags & (RF_NO_FOGOFWAR | RF_NO_LIGHTING | RF_PORTRAIT_LIGHTING),
@@ -1092,12 +1108,13 @@ static void R_W3EmitSpawnEvent(renderEntity_t const *entity, mdxModel_t const *m
     R_W3RenderEventSpawn(spawn, slot);
 }
 
-static void R_W3DrawEventSpawns(bool entity_camera, model_t const *source_model) {
+static void R_W3DrawEventSpawns(bool entity_camera, model_t const *source_model, uintptr_t source_instance_id) {
     if (tr.render_phase != RENDER_PHASE_SOLID) return;
     FOR_LOOP(i, WC3_EVENT_SPAWN_MAX) {
         wc3EventSpawn_t *spawn = event_spawns + i;
         if (!spawn->active || spawn->entity_camera != entity_camera) continue;
         if (entity_camera && spawn->source_model != source_model) continue;
+        if (entity_camera && spawn->source_instance_id != source_instance_id) continue;
         R_W3RenderEventSpawn(spawn, i);
     }
 }
@@ -1115,7 +1132,7 @@ static void R_W3UpdateModelEvents(renderEntity_t const *entity) {
     if (!model->events) return;
     state = R_W3EventSoundState(entity);
     if (!state->valid || state->model != entity->model) {
-        *state = (wc3EventSoundState_t){ .model = entity->model, .frame = entity->frame,
+        *state = (wc3EventSoundState_t){ .model = entity->model, .instance_id = entity->instance_id, .frame = entity->frame,
                                    .render_time = tr.viewDef.time, .valid = true };
         return;
     }
