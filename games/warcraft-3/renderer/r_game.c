@@ -185,6 +185,18 @@ static void R_W3ClearCameraEventStates(void) {
     event_camera_sound_count = event_camera_sound_capacity = 0;
 }
 
+void R_ReleaseEntityCameraEvents(uintptr_t instance_id) {
+    FOR_LOOP(i, event_camera_sound_count) {
+        wc3EventSoundState_t *state = event_camera_sound_state + i;
+        if (state->instance_id != instance_id) continue;
+        R_W3ClearCameraSpawns(state->model, state->instance_id);
+        event_camera_sound_count--;
+        if (i != event_camera_sound_count)
+            event_camera_sound_state[i] = event_camera_sound_state[event_camera_sound_count];
+        return;
+    }
+}
+
 /* Entity-camera views use synthetic entity numbers (usually zero), which can
  * collide with game edicts. Keep independent event clocks for those views. */
 static wc3EventSoundState_t *R_W3EventSoundState(renderEntity_t const *entity) {

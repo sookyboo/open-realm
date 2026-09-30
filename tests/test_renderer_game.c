@@ -151,6 +151,16 @@ TEST(renderer_model, production_spn_dispatch_retains_spawn_after_parent_update) 
     T_EQ(test_spn_render_count, 41);
     T_EQ(test_spn_render_entity.frame, 0);
 
+    /* Releasing a recycled UI identity drops its old event clock and child. */
+    R_ReleaseEntityCameraEvents(100);
+    FOR_LOOP(i, WC3_EVENT_SPAWN_MAX)
+        T_ASSERT(!event_spawns[i].active || !event_spawns[i].entity_camera || event_spawns[i].source_instance_id != 100);
+    camera_parents[0].frame = 0;
+    R_UpdateEntityPresentation(camera_parents);
+    camera_parents[0].frame = 150;
+    R_UpdateEntityPresentation(camera_parents);
+    T_EQ(test_spn_render_count, 42);
+
     R_W3ClearEventSpawns();
     tr.viewDef.rdflags = 0;
     parent.frame = 0;
