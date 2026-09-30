@@ -185,7 +185,7 @@ static void R_W3ClearCameraEventStates(void) {
     event_camera_sound_count = event_camera_sound_capacity = 0;
 }
 
-void R_ReleaseEntityCameraEvents(uintptr_t instance_id) {
+void R_ReleaseGameEntityCameraEvents(uintptr_t instance_id) {
     FOR_LOOP(i, event_camera_sound_count) {
         wc3EventSoundState_t *state = event_camera_sound_state + i;
         if (state->instance_id != instance_id) continue;
