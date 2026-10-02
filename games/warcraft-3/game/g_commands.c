@@ -1563,6 +1563,16 @@ CLIENTCOMMAND(Hero) {
 /* Emit a compact, reproducible snapshot of the selected unit and the local
  * pathing neighborhood. The grid is deliberately bounded so console output
  * remains usable and can be copied into a focused routing fixture. */
+static cstring_t G_PathdumpObstacleKind(edict_t const *ent) {
+    if (!ent) return NULL;
+    if (ent->svflags & SVF_MONSTER)
+        return G_UnitIsStructure(ent) ? "building" : "unit";
+    if (G_IsDestructable(ent))
+        return ent->targtype == TARG_BRIDGE ? "bridge" : "destructable";
+    if (G_IsDoodad(ent)) return "doodad";
+    return NULL;
+}
+
 CLIENTCOMMAND(Pathdump) {
     gameClient_t *client = clent ? clent->client : NULL;
     edict_t *unit = client ? G_GetMainSelectedUnit(client) : NULL;
@@ -1598,12 +1608,16 @@ CLIENTCOMMAND(Pathdump) {
     cx = (int)floorf(unit->s.origin2.x / cell);
     cy = (int)floorf(unit->s.origin2.y / cell);
     G_CheatPrintf(clent,
-        "PATHDUMP unit=%u rawcode=%08x owner=%u origin=%.3f,%.3f collision=%.3f cell=%.3f cellpos=%d,%d queued=%u move=%u move_name=%s goal=%u goal_kind=%s goal_rawcode=%08x goal_owner=%u goal_inuse=%u goal_spawn=%u goal_svflags=%08x goal_targtype=%u goal_origin=%.3f,%.3f goal_collision=%.3f goal_distance=%.3f goal_pathable=%u fallback=%.3f,%.3f blocked=%u flow=%u direct=%u reached=%u unreachable=%u",
+        "PATHDUMP unit=%u rawcode=%08x owner=%u origin=%.3f,%.3f collision=%.3f cell=%.3f cellpos=%d,%d queued=%u move=%u move_name=%s last_origin=%.3f,%.3f last_distance=%.3f heading=%.3f route_valid=%u route_waypoint=%.3f,%.3f route_radius=%.3f goal=%u goal_kind=%s goal_rawcode=%08x goal_owner=%u goal_inuse=%u goal_spawn=%u goal_svflags=%08x goal_targtype=%u goal_origin=%.3f,%.3f goal_collision=%.3f goal_distance=%.3f goal_pathable=%u attack_target_spawn=%u attack_target_matches=%u attackable=%u fallback=%.3f,%.3f blocked=%u flow=%u direct=%u reached=%u unreachable=%u",
         (unsigned)unit->s.number, (unsigned)unit->class_id, (unsigned)unit->s.player,
         unit->s.origin2.x, unit->s.origin2.y, unit->collision, cell, cx, cy,
         (unsigned)unit->order_queue.count,
         (unsigned)(unit->currentmove ? GetAbilityIndex(unit->currentmove->proc) : 255),
         move_ability && move_ability->classname ? move_ability->classname : "none",
+        unit->movement.last_origin.x, unit->movement.last_origin.y, unit->movement.last_distance,
+        unit->movement.heading, (unsigned)unit->movement.path.valid,
+        unit->movement.path.waypoint.x, unit->movement.path.waypoint.y,
+        unit->movement.path.radius,
         (unsigned)(goal ? goal->s.number : 0), goal_kind, (unsigned)(goal ? goal->class_id : 0),
         (unsigned)(goal ? goal->s.player : 0),
         (unsigned)(goal && goal->inuse), (unsigned)(goal ? goal->spawn_time : 0),
@@ -1612,6 +1626,9 @@ CLIENTCOMMAND(Pathdump) {
         goal ? goal->collision : 0.0f,
         goal ? Vector2_distance(&unit->s.origin2, &goal->s.origin2) : 0.0f,
         (unsigned)(goal && CM_PointIsPathableForRadius(&goal->s.origin2, unit->collision)),
+        (unsigned)unit->attack_target_spawn_time,
+        (unsigned)(goal && unit->attack_target_spawn_time == goal->spawn_time),
+        (unsigned)(goal && S_AttackCanTarget(unit, goal)),
         unit->movement.flow_fallback_target.x, unit->movement.flow_fallback_target.y, (unsigned)unit->movement.blocked_frames,
         (unsigned)unit->movement.flow_generation, unit->movement.flow_direct,
         unit->movement.flow_goal_reached, unit->movement.flow_unreachable);
@@ -1629,6 +1646,66 @@ CLIENTCOMMAND(Pathdump) {
         }
         G_CheatPrintf(clent, "PATHDUMP GRID y=%d %s", cy + y, row);
     }
+    if (goal && goal->inuse) {
+        vec2_t delta = Vector2_sub(&goal->s.origin2, &unit->s.origin2);
+        float distance = Vector2_len(&delta);
+        vec2_t direction = distance > 0.001f ? Vector2_scale(&delta, 1.0f / distance) : (vec2_t){0, 0};
+        vec2_t side = { -direction.y, direction.x };
+        uint8_t blocked_flags = M_UnitStaticPathingFlags(unit);
+        int steps = (int)ceilf(distance / cell);
+        int step;
+        bool direct_point = CM_LineIsPathableForRadiusFlags(&unit->s.origin2, &goal->s.origin2, 0.0f, blocked_flags);
+        bool direct_mover = CM_LineIsPathableForRadiusFlags(&unit->s.origin2, &goal->s.origin2, unit->collision, blocked_flags);
+        G_CheatPrintf(clent,
+            "PATHDUMP ROUTE distance=%.3f unit_flags=%02x direct_point=%u direct_mover=%u cells=%d stride=%.3f lateral_cells=-2..2 dir=%.5f,%.5f side=%.5f,%.5f",
+            distance, blocked_flags, direct_point, direct_mover, steps, cell,
+            direction.x, direction.y, side.x, side.y);
+        for (step = 0; step <= steps; step += 4) {
+            char samples[800];
+            size_t used = 0;
+            int end = MIN(steps, step + 3);
+            for (int sample = step; sample <= end; sample++) {
+                float along = MIN(distance, sample * cell);
+                vec2_t center = { unit->s.origin2.x + direction.x * along,
+                                  unit->s.origin2.y + direction.y * along };
+                int n = snprintf(samples + used, sizeof(samples) - used, "%s%d=", sample == step ? "" : ";", sample);
+                if (n < 0 || (size_t)n >= sizeof(samples) - used) break;
+                used += (size_t)n;
+                for (int lateral = -2; lateral <= 2; lateral++) {
+                    vec2_t p = { center.x + side.x * lateral * cell,
+                                 center.y + side.y * lateral * cell };
+                    uint8_t flags = 0;
+                    bool known = CM_GetPathingFlagsAt(&p, &flags);
+                    n = snprintf(samples + used, sizeof(samples) - used, "%s%s%02x",
+                        lateral == -2 ? "" : ",", known ? "" : "??", known ? flags : 0);
+                    if (n < 0 || (size_t)n >= sizeof(samples) - used) break;
+                    used += (size_t)n;
+                }
+            }
+            G_CheatPrintf(clent, "PATHDUMP ROUTE samples=%s", samples);
+        }
+        FOR_LOOP(i, globals.num_edicts) {
+            edict_t *other = &globals.edicts[i];
+            cstring_t kind;
+            vec2_t offset;
+            float along, across, reach;
+            if (other == unit || other == goal || !other->inuse ||
+                !(kind = G_PathdumpObstacleKind(other)) ||
+                ((other->svflags & SVF_MONSTER) && M_IsDead(other))) continue;
+            offset = Vector2_sub(&other->s.origin2, &unit->s.origin2);
+            along = offset.x * direction.x + offset.y * direction.y;
+            if (along < 0.0f || along > distance) continue;
+            across = fabsf(offset.x * side.x + offset.y * side.y);
+            reach = unit->collision + MAX(0.0f, other->collision) + cell;
+            if (across > reach) continue;
+            G_CheatPrintf(clent,
+                "PATHDUMP ROUTE_BLOCKER kind=%s entity=%u rawcode=%08x owner=%u along=%.3f across=%.3f origin=%.3f,%.3f collision=%.3f pathing=%u",
+                kind, (unsigned)other->s.number, (unsigned)other->class_id,
+                (unsigned)other->s.player, along, across, other->s.origin2.x,
+                other->s.origin2.y, other->collision,
+                (unsigned)(other->pathtex != NULL || other->collision > 0.0f));
+        }
+    }
     FOR_LOOP(i, globals.num_edicts) {
         edict_t *other = &globals.edicts[i];
         float dx, dy;
@@ -1640,16 +1717,8 @@ CLIENTCOMMAND(Pathdump) {
             float reach = cell * 5.0f + MAX(0.0f, other->collision);
             if (dx * dx + dy * dy > reach * reach) continue;
         }
-        if (other->svflags & SVF_MONSTER) {
-            if (M_IsDead(other)) continue;
-            kind = G_UnitIsStructure(other) ? "building" : "unit";
-        } else if (G_IsDestructable(other)) {
-            kind = other->targtype == TARG_BRIDGE ? "bridge" : "destructable";
-        } else if (G_IsDoodad(other)) {
-            kind = "doodad";
-        } else {
-            continue;
-        }
+        kind = G_PathdumpObstacleKind(other);
+        if (!kind || ((other->svflags & SVF_MONSTER) && M_IsDead(other))) continue;
         G_CheatPrintf(clent, "PATHDUMP NEAR kind=%s entity=%u rawcode=%08x owner=%u origin=%.3f,%.3f collision=%.3f pathing=%u dead=%u delta=%.3f,%.3f",
             kind, (unsigned)other->s.number, (unsigned)other->class_id, (unsigned)other->s.player,
             other->s.origin2.x, other->s.origin2.y, other->collision,

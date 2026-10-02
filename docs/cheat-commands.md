@@ -74,13 +74,13 @@ fow off
 fow on
 ```
 
-`pathdump` writes a bounded `PATHDUMP` snapshot for the main selected unit. It includes its position, collision radius, queued order count, current move ability index and classname, active goal kind/identity/owner/rawcode/lifecycle flags/position/collision/distance and point pathability, active routing flags, fallback point, the static pathing mask in a 9-by-9 cell window, and nearby live units, buildings, destructables, bridges, and doodads within five pathing cells (expanded by each obstacle's collision radius). Static walls and other baked terrain blockers appear in the cell mask. Copy the output into a routing regression fixture together with the map and issued order:
+`pathdump` writes a machine-readable `PATHDUMP` snapshot for the main selected unit. It includes the current move ability, previous movement sample, cached route waypoint, active goal identity and point pathability, attack-target validation, and local routing flags. The local 9-by-9 static pathing grid is followed by a five-cell-wide static pathing trace from the unit to its goal, direct-line pathability checks, and live obstacles near that corridor. Nearby units, buildings, destructables, bridges, and doodads are also listed within five pathing cells of the unit. Static walls and other baked terrain blockers appear in the grid and trace. Copy the output into a routing regression fixture together with the map and issued order:
 
 ```
 pathdump
 ```
 
-The grid rows are ordered from north to south; each comma-separated byte is the static pathing mask at that cell center. `PATHDUMP NEAR` records include obstacle kind, entity number, rawcode, owner, position, collision radius, pathing presence, destructable death state, and offset from the selected unit. The dump requires `sv_cheats 1` and one selected unit.
+The grid rows are ordered from north to south; each comma-separated byte is the static pathing mask at that cell center. `PATHDUMP ROUTE` rows encode five mask samples at lateral offsets -2 through +2 cells for each point along the straight line to the goal; the header gives the route direction and sample spacing. `PATHDUMP ROUTE_BLOCKER` records identify live obstacles whose collision extent overlaps that corridor. `PATHDUMP NEAR` records include obstacle kind, entity number, rawcode, owner, position, collision radius, pathing presence, destructable death state, and offset from the selected unit. The dump requires `sv_cheats 1` and one selected unit.
 
 All `sv_cheats 1` Warcraft III cheat commands print their result to the issuing player's in-game console. This includes successful state changes as well as disabled-cheat, usage, and validation feedback. The same text is retained on stderr for terminal/debug logs; console delivery is presentation-only and is skipped for disconnected test/reserved clients.
 
