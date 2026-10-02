@@ -1896,6 +1896,8 @@ typedef struct {
 typedef struct {
     uint8_t *visible;
     uint8_t *explored;
+    uint8_t *saved_visible;
+    uint8_t *saved_explored;
     uint8_t *visible_rows;
     uint8_t *dirty_visible_rows;
     uint8_t *dirty_explored_rows;
@@ -1905,6 +1907,8 @@ typedef struct {
     uint32_t packed_stride;
 #endif
     bool client_connected;
+    bool cheat_disabled;
+    bool saved_nofog;
 } fowPlayerGrid_t;
 
 typedef struct {
@@ -2341,6 +2345,7 @@ bool G_SetBlightState(uint8_t const *data, uint32_t size);
 void G_FowInit(void);
 void G_FowShutdown(void);
 void G_FowConnectPlayer(uint32_t player);
+bool G_FowSetCheat(uint32_t player, bool disabled);
 void G_FowUpdate(void);
 void G_FowMarkBlockersDirty(void);
 void G_FowSendDeltas(void);

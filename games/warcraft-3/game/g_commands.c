@@ -1251,6 +1251,29 @@ bool G_CheatsEnabled(void) {
     return atoi(gi.CvarString("sv_cheats", "0")) != 0;
 }
 
+CLIENTCOMMAND(Fow) {
+    bool disabled;
+
+    if (!G_CheatsEnabled()) {
+        G_CheatPrintf(clent, "WC3: cheats are disabled; set sv_cheats 1");
+        return;
+    }
+    if (argc != 2 || (strcasecmp(argv[1], "off") && strcasecmp(argv[1], "on"))) {
+        G_CheatPrintf(clent, "WC3: usage: fow off|on");
+        return;
+    }
+    if (!clent || !clent->client || clent->client->ps.number >= MAX_PLAYERS) {
+        G_CheatPrintf(clent, "WC3: fow requires a connected player");
+        return;
+    }
+    disabled = !strcasecmp(argv[1], "off");
+    if (!G_FowSetCheat(clent->client->ps.number, disabled)) {
+        G_CheatPrintf(clent, "WC3: fog of war is unavailable");
+        return;
+    }
+    G_CheatPrintf(clent, "WC3: fog of war %s", disabled ? "off" : "on");
+}
+
 static edict_t *G_GiveItem(edict_t *unit, uint32_t item_code) {
     edict_t *item = SP_SpawnAtLocation(item_code, unit->s.player, &unit->s.origin2);
     if (!item || !G_PickupItem(unit, item)) {
@@ -2827,6 +2850,7 @@ static void CMD_UICanvas(edict_t *ent, uint32_t argc, cstring_t argv[]) {
 
 clientCommand_t clientCommands[] = {
     { "give", CMD_Give },
+    { "fow", CMD_Fow },
     { "god", CMD_God },
     { "kill", CMD_Kill },
     { "hero", CMD_Hero },

@@ -67,6 +67,13 @@ in the latter checkout. That main includes `0059057e`, which fixes the older PR 
 
 ## Warcraft III
 
+With `sv_cheats 1`, `fow off` reveals the map and units for the issuing player. `fow on` restores that player's fog state as it was when the cheat was enabled:
+
+```
+fow off
+fow on
+```
+
 All `sv_cheats 1` Warcraft III cheat commands print their result to the issuing player's in-game console. This includes successful state changes as well as disabled-cheat, usage, and validation feedback. The same text is retained on stderr for terminal/debug logs; console delivery is presentation-only and is skipped for disconnected test/reserved clients.
 
 `hero max` raises the selected friendly Hero to the active map's `Misc/MaxHeroLevel` and grants the skill points associated with that level:
