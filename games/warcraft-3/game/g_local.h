@@ -542,6 +542,25 @@ typedef enum {
     CAMERA_TARGET_ORIENT,        // SetCameraOrientController: the source stays at orient_eye and turns toward the unit
 } cameraTargetMode_t;
 
+#define PATHDUMP_TRACE_CAPACITY 32
+typedef struct {
+    uint32_t time, frame_ms, goal_number, goal_spawn_time;
+    uint32_t attack_order_serial, attack_order_time;
+    uint32_t assault_order_serial, assault_order_time;
+    uint32_t flow_generation, blocker_number;
+    uint32_t blocker_rawcode, blocker_owner;
+    uint32_t path_job_pending, path_job_queued, path_job_work;
+    vec2_t origin, position_delta, attempted_step, goal_origin, blocker_origin;
+    uint8_t attempted_flags;
+    float heading, facing, goal_distance, last_distance;
+    float blocker_collision;
+    uint8_t move_id, move_state, path_job_active, path_job_started;
+    int path_job_target_x, path_job_target_y;
+    uint32_t blocked_frames;
+        bool direct, route_valid, can_translate;
+        bool attempted_flags_known, attempted_pathable, attempted_sweep_pathable;
+} pathdumpTraceSample_t;
+
 struct client_s {
     player_t ps;
     bool connected; /* ClientBegin completed for this reserved player edict. */
@@ -639,6 +658,15 @@ struct client_s {
         uint32_t count;
     } message_log;
     wc3MusicState_t music; /* client-local Warcraft music semantics; synced on ClientBegin */
+    struct {
+        bool active, dumped;
+        uint32_t unit_number, unit_spawn_time;
+        uint32_t stop_order_serial;
+        uint32_t last_progress_time, stall_ms;
+        vec2_t last_origin;
+        pathdumpTraceSample_t trace[PATHDUMP_TRACE_CAPACITY];
+        uint32_t trace_cursor, trace_count;
+    } pathdump_monitor; /* developer pd cheat; follows one entity after the selection is captured */
     uint32_t cinematic_end_time;       /* game time (ms) when current SetCinematicScene expires, 0 = none */
     uint32_t cinematic_voice_end_time; /* game time (ms) when Portrait Talk becomes Portrait, 0 = not talking */
 };
@@ -1333,6 +1361,18 @@ typedef enum {
     MOVE_FALLBACK_APPLIED,
 } moveFallbackState_t;
 
+typedef enum {
+    MOVE_DIAG_NONE,
+    MOVE_DIAG_ROUTE_WAIT,
+    MOVE_DIAG_TURN_WAIT,
+    MOVE_DIAG_STATIC_BLOCK,
+    MOVE_DIAG_UNIT_BLOCK,
+    MOVE_DIAG_MOVED_FACING,
+    MOVE_DIAG_MOVED_HEADING,
+    MOVE_DIAG_IMMOBILE,
+    MOVE_DIAG_STATUS_LOCK,
+} moveDiagState_t;
+
 typedef struct edictArtillery_s {
     uint32_t attack_type, area_targets, targets_allowed;
     float area_full, area_medium, area_small, factor_medium, factor_small;
@@ -1660,6 +1700,22 @@ struct edict_s {
         routePath_t path; /* persistent WC3 accelerator state shared with other server games */
         float group_speed;  // slowest member's speed for a group move (0 = no cap), keeps the group together
         float heading;      // avoidance-resolved heading chosen this tick by unit_changeangle; movement follows it
+        moveDiagState_t pathdump_step_state;
+        uint32_t pathdump_step_time, pathdump_blocker_number;
+        vec2_t pathdump_attempted_step;
+        uint32_t pathdump_attack_order_serial, pathdump_attack_order_time;
+        uint32_t pathdump_assault_order_serial, pathdump_assault_order_time;
+        uint32_t pathdump_stop_order_serial, pathdump_stop_order_time;
+        vec2_t route_resume_direction;
+        vec2_t route_resume_goal_origin;
+        edict_t *route_resume_goal;
+        uint32_t route_resume_goal_spawn, route_resume_time;
+        float route_resume_radius;
+        uint8_t route_resume_flags;
+        bool route_resume_valid, route_resume_active;
+        bool path_wait_active;
+        uint32_t path_wait_start, path_wait_goal_number, path_wait_goal_spawn;
+        vec2_t path_wait_origin;
         vec2_t worker_avoid_origin; /* start of the active resource-worker avoidance corridor */
         float worker_avoid_heading;  /* direct corridor heading captured when local blocking begins */
         uint32_t worker_avoid_blocked_frames; /* consecutive blocked decisions before queue escape */
@@ -2201,6 +2257,7 @@ void G_DisableStartingResourceCheatForLoadedGame(void);
 void G_ApplyStartingResourceCheat(void);
 bool G_PlayerInstantBuild(uint32_t player);
 bool G_PlayerInstantKill(uint32_t player);
+void G_PathdumpMonitorFrame(void);
 bool G_RemovePlayerWithResult(uint32_t player_num, uint32_t game_result);
 bool G_GameResultDebugEnabled(void);
 void G_GameResultDebug(cstring_t format, ...);

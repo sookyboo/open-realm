@@ -782,6 +782,8 @@ void order_attack(edict_t *self, edict_t *target) {
         !S_AttackCanTarget(self, target)) {
         return;
     }
+    self->movement.pathdump_attack_order_serial++;
+    self->movement.pathdump_attack_order_time = level.time;
     /* Beginning an attack is incompatible with Shadow Meld. This path is used
      * by explicit attacks, ordinary acquisition, and the automatic retaliation
      * issued by T_Damage(), so clear both invisibility and the explicit Hide
@@ -1085,6 +1087,8 @@ static umove_t attackmove_move_walk = { "walk", ai_attackmove_walk, NULL, CAbili
 void order_attackmove(edict_t *self, edict_t *waypoint) {
     if (S_GoldMineWorkerIsInside(self))
         return;
+    self->movement.pathdump_assault_order_serial++;
+    self->movement.pathdump_assault_order_time = level.time;
     self->movement.attackmove_waypoint = waypoint;
     self->movement.patrol_a = NULL;
     self->movement.patrol_b = NULL;

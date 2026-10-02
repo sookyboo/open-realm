@@ -80,6 +80,16 @@ fow on
 pathdump
 ```
 
+`pd` captures the main selected unit and follows that entity even if selection changes. It dumps a short frame trace and the full path snapshot after the unit has had no meaningful movement for 0.1 seconds while in a walking move with a live goal. Each trace sample includes the attempted step's static pathing flags, endpoint pathability for the unit's collision radius, and swept-step pathability; these distinguish a terrain/building footprint rejection from a dynamic unit blocker or route wait. Pass a timeout in seconds to change the threshold, or use `pd off` to stop monitoring:
+
+```text
+pd
+pd 0.1
+pd off
+```
+
+The monitor checks after entity movement and collision resolution. Route waits remain in the rolling trace but do not trigger a dump by themselves. A dump occurs after the timeout when the unit is still stopped on a turn wait or a static/unit collision. Issuing Stop to the monitored unit also immediately dumps the recent trace and resulting order state, so you can press Stop after noticing a pause. `PATHDUMP TRACE` contains the last 32 server frames before the stall, including the movement result, attempted position and pathability, active route-job progress, blocker identity, and attack/attack-move order serials. An order serial that changes repeatedly during the trace shows that AI or script code is reissuing that order. The monitor emits one capture per stall episode, then rearms after the unit makes progress or resumes walking after a pause. The timeout defaults to 0.1 seconds (one simulation tick) and accepts values from 0.1 to 60 seconds.
+
 The grid rows are ordered from north to south; each comma-separated byte is the static pathing mask at that cell center. `PATHDUMP ROUTE` rows encode five mask samples at lateral offsets -2 through +2 cells for each point along the straight line to the goal; the header gives the route direction and sample spacing. `PATHDUMP ROUTE_BLOCKER` records identify live obstacles whose collision extent overlaps that corridor. `PATHDUMP NEAR` records include obstacle kind, entity number, rawcode, owner, position, collision radius, pathing presence, destructable death state, and offset from the selected unit. The dump requires `sv_cheats 1` and one selected unit.
 
 All `sv_cheats 1` Warcraft III cheat commands print their result to the issuing player's in-game console. This includes successful state changes as well as disabled-cheat, usage, and validation feedback. The same text is retained on stderr for terminal/debug logs; console delivery is presentation-only and is skipped for disconnected test/reserved clients.

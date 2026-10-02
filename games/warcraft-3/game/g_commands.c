@@ -1573,9 +1573,7 @@ static cstring_t G_PathdumpObstacleKind(edict_t const *ent) {
     return NULL;
 }
 
-CLIENTCOMMAND(Pathdump) {
-    gameClient_t *client = clent ? clent->client : NULL;
-    edict_t *unit = client ? G_GetMainSelectedUnit(client) : NULL;
+static void G_PathdumpUnit(edict_t *clent, edict_t *unit) {
     edict_t *goal = unit ? unit->goalentity : NULL;
     ability_t const *move_ability = unit && unit->currentmove
         ? GetAbilityByIndex(GetAbilityIndex(unit->currentmove->proc)) : NULL;
@@ -1583,10 +1581,6 @@ CLIENTCOMMAND(Pathdump) {
     cstring_t goal_kind = "none";
     int cx, cy, x, y;
 
-    if (!G_CheatsEnabled()) {
-        G_CheatPrintf(clent, "WC3: cheats are disabled; set sv_cheats 1");
-        return;
-    }
     if (goal) {
         if (goal->svflags & SVF_MONSTER)
             goal_kind = G_UnitIsStructure(goal) ? "building" : "unit";
@@ -1597,10 +1591,7 @@ CLIENTCOMMAND(Pathdump) {
         else
             goal_kind = "other";
     }
-    if (argc != 1 || !unit) {
-        G_CheatPrintf(clent, "WC3: usage: pathdump (requires one selected unit)");
-        return;
-    }
+    if (!unit) return;
     if (!(cell > 0.0f)) {
         G_CheatPrintf(clent, "PATHDUMP error=invalid_path_cell_size value=%.3f", cell);
         return;
@@ -1724,6 +1715,270 @@ CLIENTCOMMAND(Pathdump) {
             other->s.origin2.x, other->s.origin2.y, other->collision,
             (unsigned)(other->pathtex != NULL || other->collision > 0.0f),
             (unsigned)(G_IsDestructable(other) && other->destructable.dead), dx, dy);
+    }
+}
+
+CLIENTCOMMAND(Pathdump) {
+    gameClient_t *client = clent ? clent->client : NULL;
+    edict_t *unit = client ? G_GetMainSelectedUnit(client) : NULL;
+    if (!G_CheatsEnabled()) {
+        G_CheatPrintf(clent, "WC3: cheats are disabled; set sv_cheats 1");
+        return;
+    }
+    if (argc != 1 || !unit) {
+        G_CheatPrintf(clent, "WC3: usage: pathdump (requires one selected unit)");
+        return;
+    }
+    G_PathdumpUnit(clent, unit);
+}
+
+static bool G_PathdumpParseTimeout(cstring_t text, float *seconds_out) {
+    char *end;
+    float seconds;
+    if (!text || !*text || !seconds_out) return false;
+    seconds = strtof(text, &end);
+    if (end == text || *end || !isfinite(seconds) || seconds < 0.1f || seconds > 60.0f) return false;
+    *seconds_out = seconds;
+    return true;
+}
+
+CLIENTCOMMAND(Pd) {
+    gameClient_t *client = clent ? clent->client : NULL;
+    edict_t *unit = client ? G_GetMainSelectedUnit(client) : NULL;
+    float seconds = 0.1f;
+
+    if (!G_CheatsEnabled()) {
+        G_CheatPrintf(clent, "WC3: cheats are disabled; set sv_cheats 1");
+        return;
+    }
+    if (!client) {
+        G_CheatPrintf(clent, "WC3: pd requires a connected player");
+        return;
+    }
+    if (argc == 2 && !strcasecmp(argv[1], "off")) {
+        client->pathdump_monitor.active = false;
+        G_CheatPrintf(clent, "PD monitoring stopped");
+        return;
+    }
+    if (argc > 2 || (argc == 2 && !G_PathdumpParseTimeout(argv[1], &seconds))) {
+        G_CheatPrintf(clent, "WC3: usage: pd [stall_seconds|off] (stall_seconds 0.1..60)");
+        return;
+    }
+    if (!unit) {
+        G_CheatPrintf(clent, "WC3: pd requires one selected unit");
+        return;
+    }
+    client->pathdump_monitor.active = true;
+    client->pathdump_monitor.dumped = false;
+    client->pathdump_monitor.unit_number = unit->s.number;
+    client->pathdump_monitor.unit_spawn_time = unit->spawn_time;
+    client->pathdump_monitor.stop_order_serial = unit->movement.pathdump_stop_order_serial;
+    client->pathdump_monitor.last_progress_time = G_Time();
+    client->pathdump_monitor.stall_ms = (uint32_t)(seconds * 1000.0f);
+    client->pathdump_monitor.last_origin = unit->s.origin2;
+    client->pathdump_monitor.trace_cursor = 0;
+    client->pathdump_monitor.trace_count = 0;
+    G_CheatPrintf(clent, "PD monitoring unit=%u rawcode=%08x stall_after_ms=%u; use pd off to stop",
+        (unsigned)unit->s.number, (unsigned)unit->class_id,
+        (unsigned)client->pathdump_monitor.stall_ms);
+}
+
+static bool G_PathdumpUnitWalking(edict_t const *unit) {
+    return unit && unit->currentmove && unit->currentmove->animation &&
+        (!strcasecmp(unit->currentmove->animation, "walk") ||
+         !strcasecmp(unit->currentmove->animation, "run"));
+}
+
+static cstring_t G_PathdumpMoveStateName(uint8_t state) {
+    switch ((moveDiagState_t)state) {
+    case MOVE_DIAG_ROUTE_WAIT: return "route_wait";
+    case MOVE_DIAG_TURN_WAIT: return "turn_wait";
+    case MOVE_DIAG_STATIC_BLOCK: return "static_block";
+    case MOVE_DIAG_UNIT_BLOCK: return "unit_block";
+    case MOVE_DIAG_MOVED_FACING: return "moved_facing";
+    case MOVE_DIAG_MOVED_HEADING: return "moved_heading";
+    case MOVE_DIAG_IMMOBILE: return "immobile";
+    case MOVE_DIAG_STATUS_LOCK: return "status_lock";
+    default: return "none";
+    }
+}
+
+static void G_PathdumpRecordSample(gameClient_t *client, edict_t *unit, uint32_t now) {
+    pathdumpTraceSample_t *sample;
+    cmPathJobStatus_t job;
+    edict_t *goal = unit->goalentity && unit->goalentity->inuse ? unit->goalentity : NULL;
+    edict_t *blocker = NULL;
+    uint32_t index = client->pathdump_monitor.trace_cursor;
+
+    if (index >= PATHDUMP_TRACE_CAPACITY) index = 0;
+    sample = &client->pathdump_monitor.trace[index];
+    memset(sample, 0, sizeof(*sample));
+    if (client->pathdump_monitor.trace_count) {
+        uint32_t previous_index = (index + PATHDUMP_TRACE_CAPACITY - 1) % PATHDUMP_TRACE_CAPACITY;
+        pathdumpTraceSample_t const *previous = &client->pathdump_monitor.trace[previous_index];
+        sample->frame_ms = now - previous->time;
+        sample->position_delta = Vector2_sub(&unit->s.origin2, &previous->origin);
+    }
+    sample->time = now;
+    sample->origin = unit->s.origin2;
+    sample->goal_number = goal ? goal->s.number : 0;
+    sample->goal_spawn_time = goal ? goal->spawn_time : 0;
+    sample->goal_origin = goal ? goal->s.origin2 : unit->s.origin2;
+    sample->goal_distance = goal ? Vector2_distance(&unit->s.origin2, &goal->s.origin2) : 0.0f;
+    sample->move_id = (uint8_t)MIN(255u, unit->currentmove
+        ? GetAbilityIndex(unit->currentmove->proc) : 255u);
+    sample->move_state = unit->movement.pathdump_step_time == now
+        ? (uint8_t)unit->movement.pathdump_step_state : MOVE_DIAG_NONE;
+    sample->attempted_step = unit->movement.pathdump_step_time == now
+        ? unit->movement.pathdump_attempted_step : unit->s.origin2;
+    sample->attempted_flags_known = CM_GetPathingFlagsAt(&sample->attempted_step,
+        &sample->attempted_flags);
+    sample->attempted_pathable = CM_PointIsPathableForRadiusFlags(&sample->attempted_step,
+        unit->collision, M_UnitStaticPathingFlags(unit));
+    sample->attempted_sweep_pathable = CM_LineIsPathableForRadiusFlags(&unit->s.origin2,
+        &sample->attempted_step, unit->collision, M_UnitStaticPathingFlags(unit));
+    sample->heading = unit->movement.heading;
+    sample->facing = unit->s.angle;
+    sample->last_distance = unit->movement.last_distance;
+    sample->blocked_frames = unit->movement.blocked_frames;
+    sample->flow_generation = unit->movement.flow_generation;
+    sample->direct = unit->movement.flow_direct;
+    sample->route_valid = unit->movement.path.valid;
+    sample->can_translate = S_UnitCanTranslate(unit);
+    sample->attack_order_serial = unit->movement.pathdump_attack_order_serial;
+    sample->attack_order_time = unit->movement.pathdump_attack_order_time;
+    sample->assault_order_serial = unit->movement.pathdump_assault_order_serial;
+    sample->assault_order_time = unit->movement.pathdump_assault_order_time;
+    if (unit->movement.pathdump_step_time == now)
+        sample->blocker_number = unit->movement.pathdump_blocker_number;
+    if (sample->blocker_number && sample->blocker_number < globals.num_edicts) {
+        blocker = &globals.edicts[sample->blocker_number];
+        if (blocker->inuse) {
+            sample->blocker_rawcode = blocker->class_id;
+            sample->blocker_owner = blocker->s.player;
+            sample->blocker_origin = blocker->s.origin2;
+            sample->blocker_collision = blocker->collision;
+        } else {
+            sample->blocker_number = 0;
+        }
+    }
+    CM_GetPathJobStatus(&job);
+    sample->path_job_active = job.active;
+    sample->path_job_started = job.started;
+    sample->path_job_target_x = job.target_cell_x;
+    sample->path_job_target_y = job.target_cell_y;
+    sample->path_job_pending = job.pending_cells;
+    sample->path_job_queued = job.pending_jobs;
+    sample->path_job_work = job.work_done;
+    client->pathdump_monitor.trace_cursor = (index + 1) % PATHDUMP_TRACE_CAPACITY;
+    if (client->pathdump_monitor.trace_count < PATHDUMP_TRACE_CAPACITY)
+        client->pathdump_monitor.trace_count++;
+}
+
+static void G_PathdumpPrintTrace(edict_t *clent, gameClient_t *client) {
+    uint32_t count = client->pathdump_monitor.trace_count;
+    uint32_t first = (client->pathdump_monitor.trace_cursor + PATHDUMP_TRACE_CAPACITY - count) % PATHDUMP_TRACE_CAPACITY;
+    G_CheatPrintf(clent, "PATHDUMP TRACE frames=%u order_serials=attack,attackmove; state=movement_result",
+        (unsigned)count);
+    FOR_LOOP(i, count) {
+        pathdumpTraceSample_t const *sample = &client->pathdump_monitor.trace[(first + i) % PATHDUMP_TRACE_CAPACITY];
+        uint32_t attack_age = sample->attack_order_serial
+            ? (uint32_t)(sample->time - sample->attack_order_time) : UINT32_MAX;
+        uint32_t assault_age = sample->assault_order_serial
+            ? (uint32_t)(sample->time - sample->assault_order_time) : UINT32_MAX;
+        G_CheatPrintf(clent,
+            "PATHDUMP TRACE t=%u dt=%u pos=%.2f,%.2f dpos=%.2f,%.2f goal=%u@%u goalpos=%.2f,%.2f goaldist=%.2f move=%u result=%s attempted=%.2f,%.2f attempt_flags=%s%02x attempt_pathable=%u attempt_sweep=%u heading=%.3f facing=%.3f can_translate=%u flow=%u direct=%u route=%u blocked_frames=%u lastdist=%.2f blocker=%u/%08x/%u at=%.2f,%.2f r=%.1f attack_order=%u age=%u attackmove_order=%u age=%u pathjob=%u/%u target=%d,%d pending=%u queued=%u work=%u",
+            (unsigned)sample->time, (unsigned)sample->frame_ms,
+            sample->origin.x, sample->origin.y, sample->position_delta.x, sample->position_delta.y,
+            (unsigned)sample->goal_number, (unsigned)sample->goal_spawn_time,
+            sample->goal_origin.x, sample->goal_origin.y, sample->goal_distance,
+            (unsigned)sample->move_id, G_PathdumpMoveStateName(sample->move_state),
+            sample->attempted_step.x, sample->attempted_step.y,
+            sample->attempted_flags_known ? "" : "??", (unsigned)sample->attempted_flags,
+            sample->attempted_pathable, sample->attempted_sweep_pathable,
+            sample->heading, sample->facing,
+            sample->can_translate, (unsigned)sample->flow_generation, sample->direct,
+            sample->route_valid, (unsigned)sample->blocked_frames, sample->last_distance,
+            (unsigned)sample->blocker_number, (unsigned)sample->blocker_rawcode,
+            (unsigned)sample->blocker_owner, sample->blocker_origin.x, sample->blocker_origin.y,
+            sample->blocker_collision, (unsigned)sample->attack_order_serial,
+            (unsigned)attack_age, (unsigned)sample->assault_order_serial,
+            (unsigned)assault_age, sample->path_job_active,
+            sample->path_job_started, sample->path_job_target_x, sample->path_job_target_y,
+            (unsigned)sample->path_job_pending, (unsigned)sample->path_job_queued,
+            (unsigned)sample->path_job_work);
+    }
+}
+
+void G_PathdumpMonitorFrame(void) {
+    FOR_LOOP(i, MAX_CLIENTS) {
+        gameClient_t *client = game.clients + i;
+        edict_t *clent, *unit;
+        uint32_t now;
+        float moved;
+        bool stop_order_changed;
+        if (!client->pathdump_monitor.active) continue;
+        clent = G_GetPlayerEntityByNumber(client->ps.number);
+        if (!client->connected || !G_CheatsEnabled() ||
+            client->pathdump_monitor.unit_number >= globals.num_edicts) {
+            client->pathdump_monitor.active = false;
+            continue;
+        }
+        unit = &globals.edicts[client->pathdump_monitor.unit_number];
+        if (!unit->inuse || unit->spawn_time != client->pathdump_monitor.unit_spawn_time || M_IsDead(unit)) {
+            client->pathdump_monitor.active = false;
+            G_CheatPrintf(clent, "PD stopped: monitored unit is no longer alive");
+            continue;
+        }
+        now = G_Time();
+        stop_order_changed = unit->movement.pathdump_stop_order_serial != client->pathdump_monitor.stop_order_serial;
+        /* Retain the last moving/pause trace while the unit is idle, so a later
+         * manual Stop can still dump the frames leading up to the player's action. */
+        if (stop_order_changed || (G_PathdumpUnitWalking(unit) && unit->goalentity && unit->goalentity->inuse))
+            G_PathdumpRecordSample(client, unit, now);
+        if (stop_order_changed) {
+            client->pathdump_monitor.stop_order_serial = unit->movement.pathdump_stop_order_serial;
+            G_CheatPrintf(clent, "PD ORDER unit=%u rawcode=%08x order=stop serial=%u",
+                (unsigned)unit->s.number, (unsigned)unit->class_id,
+                (unsigned)unit->movement.pathdump_stop_order_serial);
+            G_PathdumpPrintTrace(clent, client);
+            G_PathdumpUnit(clent, unit);
+            client->pathdump_monitor.dumped = true;
+        }
+        if (!G_PathdumpUnitWalking(unit) || !unit->goalentity || !unit->goalentity->inuse) {
+            client->pathdump_monitor.last_origin = unit->s.origin2;
+            client->pathdump_monitor.last_progress_time = now;
+            client->pathdump_monitor.dumped = false;
+            continue;
+        }
+        moved = Vector2_distance(&unit->s.origin2, &client->pathdump_monitor.last_origin);
+        if (moved >= MAX(8.0f, unit->collision * 0.25f)) {
+            client->pathdump_monitor.last_origin = unit->s.origin2;
+            client->pathdump_monitor.last_progress_time = now;
+            client->pathdump_monitor.dumped = false;
+            continue;
+        }
+        /* Route cache misses intentionally pause movement for a few frames.
+         * Keep them in the rolling trace, but only emit a stall dump once the
+         * unit is actually being held by a turn or collision decision. */
+        {
+            uint32_t previous_index = (client->pathdump_monitor.trace_cursor +
+                PATHDUMP_TRACE_CAPACITY - 1) % PATHDUMP_TRACE_CAPACITY;
+            moveDiagState_t state = (moveDiagState_t)
+                client->pathdump_monitor.trace[previous_index].move_state;
+            bool blocked = state == MOVE_DIAG_TURN_WAIT ||
+                state == MOVE_DIAG_STATIC_BLOCK || state == MOVE_DIAG_UNIT_BLOCK;
+            if (!client->pathdump_monitor.dumped && blocked &&
+                (uint32_t)(now - client->pathdump_monitor.last_progress_time) >= client->pathdump_monitor.stall_ms) {
+                G_CheatPrintf(clent, "PD STALL unit=%u rawcode=%08x no_progress_ms=%u reason=%s",
+                    (unsigned)unit->s.number, (unsigned)unit->class_id,
+                    (unsigned)(now - client->pathdump_monitor.last_progress_time),
+                    G_PathdumpMoveStateName((uint8_t)state));
+                G_PathdumpPrintTrace(clent, client);
+                G_PathdumpUnit(clent, unit);
+                client->pathdump_monitor.dumped = true;
+            }
+        }
     }
 }
 
@@ -3039,6 +3294,7 @@ clientCommand_t clientCommands[] = {
     { "kill", CMD_Kill },
     { "hero", CMD_Hero },
     { "pathdump", CMD_Pathdump },
+    { "pd", CMD_Pd },
     { "win", CMD_Win },
     { "lose", CMD_Lose },
     { "day", CMD_Day },
