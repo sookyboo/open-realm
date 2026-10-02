@@ -74,6 +74,14 @@ fow off
 fow on
 ```
 
+`pathdump` writes a bounded `PATHDUMP` snapshot for the main selected unit. It includes its position, collision radius, queued order count, active routing flags, fallback point, the static pathing mask in a 9-by-9 cell window, and nearby live units, buildings, destructables, bridges, and doodads within five pathing cells (expanded by each obstacle's collision radius). Static walls and other baked terrain blockers appear in the cell mask. Copy the output into a routing regression fixture together with the map and issued order:
+
+```
+pathdump
+```
+
+The grid rows are ordered from north to south; each comma-separated byte is the static pathing mask at that cell center. `PATHDUMP NEAR` records include obstacle kind, entity number, rawcode, owner, position, collision radius, pathing presence, destructable death state, and offset from the selected unit. The dump requires `sv_cheats 1` and one selected unit.
+
 All `sv_cheats 1` Warcraft III cheat commands print their result to the issuing player's in-game console. This includes successful state changes as well as disabled-cheat, usage, and validation feedback. The same text is retained on stderr for terminal/debug logs; console delivery is presentation-only and is skipped for disconnected test/reserved clients.
 
 `hero max` raises the selected friendly Hero to the active map's `Misc/MaxHeroLevel` and grants the skill points associated with that level:

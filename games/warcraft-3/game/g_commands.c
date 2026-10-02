@@ -1560,6 +1560,80 @@ CLIENTCOMMAND(Hero) {
     G_InvalidateUnitInfoPanel(hero);
 }
 
+/* Emit a compact, reproducible snapshot of the selected unit and the local
+ * pathing neighborhood. The grid is deliberately bounded so console output
+ * remains usable and can be copied into a focused routing fixture. */
+CLIENTCOMMAND(Pathdump) {
+    gameClient_t *client = clent ? clent->client : NULL;
+    edict_t *unit = client ? G_GetMainSelectedUnit(client) : NULL;
+    float cell = CM_PathCellWorldSize();
+    int cx, cy, x, y;
+
+    if (!G_CheatsEnabled()) {
+        G_CheatPrintf(clent, "WC3: cheats are disabled; set sv_cheats 1");
+        return;
+    }
+    if (argc != 1 || !unit) {
+        G_CheatPrintf(clent, "WC3: usage: pathdump (requires one selected unit)");
+        return;
+    }
+    if (!(cell > 0.0f)) {
+        G_CheatPrintf(clent, "PATHDUMP error=invalid_path_cell_size value=%.3f", cell);
+        return;
+    }
+    cx = (int)floorf(unit->s.origin2.x / cell);
+    cy = (int)floorf(unit->s.origin2.y / cell);
+    G_CheatPrintf(clent,
+        "PATHDUMP unit=%u rawcode=%08x owner=%u origin=%.3f,%.3f collision=%.3f cell=%.3f cellpos=%d,%d queued=%u goal=%u fallback=%.3f,%.3f blocked=%u flow=%u direct=%u reached=%u unreachable=%u",
+        (unsigned)unit->s.number, (unsigned)unit->class_id, (unsigned)unit->s.player,
+        unit->s.origin2.x, unit->s.origin2.y, unit->collision, cell, cx, cy,
+        (unsigned)unit->order_queue.count, (unsigned)(unit->goalentity ? unit->goalentity->s.number : 0),
+        unit->movement.flow_fallback_target.x, unit->movement.flow_fallback_target.y, (unsigned)unit->movement.blocked_frames,
+        (unsigned)unit->movement.flow_generation, unit->movement.flow_direct,
+        unit->movement.flow_goal_reached, unit->movement.flow_unreachable);
+    G_CheatPrintf(clent, "PATHDUMP GRID rows=y-4..y+4 columns=x-4..x+4; bits=static_pathing_mask");
+    for (y = 4; y >= -4; y--) {
+        char row[160];
+        size_t used = 0;
+        for (x = -4; x <= 4; x++) {
+            vec2_t p = { (cx + x + 0.5f) * cell, (cy + y + 0.5f) * cell };
+            uint8_t flags = 0;
+            bool known = CM_GetPathingFlagsAt(&p, &flags);
+            int n = snprintf(row + used, sizeof(row) - used, "%s%s%02x", x == -4 ? "" : ",", known ? "" : "??", known ? flags : 0);
+            if (n < 0 || (size_t)n >= sizeof(row) - used) break;
+            used += (size_t)n;
+        }
+        G_CheatPrintf(clent, "PATHDUMP GRID y=%d %s", cy + y, row);
+    }
+    FOR_LOOP(i, globals.num_edicts) {
+        edict_t *other = &globals.edicts[i];
+        float dx, dy;
+        cstring_t kind;
+        if (other == unit || !other->inuse) continue;
+        dx = other->s.origin2.x - unit->s.origin2.x;
+        dy = other->s.origin2.y - unit->s.origin2.y;
+        {
+            float reach = cell * 5.0f + MAX(0.0f, other->collision);
+            if (dx * dx + dy * dy > reach * reach) continue;
+        }
+        if (other->svflags & SVF_MONSTER) {
+            if (M_IsDead(other)) continue;
+            kind = G_UnitIsStructure(other) ? "building" : "unit";
+        } else if (G_IsDestructable(other)) {
+            kind = other->targtype == TARG_BRIDGE ? "bridge" : "destructable";
+        } else if (G_IsDoodad(other)) {
+            kind = "doodad";
+        } else {
+            continue;
+        }
+        G_CheatPrintf(clent, "PATHDUMP NEAR kind=%s entity=%u rawcode=%08x owner=%u origin=%.3f,%.3f collision=%.3f pathing=%u dead=%u delta=%.3f,%.3f",
+            kind, (unsigned)other->s.number, (unsigned)other->class_id, (unsigned)other->s.player,
+            other->s.origin2.x, other->s.origin2.y, other->collision,
+            (unsigned)(other->pathtex != NULL || other->collision > 0.0f),
+            (unsigned)(G_IsDestructable(other) && other->destructable.dead), dx, dy);
+    }
+}
+
 /* Keep the instant-build cheat scoped to the issuing player's live client state. */
 bool G_PlayerInstantBuild(uint32_t player) {
     gameClient_t *client = G_GetPlayerClientByNumber(player);
@@ -2871,6 +2945,7 @@ clientCommand_t clientCommands[] = {
     { "god", CMD_God },
     { "kill", CMD_Kill },
     { "hero", CMD_Hero },
+    { "pathdump", CMD_Pathdump },
     { "win", CMD_Win },
     { "lose", CMD_Lose },
     { "day", CMD_Day },
