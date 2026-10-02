@@ -1567,12 +1567,25 @@ CLIENTCOMMAND(Pathdump) {
     gameClient_t *client = clent ? clent->client : NULL;
     edict_t *unit = client ? G_GetMainSelectedUnit(client) : NULL;
     edict_t *goal = unit ? unit->goalentity : NULL;
+    ability_t const *move_ability = unit && unit->currentmove
+        ? GetAbilityByIndex(GetAbilityIndex(unit->currentmove->proc)) : NULL;
     float cell = CM_PathCellWorldSize();
+    cstring_t goal_kind = "none";
     int cx, cy, x, y;
 
     if (!G_CheatsEnabled()) {
         G_CheatPrintf(clent, "WC3: cheats are disabled; set sv_cheats 1");
         return;
+    }
+    if (goal) {
+        if (goal->svflags & SVF_MONSTER)
+            goal_kind = G_UnitIsStructure(goal) ? "building" : "unit";
+        else if (G_IsDestructable(goal))
+            goal_kind = goal->targtype == TARG_BRIDGE ? "bridge" : "destructable";
+        else if (G_IsDoodad(goal))
+            goal_kind = "doodad";
+        else
+            goal_kind = "other";
     }
     if (argc != 1 || !unit) {
         G_CheatPrintf(clent, "WC3: usage: pathdump (requires one selected unit)");
@@ -1585,14 +1598,18 @@ CLIENTCOMMAND(Pathdump) {
     cx = (int)floorf(unit->s.origin2.x / cell);
     cy = (int)floorf(unit->s.origin2.y / cell);
     G_CheatPrintf(clent,
-        "PATHDUMP unit=%u rawcode=%08x owner=%u origin=%.3f,%.3f collision=%.3f cell=%.3f cellpos=%d,%d queued=%u move=%u goal=%u goal_rawcode=%08x goal_owner=%u goal_origin=%.3f,%.3f goal_collision=%.3f goal_distance=%.3f goal_pathable=%u fallback=%.3f,%.3f blocked=%u flow=%u direct=%u reached=%u unreachable=%u",
+        "PATHDUMP unit=%u rawcode=%08x owner=%u origin=%.3f,%.3f collision=%.3f cell=%.3f cellpos=%d,%d queued=%u move=%u move_name=%s goal=%u goal_kind=%s goal_rawcode=%08x goal_owner=%u goal_inuse=%u goal_spawn=%u goal_svflags=%08x goal_targtype=%u goal_origin=%.3f,%.3f goal_collision=%.3f goal_distance=%.3f goal_pathable=%u fallback=%.3f,%.3f blocked=%u flow=%u direct=%u reached=%u unreachable=%u",
         (unsigned)unit->s.number, (unsigned)unit->class_id, (unsigned)unit->s.player,
         unit->s.origin2.x, unit->s.origin2.y, unit->collision, cell, cx, cy,
         (unsigned)unit->order_queue.count,
         (unsigned)(unit->currentmove ? GetAbilityIndex(unit->currentmove->proc) : 255),
-        (unsigned)(goal ? goal->s.number : 0), (unsigned)(goal ? goal->class_id : 0),
-        (unsigned)(goal ? goal->s.player : 0), goal ? goal->s.origin2.x : 0.0f,
-        goal ? goal->s.origin2.y : 0.0f, goal ? goal->collision : 0.0f,
+        move_ability && move_ability->classname ? move_ability->classname : "none",
+        (unsigned)(goal ? goal->s.number : 0), goal_kind, (unsigned)(goal ? goal->class_id : 0),
+        (unsigned)(goal ? goal->s.player : 0),
+        (unsigned)(goal && goal->inuse), (unsigned)(goal ? goal->spawn_time : 0),
+        (unsigned)(goal ? goal->svflags : 0), (unsigned)(goal ? goal->targtype : 0),
+        goal ? goal->s.origin2.x : 0.0f, goal ? goal->s.origin2.y : 0.0f,
+        goal ? goal->collision : 0.0f,
         goal ? Vector2_distance(&unit->s.origin2, &goal->s.origin2) : 0.0f,
         (unsigned)(goal && CM_PointIsPathableForRadius(&goal->s.origin2, unit->collision)),
         unit->movement.flow_fallback_target.x, unit->movement.flow_fallback_target.y, (unsigned)unit->movement.blocked_frames,
