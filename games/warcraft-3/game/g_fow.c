@@ -42,6 +42,8 @@ static bool G_FowReady(void) {
     return level.fow.width > 0 && level.fow.height > 0;
 }
 
+static bool G_FowPlayerFogDisabled(uint32_t player);
+
 bool G_FowPlayersShareVision(uint32_t viewer, uint32_t owner) {
     if (viewer >= MAX_PLAYERS || owner >= MAX_PLAYERS) {
         return false;
@@ -925,6 +927,8 @@ void G_FowShutdown(void) {
         fowPlayerGrid_t *grid = &level.fow.players[player];
         SAFE_DELETE(grid->visible, gi.MemFree);
         SAFE_DELETE(grid->explored, gi.MemFree);
+        SAFE_DELETE(grid->saved_visible, gi.MemFree);
+        SAFE_DELETE(grid->saved_explored, gi.MemFree);
         SAFE_DELETE(grid->visible_rows, gi.MemFree);
         SAFE_DELETE(grid->dirty_visible_rows, gi.MemFree);
         SAFE_DELETE(grid->dirty_explored_rows, gi.MemFree);
@@ -1006,6 +1010,83 @@ void G_FowConnectPlayer(uint32_t player) {
         level.fow.players[player].client_connected = true;
 }
 
+/* Reveal fog for one player while retaining the authoritative planes for restore. */
+bool G_FowSetCheat(uint32_t player, bool disabled) {
+    fowPlayerGrid_t *grid;
+    gameClient_t *client;
+    uint32_t cells;
+
+    if (player >= MAX_PLAYERS || !G_FowReady()) return false;
+    grid = &level.fow.players[player];
+    client = G_GetPlayerClientByNumber(player);
+    if (!client || !grid->visible || !grid->explored) return false;
+    if (grid->cheat_disabled == disabled) return true;
+    cells = G_FowCellCount();
+    if (disabled) {
+        grid->saved_visible = gi.MemAlloc(cells);
+        grid->saved_explored = gi.MemAlloc(cells);
+        if (!grid->saved_visible || !grid->saved_explored) {
+            SAFE_DELETE(grid->saved_visible, gi.MemFree);
+            SAFE_DELETE(grid->saved_explored, gi.MemFree);
+            return false;
+        }
+        memcpy(grid->saved_visible, grid->visible, cells);
+        memcpy(grid->saved_explored, grid->explored, cells);
+        grid->saved_nofog = (client->ps.rdflags & RDF_NOFOG) != 0;
+        grid->cheat_disabled = true;
+        memset(grid->visible, 1, cells);
+        memset(grid->explored, 1, cells);
+        FOR_LOOP(y, level.fow.height) {
+            grid->visible_rows[y] = 1;
+            grid->dirty_visible_rows[y] = 1;
+            grid->dirty_explored_rows[y] = 1;
+        }
+#ifdef WC3_FOW_PACKED_MASK
+        memset(grid->packed_visible, 0, grid->packed_stride * level.fow.height * sizeof(*grid->packed_visible));
+        memset(grid->packed_explored, 0, grid->packed_stride * level.fow.height * sizeof(*grid->packed_explored));
+        FOR_LOOP(y, level.fow.height)
+            FOR_LOOP(x, level.fow.width) {
+                uint16_t mask = (uint16_t)(1u << (x & 15));
+                uint32_t word = (x >> 4) + y * grid->packed_stride;
+                grid->packed_visible[word] |= mask;
+                grid->packed_explored[word] |= mask;
+            }
+#endif
+        client->ps.rdflags |= RDF_NOFOG;
+        return true;
+    }
+
+    if (!grid->saved_visible || !grid->saved_explored) return false;
+    memcpy(grid->visible, grid->saved_visible, cells);
+    memcpy(grid->explored, grid->saved_explored, cells);
+#ifdef WC3_FOW_PACKED_MASK
+    memset(grid->packed_visible, 0, grid->packed_stride * level.fow.height * sizeof(*grid->packed_visible));
+    memset(grid->packed_explored, 0, grid->packed_stride * level.fow.height * sizeof(*grid->packed_explored));
+    FOR_LOOP(y, level.fow.height)
+        FOR_LOOP(x, level.fow.width) {
+            uint32_t index = G_FOW_CELL_INDEX(x, y);
+            uint16_t mask = (uint16_t)(1u << (x & 15));
+            if (grid->visible[index]) grid->packed_visible[(x >> 4) + y * grid->packed_stride] |= mask;
+            if (grid->explored[index]) grid->packed_explored[(x >> 4) + y * grid->packed_stride] |= mask;
+        }
+#endif
+    FOR_LOOP(y, level.fow.height) {
+        grid->visible_rows[y] = 0;
+        FOR_LOOP(x, level.fow.width)
+            if (grid->visible[G_FOW_CELL_INDEX(x, y)]) {
+                grid->visible_rows[y] = 1;
+                break;
+            }
+    }
+    memset(grid->dirty_visible_rows, 1, level.fow.height);
+    memset(grid->dirty_explored_rows, 1, level.fow.height);
+    grid->cheat_disabled = false;
+    SET_FLAG(client->ps.rdflags, RDF_NOFOG, grid->saved_nofog);
+    SAFE_DELETE(grid->saved_visible, gi.MemFree);
+    SAFE_DELETE(grid->saved_explored, gi.MemFree);
+    return true;
+}
+
 void G_FowUpdate(void) {
     uint32_t owner_viewers[MAX_PLAYERS] = { 0 };
     uint32_t viewers = 0;
@@ -1024,7 +1105,8 @@ void G_FowUpdate(void) {
 #endif
     FOR_LOOP(owner, MAX_PLAYERS)
         FOR_LOOP(viewer, MAX_PLAYERS)
-            if ((viewers & (1u << viewer)) && G_FowPlayersShareVision(viewer, owner))
+            if ((viewers & (1u << viewer)) && !level.fow.players[viewer].cheat_disabled &&
+                G_FowPlayersShareVision(viewer, owner))
                 owner_viewers[owner] |= 1u << viewer;
 
     if (G_FowBlockersChanged()) {
@@ -1032,7 +1114,7 @@ void G_FowUpdate(void) {
     }
     FOR_LOOP(player, MAX_PLAYERS) {
         fowPlayerGrid_t *grid = &level.fow.players[player];
-        if (!(viewers & (1u << player))) {
+        if (!(viewers & (1u << player)) || level.fow.players[player].cheat_disabled) {
             continue;
         }
         G_FowClearVisible(grid);
