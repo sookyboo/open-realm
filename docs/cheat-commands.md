@@ -74,7 +74,7 @@ fow off
 fow on
 ```
 
-`pathdump` writes a bounded `PATHDUMP` snapshot for the main selected unit. It includes its position, collision radius, queued order count, active routing flags, fallback point, the static pathing mask in a 9-by-9 cell window, and nearby live units, buildings, destructables, bridges, and doodads within five pathing cells (expanded by each obstacle's collision radius). Static walls and other baked terrain blockers appear in the cell mask. Copy the output into a routing regression fixture together with the map and issued order:
+`pathdump` writes a bounded `PATHDUMP` snapshot for the main selected unit. It includes its position, collision radius, queued order count, current move ability index, active goal identity/position/collision/distance and point pathability, active routing flags, fallback point, the static pathing mask in a 9-by-9 cell window, and nearby live units, buildings, destructables, bridges, and doodads within five pathing cells (expanded by each obstacle's collision radius). Static walls and other baked terrain blockers appear in the cell mask. Copy the output into a routing regression fixture together with the map and issued order:
 
 ```
 pathdump

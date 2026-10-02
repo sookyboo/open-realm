@@ -1566,6 +1566,7 @@ CLIENTCOMMAND(Hero) {
 CLIENTCOMMAND(Pathdump) {
     gameClient_t *client = clent ? clent->client : NULL;
     edict_t *unit = client ? G_GetMainSelectedUnit(client) : NULL;
+    edict_t *goal = unit ? unit->goalentity : NULL;
     float cell = CM_PathCellWorldSize();
     int cx, cy, x, y;
 
@@ -1584,10 +1585,16 @@ CLIENTCOMMAND(Pathdump) {
     cx = (int)floorf(unit->s.origin2.x / cell);
     cy = (int)floorf(unit->s.origin2.y / cell);
     G_CheatPrintf(clent,
-        "PATHDUMP unit=%u rawcode=%08x owner=%u origin=%.3f,%.3f collision=%.3f cell=%.3f cellpos=%d,%d queued=%u goal=%u fallback=%.3f,%.3f blocked=%u flow=%u direct=%u reached=%u unreachable=%u",
+        "PATHDUMP unit=%u rawcode=%08x owner=%u origin=%.3f,%.3f collision=%.3f cell=%.3f cellpos=%d,%d queued=%u move=%u goal=%u goal_rawcode=%08x goal_owner=%u goal_origin=%.3f,%.3f goal_collision=%.3f goal_distance=%.3f goal_pathable=%u fallback=%.3f,%.3f blocked=%u flow=%u direct=%u reached=%u unreachable=%u",
         (unsigned)unit->s.number, (unsigned)unit->class_id, (unsigned)unit->s.player,
         unit->s.origin2.x, unit->s.origin2.y, unit->collision, cell, cx, cy,
-        (unsigned)unit->order_queue.count, (unsigned)(unit->goalentity ? unit->goalentity->s.number : 0),
+        (unsigned)unit->order_queue.count,
+        (unsigned)(unit->currentmove ? GetAbilityIndex(unit->currentmove->proc) : 255),
+        (unsigned)(goal ? goal->s.number : 0), (unsigned)(goal ? goal->class_id : 0),
+        (unsigned)(goal ? goal->s.player : 0), goal ? goal->s.origin2.x : 0.0f,
+        goal ? goal->s.origin2.y : 0.0f, goal ? goal->collision : 0.0f,
+        goal ? Vector2_distance(&unit->s.origin2, &goal->s.origin2) : 0.0f,
+        (unsigned)(goal && CM_PointIsPathableForRadius(&goal->s.origin2, unit->collision)),
         unit->movement.flow_fallback_target.x, unit->movement.flow_fallback_target.y, (unsigned)unit->movement.blocked_frames,
         (unsigned)unit->movement.flow_generation, unit->movement.flow_direct,
         unit->movement.flow_goal_reached, unit->movement.flow_unreachable);
