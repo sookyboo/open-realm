@@ -7,8 +7,8 @@ static cstring_t status_buff_fallback(uint32_t code) {
 }
 
 static cstring_t status_buff(abilityitem_t const *spell, uint32_t level) {
-    cstring_t buff = G_AbilityLevel(spell->code, level)->buffID;
-    return buff && strlen(buff) >= 4 ? buff : status_buff_fallback(spell->code);
+    cstring_t buff = S_SpellBuffId(spell->code, level);
+    return buff ? buff : status_buff_fallback(spell->code);
 }
 
 static void status_execute(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
@@ -16,7 +16,7 @@ static void status_execute(edict_t *caster, spellTarget_t st, abilityitem_t cons
     cstring_t buff = status_buff(spell, level);
     if (!st.entity || !buff) return;
     S_SpellApplyTimedTargetStatus(st.entity, spell->code, level, buff,
-                                  S_SpellDuration(spell->code, level, S_UnitIsResistant(st.entity)));
+                                  S_SpellResistantDuration(spell->code, level, st.entity));
 }
 
 /* ---- Cripple (Acri) -------------------------------------------------------
@@ -132,7 +132,7 @@ static void poison_apply(edict_t *attacker, edict_t *target, uint32_t code, uint
     for (uint32_t token = 0;; token++) {
         cstring_t buff = S_SpellBuffToken(buffs, token);
         if (!buff) break;
-        unit_addtimedstatus(target, buff, level, S_SpellDuration(code, level, S_UnitIsResistant(target)));
+        unit_addtimedstatus(target, buff, level, S_SpellResistantDuration(code, level, target));
     }
 }
 
