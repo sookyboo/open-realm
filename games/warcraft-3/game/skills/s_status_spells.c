@@ -132,7 +132,7 @@ static void poison_apply(edict_t *attacker, edict_t *target, uint32_t code, uint
     for (uint32_t token = 0;; token++) {
         cstring_t buff = S_SpellBuffToken(buffs, token);
         if (!buff) break;
-        unit_addtimedstatus(target, buff, level, S_SpellResistantDuration(code, level, target));
+        S_SpellApplyTimedStatus(target, buff, level, S_SpellResistantDuration(code, level, target));
     }
 }
 
