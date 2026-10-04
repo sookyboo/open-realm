@@ -295,6 +295,9 @@ Use sources in this order, choosing the smallest set that answers the question:
 Retail data is authoritative for authored values. External references are useful for
 explaining behavior, but they must not override an active ROC/TFT row without a reason.
 Game.dll is evidence about one binary build, not a portable source file.
+For claims limited to authored tooltip text and fully resolved tooltip values, the
+active Retail strings plus their referenced object-data fields are sufficient evidence;
+do not launch Retail solely to read or screenshot that same tooltip.
 
 ## Data Flow
 
@@ -431,6 +434,60 @@ Ability strings provide a compact behavioral sketch:
 | `Bufftip`, `Buffubertip` | player-visible status | does not define stacking or dispel rules |
 | `<rawcode,Field>` | authored value dependency | field units still come from the normalized SLK row |
 | `Globalmessage`, `Globalsound` | visible cast/death feedback | empty values are meaningful and should remain empty |
+
+### Retail tooltip content: data-only validation
+
+**Try this first when verifying an ability.** Before planning a Retail run, check
+whether the question is already answered by the active Retail tooltip and its
+referenced object-data fields. Resolve those fields first; this often verifies
+rank-specific unit IDs, hit points, damage, duration, and other authored
+values without launching the game.
+
+**Acceptance rule:** When the claim is what the Retail tooltip says at each rank,
+matching the active archive's tooltip string and resolving all its placeholders
+from the referenced Retail data rows validates that tooltip claim. No Retail
+launch or screenshot is required for this validation. Follow this procedure:
+
+1. Run `ability_audit` for the concrete rawcode and target archive mode. Read
+   the rank-specific `Ubertip` strings and the matching `UnitID`, `Dur`, and
+   other per-level fields. Use `-tft` or `-roc` when validating one mode; do not
+   let an overlay silently change the selected row.
+   For an initial resolution, use
+   `build/bin/ability_audit -data 'data/Warcraft III' -tft -resolve-tooltip AOsw`.
+   The resolver prints each rank and the source values it substituted.
+2. List every `<rawcode,field>` reference in the tooltip. Resolve each field
+   from the referenced object's table, not from the ability by assumption:
+   ability values from `AbilityData.slk`, unit health/movement from
+   `UnitBalance.slk`, weapon damage/targets from `UnitWeapons.slk`, unit
+   ability lists from `UnitAbilities.slk`, and status descriptions from
+   `AbilityBuffData.slk` or the appropriate buff table. `ability_audit` covers
+   ability rows; use `mpqtool` to inspect the required unit or buff rows in the
+   same active archive set.
+3. Apply the placeholder's rank and display formatting, then write out the
+   resolved tooltip text for each rank. Keep authored markup such as `|n` and
+   color codes clear in the formatted version rather than treating them as
+   gameplay values.
+4. Compare the resolved text with the ability's authored rank mapping. Existing
+   runtime observations can corroborate the mapping, but are not a prerequisite
+   for validating tooltip text when the data references resolve completely.
+
+The resolver currently handles ability Dur/HeroDur/Cool/Cost/Area/Rng and
+DataA–I fields, unit `realHP`, and first weapon `mindmg1`/`maxdmg1`. It is a
+convenience for those common references, not a complete WC3 placeholder
+interpreter. Any `[UNRESOLVED:...]` or `[UNSUPPORTED:...]` marker means the
+reference still needs manual resolution from the active archive before the
+acceptance rule above applies. Preserve the source tooltip and inspect every
+rank; the tool does not model UI formatting or establish runtime mechanics.
+
+This validates the Retail tooltip's displayed data contract. It does not prove
+that runtime behavior follows the text: an authored duration does not prove a
+summon expires on time, and listed damage does not prove the attack path applies
+that amount. If the original question remains after resolving the tooltip, name
+the specific unverified runtime behavior and choose a focused headless test or
+controlled observation for that remaining claim. The
+[Serpent Ward worked example](sentry-ward.md#tft-serpent-ward-rank-up-tooltip-data)
+shows a complete tooltip validated from rank-specific unit and duration data
+without requiring another Retail run.
 
 Do not treat a tooltip as a complete target predicate. For example, “enemy land
 units” establishes the ordinary War Stomp filter, but immunity, summoned units,

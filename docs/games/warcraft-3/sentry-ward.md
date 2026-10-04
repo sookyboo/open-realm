@@ -63,6 +63,61 @@ build/bin/ability_audit -data 'data/Warcraft III' -raw Adt1
 make test-wc3-engine WC3_PATTERN='wc3_spell.sentry_ward*'
 ```
 
+### TFT Serpent Ward rank-up tooltip data
+
+This applies the [Retail tooltip data validation process](ability-implementation.md#retail-tooltip-content-data-only-validation):
+resolve each rank's text placeholders from the referenced rawcode and field,
+then compare the result with the active ability row and known rank mapping.
+
+The rank-specific stock `AOsw` `Ubertip` strings resolve their unit and
+duration placeholders through TFT object data. Run:
+
+```sh
+build/bin/ability_audit -data 'data/Warcraft III' -tft -raw AOsw
+build/bin/ability_audit -data 'data/Warcraft III' -tft -raw ACmi
+build/bin/mpqtool -mpq 'data/Warcraft III/War3x.mpq' grep osp1 Units/UnitBalance.slk
+build/bin/mpqtool -mpq 'data/Warcraft III/War3x.mpq' grep osp1 Units/UnitWeapons.slk
+build/bin/mpqtool -mpq 'data/Warcraft III/War3x.mpq' grep osp1 Units/UnitAbilities.slk
+```
+
+The audit shows `UnitID=osp1/osp2/osp3` and `Dur=HeroDur=40` at ranks 1–3. The
+text substitutes `<ospN,realHP>`,
+`<ospN,mindmg1>`, `<ospN,maxdmg1>`, and `<AOsw,Dur1>`. Resolving those fields
+against `Units/UnitBalance.slk` and `Units/UnitWeapons.slk` gives the tooltip
+content OpenRealm should display when each rank is learned:
+
+| Rank | Summoned unit | Hit points | Attack damage | Duration |
+| ---: | --- | ---: | ---: | ---: |
+| 1 | `osp1` | 90 | 14–16 | 40 seconds |
+| 2 | `osp2` | 165 | 27–30 | 40 seconds |
+| 3 | `osp3` | 200 | 48–52 | 40 seconds |
+
+Resolved English tooltip bodies, with `|n` shown as line breaks:
+
+- **Rank 1:** Summons an immobile serpentine ward to attack the Shadow Hunter's
+  enemies. The ward has 90 hit points, is magic immune, and deals 14–16 damage.
+  Lasts 40 seconds. Attacks land and air units.
+- **Rank 2:** Summons an immobile serpentine ward to attack the Shadow Hunter's
+  enemies. The ward has 165 hit points, is magic immune, and deals 27–30
+  damage. Lasts 40 seconds. Attacks land and air units.
+- **Rank 3:** Summons an immobile serpentine ward to attack the Shadow Hunter's
+  enemies. The ward has 200 hit points, is magic immune, and deals 48–52
+  damage. Lasts 40 seconds. Attacks land and air units.
+
+All three unit rows have `spd=0` and `abilList=ACmi`; `ACmi` aliases `Amim`
+(`CAbilityMagicImmunity`). Their `UnitWeapons.slk` attack target mask includes
+both `ground` and `air`. This resolves the rest of the tooltip claims: the ward
+is immobile and spell immune, and can attack land and air units. The same unit
+stats were present in both `War3.mpq` and `War3x.mpq`.
+
+This authored-data check validates the rank-specific Retail tooltip values;
+there is no need to launch Retail to confirm those strings or their resolved
+numbers. It agrees with the JASS observations that ranks 1–3 create
+`osp1`–`osp3`, and the rank 1 ward being absent by 45 seconds is consistent
+with its authored 40-second duration. Actual rank 2/3 expiry, runtime attack
+damage, and runtime hit points are separate gameplay claims and are not proven
+by tooltip data.
+
 ### Retail JASS observation (TFT)
 
 The stock TFT spell was probed in Retail 1.29.2 using
