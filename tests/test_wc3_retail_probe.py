@@ -99,6 +99,18 @@ class ScriptEditTest(unittest.TestCase):
         self.assertEqual(len(PROBE.re.findall(r"(?m)^globals$", result)), 1)
         self.assertIn("integer udg_existing = 0\nunit gg_probe_caster = null\nendglobals", result)
 
+    def test_executable_statement_inside_globals_is_rejected(self):
+        source = (
+            "globals\n"
+            "    integer udg_existing = 0\n"
+            "    set report = 0\n"
+            "endglobals\n"
+            "function Init takes nothing returns nothing\n"
+            "endfunction\n"
+        )
+        with self.assertRaisesRegex(PROBE.ProbeError, "non-declaration"):
+            PROBE.validate_jass_layout(source)
+
     def test_second_globals_block_is_rejected(self):
         source = (
             "globals\nendglobals\n"
@@ -241,8 +253,15 @@ class LaunchTest(unittest.TestCase):
                 "prepared_map_sha256": PROBE.sha256_file(prepared),
             }
             (directory / "probe.json").write_text(json.dumps(record), encoding="utf-8")
+            (directory / "control-launch.json").write_text(json.dumps({
+                "probe_id": "launch-fixture",
+                "role": "control",
+                "map_sha256": record["control_map_sha256"],
+                "retail_executable_sha256": record["retail_executable_sha256"],
+            }), encoding="utf-8")
             args = SimpleNamespace(probe_dir=directory, control=False, wine="wine-fixture",
-                                   winepath="winepath-fixture", wine_prefix=None)
+                                   winepath="winepath-fixture", wine_prefix=None,
+                                   control_confirmed=True)
             with mock.patch.object(PROBE, "run", return_value=SimpleNamespace(
                     stdout=b"Z:\\tmp\\probe\\prepared.w3x\r\n")) as path_call, \
                  mock.patch.object(PROBE.subprocess, "Popen",
@@ -259,7 +278,65 @@ class LaunchTest(unittest.TestCase):
             launch_record = json.loads((directory / "launch.json").read_text(encoding="utf-8"))
             self.assertEqual(launch_record["role"], "prepared")
             self.assertEqual(launch_record["map_sha256"], record["prepared_map_sha256"])
+            self.assertTrue(launch_record["control_screen_confirmed"])
             self.assertTrue(launch_record["manual_map_confirmation_required"])
+
+    def test_prepared_launch_requires_control_confirmation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "probe"
+            directory.mkdir()
+            executable = directory / "retail.exe"
+            executable.write_bytes(b"retail executable fixture")
+            control = directory / "control.w3x"
+            prepared = directory / "prepared.w3x"
+            control.write_bytes(b"control map")
+            prepared.write_bytes(b"prepared map")
+            record = {
+                "id": "confirmation-fixture",
+                "retail_executable": str(executable),
+                "retail_executable_sha256": PROBE.sha256_file(executable),
+                "control_map": str(control),
+                "control_map_sha256": PROBE.sha256_file(control),
+                "prepared_map": str(prepared),
+                "prepared_map_sha256": PROBE.sha256_file(prepared),
+            }
+            (directory / "probe.json").write_text(json.dumps(record), encoding="utf-8")
+            args = SimpleNamespace(probe_dir=directory, control=False, wine="wine-fixture",
+                                   winepath="winepath-fixture", wine_prefix=None,
+                                   control_confirmed=False)
+            with self.assertRaisesRegex(PROBE.ProbeError, "visually confirm"):
+                PROBE.launch(args)
+
+    def test_prepared_launch_rejects_mismatched_control_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "probe"
+            directory.mkdir()
+            executable = directory / "retail.exe"
+            executable.write_bytes(b"retail executable fixture")
+            control = directory / "control.w3x"
+            prepared = directory / "prepared.w3x"
+            control.write_bytes(b"control map")
+            prepared.write_bytes(b"prepared map")
+            record = {
+                "id": "control-fixture",
+                "retail_executable": str(executable),
+                "retail_executable_sha256": PROBE.sha256_file(executable),
+                "control_map": str(control),
+                "control_map_sha256": PROBE.sha256_file(control),
+                "prepared_map": str(prepared),
+                "prepared_map_sha256": PROBE.sha256_file(prepared),
+            }
+            (directory / "probe.json").write_text(json.dumps(record), encoding="utf-8")
+            (directory / "control-launch.json").write_text(json.dumps({
+                "probe_id": "different-probe", "role": "control",
+                "map_sha256": record["control_map_sha256"],
+                "retail_executable_sha256": record["retail_executable_sha256"],
+            }), encoding="utf-8")
+            args = SimpleNamespace(probe_dir=directory, control=False, wine="wine-fixture",
+                                   winepath="winepath-fixture", wine_prefix=None,
+                                   control_confirmed=True)
+            with self.assertRaisesRegex(PROBE.ProbeError, "does not match this probe"):
+                PROBE.launch(args)
 
 
 if __name__ == "__main__":
