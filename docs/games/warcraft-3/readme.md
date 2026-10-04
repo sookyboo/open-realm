@@ -138,7 +138,7 @@ File formats, renderer notes, UI/FDF behavior, and gameplay coverage work used b
 - [Unit Stat Modifiers](unit-stat-modifiers.md): modifier ledgers, physical/spell/direct damage paths, and implementation checklist.
 - [Poison Attacks](poison-attacks.md): `Aven`/`Apoi`/`Apo2` on-hit buff state, DPS deferred to the status tick.
 - [Implemented Ability Verification Review](ability-verification-review.md): reproduced failures, lifecycle fixes, and permanent regression coverage.
-- [Retail JASS Probe Workflow](retail-camera-tracing.md): edition-correct campaign maps, control-map preflight, safe script edits, and fresh Retail captures.
+- [Retail JASS Probe Workflow](retail-camera-tracing.md): edition-correct campaign maps, fresh Retail captures, optional bounded Frida tracing, and repeatable rawcode-to-native-hook discovery.
 - [Campaign Map Audit](map-audit.md): bounded bulk runtime sweeps with per-map errors and retained logs.
 - [Save/Load](save-load.md): versioned game serializer, Hero walk/save/load campaign diagnostic.
 - [DotA Custom-Map Playability](dota-map-playability.md): protected-MPQ load, hashtable demand, and map-imported object data for DotA 6.83d.
