@@ -338,6 +338,59 @@ unexplained setup or behavior anomaly, not as evidence against level-3
 acceptance. These probes do not establish alias-specific limits or complete
 source/destination resource accounting.
 
+## Retail Purge friendly and hostile target verification (October 4, 2026)
+
+Stock TFT `Apg2` was exercised in the Prologue campaign map under Wine with
+the same Warcraft III executable identified in the Charm probe above
+(`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`).
+`ability_audit` reports `DataA=5`, `DataC=400`, `DataD=3`, `DataE=1`, and the
+target mask `air,ground,ward,vuln,invu,tree`. Two Player 0 Blood Mages (`Hblm`)
+each received stock `Apg2`; one cast on a Player 0 Footman and one on a Player
+12 Footman. Each target had a same-owner Footman control moving toward the
+same destination on a nearby parallel lane. JASS issued the `purge` target
+orders after two seconds of baseline movement and sampled X displacement at
+1.5, 3.5, and 6.5 seconds after the orders. Results were written through
+`PreloadGen*` to `CustomMapData/purgetest.txt` and
+`CustomMapData/purgetest-ally.txt`.
+
+The hostile-target run reported:
+
+```text
+PURGETEST allyAbility=1 enemyAbility=1 allyManaSpent=0.000 enemyManaSpent=69.111 s1=ally=0.000,allyctl=0.000,enemy=80.865,enemyctl=385.253 s2=ally=0.000,allyctl=0.000,enemy=108.837,enemyctl=608.150 s3ally=0.000 s3allyctl=0.000 s3enemy=390.058 s3enemyctl=608.1
+```
+
+The zero allied-lane values belong to an earlier placement where neither that
+target nor its control moved; discard them. The valid hostile comparison is
+that the enemy target moved 80.865 units versus 385.253 for its control at 1.5
+seconds, and 108.837 versus 608.150 at 3.5 seconds. By 6.5 seconds the enemy
+target had resumed moving. The control had already reached its destination, so
+the last sample does not establish the recovery rate.
+
+The corrected allied-target run used a path on which both allied units moved.
+It reported:
+
+```text
+PURGETESTALLY allyAbility=1 enemyAbility=1 allyManaSpent=69.196 enemyManaSpent=69.168 s1=ally=382.881,allyctl=403.491,enemy=403.566,enemyctl=395.808 s2=ally=893.105,allyctl=750.494,enemy=737.043,enemyctl=549.672 s3ally=910.964 s3allyctl=750.494 s3enemy=737.04
+```
+
+The allied cast spent approximately 75 mana after regeneration, and the target
+moved about as far as its control during the first 1.5-second sample. Later
+lane/control divergence makes those samples unsuitable for a precise speed
+ratio. Together, the runs support the stock `Apg2` contract that enemies are
+immobilized/slowed while an allied target can receive the cast without that
+movement effect. This probe does not establish whether the allied cast removes
+buffs, exact pause/slow timing, or behavior of `Aprg` and item/creep aliases.
+
+The untouched Prologue map was extracted from `War3Local.mpq`; each instrumented
+copy replaced the exact `war3map.j` member in place with `smpq -a -f`. The
+embedded script was compared byte-for-byte with the staged script. As with the
+Charm probe above, helpers were placed before
+`Trig_Intro_Cinematic_Skip_Actions`, the test started after the skip callback,
+and Retail was launched with `-window -graphicsapi OpenGL2 -loadfile` (without
+`-launch`). The familiar chapter-card click and Escape sequence was used. An
+initial allied setup whose target and control could not move was discarded;
+the corrected run is the allied evidence above.
+
 ## Jaina / Archmage follow-up (September 19, 2026)
 
 The Archmage review tightened three abilities without adding Hero-specific
