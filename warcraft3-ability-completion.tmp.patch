@@ -1,0 +1,902 @@
+diff --git a/games/warcraft-3/game/skills/s_ability_stubs.c b/games/warcraft-3/game/skills/s_ability_stubs.c
+index a01a2d19..91a046bf 100644
+--- a/games/warcraft-3/game/skills/s_ability_stubs.c
++++ b/games/warcraft-3/game/skills/s_ability_stubs.c
+@@ -5,18 +5,80 @@
+  * Untip="Deactivate Immolation"
+  * Unubertip=""
+  */
++#define ID_IMMOLATION MAKEFOURCC('A','E','i','m')
++#define ID_IMMOLATION_CREEP MAKEFOURCC('A','C','i','m')
++#define ID_IMMOLATION_BUFF MAKEFOURCC('B','E','i','m')
++#define ID_PERMANENT_IMMOLATION MAKEFOURCC('A','N','p','i')
++#define ID_PERMANENT_IMMOLATION_CREEP MAKEFOURCC('A','p','i','g')
++#define IMMOLATION_TICK_MS 1000
++
++static heroabilitystatus_t *immolation_status(edict_t *unit) {
++    heroabilitystatus_t *slot = unit ? unit_findstatus(unit, ID_IMMOLATION_BUFF) : NULL;
++    return slot && (slot->data == ID_IMMOLATION || slot->data == ID_IMMOLATION_CREEP) ? slot : NULL;
++}
+
+-BZ_SIMPLE_SPELL_PROC(AbilityImmolation) {
+-    uint32_t code = spell->code;
++static void immolation_stop(edict_t *unit, heroabilitystatus_t *slot) {
++    if (!unit || !slot || slot->code != ID_IMMOLATION_BUFF) return;
++    unit_expirestatus(unit, slot);
++    G_InvalidateUnitInfoPanel(unit);
++}
+
+-    FOR_LOOP(i, MAX_UNIT_STATUSES) {
+-        if (caster->abilstatus[i].level && caster->abilstatus[i].code == code) {
+-            memset(&caster->abilstatus[i], 0, sizeof(caster->abilstatus[i]));
+-            G_InvalidateUnitInfoPanel(caster);
+-            return;
++static void immolation_pulse(edict_t *unit, heroabilitystatus_t *slot) {
++    uint32_t code, rank, now;
++    float mana_cost, radius, damage;
++    if (!unit || !slot || !slot->level) return;
++    code = slot->data;
++    rank = slot->rank;
++    if (M_IsDead(unit) || !G_UnitAbilityLevel(unit, code)) { immolation_stop(unit, slot); return; }
++    now = G_Time();
++    while (slot->level && slot->next_tick <= now) {
++        mana_cost = MAX(0.0f, S_SpellData(code, rank, 2));
++        if (unit->mana.value < mana_cost) { immolation_stop(unit, slot); return; }
++        slot->next_tick += IMMOLATION_TICK_MS;
++        unit->mana.value -= mana_cost;
++        radius = S_SpellNumber(code, ABILITY_NUMBER_AREA, rank);
++        damage = MAX(0.0f, S_SpellData(code, rank, 1));
++        FILTER_EDICTS(target, target != unit && S_SpellAllowsTarget(code, unit, target) &&
++                      G_UnitTargetType(target) == TARG_GROUND &&
++                      Vector2_distance(&target->s.origin2, &unit->s.origin2) <= radius)
++            if (damage > 0.0f) S_SpellDamage(target, unit, (int)damage);
++        /* TODO(UNVERIFIED): DataC's minimum/buffer-mana rule and whether the
++         * first damage pulse precedes the first recurring drain need retail observation. */
++    }
++}
++
++BZ_ABILITY_PROC(CAbilityImmolation) {
++    uint32_t code = call && call->item ? call->item->code : 0;
++    heroabilitystatus_t *slot = immolation_status(ent);
++
++    if (msg == A_TOGGLE_ON) return slot && slot->data == code;
++    if (msg == A_UPDATE) { if (slot) immolation_pulse(ent, slot); return true; }
++    if ((msg == A_DEATH || msg == A_DISABLE) && slot) { immolation_stop(ent, slot); return true; }
++    if (msg == A_EXECUTE) {
++        if (code == ID_PERMANENT_IMMOLATION || code == ID_PERMANENT_IMMOLATION_CREEP) {
++            /* Outside the active Demon Hunter/Creep Immolation scope. */
++            S_ToggleUnitAbilityStatus(ent, code, S_SpellLevel(ent, code));
++            return true;
+         }
++        if (code != ID_IMMOLATION && code != ID_IMMOLATION_CREEP) return true;
++        if (slot) immolation_stop(ent, slot);
++        else {
++            uint32_t level = S_SpellLevel(ent, code);
++            slot = S_SpellApplyTimedStatus(ent, "BEim", level, 0.0f);
++            if (slot) {
++                slot->data = code;
++                slot->rank = level;
++                slot->source = ent;
++                slot->source_spawn_time = ent->spawn_time;
++                slot->next_tick = G_Time() + IMMOLATION_TICK_MS;
++            }
++            /* TODO(UNVERIFIED): BEia is a second authored BuffID token; its
++             * runtime gameplay role has not been established, so it is not
++             * installed as a second active-state record here. */
++        }
++        return true;
+     }
+-    unit_addstatus(caster, "Biml", 1);
++    return CAbilitySimpleSpell(ent, msg, call);
+ }
+
+ /* Name=Cold Arrows
+@@ -138,8 +200,43 @@ BZ_SIMPLE_SPELL_PROC(AbilityDivineShield) {
+  */
+ /* Name=Phoenix Fire
+  * Ubertip="Automatically attacks nearby enemy units with flaming projectiles."
+- * TODO: passive attack-resolution behavior is not implemented here.
+  */
++BZ_ABILITY_PROC(CAbilityPhoenixFire) {
++    uint32_t const code = MAKEFOURCC('A','p','x','f');
++    uint32_t const level = G_UnitAbilityLevel(ent, code);
++    float const radius = S_SpellNumber(code, ABILITY_NUMBER_AREA, level);
++    float nearest = 0.0f;
++    edict_t *selected = NULL;
++
++    if (msg != A_UPDATE) return CAbilityPassive(ent, msg, call);
++    if (!ent || !ent->inuse || M_IsDead(ent) || !level || !S_SpellCooldownReady(ent, code)) return true;
++    FILTER_EDICTS(target, target != ent && S_SpellAllowsTarget(code, ent, target) &&
++                  Vector2_distance(&target->s.origin2, &ent->s.origin2) <= radius) {
++        float const distance = Vector2_distance(&target->s.origin2, &ent->s.origin2);
++        if (!selected || distance < nearest) { selected = target; nearest = distance; }
++    }
++    if (!selected) return true;
++
++    /* TODO(UNVERIFIED): nearest-target tie selection has not been compared
++     * against retail; edict iteration order currently preserves determinism. */
++    S_SpellDamage(selected, ent, (int)MAX(1.0f, S_SpellData(code, level, 1)));
++    S_SpellStartCooldownDuration(ent, code, S_SpellNumber(code, ABILITY_NUMBER_COOLDOWN, level));
++    /* TODO(UNVERIFIED): Apxf authors no BuffID. Retail testing must establish
++     * whether DataB describes a separate burn/DoT and its refresh/stack rules. */
++    return true;
++}
++
++/* ANcs/ANc1-ANc3 must not inherit Flame Strike pulses. Its Data-field mapping,
++ * bombardment impact order, aggregate cap, and building treatment remain
++ * unverified, so reject the guessed effect and emit an actionable diagnostic. */
++BZ_ABILITY_PROC(CAbilityClusterRockets) {
++    if (msg == A_EXECUTE && call && call->item) {
++        fprintf(stderr, "WC3: %.4s Cluster Rockets deferred: bombardment fields/cap/buildings unverified\n",
++                (cstring_t)&call->item->code);
++        return true;
++    }
++    return CAbilitySimpleSpell(ent, msg, call);
++}
+ /* Name=Invulnerable
+  * Ubertip="This unit cannot be damaged."
+  */
+diff --git a/games/warcraft-3/game/skills/s_area_spell.c b/games/warcraft-3/game/skills/s_area_spell.c
+index 7964342d..d738e8ba 100644
+--- a/games/warcraft-3/game/skills/s_area_spell.c
++++ b/games/warcraft-3/game/skills/s_area_spell.c
+@@ -202,18 +202,18 @@ BZ_SIMPLE_SPELL_PROC(AbilityBlizzard) {
+ /* Name=Carrion Swarm
+  * Ubertip="Sends a wave of bats that damages enemy units in a line."
+  */
+-/* Carrion Swarm: instant point-target AoE blast. */
+-BZ_SIMPLE_SPELL_PROC(AbilityCarrionSwarm) {
+-    uint32_t level = S_SpellLevel(caster, spell->code);
+-    edict_t *blast;
+-
+-    blast = G_Spawn();
+-    blast->owner = caster;
+-    blast->s.origin2 = st.point;
+-    blast->collision = MAX(96.0f, S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level));
+-    blast->damage = (uint32_t)MAX(1.0f, S_SpellData(spell->code, level, 1));
+-    area_spell_damage(blast, S_SpellData(spell->code, level, 2)); /* DataB = Max Damage */
+-    G_FreeEdict(blast);
++/* TODO(UNVERIFIED): retail Carrion Swarm is a travelling line wave, while
++ * this checkout has no save-safe per-cast hit set. The installed rows contain
++ * alias-specific DataC/DataD values whose distance/speed meanings and cap
++ * accounting still need controlled retail observation. Do not substitute the
++ * old point burst or guess a wave schedule. */
++BZ_ABILITY_PROC(CAbilityCarrionSwarm) {
++    if (msg == A_EXECUTE && call && call->item) {
++        fprintf(stderr, "WC3: %.4s Carrion Swarm deferred: travel fields/cap ordering unverified\n",
++                (cstring_t)&call->item->code);
++        return true;
++    }
++    return CAbilitySimpleSpell(ent, msg, call);
+ }
+
+ /* Name=Shockwave
+diff --git a/games/warcraft-3/game/skills/s_attack.c b/games/warcraft-3/game/skills/s_attack.c
+index 919b7a61..c2381dd4 100644
+--- a/games/warcraft-3/game/skills/s_attack.c
++++ b/games/warcraft-3/game/skills/s_attack.c
+@@ -320,6 +320,16 @@ void T_Damage(edict_t *target, edict_t *attacker, int damage) {
+                    ((target->svflags & SVF_MONSTER) ||
+                     (G_IsDestructable(target) && G_DestructableCanBeAttackedBy(attacker, target))) &&
+                    G_PlayerInstantKill(attacker->s.player);
++    if (attacker && (attacker->aiflags & AI_ILLUSION) && attacker->summon_ability == MAKEFOURCC('A','O','m','i')) {
++        /* Stock AOmi authors the same multipliers at every Hero rank. */
++        /* TODO(UNVERIFIED): a custom per-rank AOmi override needs the creating
++         * cast rank retained on the illusion before it can be read here. */
++        damage = (int)MAX(1.0f, damage * S_SpellData(attacker->summon_ability, 1, 4));
++    }
++    if ((target->aiflags & AI_ILLUSION) && target->summon_ability == MAKEFOURCC('A','O','m','i')) {
++        /* TODO(UNVERIFIED): AOmi DataC=2 is treated as taken-damage factor. */
++        damage = (int)MAX(1.0f, damage * S_SpellData(target->summon_ability, 1, 3));
++    }
+     damage = S_ManaShieldDamage(target, damage);
+     if (instant_kill) damage = MAX(damage, (int)ceilf(target->health.value));
+     if (damage <= 0) return;
+@@ -382,6 +392,7 @@ void S_ResolveAttackHit(edict_t *attacker, edict_t *target, int damage) {
+         S_SpellApplyStun(target, S_SpellDuration(bash.alias, bash.level, false));
+     } }
+     damage += (int)S_UnitStatusAbilityEvent(attacker, A_ATTACK_DAMAGE_BONUS, NULL);
++    damage += S_EngineeringAttackBonus(attacker);
+     S_UnitStatusAbilityEvent(attacker, A_ATTACK_LANDED, NULL);
+     damage = S_PossessionDamageTaken(target, damage);
+     damage = S_HardenedSkinDamage(target, damage);
+@@ -831,7 +842,8 @@ static float attack_speed_divisor(edict_t *self) {
+     float total_bonus = (float)self->hero.agi * agi_bonus + S_BloodlustAttackBonus(self)
+                       + S_FrenzyAttackBonus(self) + S_UnholyFrenzyAttackBonus(self)
+                       - S_CrippleAttackReduction(self) - S_SlowPoisonAttackReduction(self)
+-                      - S_DefendAttackReduction(self) - S_CreepAttackSpeedReduction(self) - S_SlowAuraAttackReduction(self);
++                      - S_DefendAttackReduction(self) - S_CreepAttackSpeedReduction(self) - S_SlowAuraAttackReduction(self)
++                      - S_ShadowStrikeAttackReduction(self);
+     total_bonus += S_EnduranceAttackBonus(self);
+     /* Warsmash clamps total attack-speed bonus to [-90%, +400%]. OpenRealm
+      * combines authored buffs/debuffs with Agility before applying the same
+diff --git a/games/warcraft-3/game/skills/s_creep_abilities.c b/games/warcraft-3/game/skills/s_creep_abilities.c
+index d5a3e529..adad3645 100644
+--- a/games/warcraft-3/game/skills/s_creep_abilities.c
++++ b/games/warcraft-3/game/skills/s_creep_abilities.c
+@@ -211,7 +211,29 @@ BZ_ABILITY_PROC(CAbilityChaos) { return CAbilityPassive(ent, msg, call); }
+ BZ_ABILITY_PROC(CAbilitySpiderAttack) { return CAbilityPassive(ent, msg, call); }
+ BZ_ABILITY_PROC(CAbilityWander) { return CAbilityPassive(ent, msg, call); }
+ BZ_ABILITY_PROC(CAbilityMagicImmunity) { return CAbilityPassive(ent, msg, call); }
+-BZ_ABILITY_PROC(CAbilityEngineeringUpgrade) { return CAbilityPassive(ent, msg, call); }
++/* ANeg DataA is the Tinker movement bonus; DataB is his attack damage bonus.
++ * DataC-F name the rank-specific ability variants, whose secondary effect
++ * changes still need implementation/evidence below. */
++float S_EngineeringMoveBonus(edict_t const *unit) {
++    uint32_t level = G_UnitAbilityLevel((edict_t *)unit, MAKEFOURCC('A','N','e','g'));
++    return level ? S_SpellData(MAKEFOURCC('A','N','e','g'), level, 1) : 0.0f;
++}
++
++int S_EngineeringAttackBonus(edict_t const *unit) {
++    uint32_t level = G_UnitAbilityLevel((edict_t *)unit, MAKEFOURCC('A','N','e','g'));
++    return level ? (int)S_SpellData(MAKEFOURCC('A','N','e','g'), level, 2) : 0;
++}
++
++BZ_ABILITY_PROC(CAbilityEngineeringUpgrade) {
++    (void)call;
++    if (msg == A_UPDATE && G_UnitAbilityLevel(ent, MAKEFOURCC('A','N','e','g'))) {
++        /* TODO(UNVERIFIED): DataC-F selects Cluster Rockets, Pocket Factory,
++         * Robo-Goblin and Demolish variants. The rank/form transition and
++         * exact dependent stat updates have not been confirmed in retail. */
++        return true;
++    }
++    return CAbilityPassive(ent, msg, call);
++}
+ BZ_ABILITY_PROC(CAbilityDemolish) { return CAbilityPassive(ent, msg, call); }
+ BZ_ABILITY_PROC(CAbilityFactory) { return CAbilityPassive(ent, msg, call); }
+ BZ_ABILITY_PROC(CAbilityTornadoDamage) { return CAbilityPassive(ent, msg, call); }
+diff --git a/games/warcraft-3/game/skills/s_melee_spells.c b/games/warcraft-3/game/skills/s_melee_spells.c
+index a72e27d4..4af7b1c8 100644
+--- a/games/warcraft-3/game/skills/s_melee_spells.c
++++ b/games/warcraft-3/game/skills/s_melee_spells.c
+@@ -49,6 +49,46 @@ static bool faerie_validate(edict_t *caster, spellTarget_t st, abilityitem_t con
+     return st.entity && S_SpellIsAliveTarget(st.entity) && S_SpellIsEnemy(caster, st.entity);
+ }
+
++static bool faerie_status_owned(heroabilitystatus_t const *slot) {
++    abilityitem_t item;
++    if (!slot || !slot->data) return false;
++    item = S_AbilityItem(slot->data);
++    return item.ability && item.ability->proc == CAbilityFaerieFire;
++}
++
++static void faerie_reveal_remove(edict_t *target, heroabilitystatus_t *slot) {
++    if (!target || !slot || !faerie_status_owned(slot)) return;
++    /* Faerie Fire has no periodic payload. Keep its viewer in rank so expiry
++     * can release the right contribution even if the caster edict was freed
++     * and reused before this target's status expired. */
++    if (slot->rank < MAX_PLAYERS) G_RemoveUnitForcedVisibility(target, slot->rank);
++}
++
++static void faerie_fire_execute(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
++    uint32_t level = S_SpellLevel(caster, spell->code);
++    cstring_t buff = melee_buff(spell, level);
++    heroabilitystatus_t *old, *slot;
++    uint32_t buff_code, viewer, old_viewer = MAX_PLAYERS;
++    bool had_reveal;
++    if (!st.entity || !buff || !caster || caster->s.player >= MAX_PLAYERS) return;
++    buff_code = FS_SLKKey(buff);
++    viewer = caster->s.player;
++    old = unit_findstatus(st.entity, buff_code);
++    had_reveal = faerie_status_owned(old) && old->rank < MAX_PLAYERS;
++    if (had_reveal) old_viewer = old->rank;
++    slot = S_SpellApplyTimedTargetStatus(st.entity, spell->code, level, buff,
++                                         S_SpellHeroDuration(spell->code, level, st.entity));
++    if (!slot) return;
++    /* unit_addtimedstatus replaces the payload in place without sending the
++     * old status's remove callback, so transfer its owned reveal explicitly. */
++    if (had_reveal) G_RemoveUnitForcedVisibility(st.entity, old_viewer);
++    G_AddUnitForcedVisibility(st.entity, viewer);
++    slot->data = spell->code;
++    slot->source = caster;
++    slot->source_spawn_time = caster->spawn_time;
++    slot->rank = viewer;
++}
++
+ static bool rejuv_validate(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
+     (void)spell;
+     return st.entity && S_SpellIsAliveTarget(st.entity) && S_SpellIsFriend(caster, st.entity);
+@@ -84,7 +124,17 @@ BZ_ABILITY_PROC(CAbilityFaerieFire) {
+     uint32_t code = call && call->item ? call->item->code : 0;
+     switch (msg) {
+     case A_VALIDATE: return faerie_validate(ent, target, call ? call->item : NULL);
+-    case A_EXECUTE: melee_status_execute(ent, target, call ? call->item : NULL); return true;
++    case A_EXECUTE: faerie_fire_execute(ent, target, call ? call->item : NULL); return true;
++    case A_STATUS_REMOVE:
++        if (call && call->status.slot) {
++            faerie_reveal_remove(ent, call->status.slot);
++            return true;
++        }
++        return false;
++    case A_STATUS_DEATH:
++        if (!call || !call->status.slot || !faerie_status_owned(call->status.slot)) return false;
++        unit_expirestatus(ent, call->status.slot);
++        return true;
+     case A_AUTOCAST_ON: return ent && ent->autocast_code == code;
+     case A_AUTOCAST_SET: return true;
+     case A_AUTOCAST_ACQUIRE: return S_AutocastAcquireUnit(ent, code, false, false, 900.0f);
+diff --git a/games/warcraft-3/game/skills/s_mirror_image.c b/games/warcraft-3/game/skills/s_mirror_image.c
+index 7700349d..3f764c77 100644
+--- a/games/warcraft-3/game/skills/s_mirror_image.c
++++ b/games/warcraft-3/game/skills/s_mirror_image.c
+@@ -1,6 +1,6 @@
+ #include "s_skills.h"
+
+-static void mirror_image_spawn(edict_t *caster, uint32_t index, uint32_t count, float duration) {
++static void mirror_image_spawn(edict_t *caster, uint32_t code, uint32_t index, uint32_t count, float duration) {
+     vec2_t loc;
+     float angle;
+     edict_t *image;
+@@ -19,10 +19,12 @@ static void mirror_image_spawn(edict_t *caster, uint32_t index, uint32_t count,
+      * progression.  The runtime marker is enough for JASS identity checks and
+      * later damage/parity work without changing the network contract. */
+     image->owner = caster;
++    image->summon_ability = code;
+     image->aiflags |= AI_ILLUSION;
+     image->hero = caster->hero;
+     image->hero.suspend_xp = true;
+-    memcpy(image->heroabilities, caster->heroabilities, sizeof(image->heroabilities));
++    /* TODO(UNVERIFIED): retail JASS inspection has not established which
++     * learned Hero abilities or persistent Hero fields an image retains. */
+     image->health = caster->health;
+     image->mana = caster->mana;
+     image->unit_color = caster->unit_color;
+@@ -51,5 +53,5 @@ BZ_SIMPLE_SPELL_PROC(AbilityMirrorImage) {
+     if (!count) count = 1;
+
+     FOR_LOOP(i, count)
+-        mirror_image_spawn(caster, i, count, duration);
++        mirror_image_spawn(caster, spell->code, i, count, duration);
+ }
+diff --git a/games/warcraft-3/game/skills/s_move.c b/games/warcraft-3/game/skills/s_move.c
+index 87d0f859..d0686cd4 100644
+--- a/games/warcraft-3/game/skills/s_move.c
++++ b/games/warcraft-3/game/skills/s_move.c
+@@ -1267,7 +1267,9 @@ static float unit_effective_speed(edict_t *ent) {
+     speed = unit_apply_earthquake_speed(ent, speed);
+     speed *= 1.0f - S_PurgeMoveReduction(ent);
+     speed *= 1.0f - S_SlowPoisonMoveReduction(ent);
++    speed *= 1.0f - S_ShadowStrikeMoveReduction(ent);
+     speed *= 1.0f + S_EnduranceMoveBonus(ent);
++    speed *= 1.0f + S_EngineeringMoveBonus(ent);
+     return speed;
+ }
+
+diff --git a/games/warcraft-3/game/skills/s_orc_abilities.c b/games/warcraft-3/game/skills/s_orc_abilities.c
+index bfab0114..9f8a0d9a 100644
+--- a/games/warcraft-3/game/skills/s_orc_abilities.c
++++ b/games/warcraft-3/game/skills/s_orc_abilities.c
+@@ -65,21 +65,27 @@ static void purge_execute(edict_t *caster, spellTarget_t st, abilityitem_t const
+     uint32_t level = S_SpellLevel(caster, spell->code);
+     cstring_t buff;
+     heroabilitystatus_t *slot;
++    bool hostile;
+     if (!st.entity) return;
++    hostile = S_SpellIsEnemy(caster, st.entity);
+     FOR_LOOP(i, MAX_UNIT_STATUSES) {
+         heroabilitystatus_t *s = st.entity->abilstatus + i;
+         if (!s->level || !s->timestamp) continue;
+         if (S_StatusIsUndispellable(s)) continue;
+         unit_expirestatus(st.entity, s);
+     }
+-    buff = S_SpellBuffId(spell->code, level);
+-    if (!buff || strlen(buff) < 4) buff = "Bprg";
+-    slot = S_SpellApplyTimedTargetStatus(st.entity, spell->code, level, buff,
+-                                         S_SpellDuration(spell->code, level, false));
+-    if (slot) slot->data = spell->code;
++    /* Purge may remove hostile statuses from a friendly target, but its
++     * movement lock/recovery payload is a hostile effect. */
++    if (hostile) {
++        buff = S_SpellBuffId(spell->code, level);
++        if (!buff || strlen(buff) < 4) buff = "Bprg";
++        slot = S_SpellApplyTimedTargetStatus(st.entity, spell->code, level, buff,
++                                             S_SpellDuration(spell->code, level, false));
++        if (slot) slot->data = spell->code;
++    }
+     if (st.entity->owner && !S_SummonIsDispelImmune(st.entity))
+         S_SpellDamage(st.entity, caster, (int)MAX(1.0f, S_SpellData(spell->code, level, 3)));
+-    if (S_PurgeIsImmobilized(st.entity) && st.entity->stand) st.entity->stand(st.entity);
++    if (hostile && S_PurgeIsImmobilized(st.entity) && st.entity->stand) st.entity->stand(st.entity);
+ }
+
+ BZ_SIMPLE_SPELL_PROC(AbilityPurge) { purge_execute(caster, st, spell); }
+diff --git a/games/warcraft-3/game/skills/s_skills.c b/games/warcraft-3/game/skills/s_skills.c
+index 8a7f1aef..2e189518 100644
+--- a/games/warcraft-3/game/skills/s_skills.c
++++ b/games/warcraft-3/game/skills/s_skills.c
+@@ -124,7 +124,7 @@ static ability_t abilitylist[] = {
+     { "AHbn", CAbilityBanish, AB_SPELL, SPELL_TARGET_UNIT },  /* Banish */
+     { "AHpx", CAbilitySummonPhoenix, AB_SPELL },  /* Phoenix */
+     { "Aphx", CAbilityPassive, AB_PASSIVE },  /* Phoenix Morphing (Egg Related) */
+-    { "Apxf", CAbilityPassive, AB_PASSIVE },  /* Phoenix Fire */
++    { "Apxf", CAbilityPhoenixFire, AB_PASSIVE | AB_UPDATE },  /* Phoenix Fire */
+     { "Agyb", CAbilityPassive, AB_PASSIVE },  /* Flying Machine Bombs */
+     { "Asth", CAbilityPassive, AB_PASSIVE },  /* Storm Hammers */
+     { "Agyv", CAbilityTrueSight, AB_PASSIVE },  /* True Sight */
+@@ -155,7 +155,9 @@ static ability_t abilitylist[] = {
+
+     /* ItemAbilityStrings.txt */
+     { "AIsm", CAbilityStrengthMod, AB_ITEM },  /* Item Strength Gain */
++    { "AInm", CAbilityStrengthMod, AB_ITEM },  /* StrengthMod +2 */
+     { "AIam", CAbilityStrengthMod, AB_ITEM },  /* Item Agility Gain */
++    { "AIgm", CAbilityStrengthMod, AB_ITEM },  /* AgilityMod +2 */
+     { "AIat", CAbilityAttackBonus, 0 },  /* Item Damage Bonus */
+     { "AIt6", CAbilityAttackBonus, 0 },  /* Item Damage Bonus +6 */
+     { "AIt9", CAbilityAttackBonus, 0 },  /* Item Damage Bonus +9 */
+@@ -173,12 +175,13 @@ static ability_t abilitylist[] = {
+     { "AIem", CAbilityExperienceMod, AB_ITEM },  /* Item Experience Gain */
+     { "AIlm", CAbilityLevelMod, AB_ITEM },  /* Item Level Gain */
+     { "AIim", CAbilityStrengthMod, AB_ITEM },  /* Item Intelligence Gain */
++    // TODO: AItm is CAbilityTome; verify its successful-use/permanent-stat contract before sharing this procedure.
+     { "AIxm", CAbilityStrengthMod, AB_ITEM },  /* Item Int/Agi/Str gain */
+     { "AIhe", CAbilityItemHeal, AB_ITEM },  /* Item Healing */
+     { "AIvi", CAbilityItemInvis, AB_ITEM },  /* Item Temporary Invisibility */
+     { "AIma", CAbilityItemManaRestore, AB_ITEM },  /* Item Mana Regain */
+     { "AIda", CAbilityItemDefenseAoe, AB_ITEM },  /* Item Temporary Area Armor Bonus */
+-    { "AIco", CAbilityCharm, AB_SPELL, SPELL_TARGET_UNIT },  /* Item Command */
++    // TODO: AIco is CAbilityItemCommand, not Charm; its item-command contract is outside this pass.
+     { "AIfs", CAbilityFigurineSkeleton, AB_ITEM },  /* Item Skeleton Summon */
+     { "AImi", CAbilityMaxLifeMod, AB_ITEM },  /* Item Permanent Life Gain */
+     { "AIab", CAbilityAttributeBonus, 0 },  /* Item Hero Stat Bonus */
+@@ -228,7 +231,7 @@ static ability_t abilitylist[] = {
+     /* NightElfAbilityStrings.txt */
+     { "AEbl", CAbilityBlink, AB_SPELL, SPELL_TARGET_POINT },  /* Blink */
+     { "AEfk", CAbilityFanOfKnives, AB_SPELL },  /* Fan of Knives */
+-    { "AEsh", CAbilityShadowStrike, AB_SPELL, SPELL_TARGET_UNIT },  /* Shadow Strike */
++    { "AEsh", CAbilityShadowStrike, AB_SPELL | AB_STATUS_EVENTS, SPELL_TARGET_UNIT },  /* Shadow Strike */
+     { "AEsv", CAbilitySpiritOfVengeance, AB_SPELL },  /* Vengeance */
+     { "Aeat", CAbilityEatTree, AB_SPELL, SPELL_TARGET_UNIT },  /* Eat Tree */
+     { "Ambt", CAbilityManaBattery, AB_SPELL | AB_AUTOCAST | AB_UPDATE, SPELL_TARGET_UNIT },  /* Replenish Mana and Life */
+@@ -237,7 +240,7 @@ static ability_t abilitylist[] = {
+     { "Aenc", CAbilityPassive, AB_PASSIVE },  /* Load */
+     { "Aroo", CAbilityRoot, AB_COMMAND | AB_UPDATE, SPELL_TARGET_NONE, ancient_root_orders },  /* Root */
+     { "AEmb", CAbilityManaBurn, AB_SPELL, SPELL_TARGET_UNIT },  /* Mana Burn */
+-    { "AEim", CAbilityImmolation, AB_SPELL | AB_TOGGLE },  /* Immolation */
++    { "AEim", CAbilityImmolation, AB_SPELL | AB_TOGGLE | AB_UPDATE },  /* Immolation */
+     { "AEev", CAbilityPassive, AB_PASSIVE },  /* Evasion */
+     { "AEme", CAbilityMetamorphosis, AB_SPELL },  /* Metamorphosis */
+     { "AEer", CAbilityEntanglingRoots, AB_SPELL, SPELL_TARGET_UNIT },  /* Entangling Roots */
+@@ -251,7 +254,7 @@ static ability_t abilitylist[] = {
+     { "AEar", CAbilityCreepAura, AB_PASSIVE },  /* Trueshot Aura */
+     { "AEsf", CAbilityStarfall, AB_SPELL | AB_CHANNEL },  /* Starfall */
+     { "Aren", CAbilityRepairGeneric, AB_COMMAND | AB_AUTOCAST },  /* Renew */
+-    { "Afae", CAbilityFaerieFire, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Faerie Fire */
++    { "Afae", CAbilityFaerieFire, AB_SPELL | AB_AUTOCAST | AB_STATUS_EVENTS, SPELL_TARGET_UNIT },  /* Faerie Fire */
+     { "Arej", CAbilityRejuvination, AB_SPELL, SPELL_TARGET_UNIT },  /* Rejuvenation */
+     { "Aroa", CAbilityRoar, AB_SPELL },  /* Roar */
+
+@@ -394,7 +397,10 @@ static ability_t abilitylist[] = {
+     { "ANs1", CAbilityPocketFactory, AB_SPELL, SPELL_TARGET_POINT },  /* Pocket Factory (Level 1) */
+     { "ANs2", CAbilityPocketFactory, AB_SPELL, SPELL_TARGET_POINT },  /* Pocket Factory (Level 2) */
+     { "ANs3", CAbilityPocketFactory, AB_SPELL, SPELL_TARGET_POINT },  /* Pocket Factory (Level 3) */
+-    { "ANcs", CAbilityFlameStrike, AB_SPELL, SPELL_TARGET_POINT },  /* Cluster Rockets */
++    { "ANcs", CAbilityClusterRockets, AB_SPELL, SPELL_TARGET_POINT },  /* Cluster Rockets */
++    { "ANc1", CAbilityClusterRockets, AB_SPELL, SPELL_TARGET_POINT },  /* Cluster Rockets (Level 1) */
++    { "ANc2", CAbilityClusterRockets, AB_SPELL, SPELL_TARGET_POINT },  /* Cluster Rockets (Level 2) */
++    { "ANc3", CAbilityClusterRockets, AB_SPELL, SPELL_TARGET_POINT },  /* Cluster Rockets (Level 3) */
+     { "ANeg", CAbilityEngineeringUpgrade, AB_PASSIVE },  /* Engineering Upgrade */
+     { "ANrg", CAbilityMetamorphosis, AB_SPELL },  /* Robo-Goblin */
+     { "ANde", CAbilityDemolish, AB_PASSIVE },  /* Demolish */
+@@ -414,7 +420,7 @@ static ability_t abilitylist[] = {
+     { "Arng", CAbilityRevenge, AB_PASSIVE },  /* Revenge */
+     { "Atol", CAbilityTreeOfLife, AB_PASSIVE },  /* Tree of Life upgrade ability */
+     { "Awrp", CAbilityWarp, AB_PASSIVE | AB_INNATE },  /* Waygate ability */
+-    { "ANsl", CAbilityResurrection, AB_SPELL, SPELL_TARGET_NONE },  /* Soul Preservation */
++    // TODO: ANsl is Soul Preservation (nzom), not Resurrection; leave unregistered until its procedure is specified.
+     { "ANfd", CAbilityFingerOfDeath, AB_SPELL, SPELL_TARGET_UNIT },  /* Finger of Death */
+     { "ANdp", CAbilityDarkPortal, AB_SPELL, SPELL_TARGET_POINT },  /* Dark Portal */
+     { "ANrc", CAbilityRainOfChaos, AB_SPELL, SPELL_TARGET_POINT },  /* Rain of Chaos */
+@@ -549,7 +555,7 @@ static ability_t abilitylist[] = {
+     // TODO: AIgl a_unknown  /* FortificationGlyph — CAbility [ITEM] other */
+     // TODO: AIrg a_unknown  /* Potion of Life Regen — CAbility [ITEM] other */
+     { "ANsu", CAbilitySubmergeMyrmidon, AB_SPELL | AB_TOGGLE },  /* Submerge (Myrmidon) */
+-    { "AOwd", CAbilitySerpentWard, AB_SPELL, SPELL_TARGET_POINT },  /* Shadow Hunter - Serpent Ward */
++    { "AOsw", CAbilitySerpentWard, AB_SPELL, SPELL_TARGET_POINT },  /* Shadow Hunter - Serpent Ward */
+     { "Aimp", CAbilityImpale, AB_SPELL, SPELL_TARGET_POINT },  /* Impaling Bolt */
+     { "Ansp", CAbilityNeutralSpell, AB_PASSIVE },  /* Neutral Spies */
+
+@@ -591,7 +597,7 @@ static ability_t abilitylist[] = {
+     { "ACfa", CAbilityFrostArmor, AB_SPELL, SPELL_TARGET_UNIT },  /* Frost Armor (creep, old) */
+     { "ACfb", CAbilityFireBolt, AB_SPELL, SPELL_TARGET_UNIT },  /* Fire Bolt (creep) */
+     { "ACfd", CAbilityFingerOfDeath, AB_SPELL, SPELL_TARGET_UNIT },  /* Finger of Pain */
+-    { "ACff", CAbilityFaerieFire, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Faerie Fire (creep) */
++    { "ACff", CAbilityFaerieFire, AB_SPELL | AB_AUTOCAST | AB_STATUS_EVENTS, SPELL_TARGET_UNIT },  /* Faerie Fire (creep) */
+     { "ACfl", CAbilityForkedLightning, AB_SPELL, SPELL_TARGET_UNIT },  /* Forked Lightning (creep) */
+     { "ACfn", CAbilityFrostNova, AB_SPELL, SPELL_TARGET_UNIT },  /* Frost Nova (creep) */
+     { "ACfr", CAbilityForceOfNature, AB_SPELL },  /* Force of Nature (creep) */
+@@ -600,7 +606,7 @@ static ability_t abilitylist[] = {
+     { "AChw", CAbilityHealingWard, AB_SPELL, SPELL_TARGET_POINT },  /* Healing Ward (creep) */
+     { "AChx", CAbilityHex, AB_SPELL, SPELL_TARGET_UNIT },  /* Hex (Creep) */
+     { "ACif", CAbilityInnerFire, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Inner Fire (Creep) */
+-    { "ACim", CAbilityImmolation, AB_SPELL | AB_TOGGLE },  /* Immolation (creep) */
++    { "ACim", CAbilityImmolation, AB_SPELL | AB_TOGGLE | AB_UPDATE },  /* Immolation (creep) */
+     { "ACls", CAbilityLightningShield, AB_SPELL, SPELL_TARGET_UNIT },  /* Lightning Shield (creep) */
+     { "ACm2", CAbilityMagicImmunity, AB_PASSIVE },  /* Magic Immunity (Archimonde) */
+     { "ACm3", CAbilityMagicImmunity, AB_PASSIVE },  /* Magic Immunity (Dragons) */
+@@ -625,7 +631,7 @@ static ability_t abilitylist[] = {
+     { "ACsi", CAbilitySilence, AB_SPELL, SPELL_TARGET_POINT },  /* Silence (Creep) */
+     { "ACsk", CAbilityResistantSkin, AB_PASSIVE },  /* Resistant Skin (3,1 pos, creep) */
+     { "ACsm", CAbilityDrain, AB_SPELL | AB_CHANNEL, SPELL_TARGET_UNIT },  /* Siphon Mana (Creep) */
+-    { "ACss", CAbilityShadowStrike, AB_SPELL, SPELL_TARGET_UNIT },  /* Shadow Strike (Creep) */
++    { "ACss", CAbilityShadowStrike, AB_SPELL | AB_STATUS_EVENTS, SPELL_TARGET_UNIT },  /* Shadow Strike (Creep) */
+     { "ACst", CAbilityShockwave, AB_SPELL, SPELL_TARGET_POINT },  /* Shockwave (Trap) */
+     { "ACsw", CAbilitySlow, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Slow (Creep) */
+     { "ACt2", CAbilityThunderClap, AB_SPELL },  /* Thunder Clap (Thunder Lizard) */
+@@ -662,7 +668,7 @@ static ability_t abilitylist[] = {
+     { "Aco3", CAbilityCoupleInstant, AB_COMMAND },  /* Couple Instant (Hippogryph) */
+     { "Adt1", CAbilityDetector, AB_PASSIVE },  /* Detect (Sentry Ward) */
+     { "Adtg", CAbilityTrueSight, AB_PASSIVE },  /* Detect (general) */
+-    { "Afa2", CAbilityFaerieFire, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Faerie Fire */
++    { "Afa2", CAbilityFaerieFire, AB_SPELL | AB_AUTOCAST | AB_STATUS_EVENTS, SPELL_TARGET_UNIT },  /* Faerie Fire */
+     { "Afbt", CAbilityFeedback, AB_PASSIVE },  /* Feedback (Arcane Tower) */
+     { "Anh1", CAbilityHeal, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Heal (Creep Normal) */
+     { "Anh2", CAbilityHeal, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Heal (Creep High) */
+diff --git a/games/warcraft-3/game/skills/s_skills.h b/games/warcraft-3/game/skills/s_skills.h
+index 8e536f66..b1e8e713 100644
+--- a/games/warcraft-3/game/skills/s_skills.h
++++ b/games/warcraft-3/game/skills/s_skills.h
+@@ -74,6 +74,8 @@ BZ_ABILITY_PROC(CAbilitySelectSkill);
+ BZ_ABILITY_PROC(CAbilityAuraDevotion);
+ BZ_ABILITY_PROC(CAbilityHolyBolt);
+ BZ_ABILITY_PROC(CAbilitySimpleSpell);
++BZ_ABILITY_PROC(CAbilityPhoenixFire);
++BZ_ABILITY_PROC(CAbilityClusterRockets);
+ BZ_ABILITY_PROC(CAbilityModalSpell);
+ BZ_ABILITY_PROC(S_AbilityMessage);
+ bool S_UnitAbilityMessage(edict_t *ent, abilityMsg_t msg, abilityCall_t const *call);
+@@ -469,6 +471,10 @@ float S_CrippleDamageReduction(edict_t const *unit);
+ float S_SoulBurnDamageRate(edict_t const *unit);
+ float S_SoulBurnDamageReduction(edict_t const *unit);
+ float S_PurgeMoveReduction(edict_t const *unit);
++float S_ShadowStrikeMoveReduction(edict_t const *unit);
++float S_ShadowStrikeAttackReduction(edict_t const *unit);
++float S_EngineeringMoveBonus(edict_t const *unit);
++int S_EngineeringAttackBonus(edict_t const *unit);
+ bool S_PurgeIsImmobilized(edict_t const *unit);
+ void S_MoonGlaiveAttack(edict_t *attacker, edict_t *primary, int damage);
+ void S_SlowPoisonOnHit(edict_t *attacker, edict_t *target);
+diff --git a/games/warcraft-3/game/skills/s_utility_abilities.c b/games/warcraft-3/game/skills/s_utility_abilities.c
+index d01e3271..c5db3d5a 100644
+--- a/games/warcraft-3/game/skills/s_utility_abilities.c
++++ b/games/warcraft-3/game/skills/s_utility_abilities.c
+@@ -96,8 +96,10 @@ static bool charm_validate(edict_t *caster, spellTarget_t st, abilityitem_t cons
+     uint32_t level = S_SpellLevel(caster, spell->code);
+     uint32_t max_level = (uint32_t)S_SpellData(spell->code, level, 1);
+
+-    if (!S_SpellIsEnemy(caster, target)) return false;
+-    if (max_level && target->data.UnitBalance->level > max_level) return false;
++    if (!S_SpellIsAliveTarget(target) || !S_SpellIsEnemy(caster, target) ||
++        G_UnitIsHero(target) || S_UnitIsResistant(target) ||
++        !S_SpellAllowsTarget(spell->code, caster, target)) return false;
++    if (max_level && (!target->data.UnitBalance || target->data.UnitBalance->level > max_level)) return false;
+     return true;
+ }
+
+diff --git a/games/warcraft-3/game/skills/s_warden_abilities.c b/games/warcraft-3/game/skills/s_warden_abilities.c
+index a36ed33e..7a7155b0 100644
+--- a/games/warcraft-3/game/skills/s_warden_abilities.c
++++ b/games/warcraft-3/game/skills/s_warden_abilities.c
+@@ -54,15 +54,81 @@ BZ_SIMPLE_SPELL_PROC(AbilityFanOfKnives) {
+ #undef FOK_HITS
+ }
+
+-/* ---- Shadow Strike (AEsh): single-target nuke ----------------------------- */
++/* ---- Shadow Strike (AEsh): initial hit, poison, and shorter slow ---------- */
+
+-BZ_SIMPLE_SPELL_PROC(AbilityShadowStrike) {
+-    edict_t *target = st.entity;
+-    uint32_t level = S_SpellLevel(caster, spell->code);
+-    uint32_t damage = (uint32_t)MAX(1.0f, S_SpellData(spell->code, level, 5)); /* DataE = Initial Damage */
++#define SHADOW_STRIKE_BUFF MAKEFOURCC('B','E','s','h')
++#define SHADOW_STRIKE_TICK_MS 1000
++
++static heroabilitystatus_t *shadow_strike_status(edict_t const *unit) {
++    heroabilitystatus_t *slot = unit ? unit_findstatus((edict_t *)unit, SHADOW_STRIKE_BUFF) : NULL;
++    return slot && slot->data && (slot->data == MAKEFOURCC('A','E','s','h') ||
++                                  slot->data == MAKEFOURCC('A','C','s','s')) ? slot : NULL;
++}
++
++static bool shadow_strike_slow_active(heroabilitystatus_t const *slot) {
++    uint32_t start, slow_ms;
++    if (!slot || !slot->level || !slot->data || !slot->duration_ms ||
++        slot->timestamp <= G_Time() || slot->timestamp < slot->duration_ms) return false;
++    start = slot->timestamp - slot->duration_ms;
++    slow_ms = (uint32_t)(MAX(0.0f, S_SpellData(slot->data, slot->rank, 4)) * 1000.0f);
++    return slow_ms && G_Time() < start + slow_ms;
++}
++
++float S_ShadowStrikeMoveReduction(edict_t const *unit) {
++    heroabilitystatus_t const *slot = shadow_strike_status(unit);
++    return shadow_strike_slow_active(slot) ?
++        MAX(0.0f, MIN(0.9f, S_SpellData(slot->data, slot->rank, 2))) : 0.0f;
++}
++
++float S_ShadowStrikeAttackReduction(edict_t const *unit) {
++    heroabilitystatus_t const *slot = shadow_strike_status(unit);
++    return shadow_strike_slow_active(slot) ?
++        MAX(0.0f, MIN(0.9f, S_SpellData(slot->data, slot->rank, 3))) : 0.0f;
++}
++
++static void shadow_strike_tick(edict_t *target, heroabilitystatus_t *slot) {
++    edict_t *source = S_SpellStatusSource(slot);
++    float damage;
++    if (!source) { unit_expirestatus(target, slot); return; }
++    damage = MAX(0.0f, S_SpellData(slot->data, slot->rank, 1));
++    /* TODO(UNVERIFIED): retail JASS timing has not established the exact
++     * poison pulse phase/cadence; DataA is treated as DPS at one-second ticks. */
++    while (slot->level && slot->next_tick <= G_Time() && slot->next_tick < slot->timestamp) {
++        slot->next_tick += SHADOW_STRIKE_TICK_MS;
++        if (damage > 0.0f) S_SpellDamage(target, source, (int)damage);
++        if (M_IsDead(target)) break;
++    }
++}
+
+-    S_SpellDamage(target, caster, damage);
+-    /* TODO(1:1): Shadow Strike also applies a movement slow and a decaying
+-     * poison DoT via the BEsh buff.  The status system needs a movement-speed
+-     * modifier and a periodic-damage tick first. */
++BZ_ABILITY_PROC(CAbilityShadowStrike) {
++    if (msg == A_STATUS_TICK && call && call->status.slot) {
++        shadow_strike_tick(ent, call->status.slot);
++        return true;
++    }
++    if (msg == A_STATUS_DEATH && call && call->status.slot) {
++        unit_expirestatus(ent, call->status.slot);
++        return true;
++    }
++    if (msg == A_EXECUTE) {
++        spellTarget_t target = call && call->target ? *call->target : MAKE(spellTarget_t, .type = SPELL_TARGET_NONE);
++        abilityitem_t const *spell = call ? call->item : NULL;
++        uint32_t level;
++        float duration;
++        heroabilitystatus_t *slot;
++        if (!spell || !target.entity) return true;
++        level = S_SpellLevel(ent, spell->code);
++        S_SpellDamage(target.entity, ent, (int)MAX(1.0f, S_SpellData(spell->code, level, 5)));
++        if (M_IsDead(target.entity)) return true;
++        duration = S_SpellResistantDuration(spell->code, level, target.entity);
++        slot = S_SpellApplyTimedTargetStatus(target.entity, spell->code, level, "BEsh", duration);
++        if (slot) {
++            slot->data = spell->code;
++            slot->rank = level;
++            slot->source = ent;
++            slot->source_spawn_time = ent->spawn_time;
++            slot->next_tick = G_Time() + SHADOW_STRIKE_TICK_MS;
++        }
++        return true;
++    }
++    return CAbilitySimpleSpell(ent, msg, call);
+ }
+diff --git a/warcraft3-ability-completion-implementation-status.tmp.md b/warcraft3-ability-completion-implementation-status.tmp.md
+new file mode 100644
+index 00000000..0c290f27
+--- /dev/null
++++ b/warcraft3-ability-completion-implementation-status.tmp.md
+@@ -0,0 +1,134 @@
++# WC3 Ability Completion — Temporary Patch Status
++
++This status accompanies `warcraft3-ability-completion.tmp.patch`. The patch is
++an implementation draft based on
++`warcraft3-ability-completion-implementation.tmp.md`. It is not a claim of
++complete retail parity. Tests and builds have not been run.
++
++## Included changes
++
++- Tighten Charm target validation and avoid dereferencing absent UnitBalance.
++  The stock ANch target outcomes are now verified in retail JASS: a level-3
++  neutral-hostile nftt transfers; an Hpal, a dead nftt corpse, and a live nftt
++  with permanent ACsk remain with Player 12. A follow-up boundary probe
++  confirms a level-5 stock-row override and custom organic levels 4–5
++  transfer, while level 6 remains with Player 12. The custom level-3 copy
++  anomalously stayed with Player 12; that result is unexplained. See the full
++  reproducible test
++  record in docs/games/warcraft-3/ability-verification-review.md.
++- Apply Purge's slow/stop only to hostile targets while retaining dispel and
++  summon damage behavior.
++- Track Faerie Fire's forced-vision contribution through status refresh,
++  expiry, dispel and death cleanup.
++- Add Shadow Strike initial damage, periodic status damage and a separately
++  timed movement/attack reduction.
++- Add Phoenix Fire passive target acquisition, direct damage and cooldown.
++- Give Immolation one status-backed toggle state, recurring mana drain and
++  ground-target damage pulses.
++- Mark Mirror Images with their source ability, avoid copying Hero ability
++  slots, and apply provisional illusion damage multipliers.
++- Read Engineering Upgrade movement and attack bonuses from authored data.
++- Stop routing Cluster Rockets through Flame Strike and defer its execution
++  with a diagnostic until its bombardment fields are understood.
++- Replace Carrion Swarm's point burst with an explicit diagnostic deferral
++  until travel and damage-cap behavior are understood.
++- Correct audited registry rows for Cluster Rockets, Serpent Ward, Charm,
++  Soul Preservation, and several stat item aliases.
++
++## Tooltip data verification (TFT AbilityData)
++
++`ability_audit -resolve-tooltip` was run on the listed stock rows. These
++values verify authored tooltip statements, not retail runtime timing, target
++filters, damage application, status ownership, or other hidden mechanics.
++
++- `AHre`: six friendly nearby corpses. `AIrs` item row separately has DataA=6
++  but no matching ability Ubertip; `APrl`/`APrr` are absent from AbilityData.
++- `AOmi`: creates 1/2/3 illusions by rank, dispels the Blademaster's magic,
++  lasts 60 seconds.
++- `ANch`: enemy target; excludes Heroes and creeps above level 5. Retail JASS
++  target observations are recorded separately below.
++- `AEim`/`ACim`: 10/15/20 DPS (hero ranks) and 10 DPS (creep row) against
++  nearby enemy land units; mana drains until deactivated.
++- `AUcs`: 75/125/200 to each enemy unit in a cone. Line rows describe enemy
++  land units: `ACca` 75 damage/300 maximum, `ACcv` and `ACc2` 150/900,
++  `ACc3` 100/300. `ACc1` has no AbilityData row.
++- `AOeq`: 50 building DPS, 75% slow, 25 seconds.
++- `AEsh`: initial 75/150/225; 10/30/45 every 3 seconds for 15.1 seconds;
++  movement slow only says “short duration.” `ACss`: 75 initial, 10 every 3
++  seconds for 15.1 seconds; attack and movement slow “short duration.”
++- `ANfa`: +5/10/15 attack damage; attack and movement slow 30/50/70%; 5 sec.
++- `ANcs` and `ANc1`–`ANc3`: “up to” 45/75/110 damage; stun 1.01 sec.
++- `ANeg`: +2/4/6 attack damage, +10/20/30% Tinker movement speed; improves
++  other Tinker abilities.
++- `Afae`: armor −4, gives vision, 90 sec. `ACff`: armor −4, gives vision,
++  30 sec.
++- `Arav`: changes Druid into flying Storm Crow. `Aro1`/`Aro2`: rooted Ancient
++  is immobile, can build, gives Protector thrown-rock attack, grants Fortified
++  armor. `Aroo` itself has no AbilityData tooltip row.
++- `Amfl`: +12 armor for 30 sec and describes damage when nearby enemies cast
++  spells. `ANms`: absorbs 1/1.5/2 damage per mana by rank.
++- `Apxf`: only says it fires flame streams and lights nearby enemies on fire;
++  tooltip provides no damage or timing values.
++
++`AIlp` has no AbilityStrings Ubertip in this install. Proposed stat rows
++`AIab`, `AInm`, and `AIgm` do not resolve as AbilityData tooltip entries;
++`AIrs` is a separate item-resurrection row and `AItm` resolves to the tome
++class/data without an ability tooltip. Continue those checks through
++ItemData, ItemStrings and parent/code aliases. Missing tooltip text is not
++evidence that the behavior or item is absent.
++
++## Tooltip data verification (TFT AbilityData)
++
++`ability_audit -resolve-tooltip` was run on the listed stock rows. These
++values verify authored tooltip statements, not retail runtime timing, target
++filters, damage application, status ownership, or other hidden mechanics.
++
++- `AHre`: six friendly nearby corpses. `AIrs` item row separately has DataA=6
++  but no matching ability Ubertip; `APrl`/`APrr` are absent from AbilityData.
++- `AOmi`: creates 1/2/3 illusions by rank, dispels the Blademaster's magic,
++  lasts 60 seconds.
++- `ANch`: enemy target; excludes Heroes and creeps above level 5. Retail JASS
++  target observations are recorded separately below.
++- `AEim`/`ACim`: 10/15/20 DPS (hero ranks) and 10 DPS (creep row) against
++  nearby enemy land units; mana drains until deactivated.
++- `AUcs`: 75/125/200 to each enemy unit in a cone. Line rows describe enemy
++  land units: `ACca` 75 damage/300 maximum, `ACcv` and `ACc2` 150/900,
++  `ACc3` 100/300. `ACc1` has no AbilityData row.
++- `AOeq`: 50 building DPS, 75% slow, 25 seconds.
++- `AEsh`: initial 75/150/225; 10/30/45 every 3 seconds for 15.1 seconds;
++  movement slow only says “short duration.” `ACss`: 75 initial, 10 every 3
++  seconds for 15.1 seconds; attack and movement slow “short duration.”
++- `ANfa`: +5/10/15 attack damage; attack and movement slow 30/50/70%; 5 sec.
++- `ANcs` and `ANc1`–`ANc3`: “up to” 45/75/110 damage; stun 1.01 sec.
++- `ANeg`: +2/4/6 attack damage, +10/20/30% Tinker movement speed; improves
++  other Tinker abilities.
++- `Afae`: armor −4, gives vision, 90 sec. `ACff`: armor −4, gives vision,
++  30 sec.
++- `Arav`: changes Druid into flying Storm Crow. `Aro1`/`Aro2`: rooted Ancient
++  is immobile, can build, gives Protector thrown-rock attack, grants Fortified
++  armor. `Aroo` itself has no AbilityData tooltip row.
++- `Amfl`: +12 armor for 30 sec and describes damage when nearby enemies cast
++  spells. `ANms`: absorbs 1/1.5/2 damage per mana by rank.
++- `Apxf`: only says it fires flame streams and lights nearby enemies on fire;
++  tooltip provides no damage or timing values.
++
++`AIlp` has no AbilityStrings Ubertip in this install. Proposed stat rows
++`AIab`, `AInm`, and `AIgm` do not resolve as AbilityData tooltip entries;
++`AIrs` is a separate item-resurrection row and `AItm` resolves to the tome
++class/data without an ability tooltip. Continue those checks through
++ItemData, ItemStrings and parent/code aliases. Missing tooltip text is not
++evidence that the behavior or item is absent.
++
+++## Explicitly unimplemented or unverified
++
++- Resurrection, Earthquake, Serpent Ward ranks 2–3 and combat behavior, Crow
++  Form/Night Elf Form, Root/Uproot, Cold Arrows, and permanent stat consumable
++  behavior are not implemented by this patch. TFT rank 1 Serpent Ward summon
++  and expiry have since been observed in Retail JASS.
++- Cluster Rockets and Carrion Swarm currently report a diagnostic and do no
++  gameplay effect when executed.
++- Shadow Strike assumes one-second DataA poison pulses; its exact retail tick
++  schedule, slow field meanings and damage classification need verification.
++- Phoenix Fire uses nearest eligible target, DataA as direct damage and the
++  authored cooldown. Tie behavior, DataB, and any burn behavior need retail
++  verification; no BuffID is present in the inspected row.
++- Immolation assumes DataB is recurring mana drain, DataA is damage, Area is
++  radius, and one-second pulses. Activation cost, DataC's mana buffer, BEia's
++  role and initial pulse timing need verification.
++- Mirror Image uses AOmi DataD as outgoing and DataC as incoming damage
++  factors, sampled at rank one because stock ranks match. Retail field
++  orientation and Hero-state copying still need verification.
++- Engineering Upgrade applies DataA movement and DataB attack damage. DataC–F
++  dependent ability/form modifications remain unimplemented.
++- Tooltip output validates displayed Earthquake slow (75%), Cluster Rockets
++  maxima/stun time, Shadow Strike initial/periodic values and Cold Arrows
++  bonus/slow percentages. It does not validate runtime interpretation, target
++  legality, pulse schedule or other TODOs.
++- Faerie Fire reveal lifetime and refresh ownership are represented locally;
++  retail reveal semantics and alias-specific behavior need verification.
++
++Tooltip output validates the displayed Earthquake slow (75%), Cluster
++Rockets maxima/stun time, Shadow Strike initial/periodic values, and Cold
++Arrows bonus/slow percentages. It does not validate runtime interpretation,
++target legality, pulse schedule, or the remaining TODOs.
++
++## Verification update
++
++The temporary Charm target probe was run in retail under Wine on October 4,
++2026. The executable SHA-256 was
++`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`. JASS
++reported `validOwner=0 heroOwner=12 corpseOwner=12 resistantOwner=12`, with
++`corpseLife=0.000` and `resistantSkinLevel=1`. This verifies the stock ANch
++valid level-3 creep path and the Hero, dead-corpse, and Resistant Skin
++rejections. A follow-up probe reported `validOwner=0 validLevel=5` for the
++stock `nftt` row overridden to level 5, custom levels 4 and 5 transferred,
++and custom level 6 remained Player 12. A custom level-3 copy also remained
++Player 12 unexpectedly; its behavior is unexplained. These results support a
++level-5 acceptance / level-6 rejection boundary for the tested stock `ANch`
++configuration. They do not verify every alias or full transfer/resource
++accounting.
++
++The map was extracted fresh from `War3Local.mpq`; the untouched copy loaded
++first. The instrumented copy replaced only the exact-name `war3map.j` member
++using `smpq -a -f`, and the embedded script was compared byte-for-byte with
++the staged script. The script helpers precede
++`Trig_Intro_Cinematic_Skip_Actions`; the probe starts after the skip callback
++enters gameplay. Under Wine/Xvfb, click the chapter card near `(642, 600)`,
++wait for the cinematic, then press Escape. A Return sent before focusing the
++card leaves the map on the chapter screen and produces no result file. The
++full commands, JASS, output path, and troubleshooting are in
++`docs/games/warcraft-3/ability-verification-review.md`.
++
++Retail JASS also checked stock TFT Purge `Apg2` on allied and hostile moving
++Footmen. Both casts spent mana. At 1.5 seconds the allied target moved 382.881
++units versus 403.491 for its unpurged control; the hostile target moved 80.865
++versus 385.253, and at 3.5 seconds moved 108.837 versus 608.150. This supports
++enemy-only immobilization/slow. The exact recovery curve and whether an allied
++cast dispels buffs remain unverified; the complete method and raw reports are
++in `docs/games/warcraft-3/ability-verification-review.md`.
++
++
++Retail JASS also sampled TFT Sentry Ward (`Aeye`), which is distinct from the
++planned Serpent Ward (`AOsw`). Stock Sentry Ward uses order `evileye` and
++created an `oeye` owned by Player 0; after about three seconds its `Beye` and
++`Adt1` ability levels were 1. The observed position differed from the
++requested point. The `BTLF` query returned 0, so timed-life application and
++the stock 600-second expiry remain unverified. Do not transfer these Sentry
++Ward observations to Serpent Ward or change the `AOsw` implementation based
++on them. The TFT map's JASS was inspected for ability disable/restore logic;
++the ROC Prologue `found=0` run was invalid for this TFT ability. The raw fresh
++Preload output was read directly because the exploratory manifest's result
++filename did not match `PreloadGenEnd`; repeat with matching names to use the
++capture tool. Details are recorded in the temporary JASS verification doc.
++
++Separate Retail TFT JASS probes now confirm Serpent Ward (`AOsw`) rank 1,
++Mana Flare (`Amfl`) end conditions, and Mana Shield (`ANms`) rank 1 depletion.
++Serpent Ward created an owned `osp1`; one ward was present at 3 seconds and
++none at 45 seconds, after its authored `Dur`/`HeroDur=40`. The exact expiry
++second, ranks 2–3, and ward combat behavior remain unverified. See
++`docs/games/warcraft-3/sentry-ward.md`.
++
++For Mana Flare, `Bmfl` was present at 3 seconds, absent at 5 seconds after the
++accepted `manaflareoff` order, and absent at 35 seconds without interruption.
++Stock `Dur=30`; the exact boundary, generic Stop, move interruption and
++spell-triggered flare damage were not tested. The output field `stopAccepted`
++is the probe boolean for `manaflareoff`. See
++`docs/games/warcraft-3/mana-flare.md`.
++
++For Mana Shield, an ample-mana rank 1 unit spent 10 mana without life loss.
++With 1 mana, the shield spent it, reduced life loss relative to an inactive
++control, and `BNms` was removed. The fractional damage amount, ranks 2–3, and
++the `ACmf` alias remain unchecked. See
++`docs/games/warcraft-3/mana-shield.md`.
++
++These Retail observations constrain the proposed ability contracts; they do
++not establish that the temporary code patch implements them. The code patch
++has not been applied, and its tests/build have not been run. Remaining
++`TODO(UNVERIFIED)` notes elsewhere in the patch are unaffected.
