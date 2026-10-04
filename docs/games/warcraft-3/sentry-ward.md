@@ -141,6 +141,27 @@ This observation does not verify ranks 2–3, ward attacks, or the authored
 40-second expiry. The probe files remain temporary under
 `/tmp/wc3-retail-serpentward-recheck/`.
 
+### Serpent Ward expiry observation (TFT)
+
+The rank 1 expiry was checked in Retail 1.29.2 on the same OrcX01 TFT campaign
+map and executable. The probe learned stock `AOsw` on a level 2 Shadow Hunter,
+issued the `ward` point order, counted `osp1`/`osp2`/`osp3` units within 700
+units of the cast point after 3 game seconds, and counted again after another
+42 seconds. Retail wrote:
+
+```text
+SERPENTWARDEXPIRY probe=serpentward-tft-expiry-v1 accepted=true AOswLevel=1 initialSeconds=3 initialWardCount=1 finalSeconds=45 finalWardCount=0
+```
+
+This confirms that the accepted cast had one ward at the early sample and no
+matching ward at 45 game seconds, after the authored 40-second rank 1
+`Dur`/`HeroDur`. It supports the authored expiry behavior but does not identify
+the exact removal time between the 3- and 45-second samples. This observation
+does not cover rank 2 or 3 expiry, nor ward death/removal through combat or
+other means. The probe map, staged JASS, launch records, and raw capture are
+under `/tmp/wc3-retail-serpentward-expiry/run/`; the separate probe manifest
+and source fragments are under `/tmp/wc3-retail-serpentward-expiry/`.
+
 In the successful exploratory run, the manifest expected a differently named
 result file than the name passed to `PreloadGenEnd`, so the probe tool's
 `capture` command could not consume it. The raw `PreloadGen` file was inspected
