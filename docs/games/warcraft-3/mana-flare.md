@@ -77,3 +77,36 @@ Focused tests cover procedure registration, authored non-stock DataA damage,
 enemy-cast trigger, out-of-area ignore, friendly-cast ignore, armor bonus,
 Cast interval gating, channel/expiry cleanup (`channel.code == 0` after `Bmfl`
 expires), and splash mana-pool filter.
+
+### Retail lifecycle observation (TFT)
+
+The `Bmfl` end conditions were probed in Retail 1.29.2 on
+`War3xLocal.mpq:Maps/FrozenThrone/Campaign/OrcX01.w3x`. The map script was
+checked for `Amfl`, `Bmfl`, `UnitRemoveAbility`, and player ability-availability
+gates. It only toggles six unrelated campaign abilities and does not suppress
+Mana Flare. The Retail executable SHA-256 was
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`.
+
+After the map entered gameplay, JASS created two Player 0 Faerie Dragons
+(`efdr`), added stock `Amfl`, and issued the stock `manaflareon` order to both.
+Both orders were accepted. JASS queried `GetUnitAbilityLevel(unit, 'Bmfl')`
+after 3 seconds. It then issued the stock `manaflareoff` order to one Faerie
+Dragon and sampled that unit again after 2 seconds. The uninterrupted Faerie
+Dragon was sampled after 35 seconds. Retail wrote:
+
+```text
+MANAFLAREEND probe=manaflare-tft-endconditions-v2 naturalAccepted=true cancelAccepted=true stopAccepted=true naturalBuff3=1 naturalBuff35=0 cancelBuff3=1 cancelBuff5=0 cancelBuff35=0
+```
+
+This confirms `Bmfl` was present on both units at 3 seconds, was gone by 5
+seconds after the accepted `manaflareoff` order, and had expired naturally on
+the uninterrupted unit by 35 seconds. This is consistent with the authored
+`Dur=30` and the Retail `manaflareoff` cancellation path. The probe did not
+sample at the 30-second boundary, so it does not establish the exact natural
+expiry second. The result's `stopAccepted` label is the probe's acceptance
+boolean for the `manaflareoff` order; it does not mean the generic `stop`
+order was tested. Spell-triggered flare damage and caster movement
+cancellation were not tested here. The temporary probe map, JASS, launch
+records, and capture are under
+`/tmp/wc3-retail-manaflare-endconditions/run-v2/`; the source fragments and
+manifest are under `/tmp/wc3-retail-manaflare-endconditions/`.
