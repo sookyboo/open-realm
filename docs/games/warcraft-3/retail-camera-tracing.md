@@ -18,6 +18,83 @@ The generated working files are described in
 `build/retail-camera-trace/README.md`. They are build artifacts, not source
 assets.
 
+## Ability probe preparation and result capture
+
+Use `tools/wc3_retail_probe.py` to prepare a copied campaign map and preserve
+the output from a Retail JASS probe. The tool does not launch the game or
+interpret behavior; start Retail with the established workflow below, perform
+the map-specific UI inputs, then capture the fresh `PreloadGen` file.
+
+A JSON manifest points to the outer archive/map member, the JASS result path,
+and exact line edits. Each edit is scoped to a named JASS function and must
+match exactly one whole line; missing or duplicate anchors are errors. Paths
+inside the manifest are relative to the manifest itself unless absolute. The
+following example assumes it is saved in `docs/games/warcraft-3/`; replace the
+fragment and result paths for the local setup:
+
+```json
+{
+  "id": "purge-friendly-hostile",
+  "source": {
+    "archive": "../../../data/Warcraft III/War3Local.mpq",
+    "member": "Maps/Campaign/Prologue01.w3m"
+  },
+  "script_member": "war3map.j",
+  "retail_executable": "../../../data/Warcraft III/Warcraft III.exe",
+  "metadata": {"mode": "TFT", "ability_rawcodes": ["Apg2"]},
+  "output_name": "Prologue01-PurgeProbe.w3m",
+  "result_file": "/path/to/Wine/Documents/Warcraft III/CustomMapData/purgetest.txt",
+  "edits": [
+    {
+      "function": "Trig_Intro_Cinematic_Skip_Actions",
+      "anchor": "function Trig_Intro_Cinematic_Skip_Actions takes nothing returns nothing",
+      "where": "before",
+      "file": "purge-probe-helpers.j"
+    },
+    {
+      "function": "Trig_Intro_Cinematic_Skip_Actions",
+      "anchor": "call ConditionalTriggerExecute( gg_trg_Gameplay )",
+      "where": "after",
+      "text": "call PurgeTestStart()"
+    }
+  ]
+}
+```
+
+Build `mpqtool`, then prepare from the repository root. The output directory
+must be new or empty:
+
+```sh
+make mpqtool
+python3 tools/wc3_retail_probe.py prepare /path/to/probe.json \
+  /tmp/wc3-probes/purge-friendly-hostile
+```
+
+Preparation retains `control/<map>`, the edited `stage/war3map.j`, the
+instrumented map, and `probe.json` containing hashes and the pre-run result-file
+snapshot. It repacks only the exact `war3map.j` member with `smpq -a -f`, then
+checks that the root member listing is unchanged, that the map contains one
+exact root script member, and that extracting it matches the staged script
+byte-for-byte. If `retail_executable` is supplied, its path and SHA-256 are
+also recorded. `metadata` is copied into the run record for fields such as
+edition and tested rawcodes. Keep and load the untouched control map first when
+establishing a new Retail installation/map workflow.
+
+After running the prepared map in Retail, capture the expected result:
+
+```sh
+python3 tools/wc3_retail_probe.py capture \
+  /tmp/wc3-probes/purge-friendly-hostile --timeout 180
+```
+
+Capture waits for a non-empty result file whose timestamp is newer than
+preparation and whose timestamp or content differs from the previous snapshot.
+It saves the untouched result text as `result.txt`, extracts `Preload` values
+to `capture.json`, and does not label them pass/fail. A missing or stale file
+times out instead of being reported as a successful run. Use a distinct result
+filename for each run when comparing repeated probes.
+Run the retail-independent tool tests with `python3 tests/test_wc3_retail_probe.py`.
+
 ## Exact extraction and repacking
 
 Build the archive tool first, then use a workspace-local root variable rather
