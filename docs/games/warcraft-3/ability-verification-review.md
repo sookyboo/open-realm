@@ -318,6 +318,26 @@ ownership interaction, or other retail executable version. The JASS probe and
 repacked map were temporary files under `/tmp/pathfinding/charm` and
 `/tmp/charm-retail`, not shipped project assets.
 
+### Creep-level boundary follow-up
+
+A second controlled Retail run exercised the stock `ANch` level ceiling
+(`DataA=5`). The test locally overrode the stock `nftt` UnitData level to 5,
+and created organic copies at levels 3, 4, 5, and 6. The ordinary stock-row
+level-5 target transferred to Player 0. Among the custom copies, levels 4 and
+5 transferred, while level 6 stayed with Player 12. The recorded output was:
+
+```text
+CHARMTEST validOwner=0 validLevel=5 heroOwner=12 corpseOwner=12 resistantOwner=12 heroType=1215324524 corpseLife=0.000 resistantSkinLevel=1 L3=3 owner3=12 L4=4 owner4=0 L5=5 owner5=0 L6=6 owner6=12
+```
+
+This is direct evidence that the tested stock `ANch` accepts an organic creep
+through level 5 and rejects level 6. The custom level-3 copy unexpectedly
+remained Player 12 even though the ordinary stock level-3 `nftt` transferred in
+the first probe. The reason is unknown; treat that single custom result as an
+unexplained setup or behavior anomaly, not as evidence against level-3
+acceptance. These probes do not establish alias-specific limits or complete
+source/destination resource accounting.
+
 ## Jaina / Archmage follow-up (September 19, 2026)
 
 The Archmage review tightened three abilities without adding Hero-specific
