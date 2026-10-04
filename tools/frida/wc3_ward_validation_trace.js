@@ -12,7 +12,10 @@ const addresses = {
   wardValidation: atVa(0x00C34110),
   simpleSpellValidation: atVa(0x00B28980),
   validationFallback: atVa(0x007F6A00),
-  wardOrderGetter: atVa(0x00C340F0)
+  wardOrderGetter: atVa(0x00C340F0),
+  simpleSpellCheckB4adf0: atVa(0x00B4ADF0),
+  simpleSpellCheck67eca0: atVa(0x0067ECA0),
+  simpleSpellCheck7ff460: atVa(0x007FF460)
 };
 let sequence = 0;
 let dropped = false;
@@ -95,6 +98,29 @@ Interceptor.attach(addresses.validationFallback, {
     if (this.matches) emit('validation-fallback-leave', {callId: this.callId, result: retval.toInt32(), resultHex: retval.toString()});
   }
 });
+
+for (const [name, address, argumentCount] of [
+  ['simple-spell-check-b4adf0', addresses.simpleSpellCheckB4adf0, 2],
+  ['simple-spell-check-67eca0', addresses.simpleSpellCheck67eca0, 2],
+  ['simple-spell-check-7ff460', addresses.simpleSpellCheck7ff460, 4]
+]) {
+  Interceptor.attach(address, {
+    onEnter(args) {
+      const stack = activeByThread.get(Process.getCurrentThreadId()) || [];
+      this.callId = stack.length ? stack[stack.length - 1] : null;
+      this.matches = this.callId !== null;
+      if (!this.matches) return;
+      const values = [];
+      for (let i = 0; i < argumentCount; ++i) values.push(asHex(args[i]));
+      emit(name + '-enter', {callId: this.callId,
+        self: this.context.ecx.toString(), args: values});
+    },
+    onLeave(retval) {
+      if (this.matches) emit(name + '-leave', {callId: this.callId,
+        result: retval.toInt32(), resultHex: retval.toString()});
+    }
+  });
+}
 
 Interceptor.attach(addresses.wardOrderGetter, {
   onEnter() {
