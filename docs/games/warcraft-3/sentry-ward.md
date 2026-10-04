@@ -107,6 +107,40 @@ that map is not a TFT reference. Another failed attempt used order `ward`,
 which belongs to Serpent Ward. The TFT stock `Units/OrcAbilityFunc.txt` rows
 specify `Aeye Order=evileye` and `AOsw Order=ward`.
 
+### Serpent Ward order verification (TFT)
+
+The related stock Serpent Ward (`AOsw`) was separately checked on the same
+TFT OrcX01 campaign map and Retail executable. The TFT audit identifies
+`AOsw` as `CAbilityWard`, a three-rank Shadow Hunter Hero skill with order
+`ward`, cost 30, range 500, cooldown 6.5, and 40-second `Dur`/`HeroDur` at all
+ranks. Its authored summon IDs are `osp1`, `osp2`, and `osp3` for ranks 1–3.
+`Units/UnitAbilities.slk` lists `AOsw` in the Shadow Hunter (`Oshd`)
+`heroAbilList`; the probe therefore raised a fresh Shadow Hunter to level 2
+and learned rank 1 with `SelectHeroSkill` before issuing the point order. It
+used the documented OrcX01 chapter-card click and cinematic-skip sequence, and
+cast at the point used by the accepted Sentry Ward probe.
+
+After three seconds, a JASS probe searched within 700 units of the cast point.
+The reviewed capture was:
+
+```text
+SERPENTWARD probe=serpentward-tft-learned-v2 addedViaSkill=true accepted=true casterType=1332963428 owner=0 heroLevel=2 skillPointsBefore=1 skillPointsAfter=1 AOswLevel=1 wardCount=1 wardType=1869836337 wardOwner=0 wardX=-780.000 wardY=-5884.000
+```
+
+The numeric IDs are `Oshd` and `osp1`, respectively. This verifies that the
+learned stock TFT `AOsw` accepted the `ward` order and created an `osp1` ward
+owned by Player 0 at the recorded position. The fresh capture passed its
+marker gate and was reviewed manually; `ready_for_review` by itself is not a
+gameplay verdict.
+
+An earlier probe added `AOsw` with `UnitAddAbility` and set its rank directly;
+Retail returned `accepted=false` at a different point. The successful replay
+both learned the Hero skill through `SelectHeroSkill` and changed the cast
+location, so the specific reason for that earlier rejection remains unknown.
+This observation does not verify ranks 2–3, ward attacks, or the authored
+40-second expiry. The probe files remain temporary under
+`/tmp/wc3-retail-serpentward-recheck/`.
+
 In the successful exploratory run, the manifest expected a differently named
 result file than the name passed to `PreloadGenEnd`, so the probe tool's
 `capture` command could not consume it. The raw `PreloadGen` file was inspected
