@@ -3,6 +3,27 @@
 This directory contains the standalone command-line tools used to inspect
 Warcraft III assets and game data.
 
+## `convert_wc3_retail_screenshot.py`
+
+Convert the newest Warcraft III Print Screen TGA in a Wine user's
+`Documents/Warcraft III/ScreenShots` directory to an RGB PNG in
+`screenshots/tmp/`:
+
+```sh
+/opt/openrealm-tools/frida-venv/bin/python tools/convert_wc3_retail_screenshot.py
+```
+
+The tool uses `$WINEPREFIX` when set, otherwise `~/.wine-war3`. If that prefix
+has multiple Windows profiles, select one with `--wine-user`; override the
+prefix with `--wine-prefix /path/to/prefix`. `--output-dir` can change the
+destination for local workflows. Pillow must be installed in the Python
+environment used to run the script.
+
+It verifies the PNG's format, RGB mode, and dimensions before deleting the
+source TGA. If conversion or validation fails, or the PNG name already exists,
+the source TGA is kept. The default `screenshots/` destination is ignored by
+Git.
+
 ## `ability_audit`
 
 Dump one ability's ROC and TFT contract from the installed MPQs. First command

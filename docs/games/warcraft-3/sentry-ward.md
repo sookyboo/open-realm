@@ -139,8 +139,9 @@ both learned the Hero skill through `SelectHeroSkill` and changed the cast
 location, so the specific reason for that earlier rejection remains unknown.
 This rank 1 observation by itself does not verify higher-rank behavior, ward
 attacks, or the authored 40-second expiry. Rank 2 creation is verified by the
-paired differential below; rank 3 remains open. The probe files remain temporary under
-`/tmp/wc3-retail-serpentward-recheck/`.
+paired differential below, and rank 3 creation is recorded below. Neither
+higher-rank result verifies expiry or combat behavior. The probe files remain
+temporary under `/tmp/wc3-retail-serpentward-recheck/`.
 
 ### Serpent Ward rank 2 validation differential (TFT)
 
@@ -179,6 +180,38 @@ accepted summon was `osp2`, but does not test rank 2 expiry, attacks, or other
 ward behavior. Probe maps, captures, and traces are under
 `/tmp/wc3-serpentward-rank-compare-v2/run2/` and
 `/tmp/wc3-serpentward-rank-compare-v3/run/`.
+
+### Serpent Ward rank 3 summon identity (TFT)
+
+Retail rank 3 was tested on October 4, 2026, with the same TFT OrcX01 source
+map and Retail 1.29.2 executable (SHA-256
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`). The
+untouched control first reached its Act One chapter card. The prepared JASS
+probe then created a Player 0 Shadow Hunter, set it to level 6, learned stock
+`AOsw` three times with `SelectHeroSkill`, and issued the ordinary `ward` point
+order at `(startX + 2100, startY + 900)`, the same known-good point where the
+rank 2 differential accepted its cast. Three game seconds later, JASS counted
+nearby `osp1`/`osp2`/`osp3` wards and recorded their type and owner:
+
+```text
+SERPENTRANK3 probe=serpentward-tft-rank3-v1 abilityLevel=3 skillPoints=3 accepted=true wardCount=1 wardType=1869836339 wardOwner=0
+```
+
+The reported ability level was 3, the order was accepted, and exactly one
+nearby ward was found with rawcode `osp3` (`1869836339`) owned by Player 0.
+This confirms rank 3 summon identity at the same point that passed the rank 2
+control. The prior exploratory rank-3 cast also returned `osp3`, but this
+single-rank replay removes its different cast location as a confound. The
+probe map, fresh Preload result, and capture review are under
+`/tmp/wc3-serpentward-rank3/run/`.
+
+The in-game result was also captured with Warcraft Print Screen, which wrote a
+TGA under the Wine profile's `Documents/Warcraft III/ScreenShots/` folder. The
+converter validated its RGB PNG and deleted that TGA. The PNG is
+`screenshots/tmp/WC3ScrnShot_100426_211722_02.png` (ignored by Git). The tool's
+`ready_for_review` state was treated only as a fresh-capture gate; the raw JASS
+values and matching visible in-game output were reviewed manually. This
+observation does not test rank 3 expiry, ward attacks, or other combat behavior.
 
 ### Serpent Ward expiry observation (TFT)
 
