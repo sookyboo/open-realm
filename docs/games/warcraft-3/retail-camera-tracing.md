@@ -165,6 +165,152 @@ Example manifest contract:
   "inconclusive_markers": ["accepted=false", "abilityAdded=false"]
 }
 ```
+
+### Optional Frida attach preflight
+
+For investigations that need native-level diagnostics, Frida can check that
+the controller reaches the unique Retail process after the prepared-map launch
+and before continuing the chapter card. Start the matching Frida server under
+the same Wine prefix, then run:
+
+```sh
+DISPLAY=:97 WAYLAND_DISPLAY= WINEDEBUG=-all WINEPREFIX="$WINEPREFIX" \
+  wine /opt/openrealm-tools/frida-server.exe --listen=127.0.0.1:27043
+
+/opt/openrealm-tools/frida-venv/bin/python \
+  tools/frida/wc3_retail_preflight.py /tmp/wc3-probes/purge-friendly-hostile \
+  --remote 127.0.0.1:27043 \
+  --output /tmp/wc3-probes/purge-friendly-hostile/frida-preflight.json
+```
+
+The preflight checks the prepared launch/map records, the live Wine host
+process arguments, Retail executable hash, Frida client version, Windows remote
+endpoint, and unique Retail process. It then attaches and immediately detaches
+without installing hooks. Its JSON record is a transport/identity check only;
+it contains no gameplay evidence. Stop if the process is missing or ambiguous,
+attachment fails, or any recorded hash differs. Do not continue the map probe
+on a failed preflight.
+
+This preflight makes native tracing safer to set up, but it does not identify
+or hook Warcraft's ability-order validation functions. An ability trace needs
+a separate, reviewed Frida agent whose addresses and calling conventions are
+mapped against this exact executable in Ghidra or radare2. Keep that trace bounded and
+passive until its hook contract is established; use JASS to verify any
+resulting gameplay claim. To run such an agent optionally against the current
+prepared-map process, first start Frida server as above, wait at the prepared
+map's safe pause point, and run:
+
+```sh
+/opt/openrealm-tools/frida-venv/bin/python \
+  tools/frida/trace_wc3_retail.py /tmp/wc3-probes/purge-friendly-hostile \
+  --agent /tmp/reviewed-ability-trace.js --seconds 60 \
+  --output /tmp/wc3-probes/purge-friendly-hostile/frida-ability-$(date -u +%Y%m%dT%H%M%SZ).jsonl
+```
+
+This is attach-only: the tool does not launch Retail, send input, or choose
+hook addresses. It checks the prepared launch and map records, their hashes,
+the live Wine host command line, the unique Frida-side `Warcraft III.exe`, and
+the Frida client version before attaching. The JavaScript agent is hashed into
+the output record. Existing output paths are refused, and each record carries
+the executable/map hashes and target PID. Keep the process at the documented
+pause point while the bounded trace runs. Use `--pid` only when the server
+reports multiple Retail processes and you have identified the prepared one.
+An agent may declare `// WC3_RETAIL_SHA256: <64 lowercase hex digits>`;
+when present, the controller refuses to run it against another executable
+hash. Use this declaration for version-specific offsets. The generic
+controller does not promise compatibility with a different Frida version;
+update the pinned client/server requirement deliberately.
+
+The saved `tools/frida/wc3_ward_validation_trace.js` is a reusable,
+read-only example for the exact executable hash recorded below. Run it through
+the bounded controller, for example:
+
+```sh
+/opt/openrealm-tools/frida-venv/bin/python \
+  tools/frida/trace_wc3_retail.py /tmp/wc3-probes/serpentward-rank2 \
+  --agent tools/frida/wc3_ward_validation_trace.js --seconds 60 \
+  --output /tmp/wc3-probes/serpentward-rank2/frida-ward.jsonl
+```
+
+Do not use its RVAs or vtable address on another binary until independently
+recovered and checked. Treat it as an example of receiver filtering,
+thread-scoped nested call correlation, and return logging.
+
+#### Finding ability hooks from a rawcode
+
+Addresses from one Warcraft III executable must never be copied blindly to
+another build. Begin with the ability rawcode and data edition, for example
+`AOsw` in TFT. Resolve the implementation code first: inspect that edition's
+`AbilityData.slk` `code=` field and confirm the resolved four-character code
+in the runtime registry/class audit. Retail may register `AOwd` as
+`CAbilityWard`; the map/JASS rawcode `AOsw` is not necessarily the binary
+registration key. Record the executable SHA-256, PE image base, architecture,
+and file/version metadata for every analysis.
+
+In radare2, load the *matching executable* and search its data for the
+little-endian FOURCC (for ASCII `AOwd`, bytes are `64 77 4f 41`). Search the
+registration table or nearby strings, then follow references to the row or
+factory function. Do not treat a rawcode byte hit by itself as proof: confirm
+the surrounding table shape and adjacent known ability rows. A convenient
+starting point for registry analysis is the generated demo/TFT mapping and the
+ability class audit, but that output is a lead for the tested executable, not
+an address database for a different version.
+
+From the factory/registration entry, identify the concrete class vtable and
+the virtual slots used for the behavior under investigation. With Ghidra,
+inspect the vtable references and decompile likely order getter, order
+validation, cast, and creation methods. With radare2, follow xrefs from the
+registration and vtable, inspect `pdf`/`pd` around each candidate, and trace
+callers/callees until the argument roles and return behavior are clear. A
+method is a useful hook only after its receiver/class identity and calling
+convention have been established. Prefer a method reached by an actual JASS
+order over a class-name guess. For validation, return-value meaning can be
+derived from the caller's branch (for example, whether false maps to an
+invalid-order code); for creation, prove the call path reaches it on a
+successful control cast.
+
+Rebase static addresses using the current module base and PE image base; Frida
+agents should express locations as RVAs and compute `module.base + RVA`, not
+hard-code a process address. Re-check every candidate's bytes, xrefs, class
+identity, and a harmless attach/trace on each executable hash. If the
+registration structure or candidate code differs, redo the analysis rather
+than forcing the old RVA. Keep hooks read-only and bounded. First validate
+hook reachability with an in-game/JASS action, then use a controlled success
+and failure differential to interpret the result. Frida evidence localizes
+native execution; it does not alone establish gameplay equivalence.
+
+For the Serpent Ward TFT rank-2 investigation on executable SHA-256
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`, the
+resolved implementation code was `AOwd`, and the live `CAbilityWard` validation
+method at RVA `0x834110` ran for order ID `0xD0218`. Its shared spell validator
+returned false, and Ward mapped that path to result `0x41`; the order was
+rejected before summon creation. This is a worked example for that exact build,
+not a portable offset or explanation of the generic validator's failure.
+
+The observed call path and return-value interpretation on that binary were:
+
+| Function (VA / RVA) | Observed result | Meaning supported by the call path |
+|---|---:|---|
+| `CAbilityWard` order getter (`0xC340F0` / `0x8340F0`) | `0xD0218` | The ability supplied this order ID for the attempted `ward` point order. |
+| `CAbilityWard` validator (`0xC34110` / `0x834110`) | `0x41` | The Ward validator's failure result for the observed request. Disassembly shows it calls SimpleSpell validation; if that returns nonzero, it returns that result unchanged. If SimpleSpell returns zero, it calls the fallback helper and maps fallback false to zero, fallback true to `0x41`. |
+| SimpleSpell validator (`0xB28980` / `0x728980`) | `0` | False/failure for this order validation. This is not a success code. The Ward caller takes the fallback path when it sees zero. |
+| validation fallback (`0x7F6A00` / `0x3F6A00`) | `1` | Nonzero result from the fallback predicate. The Ward caller converts nonzero to `0x41` on this branch; this trace does not establish what predicate the helper represents. |
+
+Thus `fallback=1` is not “order accepted”: it is nonzero, and the Ward wrapper
+then returns `0x41`. `SimpleSpell=0` is the zero result that selects fallback
+evaluation. In this Ward method, a nonzero SimpleSpell result is returned
+unchanged; zero followed by a zero fallback result produces zero. The
+combination explains the wrapper's output but does
+not identify the failed condition inside SimpleSpell validation or the
+fallback's semantic category. The separate JASS result (`accepted=false`,
+`wardCount=0`) confirms that this request did not create a ward. Do not infer
+from this single call that all `0x41` values have a global meaning outside
+this validator; establish enum/error semantics from the caller and compare
+other ability implementations before generalizing. To explain the underlying
+rejection, a follow-up trace must inspect the validator inputs and branch
+condition (or compare controlled rank-1/rank-2 attempts with identical caster,
+point, availability, and map state).
+
 Run the retail-independent tool tests with `python3 tests/test_wc3_retail_probe.py`.
 
 Preparation also checks every non-comment line in the existing JASS `globals`
