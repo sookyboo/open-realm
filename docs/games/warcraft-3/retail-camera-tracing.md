@@ -282,34 +282,42 @@ native execution; it does not alone establish gameplay equivalence.
 For the Serpent Ward TFT rank-2 investigation on executable SHA-256
 `3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`, the
 resolved implementation code was `AOwd`, and the live `CAbilityWard` validation
-method at RVA `0x834110` ran for order ID `0xD0218`. Its shared spell validator
-returned false, and Ward mapped that path to result `0x41`; the order was
-rejected before summon creation. This is a worked example for that exact build,
-not a portable offset or explanation of the generic validator's failure.
+method at RVA `0x834110` ran for order ID `0xD0218`. An initial rank 2 request
+at a nearby alternate target returned `0x41`; a later paired JASS/Frida
+differential showed rank 2 succeeds at the known-good target and either rank
+fails at that alternate target. This is a worked example for that exact build,
+not a portable offset or a complete identification of the map rule rejecting
+the alternate location.
 
 The observed call path and return-value interpretation on that binary were:
 
 | Function (VA / RVA) | Observed result | Meaning supported by the call path |
 |---|---:|---|
 | `CAbilityWard` order getter (`0xC340F0` / `0x8340F0`) | `0xD0218` | The ability supplied this order ID for the attempted `ward` point order. |
-| `CAbilityWard` validator (`0xC34110` / `0x834110`) | `0x41` | The Ward validator's failure result for the observed request. Disassembly shows it calls SimpleSpell validation; if that returns nonzero, it returns that result unchanged. If SimpleSpell returns zero, it calls the fallback helper and maps fallback false to zero, fallback true to `0x41`. |
-| SimpleSpell validator (`0xB28980` / `0x728980`) | `0` | False/failure for this order validation. This is not a success code. The Ward caller takes the fallback path when it sees zero. |
-| validation fallback (`0x7F6A00` / `0x3F6A00`) | `1` | Nonzero result from the fallback predicate. The Ward caller converts nonzero to `0x41` on this branch; this trace does not establish what predicate the helper represents. |
+| `CAbilityWard` validator (`0xC34110` / `0x834110`) | `0` at point A; `0x41` at point B | Disassembly shows it calls SimpleSpell validation. A nonzero SimpleSpell result is returned unchanged; zero proceeds to Ward's position fallback. The fallback's zero is mapped to Ward result zero, and nonzero is mapped to `0x41`. |
+| SimpleSpell validator (`0xB28980` / `0x728980`) | `0` at both points | Zero here is not a failure result: it lets Ward continue with its position-specific check. The first and next shared checks also returned the same values at both points; their exact semantics are not established. |
+| Ward position fallback (`0x7F6A00` / `0x3F6A00`) | `0` at point A; `1` at point B | This result changes with target location and drives the Ward validator's zero / `0x41` result. Its precise map-level predicate remains unidentified. |
+
+The SimpleSpell disassembly also clarifies its relevant return paths. It first
+calls `0xB4ADF0`; a nonzero result is returned unchanged. If that result is
+zero, it calls a virtual order check and then `0x67ECA0`. A nonzero result
+from `0x67ECA0` returns `0` immediately; otherwise it calls `0x7FF460`, whose
+nonzero result also returns `0`. Only when both of those latter checks return
+zero does this function explicitly return `0x52`. In the paired Ward traces,
+`0xB4ADF0` returned zero and `0x67ECA0` returned one at both points, so the
+SimpleSpell path returned zero and did not reach `0x7FF460` or the `0x52`
+branch. These branch relationships are specific to the inspected executable;
+the helper names and internal policy meanings are not inferred from addresses.
 
 Thus `fallback=1` is not “order accepted”: it is nonzero, and the Ward wrapper
-then returns `0x41`. `SimpleSpell=0` is the zero result that selects fallback
-evaluation. In this Ward method, a nonzero SimpleSpell result is returned
-unchanged; zero followed by a zero fallback result produces zero. The
-combination explains the wrapper's output but does
-not identify the failed condition inside SimpleSpell validation or the
-fallback's semantic category. The separate JASS result (`accepted=false`,
-`wardCount=0`) confirms that this request did not create a ward. Do not infer
-from this single call that all `0x41` values have a global meaning outside
-this validator; establish enum/error semantics from the caller and compare
-other ability implementations before generalizing. To explain the underlying
-rejection, a follow-up trace must inspect the validator inputs and branch
-condition (or compare controlled rank-1/rank-2 attempts with identical caster,
-point, availability, and map state).
+returns `0x41`; at the known-good point `fallback=0` and Ward returns `0`.
+SimpleSpell's zero result selects fallback evaluation rather than indicating
+failure. The paired JASS runs show either learned rank succeeds at point A and
+fails at point B, independent of cast order. This explains the earlier rank 2
+rejection as a location-specific failure before summon creation. The trace
+does not establish why point B fails inside the map-level predicate. Do not
+generalize `0x41` beyond this Ward validator without checking its caller and
+other ability implementations.
 
 Run the retail-independent tool tests with `python3 tests/test_wc3_retail_probe.py`.
 
