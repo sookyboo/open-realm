@@ -19,6 +19,15 @@ runs, longer frame budgets, report semantics, and the GitHub issue command.
 Loose custom maps are not in that enumerator; see
 [DotA Custom-Map Playability](games/warcraft-3/dota-map-playability.md).
 
+For focused Retail JASS ability probes, `tools/wc3_retail_probe.py prepare`
+extracts a campaign map, applies function-scoped exact-line JASS insertions,
+replaces only `war3map.j`, and verifies that the archive member listing is
+unchanged and the embedded script matches byte-for-byte.
+After a manual Retail run, `capture` accepts only a fresh `PreloadGen` result
+and stores the raw output plus parsed values. It does not launch Retail or
+interpret gameplay. See [Retail Warcraft III camera tracing](games/warcraft-3/retail-camera-tracing.md#ability-probe-preparation-and-result-capture)
+for the manifest format and workflow.
+
 Use `make audit-wc3-hero-saveload` to walk the player Hero on every campaign
 map, save, load, and compare origin/abilities/inventory. Parser tests are
 `make test-wc3-hero-saveload-audit`. See
