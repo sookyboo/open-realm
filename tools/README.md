@@ -41,6 +41,23 @@ build/bin/ability_audit -data 'data/Warcraft III' -tft -raw Aam2
 strings, and `code=` aliases. `-roc` opens War3.mpq only; `-tft` searches
 War3x.mpq first. Without either flag, `-raw` prints both sections.
 
+Resolve the active archive's rank-specific `Ubertip` placeholders directly
+from ability and unit object data:
+
+```sh
+build/bin/ability_audit -data 'data/Warcraft III' -tft -resolve-tooltip AOsw
+build/bin/ability_audit -data 'data/Warcraft III' -tft -resolve-tooltip Aam2
+```
+
+The resolver prints the source text, each rank's resolved text, and the values
+used. It currently resolves ability Dur/HeroDur/Cool/Cost/Area/Rng and DataA–I,
+unit `realHP`, and first weapon `mindmg1`/`maxdmg1`. Unknown references appear as
+`[UNRESOLVED:...]`; unsupported placeholder syntax appears as
+`[UNSUPPORTED:...]`, with a diagnostic on stderr. Treat either marker as an
+incomplete resolution and inspect the referenced data manually before claiming
+the tooltip is fully resolved. It preserves Warcraft color codes and `|n`
+markup; it does not emulate UI number formatting or prove runtime behavior.
+
 ## `extract_wc3_ability_classes.py`
 
 Extract the demo/TFT binaries' actual FOURCC-to-class registration mappings using Python's

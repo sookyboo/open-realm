@@ -442,12 +442,161 @@ static int dump_raw(uint32_t raw, bool tft, cstring_t label) {
     return hit ? 0 : 1;
 }
 
+typedef struct { uint32_t id; float realHP; } tooltip_balance_t;
+typedef struct { uint32_t id; float mindmg1, maxdmg1; } tooltip_weapons_t;
+static slkField_t const tooltip_balance_schema[] = {
+    { "", offsetof(tooltip_balance_t, id), STB_SLK_FOURCC },
+    { "realHP", offsetof(tooltip_balance_t, realHP), STB_SLK_FLOAT }, { NULL, 0, 0 }
+};
+static slkField_t const tooltip_weapons_schema[] = {
+    { "", offsetof(tooltip_weapons_t, id), STB_SLK_FOURCC },
+    { "mindmg1", offsetof(tooltip_weapons_t, mindmg1), STB_SLK_FLOAT },
+    { "maxdmg1", offsetof(tooltip_weapons_t, maxdmg1), STB_SLK_FLOAT }, { NULL, 0, 0 }
+};
+
+static AbilityData_t const *tooltip_ability(AbilityData_t const *rows, uint32_t count, uint32_t id) {
+    FOR_LOOP(i, count) if (rows[i].id == id) return rows + i;
+    return NULL;
+}
+
+static bool tooltip_value(char const *code, char const *field, uint32_t rank,
+                          AbilityData_t const *abilities, uint32_t ability_count,
+                          tooltip_balance_t const *balance, uint32_t balance_count,
+                          tooltip_weapons_t const *weapons, uint32_t weapons_count,
+                          char *out, size_t out_size) {
+    uint32_t id = RK(code);
+    AbilityData_t const *a = tooltip_ability(abilities, ability_count, id);
+    if (a && rank < 4) {
+        if (!strcmp(field, "Dur")) snprintf(out, out_size, "%g", a->dur[rank]);
+        else if (!strcmp(field, "HeroDur")) snprintf(out, out_size, "%g", a->heroDur[rank]);
+        else if (!strcmp(field, "Cool")) snprintf(out, out_size, "%g", a->cool[rank]);
+        else if (!strcmp(field, "Cost")) snprintf(out, out_size, "%g", a->cost[rank]);
+        else if (!strcmp(field, "Area")) snprintf(out, out_size, "%g", a->area[rank]);
+        else if (!strcmp(field, "Rng")) snprintf(out, out_size, "%g", a->range[rank]);
+        else if (!strncmp(field, "Data", 4) && field[4] >= 'A' && field[4] <= 'I') {
+            unsigned slot = (unsigned)(field[4] - 'A');
+            if (data_slot_is_code(a->dataId[rank][slot], a->data[rank][slot]))
+                snprintf(out, out_size, "%.4s", (char const *)&a->dataId[rank][slot]);
+            else snprintf(out, out_size, "%g", a->data[rank][slot]);
+        } else return false;
+        return true;
+    }
+    for (uint32_t i = 0; i < balance_count; i++) if (balance[i].id == id && !strcmp(field, "realHP")) {
+        snprintf(out, out_size, "%g", balance[i].realHP); return true;
+    }
+    for (uint32_t i = 0; i < weapons_count; i++) if (weapons[i].id == id) {
+        if (!strcmp(field, "mindmg1")) { snprintf(out, out_size, "%g", weapons[i].mindmg1); return true; }
+        if (!strcmp(field, "maxdmg1")) { snprintf(out, out_size, "%g", weapons[i].maxdmg1); return true; }
+    }
+    return false;
+}
+
+static cstring_t tooltip_level(cstring_t text, uint32_t wanted) {
+    static char buf[4096];
+    uint32_t level = 0;
+    char const *start = text;
+    bool quoted = false;
+    for (char const *p = text; ; p++) {
+        if (*p == '"') quoted = !quoted;
+        if ((!*p || (*p == ',' && !quoted)) && level == wanted) {
+            size_t len = (size_t)(p - start);
+            while (len && (*start == '"' || *start == ' ')) { start++; len--; }
+            while (len && (start[len - 1] == '"' || start[len - 1] == ' ')) len--;
+            if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+            memcpy(buf, start, len); buf[len] = '\0'; return buf;
+        }
+        if (!*p) break;
+        if (*p == ',' && !quoted) { level++; start = p + 1; }
+    }
+    return NULL;
+}
+
+static int resolve_tooltip(uint32_t raw, bool tft, cstring_t label) {
+    handle_t archives[8] = {0};
+    uint32_t n = open_archive_set(archives, tft), count = 0, bc = 0, wc = 0;
+    AbilityData_t *rows = NULL, *ability = NULL;
+    tooltip_balance_t *balance = NULL;
+    tooltip_weapons_t *weapons = NULL;
+    stbIniCache_t ini = {0};
+    if (!n) { fprintf(stderr, "%s: no archives\n", label); return 1; }
+    Tool_SetSheetHost(archives, n);
+    count = Stb_SlkLoad("Units\\AbilityData.slk", ability_schema, (void **)&rows, sizeof(*rows));
+    bc = Stb_SlkLoad("Units\\UnitBalance.slk", tooltip_balance_schema, (void **)&balance, sizeof(*balance));
+    wc = Stb_SlkLoad("Units\\UnitWeapons.slk", tooltip_weapons_schema, (void **)&weapons, sizeof(*weapons));
+    Stb_IniCacheLoadFiles(&ini, ability_string_files);
+    ability = (AbilityData_t *)tooltip_ability(rows, count, raw);
+    if (!ability) { fprintf(stderr, "Ability %.4s not found\n", (char const *)&raw); goto fail; }
+    char section[5] = {0}; memcpy(section, &raw, 4);
+    cstring_t source = Stb_IniCacheFind(&ini, section, "Ubertip");
+    if (!source) { fprintf(stderr, "No Ubertip string for %.4s\n", section); goto fail; }
+    printf("=== %.4s %s resolved tooltip ===\n", section, label);
+    printf("Source: %s\n", strip_quotes(source));
+    printf("Ranks: %d\n", ability->levels);
+    for (uint32_t rank = 0; rank < (uint32_t)MIN(ability->levels > 0 ? ability->levels : 1, 4); rank++) {
+        char resolved[8192], refs[1024] = "";
+        char const *p = tooltip_level(source, rank);
+        if (!p) p = strip_quotes(source);
+        size_t used = 0, refs_used = 0;
+        while (*p && used + 1 < sizeof(resolved)) {
+            if (*p == '<') {
+                char code[16] = {0}, field[32] = {0}, value[96] = {0};
+                int consumed = 0;
+                if (sscanf(p, "<%15[^,],%31[^,>]>%n", code, field, &consumed) == 2 && consumed > 0) {
+                    bool ok = false;
+                    uint32_t value_rank = 0;
+                    size_t flen = strlen(field);
+                    AbilityData_t const *ref_ability = tooltip_ability(rows, count, RK(code));
+                    if (ref_ability && flen && field[flen - 1] >= '1' && field[flen - 1] <= '4') {
+                        value_rank = (uint32_t)(field[flen - 1] - '1');
+                        field[flen - 1] = '\0';
+                    } else if (!strcmp(code, section)) value_rank = rank;
+                    ok = tooltip_value(code, field, value_rank, rows, count, balance, bc, weapons, wc, value, sizeof(value));
+                    if (ok) {
+                        int written = snprintf(resolved + used, sizeof(resolved) - used, "%s", value);
+                        used += written > 0 ? (size_t)written : 0;
+                        int rw = snprintf(refs + refs_used, sizeof(refs) - refs_used, "%s  <%s,%s> = %s\n", refs_used ? "" : "", code, field, value);
+                        if (rw > 0 && (size_t)rw < sizeof(refs) - refs_used) refs_used += (size_t)rw;
+                    } else {
+                        fprintf(stderr, "unresolved tooltip placeholder: <%.4s,%s>\n", code, field);
+                        int written = snprintf(resolved + used, sizeof(resolved) - used, "[UNRESOLVED:<%s,%s>]", code, field);
+                        used += written > 0 ? (size_t)written : 0;
+                    }
+                    p += consumed; continue;
+                }
+                char const *end = strchr(p, '>');
+                if (end) {
+                    size_t token_len = (size_t)(end - p + 1);
+                    fprintf(stderr, "unsupported tooltip placeholder: %.*s\n", (int)token_len, p);
+                    int written = snprintf(resolved + used, sizeof(resolved) - used, "[UNSUPPORTED:%.*s]", (int)token_len, p);
+                    used += written > 0 ? (size_t)written : 0;
+                    p = end + 1; continue;
+                }
+            }
+            resolved[used++] = *p++;
+        }
+        resolved[used] = '\0';
+        printf("\nRank %u: %s\n", rank + 1, resolved);
+        if (*refs) printf("Resolved fields:\n%s", refs);
+    }
+    Stb_IniCacheFree(&ini);
+    FS_SLKFreeRows(tooltip_weapons_schema, weapons, wc, sizeof(*weapons));
+    FS_SLKFreeRows(tooltip_balance_schema, balance, bc, sizeof(*balance));
+    FS_SLKFreeRows(ability_schema, rows, count, sizeof(*rows));
+    Tool_CloseArchives(archives, 8); return 0;
+fail:
+    Stb_IniCacheFree(&ini);
+    FS_SLKFreeRows(tooltip_weapons_schema, weapons, wc, sizeof(*weapons));
+    FS_SLKFreeRows(tooltip_balance_schema, balance, bc, sizeof(*balance));
+    FS_SLKFreeRows(ability_schema, rows, count, sizeof(*rows));
+    Tool_CloseArchives(archives, 8); return 1;
+}
+
 int main(int argc, char **argv) {
     handle_t archives[8] = {0};
     size_t archive_count = 0;
     cstring_t data_dir = NULL;
     bool tft = false, roc_only = false, dump_all = false, have_mpq = false;
-    uint32_t raw = 0;
+    uint32_t raw = 0, resolve_raw = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-data") && i + 1 < argc) {
@@ -464,8 +613,10 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-raw") && i + 1 < argc && strlen(argv[i + 1]) == 4) {
             cstring_t id = argv[++i];
             raw = RK(id);
+        } else if (!strcmp(argv[i], "-resolve-tooltip") && i + 1 < argc && strlen(argv[i + 1]) == 4) {
+            cstring_t id = argv[++i]; resolve_raw = RK(id);
         } else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
-            fprintf(stderr, "Usage: %s [-data <dir>] [-mpq <file>] [-tft] [-roc] [-all] [-raw <id>]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-data <dir>] [-mpq <file>] [-tft] [-roc] [-all] [-raw <id>] [-resolve-tooltip <id>]\n", argv[0]);
             fprintf(stderr, "  -data <dir>  Data directory containing MPQ archives\n");
             fprintf(stderr, "  -mpq <file>  Open a specific MPQ archive\n");
             fprintf(stderr, "  -tft         TFT overlay (War3.mpq + War3x.mpq)\n");
@@ -473,6 +624,7 @@ int main(int argc, char **argv) {
             fprintf(stderr, "  -all         Dump all abilities, not just missing ones\n");
             fprintf(stderr, "  -raw <id>    Agent brief: row, strings, buffs, aliases, class\n");
             fprintf(stderr, "               Without -roc/-tft, -raw prints ROC then TFT.\n");
+            fprintf(stderr, "  -resolve-tooltip <id> Resolve known <code,field> tooltip placeholders by rank.\n");
             return 0;
         }
     }
@@ -483,6 +635,8 @@ int main(int argc, char **argv) {
         return 1;
     }
     load_classes();
+
+    if (resolve_raw) return resolve_tooltip(resolve_raw, !roc_only, roc_only ? "ROC" : (tft ? "TFT" : "TFT"));
 
     if (raw) {
         int missing = 0;
