@@ -391,6 +391,41 @@ and Retail was launched with `-window -graphicsapi OpenGL2 -loadfile` (without
 initial allied setup whose target and control could not move was discarded;
 the corrected run is the allied evidence above.
 
+### TFT campaign-map replay (October 4, 2026)
+
+The Charm and both Purge cases were replayed on the TFT campaign map
+`Maps/FrozenThrone/Campaign/OrcX01.w3x` extracted from `War3xLocal.mpq`, using
+the same Retail executable. This distinguishes TFT runtime evidence from the
+earlier Prologue-map probes, which used ROC map scripts even though they tested
+TFT ability rows. The untouched OrcX01 control reached its “To Tame a Land”
+chapter card and entered gameplay after the documented click/Escape sequence.
+Probe helpers ran after `Trig_Intro_Skipped_Actions` executed the Gameplay
+trigger. The map's cinematic ability gates disable `AIba`, `AIcd`, `AIad`,
+`AIae`, `AIgx` and `Ashm`; they do not gate `ANch` or `Apg2`. The probes still
+explicitly added the tested ability to each Blood Mage.
+
+Charm reproduced the prior four-target result:
+
+```text
+CHARMTEST validOwner=0 heroOwner=12 corpseOwner=12 resistantOwner=12 heroType=1215324524 corpseLife=0.000 resistantSkinLevel=1
+```
+
+For hostile Purge, the allied lane continued moving (230.819 vs. 142.339 units
+at 1.5 seconds; 661.818 vs. 564.891 at 3.5 seconds). The hostile target was
+nearly stationary (-0.186 vs. -373.630 units; -0.420 vs. -823.889), while its
+control moved. In the corrected all-allied setup, both tested targets moved at
+roughly the same scale as their controls: 69.147 vs. 99.590 and -352.893 vs.
+-384.113 at 1.5 seconds; 394.208 vs. 308.507 and -765.988 vs. -834.990 at 3.5
+seconds. The negative values reflect travel along the map's X axis. As in the
+Prologue measurements, lane and route differences make these qualitative
+movement comparisons rather than exact speed measurements.
+
+All three fresh Preload captures were classified `ready_for_review`, then
+reviewed manually. That tool status only confirms probe markers and fresh
+capture; the ownership and movement values above are the behavioral evidence.
+The replays used temporary maps and scripts under `/tmp/wc3-retail-tft-rechecks`
+and did not modify repository or retail archives.
+
 ## Jaina / Archmage follow-up (September 19, 2026)
 
 The Archmage review tightened three abilities without adding Hero-specific

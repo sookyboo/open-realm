@@ -61,23 +61,29 @@ and insertion direction for review.
 {
   "id": "purge-friendly-hostile",
   "source": {
-    "archive": "../../../data/Warcraft III/War3Local.mpq",
-    "member": "Maps/Campaign/Prologue01.w3m"
+    "archive": "../../../data/Warcraft III/War3xLocal.mpq",
+    "member": "Maps/FrozenThrone/Campaign/OrcX01.w3x"
   },
   "script_member": "war3map.j",
   "retail_executable": "../../../data/Warcraft III/Warcraft III.exe",
   "metadata": {"mode": "TFT", "ability_rawcodes": ["Apg2"]},
-  "output_name": "Prologue01-PurgeProbe.w3m",
+  "output_name": "OrcX01-PurgeProbe.w3x",
   "result_file": "/path/to/Wine/Documents/Warcraft III/CustomMapData/purgetest.txt",
   "edits": [
     {
-      "function": "Trig_Intro_Cinematic_Skip_Actions",
-      "anchor": "function Trig_Intro_Cinematic_Skip_Actions takes nothing returns nothing",
+      "block": "globals",
+      "anchor": "endglobals",
+      "where": "before",
+      "file": "purge-probe-globals.j"
+    },
+    {
+      "function": "Trig_Intro_Skipped_Actions",
+      "anchor": "function Trig_Intro_Skipped_Actions takes nothing returns nothing",
       "where": "before",
       "file": "purge-probe-helpers.j"
     },
     {
-      "function": "Trig_Intro_Cinematic_Skip_Actions",
+      "function": "Trig_Intro_Skipped_Actions",
       "anchor": "call ConditionalTriggerExecute( gg_trg_Gameplay )",
       "where": "after",
       "text": "call PurgeTestStart()"
@@ -114,19 +120,23 @@ or pass `--wine-prefix`:
 python3 tools/wc3_retail_probe.py launch \
   /tmp/wc3-probes/purge-friendly-hostile --control
 # Confirm that the untouched control reaches the documented map screen, then
-# exit Retail before starting the instrumented copy.
+# exit Retail. The prepared launch requires the explicit confirmation flag.
 python3 tools/wc3_retail_probe.py launch \
-  /tmp/wc3-probes/purge-friendly-hostile
+  /tmp/wc3-probes/purge-friendly-hostile --control-confirmed
 ```
 
-The tool records `launch.json`, including the map hash, Windows path, command,
-and log path. It does not claim that Retail visibly loaded that map; confirm
-the expected chapter/map screen before continuing. Use the map's documented
-click/skip sequence. Do not switch a campaign probe to Custom Game or another
-menu route when something goes wrong. If the expected screen or fresh result
-does not appear, recheck the executable, source archive/map, launch path,
-flags, focus/click sequence, JASS callback/anchor and result filename against
-the documented successful procedure before making a change.
+The tool records the untouched launch separately in `control-launch.json` and
+the prepared launch in `launch.json`, including each map hash, Windows path,
+command and log path. A prepared launch requires both a matching control launch
+record and `--control-confirmed`; use that flag only after visually confirming
+the untouched map reached its expected screen. The tool records this
+acknowledgment but cannot independently observe the screen. Use the map's
+documented click/skip sequence. Do not switch a campaign probe to Custom Game
+or another menu route when something goes wrong. If the expected screen or
+fresh result does not appear, recheck the executable, edition-specific source
+archive/map, launch path, flags, focus/click sequence, JASS callback/anchor and
+result filename against the documented successful procedure before making a
+change.
 
 After running the prepared map in Retail, capture the expected result:
 
@@ -156,6 +166,13 @@ Example manifest contract:
 }
 ```
 Run the retail-independent tool tests with `python3 tests/test_wc3_retail_probe.py`.
+
+Preparation also checks every non-comment line in the existing JASS `globals`
+block against global-declaration syntax. This catches executable lines such as
+`set report = ...` accidentally copied into globals, which Retail rejects with
+an initialization dialog. Keep probe declarations in the globals fragment and
+executable statements in helper functions; do not build or launch a map if
+preparation reports a globals error.
 
 ## Exact extraction and repacking
 
