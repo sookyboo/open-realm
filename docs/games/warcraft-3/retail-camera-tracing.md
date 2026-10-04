@@ -39,6 +39,9 @@ uses `ward`. A valid unit ability and a rejected order can otherwise look like
 a failed summon.
 The resulting Retail observation and map-script audit for Sentry Ward are in
 [sentry-ward.md](sentry-ward.md#retail-jass-observation-tft).
+The multi-ability TFT run, its preserved probe inputs, JASS outcomes, and
+Frida return-value limits are documented in
+[ability-verification-review.md](ability-verification-review.md#tft-multi-ability-retail-batch-with-frida-october-4-2026).
 
 A JSON manifest points to the outer archive/map member, the JASS result path,
 and exact line edits. Function edits are scoped to one named function;
