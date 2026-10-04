@@ -25,6 +25,19 @@ the output from a Retail JASS probe. The tool does not launch the game or
 interpret behavior; start Retail with the established workflow below, perform
 the map-specific UI inputs, then capture the fresh `PreloadGen` file.
 
+Choose the source archive and map for the game edition that owns the ability:
+TFT campaign maps are under `Maps/FrozenThrone/Campaign/` in `War3xLocal.mpq`;
+ROC campaign maps in `War3Local.mpq` cannot establish TFT-only behavior. Before
+instrumenting a map, inspect its `war3map.j` for `SetPlayerAbilityAvailable`,
+`UnitRemoveAbility`, and relevant tech/availability changes, and identify the
+trigger that restores cinematic restrictions. Also resolve the ability's
+actual order string from the matching stock `Units/*AbilityFunc.txt` data.
+For example, Sentry Ward (`Aeye`) uses `evileye`, while Serpent Ward (`AOsw`)
+uses `ward`. A valid unit ability and a rejected order can otherwise look like
+a failed summon.
+The resulting Retail observation and map-script audit for Sentry Ward are in
+[sentry-ward.md](sentry-ward.md#retail-jass-observation-tft).
+
 A JSON manifest points to the outer archive/map member, the JASS result path,
 and exact line edits. Each edit is scoped to a named JASS function and must
 match exactly one whole line; missing or duplicate anchors are errors. Paths

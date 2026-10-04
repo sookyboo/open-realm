@@ -62,3 +62,61 @@ build/bin/ability_audit -data 'data/Warcraft III' -raw Adt1
 ```sh
 make test-wc3-engine WC3_PATTERN='wc3_spell.sentry_ward*'
 ```
+
+### Retail JASS observation (TFT)
+
+The stock TFT spell was probed in Retail 1.29.2 using
+`War3xLocal.mpq:Maps/FrozenThrone/Campaign/OrcX01.w3x`. A Player 0 Witch
+Doctor (`odoc`) with its stock `Aeye` ability was issued the point order
+`evileye`; three seconds later JASS enumerated the playable map for `oeye`
+units. The Retail executable SHA-256 was
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`. The
+fresh `PreloadGen` result was:
+
+```text
+SENTRYWARD found=1 owner=0 unitType=1868921189 x=-780.000 y=-5884.000 BTLF=0 Beye=1 Adt1=1
+```
+
+`unitType=1868921189` is rawcode `oeye`. This confirms a stock Retail cast
+created an `oeye` owned by the caster's player, and that the ward had its
+`Beye` and `Adt1` abilities about three seconds after the order. The requested
+point was `(-676, -5992)`; Retail reported `(-780, -5884)`. The reason for
+that placement offset has not been established. `GetUnitAbilityLevel` returned
+zero for `BTLF`, so that query does not establish timed-life presence or
+remaining duration. The stock `Dur=600` field is data evidence; actual expiry
+and removal have not been observed in Retail.
+
+The probe caster was created at player 0's start location plus `(1800, 700)`;
+the requested cast point was another `(300, 200)` from there. The JASS probe
+issued `IssuePointOrder(caster, "evileye", x + 300.0, y + 200.0)`, then used
+`GroupEnumUnitsInRect` over `bj_mapInitialPlayableArea` and recorded each
+`oeye`'s owner, type, position, and queried `BTLF`, `Beye`, and `Adt1` levels.
+The source map's `war3mapUnits.doo`, `war3map.w3u`, and `war3map.w3a` had no
+`oeye` or `Aeye` rawcode entries, so the detected ward was runtime-created.
+
+The TFT map's `war3map.j` was inspected before using it. Its cinematic
+disable trigger temporarily hides `AIba`, `AIcd`, `AIad`, `AIae`, `AIgx`, and
+`Ashm` from the campaign player, and its cleanup trigger re-enables those same
+six abilities. It does not name `Aeye`/`AIsw`, call `UnitRemoveAbility`, or
+change Sentry Ward availability. The map's `war3map.w3a` contains no `Aeye`
+override. The probe hook runs after the intro cleanup and gameplay start.
+
+An earlier attempt used the Reign of Chaos Prologue map from
+`War3Local.mpq`; its `found=0` result is not evidence about Sentry Ward because
+that map is not a TFT reference. Another failed attempt used order `ward`,
+which belongs to Serpent Ward. The TFT stock `Units/OrcAbilityFunc.txt` rows
+specify `Aeye Order=evileye` and `AOsw Order=ward`.
+
+In the successful exploratory run, the manifest expected a differently named
+result file than the name passed to `PreloadGenEnd`, so the probe tool's
+`capture` command could not consume it. The raw `PreloadGen` file was inspected
+directly; a reproducible run should use the same filename in both places.
+
+The observation covers creation, owner, raw unit type, and sampled position.
+It does not prove the 600-second expiry or explain the placement offset. The
+probe source and unmodified output are temporary files under
+`/tmp/wc3-retail-sentryward/` and the Wine `CustomMapData` directory; recreate
+them using the map preparation workflow in
+[retail-camera-tracing.md](retail-camera-tracing.md). Keep the manifest's
+`result_file` identical to the filename passed to `PreloadGenEnd` so the
+capture tool can enforce freshness.
