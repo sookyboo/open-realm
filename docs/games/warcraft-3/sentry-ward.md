@@ -137,9 +137,48 @@ An earlier probe added `AOsw` with `UnitAddAbility` and set its rank directly;
 Retail returned `accepted=false` at a different point. The successful replay
 both learned the Hero skill through `SelectHeroSkill` and changed the cast
 location, so the specific reason for that earlier rejection remains unknown.
-This observation does not verify ranks 2–3, ward attacks, or the authored
-40-second expiry. The probe files remain temporary under
+This rank 1 observation by itself does not verify higher-rank behavior, ward
+attacks, or the authored 40-second expiry. Rank 2 creation is verified by the
+paired differential below; rank 3 remains open. The probe files remain temporary under
 `/tmp/wc3-retail-serpentward-recheck/`.
+
+### Serpent Ward rank 2 validation differential (TFT)
+
+Retail rank 2 was compared with rank 1 in paired probes on the same TFT OrcX01
+map and executable (`Warcraft III.exe` SHA-256
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`). Both
+heroes learned stock `AOsw` through `SelectHeroSkill`; the probe used the same
+`ward` order and two nearby target points. At point A (the previously
+successful rank 1 point), rank 1 first produced owned `osp1`, while rank 2
+then failed at point B. Reversing cast order and assigning rank 2 to point A
+made rank 2 succeed and create owned `osp2`; rank 1 then failed at point B:
+the points were `(startX + 2100, startY + 900)` and
+`(startX + 2600, startY + 900)`, respectively.
+
+```text
+SERPENTWARD_COMPARE probe=serpentward-tft-ranks-v2 rank1Level=1 rank1Accepted=true rank1WardCount=1 rank1WardType=1869836337 rank2Level=2 rank2SkillPoints=2 rank2Accepted=false rank2WardCount=0 rank2WardType=0
+SERPENTWARD_COMPARE probe=serpentward-tft-ranks-v3 rank1Level=1 rank1Accepted=false rank1WardCount=0 rank1WardType=0 rank2Level=2 rank2SkillPoints=2 rank2Accepted=true rank2WardCount=1 rank2WardType=1869836338
+```
+
+The outcome follows the target point rather than the ability rank or cast
+order: point A accepts either rank, while point B rejects either rank. This
+resolves the earlier rank 2 rejection as a location-specific validation
+failure, not a rank 2 summon/identity failure. The specific map property that
+makes point B invalid has not been isolated, so do not label it blocked terrain
+or unit collision without another differential.
+
+A bounded Frida trace on the same executable observed the native reason code
+change with the point. For the successful point, SimpleSpell validation
+returned `0`, Ward's position fallback returned `0`, and `CAbilityWard`
+returned `0`. For the rejected point, SimpleSpell still returned `0`, the
+fallback returned `1`, and Ward returned `0x41`. The availability and owner
+checks also had the same observed results for both requests. Disassembly shows
+that this fallback result is what changes Ward's validation result; its exact
+map-level predicate remains unknown. The rank 2 JASS sample confirms the
+accepted summon was `osp2`, but does not test rank 2 expiry, attacks, or other
+ward behavior. Probe maps, captures, and traces are under
+`/tmp/wc3-serpentward-rank-compare-v2/run2/` and
+`/tmp/wc3-serpentward-rank-compare-v3/run/`.
 
 ### Serpent Ward expiry observation (TFT)
 
