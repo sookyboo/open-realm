@@ -469,6 +469,7 @@ static bool tooltip_value(char const *code, char const *field, uint32_t rank,
     if (a && rank < 4) {
         if (!strcmp(field, "Dur")) snprintf(out, out_size, "%g", a->dur[rank]);
         else if (!strcmp(field, "HeroDur")) snprintf(out, out_size, "%g", a->heroDur[rank]);
+        else if (!strcmp(field, "Cast")) snprintf(out, out_size, "%g", a->cast[rank]);
         else if (!strcmp(field, "Cool")) snprintf(out, out_size, "%g", a->cool[rank]);
         else if (!strcmp(field, "Cost")) snprintf(out, out_size, "%g", a->cost[rank]);
         else if (!strcmp(field, "Area")) snprintf(out, out_size, "%g", a->area[rank]);
@@ -539,22 +540,58 @@ static int resolve_tooltip(uint32_t raw, bool tft, cstring_t label) {
         size_t used = 0, refs_used = 0;
         while (*p && used + 1 < sizeof(resolved)) {
             if (*p == '<') {
-                char code[16] = {0}, field[32] = {0}, value[96] = {0};
+                char code[16] = {0}, field[32] = {0}, modifier[16] = {0}, value[96] = {0};
                 int consumed = 0;
-                if (sscanf(p, "<%15[^,],%31[^,>]>%n", code, field, &consumed) == 2 && consumed > 0) {
+                char const *token_end = strchr(p, '>');
+                if (token_end) {
+                    char token[96];
+                    size_t token_len = (size_t)(token_end - p - 1);
+                    if (token_len < sizeof(token)) {
+                        char *comma1, *comma2;
+                        memcpy(token, p + 1, token_len);
+                        token[token_len] = '\0';
+                        comma1 = strchr(token, ',');
+                        comma2 = comma1 ? strchr(comma1 + 1, ',') : NULL;
+                        if (comma1 && (size_t)(comma1 - token) < sizeof(code)) {
+                            *comma1 = '\0';
+                            memcpy(code, token, strlen(token) + 1);
+                            if (comma2) {
+                                *comma2 = '\0';
+                                if (strlen(comma1 + 1) < sizeof(field) && strlen(comma2 + 1) < sizeof(modifier)) {
+                                    memcpy(field, comma1 + 1, strlen(comma1 + 1) + 1);
+                                    memcpy(modifier, comma2 + 1, strlen(comma2 + 1) + 1);
+                                    consumed = (int)(token_end - p + 1);
+                                }
+                            } else if (strlen(comma1 + 1) < sizeof(field)) {
+                                memcpy(field, comma1 + 1, strlen(comma1 + 1) + 1);
+                                consumed = (int)(token_end - p + 1);
+                            }
+                        }
+                    }
+                }
+                int parts = consumed > 0 ? (*modifier ? 3 : 2) : 0;
+                if ((parts == 2 || parts == 3) && consumed > 0) {
                     bool ok = false;
                     uint32_t value_rank = 0;
                     size_t flen = strlen(field);
+                    char original_field[32] = {0};
+                    memcpy(original_field, field, sizeof(original_field) - 1);
                     AbilityData_t const *ref_ability = tooltip_ability(rows, count, RK(code));
                     if (ref_ability && flen && field[flen - 1] >= '1' && field[flen - 1] <= '4') {
                         value_rank = (uint32_t)(field[flen - 1] - '1');
                         field[flen - 1] = '\0';
                     } else if (!strcmp(code, section)) value_rank = rank;
-                    ok = tooltip_value(code, field, value_rank, rows, count, balance, bc, weapons, wc, value, sizeof(value));
+                    if (*modifier && strcmp(modifier, "%")) {
+                        fprintf(stderr, "unsupported tooltip format modifier: %s\n", modifier);
+                    } else {
+                        ok = tooltip_value(code, field, value_rank, rows, count, balance, bc, weapons, wc, value, sizeof(value));
+                        if (ok && !strcmp(modifier, "%")) snprintf(value, sizeof(value), "%g", strtof(value, NULL) * 100.0f);
+                    }
                     if (ok) {
                         int written = snprintf(resolved + used, sizeof(resolved) - used, "%s", value);
                         used += written > 0 ? (size_t)written : 0;
-                        int rw = snprintf(refs + refs_used, sizeof(refs) - refs_used, "%s  <%s,%s> = %s\n", refs_used ? "" : "", code, field, value);
+                        int rw = snprintf(refs + refs_used, sizeof(refs) - refs_used, "  <%s,%s%s%s> = %s\n", code, original_field,
+                                          *modifier ? "," : "", modifier, value);
                         if (rw > 0 && (size_t)rw < sizeof(refs) - refs_used) refs_used += (size_t)rw;
                     } else {
                         fprintf(stderr, "unresolved tooltip placeholder: <%.4s,%s>\n", code, field);

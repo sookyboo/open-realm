@@ -1,10 +1,12 @@
 # WC3 Ability Retail Verification — Temporary JASS Plan
 
 Status: Charm's stock target exclusions and creep-level boundary, stock
-`Apg2` friendly/hostile movement distinction, and TFT Sentry Ward summon
-identity sample are verified as described below. Sentry Ward expiry and its
-placement offset remain unresolved; the remaining scenarios are proposed
-follow-up work. This is a scratch document for resolving the narrow retail-behavior questions in
+`Apg2` friendly/hostile movement distinction, Serpent Ward ranks 1–2 summon
+identity and rank 1 expiry, Mana Flare lifecycle end conditions, and Mana
+Shield rank 1 depletion are verified as described below. Sentry Ward expiry
+and placement offset remain unresolved; the remaining scenarios are proposed
+follow-up work. This
+is a scratch document for resolving the narrow retail-behavior questions in
 [`warcraft3-ability-completion-implementation.tmp.md`](warcraft3-ability-completion-implementation.tmp.md).
 It does not replace headless regression tests or the project test rules.
 
@@ -150,6 +152,60 @@ The retained ability contract and observation are in
 This observation covers creation, owner, type, and a sampled position only.
 It does not complete the separate Serpent Ward scenario in the table below.
 
+## Completed JASS case: Serpent Ward rank 1 summon and expiry
+
+Retail TFT `AOsw` was checked on the same OrcX01 map and Warcraft III 1.29.2
+executable above. The probe inspected the map script for ability availability
+gates, learned `AOsw` on a level 2 Shadow Hunter with `SelectHeroSkill`, and
+issued the stock `ward` point order. At 3 seconds it found one owned `osp1`
+near the cast point. A second probe sampled after 3 seconds and again at 45
+seconds:
+
+    SERPENTWARDEXPIRY probe=serpentward-tft-expiry-v1 accepted=true AOswLevel=1 initialSeconds=3 initialWardCount=1 finalSeconds=45 finalWardCount=0
+
+This establishes rank 1 creation and that the ward was gone by 45 seconds,
+after the authored `Dur`/`HeroDur=40`. It does not establish the exact expiry
+second, higher-rank unit types/durations, combat behavior, or the reason for
+the observed placement offset. The full observation and replay pitfalls are
+in [`sentry-ward.md`](docs/games/warcraft-3/sentry-ward.md#serpent-ward-expiry-observation-tft).
+
+## Completed JASS case: Mana Flare end conditions
+
+Retail TFT `Amfl` was tested on OrcX01 after its intro cleanup. The map script
+does not suppress `Amfl`/`Bmfl`; the only availability toggles name six
+unrelated campaign abilities. Two Player 0 Faerie Dragons (`efdr`) received
+stock `Amfl` and the stock `manaflareon` order. JASS found `Bmfl` on both at
+3 seconds, issued `manaflareoff` to one, and found that buff absent on the
+canceled unit at 5 seconds. The uninterrupted unit had no `Bmfl` at 35 seconds:
+
+    MANAFLAREEND probe=manaflare-tft-endconditions-v2 naturalAccepted=true cancelAccepted=true stopAccepted=true naturalBuff3=1 naturalBuff35=0 cancelBuff3=1 cancelBuff5=0 cancelBuff35=0
+
+The field named `stopAccepted` is the probe's acceptance boolean for
+`manaflareoff`; the generic `stop` order was not tested. Natural removal by
+35 seconds is consistent with stock `Dur=30`, but sampling did not isolate
+the exact expiry second. Movement interruption and spell-triggered flare
+damage remain unverified. Full details are in
+[`mana-flare.md`](docs/games/warcraft-3/mana-flare.md#retail-lifecycle-observation-tft).
+
+## Completed JASS case: Mana Shield depletion
+
+Retail TFT rank 1 `ANms` was tested on OrcX01. JASS created three Player 0
+Naga Sea Witches, learned rank 1 on each, and activated `manashieldon` on two.
+The inactive unit was a damage control. After activation, the probe set mana
+to 20 on one shielded unit, 1 on the other, and 1 on the inactive unit, then
+applied an equal `UnitDamageTarget` hit to each. The short capture was:
+
+    MS probe=manashield-tft-depletion-v2 L=111 ON=11 HIT=111 full(M=10.000,L=0.000,B=1) low(M=0.000,L=7.589,B=0) off(M=1.000,L=8.432,B=0)
+
+`L=111`, `ON=11`, and `HIT=111` report all skills learned, both shield
+activation orders accepted, and all damage calls accepted. In each tuple,
+`M` is remaining mana, `L` is life lost, and `B` is the `BNms` level. With
+ample mana the shield spent 10 mana without life loss; with 1 mana it spent
+the last mana, reduced life loss relative to the inactive control, and was
+removed. This verifies rank 1 absorption and depletion removal, not exact
+fractional damage math, ranks 2–3, or the `ACmf` alias. See
+[`mana-shield.md`](docs/games/warcraft-3/mana-shield.md#retail-depletion-observation-tft).
+
 Reproduction pitfalls were material: first verify that a fresh map extracted
 from the correct archive loads; update a copy by replacing the exact
 `war3map.j` member in place with `smpq -a -f`; and place helper functions
@@ -195,7 +251,9 @@ command, result path, and failure diagnosis are recorded in
 | Phoenix Fire: burn refresh/stack and target selection | Use one legal enemy first; attack at controlled intervals and log life over time to separate instant damage from burn. Repeat with attacks faster/slower than burn expiry. Then use two symmetric legal enemies and record which one is hit on each cooldown; repeat the setup. Check that attack/movement orders are not replaced. | If target tie resolution is not reproducible from observable outcomes or a question asks for the hidden selection algorithm. |
 | Shadow Strike: slow lifetime separate from poison | Cast once on a unit with known movement speed. Log movement speed and life at short intervals; establish when movement returns and when poison damage ends. Repeat with Hero and ordinary targets and each alias. | If exact expiry ordering within one simulation frame is material or the observable status cannot be attributed to this spell. |
 | Mirror Image: copied Hero state | Cast on a Hero with known level, XP, attributes, ability ranks and inventory. Identify created images; query exposed Hero stats/XP/ability levels/inventory and observe life/mana. Repeat with one source value changed. Check image damage taken/dealt and illusion-sensitive dispel behavior separately. | For hidden constructor-copied fields with no JASS getter, or to explain an unobservable internal copy path. Scope the question to a named field before analysis. |
-| Serpent Ward (`AOsw`) / form-specific exceptions | For each Serpent Ward rank, observe its own unit type, owner, move response, speed, attacks against ground/air, spell-immunity response and duration. Do not substitute Sentry Ward (`Aeye`/`AIsw`, `evileye`, `oeye`) observations. For Crow Form, inspect available abilities and cast Faerie Fire with/without Mark of the Talon. | Only for internal classification not exposed through JASS and with no distinct gameplay test. Use AbilityData/UnitData for authored values. |
+| Serpent Ward (`AOsw`) / form-specific exceptions | **Ranks 1–2 verified:** learned stock TFT ranks create owned `osp1`/`osp2` at a known-good point. Paired order-reversal probes show rank 2's earlier rejection followed the alternate target location: either rank fails there, while either rank succeeds at the known-good point. Frida: shared spell validation agrees; the Ward position fallback is `0` at the good point and `1` at the rejected point, mapping to Ward result `0`/`0x41`. The specific map property rejecting the alternate point remains unidentified. Follow up on rank 3, rank 2/3 expiry, exact expiry boundary, movement, attacks against ground/air, and spell-immunity response. Keep separate from Sentry Ward (`Aeye`/`AIsw`, `evileye`, `oeye`). For Crow Form, inspect available abilities and cast Faerie Fire with/without Mark of the Talon. | Only for internal classification not exposed through JASS and with no distinct gameplay test. Use AbilityData/UnitData for authored values. |
+| Mana Flare (`Amfl`) end conditions | **Verified:** `Bmfl` is present at 3 seconds, absent at 5 seconds after `manaflareoff`, and absent at 35 seconds without interruption; stock `Dur=30`. Exact expiry boundary, generic Stop, move interruption and spell-triggered damage remain open. | Not needed for these sampled end states; exact hidden callback ordering below JASS timer resolution would require binary analysis. |
+| Mana Shield (`ANms`) rank 1 depletion | **Verified:** with ample mana a hit spends mana without life loss; with 1 mana the shield spends it, reduces life loss versus an inactive control, and `BNms` is removed. Fractional exact damage and ranks 2–3/`ACmf` remain open. | Not needed for the depletion/removal result. Binary work only if the exact internal damage ordering is required. |
 
 ## What JASS does not prove by itself
 
