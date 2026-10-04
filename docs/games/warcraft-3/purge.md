@@ -88,3 +88,19 @@ Focused tests cover alias procedure sharing, Aprg authored DataA slow,
 Apg2 DataD immobilize + expiry restore, Hero DataE pause, summoned DataC
 damage, and gradual post-pause recovery. Existing `t_spell.c` Purge cases must
 keep passing.
+
+### Retail JASS observation (October 4, 2026)
+
+Stock TFT `Apg2` was attached to independent Player 0 Blood Mage casters and
+cast on moving Footmen. Each target had an unpurged Footman control on a nearby
+parallel lane. For the allied case, both targets belonged to Player 0; for the
+hostile case, the target belonged to Player 12. Both casts spent approximately
+the authored 75 mana after accounting for regeneration, confirming completed
+casts. At 1.5 seconds after casting, the allied target had moved 382.881 units
+versus 403.491 for its control. The hostile target had moved 80.865 versus
+385.253 for its control, and at 3.5 seconds had moved 108.837 versus 608.150.
+This supports the retail tooltip contract: `Apg2` movement immobilization and
+reduction applies to enemies, while an allied target is accepted without a
+comparable movement effect. The probe does not establish an exact pause
+duration or slow curve, or whether the allied cast dispels buffs. See the full
+probe setup and raw output in [ability verification review](ability-verification-review.md#retail-purge-friendly-and-hostile-target-verification-october-4-2026).
