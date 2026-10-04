@@ -563,11 +563,11 @@ profile it writes a TGA under:
 
 The filename is timestamped, for example
 `WC3ScrnShot_100426_210616_01.tga`. The exact capitalization of `ScreenShots`
-is not significant on the Wine filesystem. Preserve the TGA in the Wine
-profile and convert a copy to PNG under the repository's ignored
-`screenshots/tmp/` directory. Do not derive Retail evidence PNGs from XWD
-captures: the earlier XWD conversion produced striped pixels even though its
-PNG metadata reported RGB.
+is not significant on the Wine filesystem. Convert the newest TGA to PNG under
+the repository's ignored `screenshots/tmp/` directory; the converter removes
+the TGA only after validating the PNG. Do not derive Retail evidence PNGs from
+XWD captures: the earlier XWD conversion produced striped pixels even though
+its PNG metadata reported RGB.
 
 For an automated headless run, follow the map-specific launch procedure in
 this document, then send `Print` to the focused Warcraft window with `xdotool`.
@@ -604,31 +604,25 @@ capture. If the map does not reach the expected screen or no fresh file is
 written, use the existing replay troubleshooting guidance above rather than
 changing the launch route by guesswork.
 
-Convert with Pillow, explicitly requesting RGB so an alpha channel in the TGA
-does not carry into the PNG:
+Convert the newest TGA with the repository tool. It validates the output PNG
+as RGB with the original dimensions and deletes the TGA only after validation
+succeeds. By default it searches `$WINEPREFIX` (or `~/.wine-war3`) and writes
+beside the repository under `screenshots/tmp/`:
 
 ```sh
-mkdir -p screenshots/tmp
-/opt/openrealm-tools/frida-venv/bin/python - <<'PY'
-from pathlib import Path
-from PIL import Image
-
-source = Path("/home/agent/.wine-war3/drive_c/users/agent/Documents/Warcraft III/ScreenShots/WC3ScrnShot_100426_210616_01.tga")
-output = Path("screenshots/tmp/war3-retail-printscreen-2026-10-04.png")
-with Image.open(source) as image:
-    image.convert("RGB").save(output, format="PNG", optimize=True)
-with Image.open(output) as image:
-    image.verify()
-with Image.open(output) as image:
-    print(image.format, image.mode, image.size, output)
-PY
+/opt/openrealm-tools/frida-venv/bin/python tools/convert_wc3_retail_screenshot.py \
+  --wine-prefix /home/agent/.wine-war3 --wine-user agent
 ```
 
-Use the actual TGA filename for each run and choose a descriptive PNG filename.
-The verified sample TGA was RGBA at 1024×576; its converted PNG was RGB at the
-same dimensions. This is a property of that capture, not a guarantee about all
-Retail window sizes. `screenshots/` is ignored by Git, so these local evidence
-images are not committed by default.
+The output keeps the TGA's timestamped basename with a `.png` extension. If
+the corresponding PNG already exists, the tool stops and leaves the TGA in
+place. The verified sample TGA was RGBA at 1024×576; its converted PNG was RGB
+at the same dimensions. This is a property of that capture, not a guarantee
+about all Retail window sizes. The tool needs Pillow; use a Python environment
+that has it installed. `screenshots/` is ignored by Git, so these local
+evidence images are not committed by default. See
+[`tools/README.md`](../../../tools/README.md#convert_wc3_retail_screenshotpy)
+for options and behavior.
 
 The sample image showed the in-game JASS comparison output for the test:
 rank 2 was accepted and produced unit type `1869836338` (`osp2`). The screenshot
