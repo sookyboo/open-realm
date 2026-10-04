@@ -1,0 +1,55 @@
+{
+  "id": "ability-batch-tft",
+  "source": {
+    "archive": "../../../data/Warcraft III/War3xLocal.mpq",
+    "member": "Maps/FrozenThrone/Campaign/OrcX01.w3x"
+  },
+  "script_member": "war3map.j",
+  "retail_executable": "../../../data/Warcraft III/Warcraft III.exe",
+  "metadata": {
+    "mode": "TFT",
+    "ability_rawcodes": [
+      "AEim",
+      "AEsh",
+      "AOeq",
+      "ANcs",
+      "ACca"
+    ],
+    "question": "Sequential damage, mana, slow, ground/air/structure and line-wave behavior with a bounded Frida SimpleSpell validation trace"
+  },
+  "output_name": "OrcX01-AbilityBatch-TFT-v1.w3x",
+  "result_file": "/home/agent/.wine-war3/drive_c/users/agent/Documents/Warcraft III/CustomMapData/ability-batch-tft-v1.txt",
+  "edits": [
+    {
+      "block": "globals",
+      "anchor": "endglobals",
+      "where": "before",
+      "file": "globals.j"
+    },
+    {
+      "function": "Trig_Intro_Skipped_Actions",
+      "anchor": "function Trig_Intro_Skipped_Actions takes nothing returns nothing",
+      "where": "before",
+      "file": "helpers.j"
+    },
+    {
+      "function": "Trig_Intro_Skipped_Actions",
+      "anchor": "call ConditionalTriggerExecute( gg_trg_Gameplay )",
+      "where": "after",
+      "text": "call AB_Start()"
+    }
+  ],
+  "capture_contract": {
+    "required_markers": [
+      "AB_META",
+      "AB_DONE"
+    ],
+    "inconclusive_markers": [
+      "AB_IM_SETUP order=0",
+      "AB_SS_SETUP order=0",
+      "AB_EQ_SETUP order=0",
+      "AB_CR_SETUP order=0",
+      "AB_CSW_SETUP order=0"
+    ]
+  }
+}

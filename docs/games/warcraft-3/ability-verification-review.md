@@ -423,8 +423,178 @@ movement comparisons rather than exact speed measurements.
 All three fresh Preload captures were classified `ready_for_review`, then
 reviewed manually. That tool status only confirms probe markers and fresh
 capture; the ownership and movement values above are the behavioral evidence.
-The replays used temporary maps and scripts under `/tmp/wc3-retail-tft-rechecks`
-and did not modify repository or retail archives.
+Those Charm and Purge replays used temporary maps and scripts under
+`/tmp/wc3-retail-tft-rechecks`; they did not modify repository or retail map
+assets.
+
+## TFT multi-ability Retail batch with Frida (October 4, 2026)
+
+To compare several still-open ability behaviors in one Retail session, a
+temporary JASS harness was injected into the same TFT OrcX01 map. The reusable
+inputs are now kept in
+[`tools/retail_probes/ability_batch_tft/`](../../../tools/retail_probes/ability_batch_tft/):
+the manifest, declarations, and JASS helpers. The passive native trace is
+[`tools/frida/wc3_simple_spell_validator_trace.js`](../../../tools/frida/wc3_simple_spell_validator_trace.js).
+The tested executable SHA-256 was
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`.
+
+The manifest uses `War3xLocal.mpq` and
+`Maps/FrozenThrone/Campaign/OrcX01.w3x`; before preparation, the source JASS
+was checked for ability/tech gates and the gameplay callback. Its cinematic
+gates affect `AIba`, `AIcd`, `AIad`, `AIae`, `AIgx`, and `Ashm`, not the five
+probed rawcodes. The harness starts after
+`Trig_Intro_Skipped_Actions` executes `gg_trg_Gameplay`, adds each stock
+ability explicitly, and records observations through `PreloadGen*`. Its
+sequence is Immolation (`AEim`), Shadow Strike (`AEsh`), Earthquake (`AOeq`),
+Cluster Rockets (`ANcs`), then Carrion Swarm (`ACca`). The last case is a
+stretch probe and is separately classified below.
+
+To repeat the preparation, first set `result_file` in the manifest to the
+`CustomMapData/ability-batch-tft-v1.txt` path under the selected Wine user's
+Documents directory. Then run from the repository root:
+
+```sh
+make mpqtool
+python3 tools/wc3_retail_probe.py prepare \
+  tools/retail_probes/ability_batch_tft/manifest.json \
+  /tmp/wc3-ability-batch/run
+```
+
+Preparation extracts an untouched control map, edits only the root
+`war3map.j`, repacks that exact member, and verifies that its bytes and root
+member list match expectations. Inspect `probe.json` and the staged JASS
+before launching. The manifest's result path must name the same file as the
+harness's `PreloadGenEnd` call.
+
+### Wine display and launch sequence
+
+This Wine prefix initially had no selected graphics driver. Retail and even
+Wine's Notepad reported `nodrv_CreateWindow`, despite Xvfb running. Query and,
+if absent, select Wine's X11 driver:
+
+```sh
+WINEPREFIX=/home/agent/.wine-war3 wine reg query \
+  'HKCU\Software\Wine\Drivers' /v Graphics
+WINEPREFIX=/home/agent/.wine-war3 wine reg add \
+  'HKCU\Software\Wine\Drivers' /v Graphics /t REG_SZ /d x11 /f
+```
+
+Close any failed Retail process before retrying. Run the probe launcher from
+inside the Xvfb shell and keep that shell alive: if `xvfb-run` exits as soon
+as the probe launch tool returns, the background Retail process loses its
+display. The control and prepared map use the same launch flags and input
+sequence:
+
+```sh
+WINEPREFIX=/home/agent/.wine-war3 xvfb-run -a \
+  -s '-screen 0 1280x720x24' bash -lc '
+    export WINEPREFIX=/home/agent/.wine-war3 WAYLAND_DISPLAY= WINEDEBUG=-all
+    python3 tools/wc3_retail_probe.py launch /tmp/wc3-ability-batch/run --control
+    sleep 30
+    xdotool mousemove 642 600 click 1
+    sleep 20
+    xdotool key Escape
+    sleep 10
+    xdotool key Print
+    sleep 5
+    find "$WINEPREFIX/drive_c/users/agent/Documents/Warcraft III/ScreenShots" \
+      -type f -iname "*.tga" -mmin -2 -printf "%p\n"
+    wine taskkill /IM "Warcraft III.exe" /F
+  '
+```
+
+Confirm the untouched screenshot shows OrcX01's “To Tame a Land” chapter
+card/gameplay, then exit Retail. Convert Warcraft's newly created TGA using
+the project tool; do not use XWD conversion. For the prepared launch, use the
+same persistent-Xvfb pattern, passing `--control-confirmed`. Start Frida server
+and the trace before clicking the card; keep the shell/Xvfb alive until the
+batch and bounded trace finish. For example, after the control was visually
+confirmed and closed:
+
+```sh
+WINEPREFIX=/home/agent/.wine-war3 xvfb-run -a \
+  -s '-screen 0 1280x720x24' bash -lc '
+    export WINEPREFIX=/home/agent/.wine-war3 WAYLAND_DISPLAY= WINEDEBUG=-all
+    PROBE=/tmp/wc3-ability-batch/run
+    python3 tools/wc3_retail_probe.py launch "$PROBE" --control-confirmed
+    sleep 30
+    wine /opt/openrealm-tools/frida-server.exe --listen=127.0.0.1:27043 \
+      >/tmp/wc3-ability-batch/frida-server.log 2>&1 &
+    FRIDA_SERVER_PID=$!
+    trap "kill $FRIDA_SERVER_PID 2>/dev/null || true" EXIT
+    /opt/openrealm-tools/frida-venv/bin/python \
+      tools/frida/wc3_retail_preflight.py "$PROBE" --remote 127.0.0.1:27043
+    TRACE="$PROBE/frida-simple-spell.jsonl"
+    /opt/openrealm-tools/frida-venv/bin/python \
+      tools/frida/trace_wc3_retail.py "$PROBE" \
+      --agent tools/frida/wc3_simple_spell_validator_trace.js --seconds 240 \
+      --output "$TRACE" &
+    TRACE_PID=$!
+    until rg -q 'agent-ready' "$TRACE" 2>/dev/null; do sleep 0.2; done
+    xdotool mousemove 642 600 click 1
+    sleep 20
+    xdotool key Escape
+    sleep 50
+    xdotool key Print
+    wait "$TRACE_PID"
+    wine taskkill /IM "Warcraft III.exe" /F
+  '
+python3 tools/wc3_retail_probe.py capture /tmp/wc3-ability-batch/run --timeout 180
+/opt/openrealm-tools/frida-venv/bin/python tools/convert_wc3_retail_screenshot.py \
+  --wine-prefix /home/agent/.wine-war3 --wine-user agent
+```
+
+The example uses the persistent shell's `DISPLAY` and Xauthority for both
+Retail and `xdotool`; do not invoke `xvfb-run` only around the probe-launch
+tool, because it backgrounds Retail and then tears down that display. The
+Frida server and trace are bounded/passive; the preflight checks process,
+map, executable hash, client version, and attach before continuing the map.
+The reusable preflight and trace contract are described in
+[`retail-camera-tracing.md`](retail-camera-tracing.md#optional-frida-attach-preflight).
+The final prepared screenshot is
+[`WC3ScrnShot_100426_234242_01.png`](../../../screenshots/tmp/WC3ScrnShot_100426_234242_01.png)
+(RGB, 1024×576); it shows the expected TFT chapter card. The later gameplay
+capture is
+[`WC3ScrnShot_100426_234440_02.png`](../../../screenshots/tmp/WC3ScrnShot_100426_234440_02.png)
+(RGB, 1024×576) and visibly includes the probe's JASS debug lines.
+
+### Batch results and evidence limits
+
+The capture tool read a fresh result containing `AB_META` and `AB_DONE` and
+classified it `ready_for_review`. The first temporary manifest still listed
+older setup-marker spellings, so it failed to notice the Carrion Swarm
+`order=0`; the preserved manifest now marks any ability's `order=0` setup line
+as inconclusive. This tool status is only a freshness/marker check. The
+manually reviewed observations were:
+
+| Probe | JASS observation | Review |
+|---|---|---|
+| Immolation (`AEim`) | Order accepted. Mana samples fell from 68.802 at 1 s to 44.006 at 5 s; the ground target took damage (life 210 to 38.034) while the air target remained at 413. | Supports mana drain and ground/air filtering for this sampled cast; it does not resolve near-zero-mana shutdown thresholds or exact payment cadence. |
+| Shadow Strike (`AEsh`) | Order accepted. The target registered 10 damage events / 175.893 total damage by 16 s. A moving control was sampled, but the two units' paths diverged and starting coordinates were not logged. | Supports repeated post-cast damage for this target. The movement samples do not establish the slow amount or lifetime; poison-vs-direct damage attribution and expiry boundaries remain open. |
+| Earthquake (`AOeq`) | Order accepted. Building life fell from 250 to 0 in five one-second samples; ground unit life stayed 210, and the channel order remained active until Stop. | Supports building damage and no damage to the sampled ground unit in this setup. |
+| Cluster Rockets (`ANcs`) | Order accepted. By 3 s one ground unit had taken 34.579, the building 35, the second ground unit and air unit no damage. | Supports those sampled target outcomes only; the short observation does not establish the full duration, cap, or all target masks. |
+| Carrion Swarm (`ACca`) | `IssuePointOrder` returned false, but later damage events were recorded on some watched units, including a same-owner unit. | Inconclusive: accepted-order status conflicts with observed damage. Use a fresh caster without an inherited `ACca`, log `OrderId("carrionswarm")` and caster state, then repeat before making a behavior claim. |
+
+For the native trace, the executable was also checked with a targeted
+radare2 disassembly (`s 0xB28980; pd 16`) rather than whole-image analysis.
+At VA `0xB28980` (RVA `0x728980`, image base `0x400000`), the code saves
+`ECX` as its receiver and calls `0xB4ADF0`. The read-only Frida agent logged
+five validator entries for three order-ID values: `0xD0099` (also observed
+as Earthquake's current JASS order), `0xD02AC`, and `0xD00FA`; all returned
+zero. The hook intentionally logs pointer values without dereferencing game
+objects and does not identify the receiver's concrete ability class. As
+documented in [Retail return-value analysis](retail-camera-tracing.md#finding-ability-hooks-from-a-rawcode),
+SimpleSpell's zero result selects further fallback validation; it does not
+mean “order accepted.” The Frida trace therefore localizes shared native
+validation for three order paths but does not add gameplay proof or map the
+other two abilities to this function.
+
+This one batch produced useful JASS observations for four of its five probes;
+Carrion Swarm requires a corrected follow-up. It does not close the broader
+open questions in the temporary ability plan, such as field meanings, caps,
+aliases, expiry boundaries, or hidden target-selection rules. This batch did
+add the documented JASS and Frida probe inputs to the repository but did not
+modify Retail archives.
 
 ## Jaina / Archmage follow-up (September 19, 2026)
 
