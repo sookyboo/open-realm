@@ -20,12 +20,19 @@ Loose custom maps are not in that enumerator; see
 [DotA Custom-Map Playability](games/warcraft-3/dota-map-playability.md).
 
 For focused Retail JASS ability probes, `tools/wc3_retail_probe.py prepare`
-extracts a campaign map, applies function-scoped exact-line JASS insertions,
-replaces only `war3map.j`, and verifies that the archive member listing is
-unchanged and the embedded script matches byte-for-byte.
-After a manual Retail run, `capture` accepts only a fresh `PreloadGen` result
-and stores the raw output plus parsed values. It does not launch Retail or
-interpret gameplay. See [Retail Warcraft III camera tracing](games/warcraft-3/retail-camera-tracing.md#ability-probe-preparation-and-result-capture)
+extracts a campaign map, applies exact-line JASS insertions scoped to a
+function or the existing globals block, rejects malformed/late globals blocks,
+replaces only `war3map.j`, and verifies the archive member listing, embedded
+script, and `PreloadGenEnd` result filename.
+`launch --control` and `launch` convert the untouched/prepared map path with
+`winepath -w`, apply the required Retail launch flags, and record map/executable
+hashes and the command. They do not confirm the visible map screen or drive
+its UI; follow the documented map procedure. `capture` requires the most recent
+launch to target the prepared map and accepts only fresh output. Optional
+capture markers classify failed setup as `inconclusive`; a ready capture still
+needs human review and is not an automatic behavior pass. If a run deviates
+from its expected screen or output, re-read the verification procedure before
+changing launch or probe setup. See [Retail Warcraft III camera tracing](games/warcraft-3/retail-camera-tracing.md#ability-probe-preparation-and-result-capture)
 for the manifest format and workflow.
 
 Use `make audit-wc3-hero-saveload` to walk the player Hero on every campaign
