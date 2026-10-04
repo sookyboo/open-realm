@@ -4,7 +4,8 @@
 A JSON manifest names a source campaign map, exact JASS line anchors, injected
 JASS fragments, and the expected PreloadGen result path. Preparation preserves
 the source and verifies the repacked script byte-for-byte. Capture accepts only
-a result file refreshed after preparation; it does not interpret observations.
+a result file refreshed after the recorded prepared-map launch. Capture markers
+gate setup readiness but never decide gameplay pass/fail.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -24,6 +26,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 PRELOAD_RE = re.compile(r'Preload\s*\(\s*"((?:\\.|[^"\\])*)"\s*\)', re.S)
+RETAIL_LAUNCH_FLAGS = ("-window", "-graphicsapi", "OpenGL2")
 
 
 class ProbeError(RuntimeError):
@@ -42,8 +45,9 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def run(args: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[bytes]:
-    result = subprocess.run(args, cwd=cwd, check=False, capture_output=True)
+def run(args: list[str], *, cwd: Path | None = None,
+        env: dict[str, str] | None = None) -> subprocess.CompletedProcess[bytes]:
+    result = subprocess.run(args, cwd=cwd, env=env, check=False, capture_output=True)
     if result.returncode:
         detail = result.stderr.decode(errors="replace").strip()
         if not detail:
@@ -100,10 +104,13 @@ def read_manifest(path: Path) -> dict[str, Any]:
     for index, edit in enumerate(edits):
         if not isinstance(edit, dict):
             raise ProbeError(f"edit {index} must be an object")
-        if not all(edit.get(key) for key in ("function", "anchor", "where")):
-            raise ProbeError(f"edit {index} requires function, anchor and where")
-        if not all(isinstance(edit[key], str) for key in ("function", "anchor", "where")):
+        target_count = int("function" in edit) + int("block" in edit)
+        if target_count != 1 or not all(edit.get(key) for key in ("anchor", "where")):
+            raise ProbeError(f"edit {index} requires exactly one function or block='globals', plus anchor and where")
+        if ("function" in edit and (not isinstance(edit["function"], str) or not edit["function"])) or not isinstance(edit["anchor"], str) or not isinstance(edit["where"], str):
             raise ProbeError(f"edit {index} function, anchor and where must be strings")
+        if "block" in edit and edit["block"] != "globals":
+            raise ProbeError(f"edit {index} supports only block='globals'")
         if edit["where"] not in ("before", "after"):
             raise ProbeError(f"edit {index} where must be 'before' or 'after'")
         if bool(edit.get("text")) == bool(edit.get("file")):
@@ -116,6 +123,13 @@ def read_manifest(path: Path) -> dict[str, Any]:
         raise ProbeError("result_file must be a string path")
     if "metadata" in manifest and not isinstance(manifest["metadata"], dict):
         raise ProbeError("metadata must be a JSON object")
+    contract = manifest.get("capture_contract", {})
+    if not isinstance(contract, dict):
+        raise ProbeError("capture_contract must be a JSON object")
+    for key in ("required_markers", "inconclusive_markers"):
+        values = contract.get(key, [])
+        if not isinstance(values, list) or any(not isinstance(value, str) or not value for value in values):
+            raise ProbeError(f"capture_contract.{key} must be an array of non-empty strings")
     return manifest
 
 
@@ -146,6 +160,33 @@ def function_range(script: str, name: str) -> tuple[int, int]:
     return start, matches[0].end() + end_match.end()
 
 
+def globals_range(script: str) -> tuple[int, int]:
+    opens = list(re.finditer(r"(?m)^[ \t]*globals[ \t]*(?:\r?$)", script))
+    closes = list(re.finditer(r"(?m)^[ \t]*endglobals[ \t]*(?:\r?$)", script))
+    if len(opens) != 1 or len(closes) != 1 or closes[0].start() < opens[0].end():
+        raise ProbeError(
+            "a globals edit requires exactly one well-formed top-level globals/endglobals block")
+    first_function = re.search(r"(?m)^function\s+\w+\s+takes\b", script)
+    if first_function and opens[0].start() > first_function.start():
+        raise ProbeError("JASS globals block appears after a function declaration")
+    return opens[0].start(), closes[0].end()
+
+
+def validate_jass_layout(script: str) -> None:
+    opens = list(re.finditer(r"(?m)^[ \t]*globals[ \t]*(?:\r?$)", script))
+    closes = list(re.finditer(r"(?m)^[ \t]*endglobals[ \t]*(?:\r?$)", script))
+    if len(opens) != len(closes) or len(opens) > 1:
+        raise ProbeError(
+            f"JASS must have at most one globals block; found {len(opens)} globals and {len(closes)} endglobals. "
+            "Put declarations inside the existing block; never inject a second globals/endglobals block.")
+    if opens:
+        if closes[0].start() < opens[0].end():
+            raise ProbeError("JASS endglobals appears before globals")
+        first_function = re.search(r"(?m)^function\s+\w+\s+takes\b", script)
+        if first_function and opens[0].start() > first_function.start():
+            raise ProbeError("JASS globals block appears after a function declaration")
+
+
 def line_offsets(text: str) -> list[tuple[int, int, str]]:
     rows = []
     offset = 0
@@ -161,7 +202,12 @@ def apply_edits(script: str, edits: list[dict[str, Any]], base: Path) -> str:
     newline = "\r\n" if "\r\n" in script else "\n"
     insertions: list[tuple[int, str, str]] = []
     for index, edit in enumerate(edits):
-        start, end = function_range(script, str(edit["function"]))
+        if edit.get("block") == "globals":
+            start, end = globals_range(script)
+            target_name = "globals block"
+        else:
+            start, end = function_range(script, str(edit["function"]))
+            target_name = str(edit["function"])
         function_text = script[start:end]
         anchor = str(edit["anchor"]).strip()
         found: list[tuple[int, int, str]] = []
@@ -171,7 +217,7 @@ def apply_edits(script: str, edits: list[dict[str, Any]], base: Path) -> str:
         if len(found) != 1:
             raise ProbeError(
                 f"edit {index}: expected one line matching anchor {anchor!r} inside "
-                f"{edit['function']}, found {len(found)}")
+                f"{target_name}, found {len(found)}")
         line_start, line_end, _ = found[0]
         fragment = edit_text(edit, base).replace("\n", newline)
         if edit["where"] == "before":
@@ -187,6 +233,7 @@ def apply_edits(script: str, edits: list[dict[str, Any]], base: Path) -> str:
         raise ProbeError("multiple edits resolve to the same insertion point")
     for position, addition, _description in sorted(insertions, reverse=True):
         script = script[:position] + addition + script[position:]
+    validate_jass_layout(script)
     return script
 
 
@@ -198,6 +245,19 @@ def snapshot_result(path: Path) -> dict[str, Any]:
     stat = path.stat()
     return {"exists": True, "mtime_ns": stat.st_mtime_ns,
             "size": stat.st_size, "sha256": sha256_file(path)}
+
+
+def preload_end_names(script: str) -> list[str]:
+    return re.findall(r'PreloadGenEnd\s*\(\s*"((?:\\.|[^"\\])*)"\s*\)', script)
+
+
+def validate_result_filename(script: str, result_file: Path) -> list[str]:
+    names = [decode_jass_string(name) for name in preload_end_names(script)]
+    if result_file.name not in names:
+        raise ProbeError(
+            f"result_file basename {result_file.name!r} does not match any JASS PreloadGenEnd filename; "
+            f"found {names!r}")
+    return names
 
 
 def map_root_members(mpqtool: Path, archive: Path) -> list[str]:
@@ -263,6 +323,8 @@ def prepare(args: argparse.Namespace) -> None:
         # Preserve any legacy non-UTF-8 comment bytes while editing ASCII anchors.
         script_text = source_script.decode("utf-8", errors="surrogateescape")
         edited_text = apply_edits(script_text, manifest["edits"], base)
+        result_name = result_file.name
+        result_names = validate_result_filename(edited_text, result_file)
         edited_bytes = edited_text.encode("utf-8", errors="surrogateescape")
         script_path.write_bytes(edited_bytes)
         shutil.copyfile(map_path, output_map)
@@ -306,18 +368,106 @@ def prepare(args: argparse.Namespace) -> None:
         "source_script_sha256": sha256_bytes(source_script),
         "edited_script": str(script_path),
         "edited_script_sha256": sha256_bytes(edited_bytes),
+        "edits": [
+            {"target": edit.get("function", "block:" + str(edit.get("block"))),
+             "anchor": edit["anchor"], "where": edit["where"]}
+            for edit in manifest["edits"]
+        ],
         "prepared_map": str(output_map),
         "prepared_map_sha256": sha256_file(output_map),
         "result_file": str(result_file),
+        "result_filename_verified": result_name,
+        "preload_gen_end_filenames": result_names,
         "result_before_prepare": result_before,
+        "capture_contract": manifest.get("capture_contract", {}),
         "metadata": manifest.get("metadata", {}),
         "notes": manifest.get("notes", ""),
     }
     (output_dir / "probe.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     print(f"Prepared map: {output_map}")
     print(f"Verified one {manifest['script_member']} member and byte-matched it to: {script_path}")
-    print(f"After the Retail run, capture the fresh result with: "
+    if executable_path:
+        print(f"First launch the untouched control for visual preflight: "
+              f"python3 {Path(__file__).resolve()} launch {output_dir} --control")
+        print("After confirming its expected screen, exit Retail and start the prepared map with: "
+              f"python3 {Path(__file__).resolve()} launch {output_dir}")
+        print(f"After verifying the prepared map visually and completing its documented UI sequence, capture with: "
+              f"python3 {Path(__file__).resolve()} capture {output_dir}")
+    else:
+        print(f"After the Retail run, capture the fresh result with: "
           f"python3 {Path(__file__).resolve()} capture {output_dir}")
+
+
+def launch(args: argparse.Namespace) -> None:
+    output_dir = args.probe_dir.expanduser().resolve()
+    record_path = output_dir / "probe.json"
+    if not record_path.is_file():
+        raise ProbeError(f"prepared probe record not found: {record_path}")
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    executable = record.get("retail_executable")
+    if not executable:
+        raise ProbeError("probe manifest has no retail_executable; cannot create a Retail launch")
+    executable_path = Path(executable)
+    if not executable_path.is_file():
+        raise ProbeError(f"Retail executable not found: {executable_path}")
+    current_executable_sha = sha256_file(executable_path)
+    if current_executable_sha != record.get("retail_executable_sha256"):
+        raise ProbeError("Retail executable hash changed since preparation; prepare the probe again")
+
+    role = "control" if args.control else "prepared"
+    map_key = "control_map" if args.control else "prepared_map"
+    hash_key = "control_map_sha256" if args.control else "prepared_map_sha256"
+    map_path = Path(record[map_key])
+    if not map_path.is_file():
+        raise ProbeError(f"{role} map not found: {map_path}")
+    map_sha = sha256_file(map_path)
+    if map_sha != record.get(hash_key):
+        raise ProbeError(f"{role} map hash changed since preparation: {map_path}")
+
+    environment = os.environ.copy()
+    if args.wine_prefix:
+        environment["WINEPREFIX"] = str(Path(args.wine_prefix).expanduser().resolve())
+    converted = run([args.winepath, "-w", str(map_path)], env=environment)
+    windows_map_path = converted.stdout.decode("utf-8", errors="replace").strip()
+    if not windows_map_path:
+        raise ProbeError(f"winepath returned an empty Windows path for {map_path}")
+    command = [args.wine, str(executable_path), *RETAIL_LAUNCH_FLAGS,
+               "-loadfile", windows_map_path]
+    launched_at_ns = time.time_ns()
+    log_path = output_dir / ("launch-control.log" if args.control else "launch-prepared.log")
+    try:
+        with log_path.open("wb") as log_file:
+            process = subprocess.Popen(command, cwd=ROOT, env=environment,
+                                       stdin=subprocess.DEVNULL, stdout=log_file,
+                                       stderr=subprocess.STDOUT, start_new_session=True)
+    except OSError as error:
+        raise ProbeError(f"could not start Retail launch: {error}") from error
+    launch_record = {
+        "probe_id": record["id"],
+        "role": role,
+        "launched_at": datetime.now(timezone.utc).isoformat(),
+        "launched_at_ns": launched_at_ns,
+        "pid": process.pid,
+        "retail_executable": str(executable_path),
+        "retail_executable_sha256": current_executable_sha,
+        "map_path": str(map_path),
+        "map_sha256": map_sha,
+        "windows_map_path": windows_map_path,
+        "command": command,
+        "wine_prefix": environment.get("WINEPREFIX"),
+        "log": str(log_path),
+        "manual_map_confirmation_required": True,
+    }
+    (output_dir / "launch.json").write_text(
+        json.dumps(launch_record, indent=2) + "\n", encoding="utf-8")
+    print(f"Started Retail pid {process.pid} for the {role} map.")
+    print("Command: " + " ".join(command))
+    print(f"Wine log: {log_path}")
+    if args.control:
+        print("Visually confirm the untouched control reaches its expected map screen, then exit Retail.")
+    else:
+        print("Visually confirm the prepared map reaches its expected screen, then complete its documented UI sequence.")
+        print("Capture also requires a fresh result containing the manifest's required probe markers.")
 
 
 def decode_jass_string(value: str) -> str:
@@ -332,6 +482,23 @@ def capture(args: argparse.Namespace) -> None:
     record = json.loads(record_path.read_text(encoding="utf-8"))
     result_path = Path(record["result_file"])
     baseline = record["result_before_prepare"]
+    required_after_ns = record["prepared_at_ns"]
+    if record.get("retail_executable"):
+        launch_path = output_dir / "launch.json"
+        if not launch_path.is_file():
+            raise ProbeError(
+                "no Retail launch record; use the tool's launch command with the prepared map, "
+                "then confirm the expected screen before capture")
+        launch_record = json.loads(launch_path.read_text(encoding="utf-8"))
+        if launch_record.get("probe_id") != record.get("id") or launch_record.get("role") != "prepared":
+            raise ProbeError("latest Retail launch was not for this prepared map; launch it before capture")
+        if launch_record.get("map_sha256") != record.get("prepared_map_sha256"):
+            raise ProbeError("Retail launch map hash does not match the prepared map")
+        if not all(flag in launch_record.get("command", []) for flag in RETAIL_LAUNCH_FLAGS):
+            raise ProbeError("Retail launch record is missing required -window/-graphicsapi OpenGL2 flags")
+        if "-loadfile" not in launch_record.get("command", []) or not launch_record.get("windows_map_path"):
+            raise ProbeError("Retail launch record is missing its winepath -w map argument")
+        required_after_ns = max(required_after_ns, launch_record.get("launched_at_ns", 0))
     capture_txt = output_dir / "result.txt"
     capture_json = output_dir / "capture.json"
     if capture_txt.exists() or capture_json.exists():
@@ -342,7 +509,7 @@ def capture(args: argparse.Namespace) -> None:
     while time.monotonic() <= deadline:
         if result_path.is_file():
             current = snapshot_result(result_path)
-            newer = current["mtime_ns"] > record["prepared_at_ns"]
+            newer = current["mtime_ns"] > required_after_ns
             changed = (not baseline.get("exists")
                        or current["mtime_ns"] != baseline.get("mtime_ns")
                        or current["sha256"] != baseline.get("sha256"))
@@ -360,6 +527,27 @@ def capture(args: argparse.Namespace) -> None:
     raw = result_path.read_bytes()
     text = raw.decode("utf-8", errors="replace")
     values = [decode_jass_string(match) for match in PRELOAD_RE.findall(text)]
+    contract = record.get("capture_contract", {})
+    required_markers = contract.get("required_markers", [])
+    inconclusive_markers = contract.get("inconclusive_markers", [])
+    combined = "\n".join(values)
+    missing_markers = [marker for marker in required_markers if marker not in combined]
+    found_inconclusive_markers = [marker for marker in inconclusive_markers if marker in combined]
+    if not values:
+        status = "inconclusive"
+        reasons = ["no Preload values were parsed"]
+    else:
+        reasons = []
+        if missing_markers:
+            reasons.append("required probe markers are missing")
+        if found_inconclusive_markers:
+            reasons.append("probe reported a failed setup or rejected action")
+        if reasons:
+            status = "inconclusive"
+        elif required_markers:
+            status = "ready_for_review"
+        else:
+            status = "unclassified"
     capture_txt.write_bytes(raw)
     report = {
         "probe_id": record["id"],
@@ -369,7 +557,13 @@ def capture(args: argparse.Namespace) -> None:
         "result_sha256": fresh_snapshot["sha256"],
         "raw_copy": str(capture_txt),
         "preload_values": values,
-        "interpretation": "Not inferred by this tool; review the raw output and probe contract.",
+        "status": status,
+        "required_markers": required_markers,
+        "missing_required_markers": missing_markers,
+        "inconclusive_markers": inconclusive_markers,
+        "found_inconclusive_markers": found_inconclusive_markers,
+        "status_reasons": reasons,
+        "interpretation": "The status is a capture/setup gate only, not a gameplay pass/fail judgment. Review the raw output and probe contract.",
     }
     capture_json.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(f"Captured fresh result: {capture_txt}")
@@ -391,6 +585,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     capture_parser.add_argument("--timeout", type=float, default=180.0)
     capture_parser.add_argument("--poll-interval", type=float, default=1.0)
     capture_parser.set_defaults(func=capture)
+    launch_parser = commands.add_parser(
+        "launch", help="launch the control or prepared map with the documented Wine arguments")
+    launch_parser.add_argument("probe_dir", type=Path, help="directory created by prepare")
+    launch_parser.add_argument("--control", action="store_true",
+                               help="launch the untouched control map for the visual preflight")
+    launch_parser.add_argument("--wine", default="wine", help="Wine executable")
+    launch_parser.add_argument("--winepath", default="winepath", help="Wine path converter")
+    launch_parser.add_argument("--wine-prefix", type=Path,
+                               help="optional WINEPREFIX used for winepath and Retail")
+    launch_parser.set_defaults(func=launch)
     return parser.parse_args(argv)
 
 

@@ -21,9 +21,11 @@ assets.
 ## Ability probe preparation and result capture
 
 Use `tools/wc3_retail_probe.py` to prepare a copied campaign map and preserve
-the output from a Retail JASS probe. The tool does not launch the game or
-interpret behavior; start Retail with the established workflow below, perform
-the map-specific UI inputs, then capture the fresh `PreloadGen` file.
+the output from a Retail JASS probe. The tool can launch the Retail executable
+with the established Wine arguments and records which control/prepared map it
+asked Retail to open. It cannot confirm the visible game screen or drive
+map-specific UI inputs; visually confirm the expected screen, perform the
+documented UI sequence, then capture the fresh `PreloadGen` file.
 
 Choose the source archive and map for the game edition that owns the ability:
 TFT campaign maps are under `Maps/FrozenThrone/Campaign/` in `War3xLocal.mpq`;
@@ -39,11 +41,21 @@ The resulting Retail observation and map-script audit for Sentry Ward are in
 [sentry-ward.md](sentry-ward.md#retail-jass-observation-tft).
 
 A JSON manifest points to the outer archive/map member, the JASS result path,
-and exact line edits. Each edit is scoped to a named JASS function and must
-match exactly one whole line; missing or duplicate anchors are errors. Paths
-inside the manifest are relative to the manifest itself unless absolute. The
-following example assumes it is saved in `docs/games/warcraft-3/`; replace the
-fragment and result paths for the local setup:
+and exact line edits. Function edits are scoped to one named function;
+declaration edits use `"block": "globals"` to target the script's existing
+top-level globals block. Each anchor must match exactly one whole line.
+Preparation validates the JASS globals layout and rejects a second or
+misplaced globals block, which Retail rejects during map initialization.
+Missing or duplicate anchors are errors. Paths inside the manifest are
+relative to the manifest itself unless absolute. The following example
+assumes it is saved in `docs/games/warcraft-3/`; replace the fragment and
+result paths for the local setup:
+
+To add a JASS global, insert its declaration into the existing block, for
+example with `{"block":"globals","anchor":"globals","where":"after",
+"text":"unit gg_probe_caster = null"}`. Do not place a new `globals` block in
+a function edit. `probe.json` records each selected block/function, anchor,
+and insertion direction for review.
 
 ```json
 {
@@ -87,11 +99,34 @@ Preparation retains `control/<map>`, the edited `stage/war3map.j`, the
 instrumented map, and `probe.json` containing hashes and the pre-run result-file
 snapshot. It repacks only the exact `war3map.j` member with `smpq -a -f`, then
 checks that the root member listing is unchanged, that the map contains one
-exact root script member, and that extracting it matches the staged script
-byte-for-byte. If `retail_executable` is supplied, its path and SHA-256 are
-also recorded. `metadata` is copied into the run record for fields such as
-edition and tested rawcodes. Keep and load the untouched control map first when
-establishing a new Retail installation/map workflow.
+exact root script member, that extracting it matches the staged script
+byte-for-byte, and that the result filename agrees with a `PreloadGenEnd`
+filename in the edited JASS. If `retail_executable` is supplied, its path and
+SHA-256 are also recorded. `metadata` is copied into the run record for fields
+such as edition and tested rawcodes. Keep and load the untouched control map
+first when establishing a new Retail installation/map workflow.
+
+Launch using the tool so the prepared map path is converted by `winepath -w`
+and Retail receives the expected flags. Set `WINEPREFIX` in the environment,
+or pass `--wine-prefix`:
+
+```sh
+python3 tools/wc3_retail_probe.py launch \
+  /tmp/wc3-probes/purge-friendly-hostile --control
+# Confirm that the untouched control reaches the documented map screen, then
+# exit Retail before starting the instrumented copy.
+python3 tools/wc3_retail_probe.py launch \
+  /tmp/wc3-probes/purge-friendly-hostile
+```
+
+The tool records `launch.json`, including the map hash, Windows path, command,
+and log path. It does not claim that Retail visibly loaded that map; confirm
+the expected chapter/map screen before continuing. Use the map's documented
+click/skip sequence. Do not switch a campaign probe to Custom Game or another
+menu route when something goes wrong. If the expected screen or fresh result
+does not appear, recheck the executable, source archive/map, launch path,
+flags, focus/click sequence, JASS callback/anchor and result filename against
+the documented successful procedure before making a change.
 
 After running the prepared map in Retail, capture the expected result:
 
@@ -100,12 +135,26 @@ python3 tools/wc3_retail_probe.py capture \
   /tmp/wc3-probes/purge-friendly-hostile --timeout 180
 ```
 
-Capture waits for a non-empty result file whose timestamp is newer than
-preparation and whose timestamp or content differs from the previous snapshot.
-It saves the untouched result text as `result.txt`, extracts `Preload` values
-to `capture.json`, and does not label them pass/fail. A missing or stale file
-times out instead of being reported as a successful run. Use a distinct result
+Capture requires that the latest recorded Retail launch used the prepared map,
+and waits for a non-empty result file newer than that launch whose timestamp or
+content differs from the pre-preparation snapshot. It saves the untouched
+result text as `result.txt` and extracts `Preload` values to `capture.json`.
+Without a `capture_contract`, status is `unclassified`. With one, missing
+required markers or listed inconclusive markers yield `inconclusive`; satisfying
+the capture markers yields `ready_for_review`, never an automatic gameplay
+pass. For example, `required_markers` can name a probe ID emitted by the map,
+while `inconclusive_markers` can name `accepted=false`. A missing/stale result
+times out instead of being reported as successful. Use a distinct result
 filename for each run when comparing repeated probes.
+
+Example manifest contract:
+
+```json
+"capture_contract": {
+  "required_markers": ["probe=purge-run-1"],
+  "inconclusive_markers": ["accepted=false", "abilityAdded=false"]
+}
+```
 Run the retail-independent tool tests with `python3 tests/test_wc3_retail_probe.py`.
 
 ## Exact extraction and repacking
