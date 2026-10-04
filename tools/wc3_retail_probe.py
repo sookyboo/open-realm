@@ -27,6 +27,27 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 PRELOAD_RE = re.compile(r'Preload\s*\(\s*"((?:\\.|[^"\\])*)"\s*\)', re.S)
 RETAIL_LAUNCH_FLAGS = ("-window", "-graphicsapi", "OpenGL2")
+GLOBAL_DECLARATION_RE = re.compile(
+    r"^[ \t]*(?:constant[ \t]+)?(?P<type>[A-Za-z_]\w*)(?:[ \t]+array)?[ \t]+"
+    r"[A-Za-z_]\w*(?:[ \t]*=[ \t]*.+?)?[ \t]*(?://.*)?$"
+)
+JASS_GLOBAL_TYPES = frozenset((
+    "agent", "aitype", "alliancetype", "attacktype", "boolean", "blendmode",
+    "boolexpr", "button", "camerasetup", "camerafield", "code", "conditionfunc",
+    "damagetype", "destructable", "dialog", "dialogevent", "difficultylevel", "effect", "effecttype",
+    "event", "eventid", "filterfunc", "fogmodifier", "fogstate", "force", "gamecache",
+    "gameevent", "gamedifficulty", "gameresult", "gamespeed", "gamestate", "gametype",
+    "group", "handle", "hashtable", "image", "igamestate", "integer", "item", "itempool",
+    "itemtype", "lightning", "limitop", "location", "mapcontrol", "mapdensity", "mapflag",
+    "mapsetting", "mapvisibility", "multiboard", "multiboarditem", "pathingtype", "player",
+    "playercolor", "playergameresult", "playerevent", "playerstate", "playerscore",
+    "playerslotstate", "playerunitevent", "placement", "quest", "questitem", "race",
+    "racepreference", "raritycontrol", "real", "rect", "sound", "soundtype", "startlocprio",
+    "string", "teamcolor", "terraindeformation", "texttag", "texturemapflags", "timer",
+    "timerdialog", "trackable", "trigger", "triggeraction", "triggercondition", "unitevent",
+    "unit", "unitpool", "unitstate", "unittype", "version", "volumegroup", "weathereffect",
+    "weapontype", "widget",
+))
 
 
 class ProbeError(RuntimeError):
@@ -185,6 +206,17 @@ def validate_jass_layout(script: str) -> None:
         first_function = re.search(r"(?m)^function\s+\w+\s+takes\b", script)
         if first_function and opens[0].start() > first_function.start():
             raise ProbeError("JASS globals block appears after a function declaration")
+        block = script[opens[0].end():closes[0].start()]
+        for line_number, line in enumerate(block.splitlines(), start=1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("//"):
+                continue
+            declaration = GLOBAL_DECLARATION_RE.fullmatch(line)
+            if (not declaration
+                    or declaration.group("type").casefold() not in JASS_GLOBAL_TYPES):
+                raise ProbeError(
+                    f"JASS globals block contains a non-declaration or unknown type on line {line_number}: "
+                    f"{stripped!r}; put executable statements inside a function")
 
 
 def line_offsets(text: str) -> list[tuple[int, int, str]]:
@@ -424,6 +456,26 @@ def launch(args: argparse.Namespace) -> None:
     if map_sha != record.get(hash_key):
         raise ProbeError(f"{role} map hash changed since preparation: {map_path}")
 
+    control_confirmed = False
+    if not args.control:
+        if not getattr(args, "control_confirmed", False):
+            raise ProbeError(
+                "before launching the prepared map, launch --control, visually confirm its "
+                "expected screen, then pass --control-confirmed")
+        control_launch_path = output_dir / "control-launch.json"
+        if not control_launch_path.is_file():
+            raise ProbeError("no control launch record; launch the untouched map with --control first")
+        control_map_path = Path(record["control_map"])
+        if not control_map_path.is_file() or sha256_file(control_map_path) != record.get("control_map_sha256"):
+            raise ProbeError("untouched control map changed after preparation; prepare the probe again")
+        control_launch = json.loads(control_launch_path.read_text(encoding="utf-8"))
+        if (control_launch.get("probe_id") != record.get("id")
+                or control_launch.get("role") != "control"
+                or control_launch.get("map_sha256") != record.get("control_map_sha256")
+                or control_launch.get("retail_executable_sha256") != record.get("retail_executable_sha256")):
+            raise ProbeError("control launch record does not match this probe's untouched map and executable")
+        control_confirmed = True
+
     environment = os.environ.copy()
     if args.wine_prefix:
         environment["WINEPREFIX"] = str(Path(args.wine_prefix).expanduser().resolve())
@@ -458,8 +510,15 @@ def launch(args: argparse.Namespace) -> None:
         "log": str(log_path),
         "manual_map_confirmation_required": True,
     }
-    (output_dir / "launch.json").write_text(
-        json.dumps(launch_record, indent=2) + "\n", encoding="utf-8")
+    if args.control:
+        (output_dir / "launch.json").write_text(
+            json.dumps(launch_record, indent=2) + "\n", encoding="utf-8")
+        (output_dir / "control-launch.json").write_text(
+            json.dumps(launch_record, indent=2) + "\n", encoding="utf-8")
+    else:
+        launch_record["control_screen_confirmed"] = control_confirmed
+        (output_dir / "launch.json").write_text(
+            json.dumps(launch_record, indent=2) + "\n", encoding="utf-8")
     print(f"Started Retail pid {process.pid} for the {role} map.")
     print("Command: " + " ".join(command))
     print(f"Wine log: {log_path}")
@@ -494,6 +553,8 @@ def capture(args: argparse.Namespace) -> None:
             raise ProbeError("latest Retail launch was not for this prepared map; launch it before capture")
         if launch_record.get("map_sha256") != record.get("prepared_map_sha256"):
             raise ProbeError("Retail launch map hash does not match the prepared map")
+        if not launch_record.get("control_screen_confirmed"):
+            raise ProbeError("prepared launch record has no confirmed control-map preflight")
         if not all(flag in launch_record.get("command", []) for flag in RETAIL_LAUNCH_FLAGS):
             raise ProbeError("Retail launch record is missing required -window/-graphicsapi OpenGL2 flags")
         if "-loadfile" not in launch_record.get("command", []) or not launch_record.get("windows_map_path"):
@@ -590,6 +651,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     launch_parser.add_argument("probe_dir", type=Path, help="directory created by prepare")
     launch_parser.add_argument("--control", action="store_true",
                                help="launch the untouched control map for the visual preflight")
+    launch_parser.add_argument("--control-confirmed", action="store_true",
+                               help="confirm you visually checked the control map before prepared launch")
     launch_parser.add_argument("--wine", default="wine", help="Wine executable")
     launch_parser.add_argument("--winepath", default="winepath", help="Wine path converter")
     launch_parser.add_argument("--wine-prefix", type=Path,
