@@ -156,14 +156,14 @@ index 7964342d..d738e8ba 100644
 -    blast->damage = (uint32_t)MAX(1.0f, S_SpellData(spell->code, level, 1));
 -    area_spell_damage(blast, S_SpellData(spell->code, level, 2)); /* DataB = Max Damage */
 -    G_FreeEdict(blast);
-+/* TODO(UNVERIFIED): retail Carrion Swarm is a travelling line wave, while
-+ * this checkout has no save-safe per-cast hit set. The installed rows contain
-+ * alias-specific DataC/DataD values whose distance/speed meanings and cap
-+ * accounting still need controlled retail observation. Do not substitute the
-+ * old point burst or guess a wave schedule. */
++/* TODO(UNVERIFIED): Retail stock TFT ACca is a travelling line wave with a
++ * four-target/300 total cap; JASS also observed enemy air hits and width
++ * between 160 and 240. This checkout has no save-safe per-cast hit set. Exact
++ * DataC/DataD travel meanings/speed, field and alias behavior, and the width
++ * boundary still need resolution. Do not guess a wave schedule. */
 +BZ_ABILITY_PROC(CAbilityCarrionSwarm) {
 +    if (msg == A_EXECUTE && call && call->item) {
-+        fprintf(stderr, "WC3: %.4s Carrion Swarm deferred: travel fields/cap ordering unverified\n",
++        fprintf(stderr, "WC3: %.4s Carrion Swarm deferred: travel fields/speed and aliases unverified\n",
 +                (cstring_t)&call->item->code);
 +        return true;
 +    }
@@ -672,13 +672,28 @@ new file mode 100644
 index 00000000..0c290f27
 --- /dev/null
 +++ b/warcraft3-ability-completion-implementation-status.tmp.md
-@@ -0,0 +1,134 @@
+@@ -0,0 +1,263 @@
 +# WC3 Ability Completion — Temporary Patch Status
 +
 +This status accompanies `warcraft3-ability-completion.tmp.patch`. The patch is
 +an implementation draft based on
 +`warcraft3-ability-completion-implementation.tmp.md`. It is not a claim of
 +complete retail parity. Tests and builds have not been run.
++
++## Static-first verification
++
++Use the matching executable and data to map each rawcode to its concrete
++class, then follow its native validation and effect paths in Ghidra/radare2.
++When this code and data establish the claimed behavior, record it as verified
++and do not require a Retail run. Use Frida only to resolve dynamic receiver,
++branch, or input uncertainty; use JASS only for behavior the static path does
++not settle. For `ACca`, setup `0x00C2ED00` calls missile update `0x00C31430`,
++which scans a bounded candidate list and dispatches each candidate to the
++target-damage path `0x00C30BB0`. That path initializes a damage/event payload
++at `0x006A9940` and dispatches through target vtable slot `0x120`. The scan
++uses a 64-entry guard; that is not the observed 300 damage cap. Exact field
++mapping, travel, width, and cap remain open. See the detailed exact-build
++evidence in `docs/games/warcraft-3/ability-verification-review.md`.
 +
 +## Included changes
 +
@@ -794,22 +809,34 @@ index 00000000..0c290f27
 +ItemData, ItemStrings and parent/code aliases. Missing tooltip text is not
 +evidence that the behavior or item is absent.
 +
-++## Explicitly unimplemented or unverified
++## Explicitly unimplemented or unverified
 +
 +- Resurrection, Earthquake, Serpent Ward ranks 2–3 and combat behavior, Crow
 +  Form/Night Elf Form, Root/Uproot, Cold Arrows, and permanent stat consumable
 +  behavior are not implemented by this patch. TFT rank 1 Serpent Ward summon
 +  and expiry have since been observed in Retail JASS.
-+- Cluster Rockets and Carrion Swarm currently report a diagnostic and do no
-+  gameplay effect when executed.
-+- Shadow Strike assumes one-second DataA poison pulses; its exact retail tick
-+  schedule, slow field meanings and damage classification need verification.
++- Cluster Rockets and Carrion Swarm remain diagnostic-only in this patch.
++  The October 4 `ANcs` sample saw one ground target and one building damaged;
++  duration, stun, cap and full target rules remain open. Stock TFT `ACca`
++  follow-up found four of six pathable on-axis hostile ground targets took
++  75 each; a distal target alone also took 75. Enemy ground/air were hit;
++  tested allied ground/structure were not. Lateral hits reached 160 but not
++  240 units. Travel fields/speed, width boundary and aliases remain open.
++- Shadow Strike assumes one-second DataA poison pulses. Retail `AEsh` produced
++  10 damage events / 175.893 total damage by 16 seconds, but the run did not
++  establish exact ticks, slow field meanings/lifetime, or damage attribution.
 +- Phoenix Fire uses nearest eligible target, DataA as direct damage and the
 +  authored cooldown. Tie behavior, DataB, and any burn behavior need retail
 +  verification; no BuffID is present in the inspected row.
 +- Immolation assumes DataB is recurring mana drain, DataA is damage, Area is
-+  radius, and one-second pulses. Activation cost, DataC's mana buffer, BEia's
-+  role and initial pulse timing need verification.
++  radius, and one-second pulses. Retail `AEim` showed mana falling 68.802 to
++  44.006 from 1–5 seconds, a ground target falling from 210 to 38.034, and an
++  air target staying at 413. Activation cost, exact cadence, DataC's mana
++  buffer, BEia's role and initial pulse timing remain unverified.
++- Earthquake `AOeq` was accepted; a 250-life building reached 0 over five
++  one-second samples, tested ground units stayed at 210, and the channel
++  remained active until Stop. This does not verify ground slow, air or
++  destructible effects, duration, area, complete target masks or interruption.
 +- Mirror Image uses AOmi DataD as outgoing and DataC as incoming damage
 +  factors, sampled at rank one because stock ranks match. Retail field
 +  orientation and Hero-state copying still need verification.
@@ -826,6 +853,15 @@ index 00000000..0c290f27
 +Rockets maxima/stun time, Shadow Strike initial/periodic values, and Cold
 +Arrows bonus/slow percentages. It does not validate runtime interpretation,
 +target legality, pulse schedule, or the remaining TODOs.
++
++The October 4, 2026 TFT Retail multi-ability JASS/Frida batch provides only
++the sampled behavior listed above. Its Frida hook logged five SimpleSpell
++validator entries for order values `0xD0099`, `0xD02AC`, and `0xD00FA`; each
++returned zero, which selects fallback validation and does not prove order
++acceptance. The hook did not classify receiver abilities. The targeted r2
++inspection, launch/repack procedure, screenshots, and reusable probes are
++recorded in `docs/games/warcraft-3/ability-verification-review.md`, section
++“TFT multi-ability Retail batch with Frida”. Retail archives were not changed.
 +
 +## Verification update
 +
