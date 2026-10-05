@@ -125,6 +125,25 @@ these common lifecycle operations:
 4. Concrete buff/ability callbacks and the code that invokes these helpers
    determine the actual duration, stacking, dispel, death, or inverse rules.
 
+The native `UnitApplyTimedLife` path is now partly recovered in this exact
+build. Registration at `0x0049B3C0` maps the JASS native to wrapper
+`0x004AED50`; the wrapper resolves the unit and calls `0x006D4B60` with the
+requested buff code and duration. `0x006D4B60` selects a buff prototype,
+initializes its instance through virtual slot `+0x324`, attaches it through
+`0x006D4560`, and runs a post-attach helper. The default code path selects
+`BTLF` through `0x006F4C40`. Constructor `0x006F0D60` sets up a
+`CBuffTimedLife` instance on the `CBuffProgressBar` base and initializes an
+embedded `FloatMini` member. This maps native timed-life object creation and
+attachment. Its vtable slot `+0x328` points to `0x006F6820`, which compares a
+caller-provided float with the global game-time value at `0x0112D88C` and may
+invoke slot `+0x354` (`0x006F6BD0`). That callback dispatches event `0xD01C4`
+through `0x007FBF80` and conditionally invokes another virtual method. This
+connects timed-life objects to shared timed/progress lifecycle machinery, but
+the float's exact meaning, event semantics, final removal consequence, and
+whether stock spell summons use the native construction route remain open. See
+the [shared-helper map](ability-shared-native-functions.md) for the addresses
+and evidence limits.
+
 OpenRealm provides useful contract comparisons in `unit_addtimedstatus`,
 `unit_expirestatus`, `UnitDispatchStatus`, and `S_UnitStatusAbilityEvent`.
 Those implementations use fixed status rows and procedure dispatch, so they
