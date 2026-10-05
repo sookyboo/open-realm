@@ -72,6 +72,7 @@ The strongest currently recovered cross-ability mechanisms are:
 | Area candidates | `0x0068EA00` | Shared area-unit enumeration. The caller-supplied center, radius, callback, and callback predicates determine the actual ability behavior. |
 | Attached instance lookup | `0x006D6570` | Looks up attached ability/status instances by rawcode; Phoenix Fire queries `Bpxf` and avoids a duplicate. Lookup alone says nothing about application or expiry. |
 | Ability construction | `0x00AF3BA0`, `0x006D4560` | `UnitAddAbility` enters an AbilityData implementation-code switch that creates a concrete class instance, initializes it, and attaches it through the shared instance lifecycle. |
+| Ability rank update | `0x004971C0`, `0x004AAE20`, virtual `+0x2E4` / `+0x2E8` | Get/Set and Inc/Dec read or mutate the level field on the existing attached instance. The common up/down callbacks refresh level-indexed values; selected classes append their own virtual work. |
 | Attach and removal | `0x006D4560`, `0x006D8530`, `0x006D87A0` | Register an attached object, filter attached objects for JASS buff-removal natives, and notify/unlink selected objects. `UnitRemoveAbility` directly removes a rawcode-matched instance; `UnitRemoveBuffs` and `UnitRemoveBuffsEx` share the filter loop, where class virtual predicates decide per-instance eligibility. |
 | Callback delivery | `0x007FBE90` | Generic callback/event forwarding through a virtual slot. An event ID or callback site must be traced to establish its lifecycle meaning. |
 | Damage/effect payload | `0x006A9940` | Initializes a payload that Carrion Swarm later dispatches through the target vtable at `+0x120`. It is not itself the damage applier. |
@@ -132,7 +133,23 @@ these common lifecycle operations:
    build. `UnitRemoveAbility` (`0x004AF590`) uses the same rawcode lookup,
    removes the found instance through `0x006D8530`, and reports whether it
    found one. Both wrappers notify via `0x005F6D00` after a successful change.
-5. `0x006D87A0` is the shared filter loop called by both JASS natives
+5. `GetUnitAbilityLevel` (`0x004971C0`) returns the attached object's
+   zero-based rank field at `+0x50`, plus one, or zero when no eligible object
+   is found. `SetUnitAbilityLevel` (`0x004AAE20`) clamps to level one through
+   the data maximum and invokes rank-up slot `+0x2E4` or rank-down slot
+   `+0x2E8` repeatedly on that existing object; it does not replace the
+   instance. `IncUnitAbilityLevel` and `DecUnitAbilityLevel` use the same
+   callbacks and respect the max/level-one bounds. The shared methods
+   `0x00B498D0` / `0x00B498F0` update the stored rank through `0x0046B3C0` /
+   `0x0046B3E0` and refresh the level-indexed value through `0x0046FA80`.
+   Immolation (`0x00F277EC`), Carrion Swarm (`0x00F887B0`), Shadow Strike
+   (`0x00F98714`), and Cluster Rockets (`0x00FB2C6C`) use these common methods
+   directly at slots `+0x2E4` / `+0x2E8`; Earthquake (`0x00F85CF0`) uses
+   methods `0x00C298D0` / `0x00C298F0`, which call them and then invoke an
+   extra virtual slot `+0x434`. All four level natives share a preflight
+   internal tag `0x2B61676C` and field check `+0x20 == 0`; that gate's meaning
+   is not yet established.
+6. `0x006D87A0` is the shared filter loop called by both JASS natives
    `UnitRemoveBuffs` (`0x004AF5E0`) and `UnitRemoveBuffsEx` (`0x004AF610`).
    The extended wrapper passes `physical`, `magic`, `timedLife`, `aura`,
    `autoDispel`, `removePositive`, and `removeNegative` into the helper in
@@ -147,7 +164,7 @@ these common lifecycle operations:
    requires one of these polarity predicates to match, this `BTLF` instance
    is statically excluded from both native removal paths even when the other
    category switches allow timed life and auras.
-6. Concrete buff/ability callbacks and the code that invokes these helpers
+7. Concrete buff/ability callbacks and the code that invokes these helpers
    determine the actual duration, stacking, dispel, death, or inverse rules.
 
 The native `UnitApplyTimedLife` path is now partly recovered in this exact
@@ -220,7 +237,8 @@ sha256sum 'data/Warcraft III/Warcraft III.exe'
   -process 'Warcraft III.exe' -noanalysis \
   -scriptPath tools/ghidra \
   -postScript Wc3DumpFunction.java \
-  0x004AE8F0 0x004AF590 0x00AF3BA0 0x00B28980 \
+  0x004AE8F0 0x004AF590 0x004971C0 0x004AAE20 \
+  0x00498B20 0x0048F150 0x00AF3BA0 0x00B28980 \
   0x00C2FA90 0x00C31430 0x00C30BB0 \
   0x00682180 0x006AEA70 0x006ADA20 0x0068EA00 \
   0x006D4560 0x006D6570 0x006D8530 0x006A9940
