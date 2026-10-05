@@ -232,12 +232,18 @@ Neither inspected ability callback calls the `UnitApplyTimedLife` wrapper
 construction for these two spell classes, not shared summon expiry or timed
 life. Pocket Factory's callback `0x00C82310` resolves the `MNsy` row and
 initializes `CMissileSummonFactory` through vtable `0x00FB48A0` slot `+0xD4`,
-which resolves to `0x00C828A0`. That method copies the prepared launch and
-owner configuration into the missile object. The impact path that creates
-the Pocket Factory unit, and the factory's periodic Clockwerk producer, have
-not yet been traced to `0x00687CA0` or another shared unit constructor. See
-the exact-build evidence and reproduction notes in [shared native
-functions](ability-shared-native-functions.md).
+which resolves to `0x00C828A0`. The missile impact callback `0x00C829F0` creates
+the configured factory through shared unit constructor `0x00687CA0`, then
+creates a `BNfy` `CBuffFactory` object and attaches it through `0x006D4880`.
+The buff setup method `0x00C83130` registers event `0xD01C3`; callback
+`0x00C831F0` gates each production event through `0x0067DF90`, creates the
+configured Clockwerk through `0x00687CA0`, and attaches its `BNcg`
+`CBuffClockworkGoblin` object. Both unit creation stages therefore converge on
+the same constructor through separate attached buff classes. `ANfy` is a
+different `CAbilityFactory` path: callback `0x00C83940` also handles event
+`0xD01C3` and calls `0x00687CA0`, but `ANfy` is not attached to Pocket
+Factory's factory unit. See the exact-build evidence and reproduction notes in
+[shared native functions](ability-shared-native-functions.md).
 
 OpenRealm provides useful contract comparisons in `unit_addtimedstatus`,
 `unit_expirestatus`, `UnitDispatchStatus`, and `S_UnitStatusAbilityEvent`.
