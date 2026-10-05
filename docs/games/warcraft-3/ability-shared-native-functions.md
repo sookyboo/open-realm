@@ -89,6 +89,12 @@ comparison cases currently in the game module are:
 | `S_SummonAbilityUnits`, `S_SummonAbilityAt`, and `S_SpellApplyTimedLife` in `s_summon.c` / `s_spell.c`; Serpent Ward calls the shared summon path from `s_campaign_abilities.c` | Common UnitID/count/duration reads, unit creation, owner/ability identity assignment, and timed-life attachment | This suggests a high-value Retail search across summon abilities such as Serpent Ward, Spirit Wolves, and Pocket Factory. No common Retail summon helper is identified yet; do not infer one from the OpenRealm helper. |
 | `S_ResolveAttackHit` in `s_attack.c`, plus `S_UnitStatusAbilityEvent` and `S_SearingArrowDamage` | Shared attack-hit dispatch, ability callbacks, damage modification, and on-hit status application | This is a useful comparison for attack-triggered effects (including orb/arrow abilities). OpenRealm Cold Arrows in `s_ability_stubs.c` only toggles placeholder state, so it is not a behavior reference. Retail's `0x007FBE90` is a generic callback delivery primitive; a concrete attack-to-ability call chain still needs to be established. |
 | `S_SpellDamageEnemiesInRadius` and status application in `s_spell.c` / `s_area_spell.c` | Common area enumeration followed by per-target filtering, damage, or status application | Retail `0x0068EA00` is a widely reused area-enumeration helper. Determine the callback and target predicates at each ability caller; enumeration alone does not establish the effect. |
+| `S_SpellApplyTimedLife` / `S_SpellApplyTimedStatus` in `s_spell.c`, `S_SummonAbilityAt` in `s_summon.c`; Mirror Image and Pocket Factory | Timed-life initialization, pause/cancel, expiry, and the order between unit death/removal and attached-status cleanup | Retail JASS entry points to compare are `UnitApplyTimedLife`, `UnitPauseTimedLife`, and `BlzUnitCancelTimedLife`; `UnitRemoveBuffsEx` is a useful negative case because the inspected `BTLF` object reports false for both polarity predicates. OpenRealm keeps its timed status row on the unit and handles timed-life death in `unit_updatestatuses`, which is a behavioral checklist rather than proof of Retail internals. |
+| `S_ResolveAttackHit` in `s_attack.c`; `S_OrbOnHit` / `S_PoisonOnHit` in `s_item_stats.c` / `s_status_spells.c`; Orb of Venom, Slow Poison, Searing Arrows | The ordered split between attack damage modifiers, on-hit status application, and projectile/spell damage | Compare Retail `UnitDamageTarget` and `EVENT_PLAYER_UNIT_DAMAGED` / `BlzGetEventDamage*` only for their damage-event semantics; the actual ordinary attack path is internal and needs class/callback tracing. In OpenRealm, `S_ResolveAttackHit` explicitly orders mitigation and post-hit handlers, so follow each handler's conditions and call sites. |
+| `S_SpiritLinkRedirect` in `s_spirit_link.c` and `S_ManaShieldDamage` in `s_attack.c` / status abilities; Spirit Link and Mana Shield | Damage receiver callback ordering, redistribution/absorption amount, recursion guard, and attached-buff removal on depletion | `UnitDamageTarget` is a useful controlled Retail entry point because it reaches the same unit damage receiver; Spirit Link can also be inspected through `Aspl` / `Bspl`, while Mana Shield uses its ability and buff classes. OpenRealm's `S_SpiritLinkRedirect` and `S_ManaShieldDamage` provide concrete candidate state and expected control-flow questions; do not assume its fractions or ordering match Retail. |
+| `unit_expirestatus`, `UnitDispatchStatus`, and `unit_updatestatuses` in `m_unit.c`; Purge and Dispel Magic | Expiry/dispel removal ordering, inverse callbacks, death behavior, and whether timed-life removal kills or preserves the unit | Retail entry points are `UnitRemoveBuffs`, `UnitRemoveBuffsEx`, `UnitApplyTimedLife`, and `BlzUnitCancelTimedLife`; ability paths to compare include Purge (`Apg2`) and Dispel/Disenchant (`Adis`/`Adch`). OpenRealm dispatches `A_STATUS_REMOVE` before clearing a status slot and applies timed-life death after expiry cleanup. |
+| `S_SummonAbilityUnits` / `S_SummonAbilityAt` in `s_summon.c`; Serpent Ward, Spirit Wolves, Pocket Factory | Whether different summon classes share unit construction, owner/creator attribution, lifetime attachment, and timed removal | For Retail, follow those abilities' class callbacks to `0x00687CA0`, then compare their expiry path with JASS `UnitApplyTimedLife` and explicit `RemoveUnit`. OpenRealm routes summon creation through `S_SummonAbilityAt`, with `S_SpellApplyTimedLife` when duration is positive; Serpent Ward, Spirit Wolves, and Pocket Factory give distinct caller families. |
+| `CAbilityAttackBonus` / `S_OrbOnHit` in `s_item_stats.c` and `CAbilityPoisonAttack` / `S_PoisonOnHit` in `s_status_spells.c` | Whether passive ability instances are queried in a common hit dispatcher and how their authored `BuffID`/level reach status creation | Use Retail item orbs (`AIob`, `Aven`, `Apoi`, `Apo2`) and the matching attack-buff objects as distinct classes. Relevant JASS observables include `UnitDamageTarget` and damage event natives; OpenRealm's attack handlers make a good map of where to look, but its Cold Arrows stub is not useful evidence. |
 
 These OpenRealm analogues prioritize the remaining Retail investigations:
 
@@ -96,25 +102,37 @@ These OpenRealm analogues prioritize the remaining Retail investigations:
    Existing native paths now expose factory/attach (`0x00AF3BA0`,
    `0x006D4560`), removal (`0x006D8530`), buff filtering (`0x006D87A0`), rank
    updates (slots `+0x2E4` / `+0x2E8`), and disable/enable transitions
-   (`0x0046E0C0` / `0x0046E630`).
+   (`0x0046E0C0` / `0x0046E630`). Start with Faerie Fire, Purge, or Dispel
+   and compare `UnitRemoveBuffsEx` with their class-specific callbacks.
 2. Finish mapping the `0x0067B920` lookup indices from payload offset `+0x20`
    and unit offset `+0x1EC` to the seven configured damage-bonus rows, and
    resolve the Spirit Link callback's event-referenced `+0x364` receiver plus
-   its share-fraction/data mapping. The Spirit Link/Mana Shield callback group
-   IDs and handler addresses are established, but these field and receiver
-   meanings remain open.
+   its share-fraction/data mapping. Use `Aspl`/`Bspl` and `Amfl`/`Bmfl` as
+   contrasting damage callbacks; OpenRealm's `S_SpiritLinkRedirect` and
+   `S_ManaShieldDamage` show the candidate calculations. `UnitDamageTarget`
+   reaches the shared receiver under a controllable source/target setup. The
+   exact Retail field mappings remain open.
 3. Resolve the clock argument, event `0xD01C4`, and removal consequence around
    `BTLF` vtable methods `0x006F6820` / `0x006F6BD0`. Spirit Wolf and Serpent
    Ward have now been shown to share unit construction at `0x00687CA0`, but
    neither uses the `UnitApplyTimedLife` route in its inspected spawn callback;
-   trace their summon-specific expiry paths separately.
-4. Find the attack-hit dispatch that reaches concrete ability handlers.
+   trace their summon-specific expiry paths separately. Compare Mirror Image
+   and Pocket Factory against JASS `UnitApplyTimedLife`,
+   `UnitPauseTimedLife`, and `BlzUnitCancelTimedLife`; inspect
+   `UnitRemoveBuffsEx` as a control for buff filtering.
+4. Find the attack-hit dispatch that reaches concrete ability handlers. Use
+   `S_ResolveAttackHit` as the OpenRealm map, then trace Retail orb damage and
+   poison classes separately. JASS `UnitDamageTarget` and damage-event natives
+   can help exercise the receiver, but do not substitute for finding the
+   ordinary attack callback path.
 5. Extend the Pocket Factory trace from unit construction into the remaining
    factory and Clockwerk lifetime/removal callbacks. Impact callback
    `0x00C829F0` and periodic producer callback `0x00C831F0` both call shared
    constructor `0x00687CA0`, through separate `BNfy` and `BNcg` buff paths.
    Keep these paths distinct from `CAbilityFactory` callback `0x00C83940`
-   (`ANfy`), which is not attached to Pocket Factory's factory unit.
+   (`ANfy`), which is not attached to Pocket Factory's factory unit. Compare
+   OpenRealm's `AbilityPocketFactory` and `S_SummonAbilityAt` for the runtime
+   owner chain and `UnitApplyTimedLife` for the separate native lifetime path.
 
 For each investigation, follow references from known ability callers, inspect
 the helper body, and compare at least two distinct classes before calling a
