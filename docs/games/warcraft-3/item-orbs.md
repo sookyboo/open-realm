@@ -28,6 +28,15 @@ ownership and held orb items (the same orb from both applies once).
 Buffs are state-only like Frost Nova's `Bfro`: no movement/armor
 consumer reads `Bfro`/`BIcb`/`Bfre` yet.
 
+Retail's pinned 1.29.2 class registry has a more specific implementation
+split: `AIob` registers as `CAbilityFrostDamageBonus` (`AIDB` parent), while
+`AIpb` registers as `CAbilityPoisonDamageBonus` (`AIDB` parent). The other
+orb rows should be checked individually before treating OpenRealm's common
+`CAbilityAttackBonus` procedure as a Retail class match. Class registration
+proves the concrete class association, not the hit callback or full behavior;
+see [the extracted TFT class inventory](../../../games/warcraft-3/tft-ability-classes.txt)
+and [Retail shared-helper notes](ability-shared-native-functions.md).
+
 ## Attack Damage Bonus Aliases
 
 The passive item attack damage family is also handled by `CAbilityAttackBonus`.

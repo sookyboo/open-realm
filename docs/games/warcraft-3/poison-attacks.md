@@ -10,6 +10,14 @@ use `CAbilityPoisonAttack` (passive, mirroring `CAbilitySlowPoison`).
 (Venom Spears, creep) row, so registering it repairs `ACvs` dispatch the
 way `Anhe`/`ACtc` repair `Anh1`/`ACt2`.
 
+Retail's pinned 1.29.2 registry maps `Apoi` to `CAbilityPoisonAttack` under
+`APas`, with `Aven` (`CAbilityVenomSpear`), `Aspo`
+(`CAbilitySlowPoison`), and `Apo2` (`CAbilityPoisonDamage`) below `Apoi`.
+This identifies a shared poison ability family to inspect. It does not prove
+that the family uses one attack-hit callback or that OpenRealm's common
+`CAbilityPoisonAttack` procedure matches each Retail subclass. The extracted
+class rows are in [the TFT inventory](../../../games/warcraft-3/tft-ability-classes.txt).
+
 ## Mapping
 
 | Poison | BuffID (TFT; ROC omits) | Behavior |
