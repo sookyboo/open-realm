@@ -42,7 +42,8 @@ candidate shared mechanisms:
 | `0x00B28980` | `CAbilitySimpleSpell` order validation | Full-analysis Ghidra found 23 direct calls plus 187 non-call references (including virtual/data references). Its return value is a native validation result, not an acceptance boolean. This function is already traced for Carrion Swarm and other simple-spell callers; use its result together with caller continuation and externally observable order/event state. |
 | `0x007F6360` | Generic descriptor/registry registration | Full-analysis Ghidra found 1,077 direct calls from 1,076 functions. Known ability-registration code passes a class descriptor and rawcode here (for example `AUcs` at caller `0x00C31370`), so it can help prove rawcode-to-class registration in this executable. Its large count reflects a generic registry mechanism, not shared gameplay behavior. |
 | `0x007FBE90` | Generic callback/event delivery | Full-analysis Ghidra found 390 direct calls from 345 functions. Its body forwards an event identifier and arguments through a callback object's virtual slot `+0x8`; Phoenix Fire uses it to deliver event `0xD01B0` to its owned event member. This is useful for tracing event-driven ability lifecycles, but does not alone prove a timer duration or expiry contract. |
-| `0x006A9940` | Shared damage/event payload initializer | Full-analysis Ghidra found 49 direct calls from 47 functions. Its body writes the payload's fields and clears two counters/flags; Carrion Swarm initializes a target payload here and then dispatches through the target vtable at `+0x120`. It is an initializer, not the damage applier, and field meanings still require caller/vtable tracing. |
+| `0x006A9940` | Shared damage/event payload initializer | Full-analysis Ghidra found 49 direct calls from 47 functions. Its body writes payload fields and clears two counters/flags. Two traced paths converge on the same target virtual slot `+0x120`: the registered `UnitDamageTarget` wrapper (`0x004AEF70`) and Carrion Swarm target callback (`0x00C30BB0`). This establishes a shared damage-event handoff, not a common damage calculation or final application routine; the receiver's virtual implementation and downstream mitigation remain open. |
+| `0x004AEF70` / target vtable `+0x120` | JASS `UnitDamageTarget` damage-event handoff | The wrapper is referenced by the native registration initializer at `0x0049B3C0`. It resolves source unit and target widget handles, validates the attack-type, damage-type, and weapon-type indices, initializes the event payload through `0x006A9940`, then calls the target object's `+0x120` virtual method. It returns true after dispatch. Carrion Swarm independently uses `0x006A9940` and the same target slot after its own target checks/value selection. This is the best shared entry point found for following direct and ability-authored damage into victim handling; it does not prove that the virtual method applies damage identically for every target class. |
 | `0x006ADB90` | Shared target/state gate candidate | Full-analysis Ghidra found 18 direct callers. The body checks target virtual state and flags and calls buff lookup `0x006D6570` on one branch. This is a promising adjacent predicate to compare across abilities, but its complete semantic contract has not been established. |
 | `0x006ECE00` | Shared configuration / presentation initializer candidate | Called by `0x006EC8F0`; the body initializes virtual string/config fields, reads a target's state and position, and enters additional effect setup paths. It has 20 direct references from 19 caller functions. It is promising for tracing effect initialization, but the object family and caller-specific contract are not yet established. |
 
@@ -77,23 +78,27 @@ comparison cases currently in the game module are:
 | `S_ResolveAttackHit` in `s_attack.c`, plus `S_UnitStatusAbilityEvent` and `S_SearingArrowDamage` | Shared attack-hit dispatch, ability callbacks, damage modification, and on-hit status application | This is a useful comparison for attack-triggered effects (including orb/arrow abilities). OpenRealm Cold Arrows in `s_ability_stubs.c` only toggles placeholder state, so it is not a behavior reference. Retail's `0x007FBE90` is a generic callback delivery primitive; a concrete attack-to-ability call chain still needs to be established. |
 | `S_SpellDamageEnemiesInRadius` and status application in `s_spell.c` / `s_area_spell.c` | Common area enumeration followed by per-target filtering, damage, or status application | Retail `0x0068EA00` is a widely reused area-enumeration helper. Determine the callback and target predicates at each ability caller; enumeration alone does not establish the effect. |
 
-These analogues prioritize four Retail investigations: (1) locate the shared
-status-instance creation/refresh path adjacent to `0x006D6570`; `UnitAddAbility`
-and `UnitRemoveAbility` now provide named entry points into factory/attach and
-remove through `0x00AF3BA0`, `0x006D4560`, and `0x006D8530`, while
-`UnitRemoveBuffs` and `UnitRemoveBuffsEx` enter the shared filter at
-`0x006D87A0`; `SetUnitAbilityLevel` and its Inc/Dec variants also expose
-in-place shared rank updates through slots `+0x2E4` / `+0x2E8`; and
-`BlzUnitDisableAbility` reaches broadly reused disable/enable count transitions
-at `0x0046E0C0` / `0x0046E630`; (2) resolve the clock argument,
-event `0xD01C4`, and removal consequence around the `BTLF` vtable methods
-`0x006F6820` / `0x006F6BD0`, then determine whether spell summons reuse the
-`UnitApplyTimedLife` construction route; (3) find the attack-hit dispatch that
-reaches concrete ability handlers; and (4) identify whether summon abilities
-converge on a shared creation routine. For each, search cross
-references from known ability callers, inspect the helper body, then compare
-at least two distinct ability classes before calling it shared. Add a native
-address here only after that exact-build call-chain evidence exists.
+These OpenRealm analogues prioritize the remaining Retail investigations:
+
+1. Locate status-instance creation and refresh adjacent to `0x006D6570`.
+   Existing native paths now expose factory/attach (`0x00AF3BA0`,
+   `0x006D4560`), removal (`0x006D8530`), buff filtering (`0x006D87A0`), rank
+   updates (slots `+0x2E4` / `+0x2E8`), and disable/enable transitions
+   (`0x0046E0C0` / `0x0046E630`).
+2. Follow the shared damage-event handoff from `UnitDamageTarget`
+   (`0x004AEF70`) and Carrion Swarm (`0x00C30BB0`) through victim vtable slot
+   `+0x120`; identify concrete receiver implementations and where mitigation
+   and life mutation occur.
+3. Resolve the clock argument, event `0xD01C4`, and removal consequence around
+   `BTLF` vtable methods `0x006F6820` / `0x006F6BD0`, then determine whether
+   spell summons reuse the `UnitApplyTimedLife` construction route.
+4. Find the attack-hit dispatch that reaches concrete ability handlers.
+5. Identify whether summon abilities converge on a shared creation routine.
+
+For each investigation, follow references from known ability callers, inspect
+the helper body, and compare at least two distinct classes before calling a
+mechanism shared. Add an address here only after exact-build call-chain
+evidence supports the connection.
 
 ## Current investigation
 
