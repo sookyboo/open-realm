@@ -34,6 +34,7 @@ candidate shared mechanisms:
 | `0x00687CA0` | Shared unit construction/setup helper reached by stock summon abilities | Spirit Wolf (`CAbilitySpiritWolf`, vtable `0x00F8910C`) reaches it through `0x00CAF240` from class callback `0x00C31B40`; Serpent Ward (`CAbilityWard`, vtable `0x00F8ABB8`) calls it directly from callback `0x00C34150`. The helper validates/normalizes placement, constructs a unit through `0x00685B20`, applies creation flags and further setup, and returns the new unit. It has 31 direct call references from 30 functions. These paths do not call the `UnitApplyTimedLife` wrapper or `0x006D4B60`; summon expiry and identity remain separate questions. |
 | `0x00CAF240` | Unit creation wrapper used by Spirit Wolf and other callers | Spirit Wolf passes its resolved summon code, owner, and placement through this wrapper; it validates the unit row and delegates construction to `0x00687CA0` with creation flags. It has 15 direct references. Serpent Ward bypasses this wrapper and calls `0x00687CA0` directly. Do not assume all summons use the wrapper just because the constructor is shared. |
 | `0x0068AB70` | Shared post-creation unit relation/update path | Both Spirit Wolf and Serpent Ward invoke this after their ability-specific setup for a successfully created unit. Its body updates unit/owner-related state and dispatches shared setup helpers; 29 direct references were found. The exact lifecycle contract and whether every caller passes a newly created summon are not established. |
+| `0x00C828A0` | `CMissileSummonFactory` initializer used by Pocket Factory | `CAbilitySummonFactory` callback `0x00C82310` resolves the `MNsy` missile row and dispatches virtual slot `+0xD4`; the pinned `CMissileSummonFactory` vtable `0x00FB48A0` maps that slot to this method. It copies the prepared launch/configuration values into the missile object and captures owner-related fields. This confirms Pocket Factory enters a specialized missile path; it does not establish where missile impact creates the factory unit or where that factory's periodic Clockwerk production creates units. No direct call from this setup path to `0x00687CA0` or `0x006D4B60` was found. |
 | `0x006F6820` | Shared progress/timed-value callback in the `CBuffTimedLife` vtable | Constructor `0x006F0D60` installs vtable `0x00EA63AC`; slot `+0x328` points to this method. It reads the global game-time value at `0x0112D88C`, compares it with a float supplied by the caller, changes object flag `0x80`, and invokes slot `+0x354` on one branch. The concrete clock argument and branch meaning are not fully recovered; this is a useful timer/progress trace point, not proof of unit removal at expiry. |
 | `0x006F6BD0` | Shared lifecycle callback emitting event `0xD01C4` | This is slot `+0x354` in the `CBuffTimedLife` vtable above. It resets shared state, registers/updates a callback against the game-time value, and calls generic dispatcher `0x007FBF80` with event `0xD01C4`; a nonzero argument also invokes virtual slot `+0x30C`. The callback is referenced by many class vtables, so it is a shared lifecycle primitive. The event's semantic name and whether a particular caller uses it for expiry remain unresolved. |
 | `0x006D8530` | Attached ability/status instance removal | The body marks the instance as removed, notifies sibling attached objects through a virtual hook, unlinks it from the owner's attached-instance list, refreshes list metadata, and clears cached pointers for selected rawcodes. Full-analysis Ghidra found 221 direct calls from 174 functions. This is a strong shared path for tracing dispel, expiry, death cleanup, or ability removal, but caller and virtual-hook analysis is still needed to identify which cause initiated each removal. |
@@ -106,11 +107,10 @@ These OpenRealm analogues prioritize the remaining Retail investigations:
    neither uses the `UnitApplyTimedLife` route in its inspected spawn callback;
    trace their summon-specific expiry paths separately.
 4. Find the attack-hit dispatch that reaches concrete ability handlers.
-5. Extend the summon comparison from Spirit Wolf and Serpent Ward to Pocket
-   Factory and another summon class. `0x00687CA0` is a proven shared unit
-   constructor for the first two; Pocket Factory's periodic callback
-   `0x00C82310` uses a different data/timer dispatch and has not yet been
-   connected to this helper.
+5. Trace Pocket Factory's `MNsy` / `CMissileSummonFactory` impact and the
+   summoned factory's periodic producer separately. Callback `0x00C82310`
+   initializes the missile through `0x00C828A0`, but this path has not yet
+   been connected to the shared unit constructor `0x00687CA0`.
 
 For each investigation, follow references from known ability callers, inspect
 the helper body, and compare at least two distinct classes before calling a
@@ -138,8 +138,7 @@ Use the cached full-analysis project for read-only call/reference inspection:
   -postScript Wc3Callers.java 0x00682180 0x0068EA00 0x006D6570 \
   0x006D4560 0x00AF3BA0 0x006D61E0 0x0046E0C0 0x0046E630 \
   0x006D87A0 0x006D4B60 0x006D8530 0x006D4A10 \
-  0x00687CA0 0x00CAF240 0x0068AB70 0x00C31B40 0x00C34150 \
-  0x00C82310 \
+  0x00687CA0 0x00CAF240 0x0068AB70 \
   0x006EC8F0 0x006ECA60 \
   0x006AEA70 0x006ADA20 0x00B28980 0x007F6360 0x007FBE90 \
   0x006A9940 0x006ADB90
