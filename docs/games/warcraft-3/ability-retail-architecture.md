@@ -76,7 +76,7 @@ The strongest currently recovered cross-ability mechanisms are:
 | Ability disable/enable | `0x006D61E0`, `0x0046E0C0`, `0x0046E630` | `BlzUnitDisableAbility` changes disable counters on the existing attached object. Shared transition routines invoke class virtual hooks only when the counter crosses the enabled/disabled boundary. |
 | Attach and removal | `0x006D4560`, `0x006D8530`, `0x006D87A0` | Register an attached object, filter attached objects for JASS buff-removal natives, and notify/unlink selected objects. `UnitRemoveAbility` directly removes a rawcode-matched instance; `UnitRemoveBuffs` and `UnitRemoveBuffsEx` share the filter loop, where class virtual predicates decide per-instance eligibility. |
 | Callback delivery | `0x007FBE90` | Generic callback/event forwarding through a virtual slot. An event ID or callback site must be traced to establish its lifecycle meaning. |
-| Damage/effect payload | `0x006A9940`, target vtable `+0x120` | Both the registered JASS `UnitDamageTarget` wrapper (`0x004AEF70`) and Carrion Swarm (`0x00C30BB0`) initialize an event payload and dispatch it through this target slot. For unit targets, `CUnit`'s implementation (`0x006677C0`) contains immunity/resistance checks, attached-object callbacks, configured damage bonuses and a negative value update through its `+0x128` method (`0x00668DB0`). `CWidget` (`0x006BD260`) and `CDestructable` (`0x006CE850`) have distinct overrides; generic dispatch does not imply CUnit mitigation for every widget. |
+| Damage/effect payload | `0x006A9940`, target vtable `+0x120` | Both the registered JASS `UnitDamageTarget` wrapper (`0x004AEF70`) and Carrion Swarm (`0x00C30BB0`) initialize an event payload and dispatch it through this target slot. For unit targets, `CUnit`'s implementation (`0x006677C0`) contains immunity/resistance checks, attached-object callbacks, configured damage bonuses and a negative value update through its `+0x128` method (`0x00668DB0`). `CBuffSpiritLink` and `CBuffManaShield` participate in the CUnit callback loop with group IDs `2` and `5`, respectively; their exact-build `+0xFC` handlers are `0x00C20950` and `0x00C7A3F0`. `CWidget` (`0x006BD260`) and `CDestructable` (`0x006CE850`) have distinct overrides; generic dispatch does not imply CUnit mitigation for every widget. |
 
 Full call counts and caveats are in
 [shared native ability functions](ability-shared-native-functions.md).
@@ -267,7 +267,8 @@ sha256sum 'data/Warcraft III/Warcraft III.exe'
   0x006D4560 0x006D6570 0x006D8530 0x006A9940 \
   0x006756D0 0x00676940 0x006CF320 \
   0x006677C0 0x00668DB0 0x006BD260 0x006CE850 0x006CEF00 \
-  0x006A0630 0x0067B920
+  0x006A0630 0x0067B920 0x00C20940 0x00C20950 0x00C20AF0 \
+  0x00C7A3E0 0x00C7A3F0 0x0069E310
 ```
 
 Use `Wc3Callers.java` for direct incoming references and caller sites. Confirm
