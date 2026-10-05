@@ -230,10 +230,14 @@ Serpent Ward, separate from the `UnitApplyTimedLife` buff-object path:
 Neither inspected ability callback calls the `UnitApplyTimedLife` wrapper
 `0x004AED50` or buff creator `0x006D4B60`. This establishes shared unit
 construction for these two spell classes, not shared summon expiry or timed
-life. Pocket Factory's class callback `0x00C82310` follows a data/timer member
-dispatch and has not been connected to `0x00687CA0`; its periodic unit
-production remains a separate open path. See the exact-build evidence and
-reproduction notes in [shared native functions](ability-shared-native-functions.md).
+life. Pocket Factory's callback `0x00C82310` resolves the `MNsy` row and
+initializes `CMissileSummonFactory` through vtable `0x00FB48A0` slot `+0xD4`,
+which resolves to `0x00C828A0`. That method copies the prepared launch and
+owner configuration into the missile object. The impact path that creates
+the Pocket Factory unit, and the factory's periodic Clockwerk producer, have
+not yet been traced to `0x00687CA0` or another shared unit constructor. See
+the exact-build evidence and reproduction notes in [shared native
+functions](ability-shared-native-functions.md).
 
 OpenRealm provides useful contract comparisons in `unit_addtimedstatus`,
 `unit_expirestatus`, `UnitDispatchStatus`, and `S_UnitStatusAbilityEvent`.
@@ -296,7 +300,8 @@ sha256sum 'data/Warcraft III/Warcraft III.exe'
   0x006756D0 0x00676940 0x006CF320 \
   0x006677C0 0x00668DB0 0x006BD260 0x006CE850 0x006CEF00 \
   0x006A0630 0x0067B920 0x00C20940 0x00C20950 0x00C20AF0 \
-  0x00C7A3E0 0x00C7A3F0 0x0069E310
+  0x00C7A3E0 0x00C7A3F0 0x0069E310 \
+  0x00C82310 0x00C828A0 0x00C81A60 0x00C85200
 ```
 
 Use `Wc3Callers.java` for direct incoming references and caller sites. Confirm
