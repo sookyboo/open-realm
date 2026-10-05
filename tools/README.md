@@ -58,6 +58,42 @@ incomplete resolution and inspect the referenced data manually before claiming
 the tooltip is fully resolved. It preserves Warcraft color codes and `|n`
 markup; it does not emulate UI number formatting or prove runtime behavior.
 
+## `wc3_ability_verification_packet.py`
+
+Capture ROC/TFT ability data and resolved TFT tooltips into one Markdown packet,
+with the exact Retail executable hash and a native/JASS evidence worksheet per
+rawcode:
+
+```sh
+python3 tools/wc3_ability_verification_packet.py Apxf AOeq \
+  --output /tmp/wc3-ability-packet.md
+```
+
+Supply narrow claims in JSON so each checkbox names a behavior to settle:
+
+```json
+{
+  "Apxf": ["Map the periodic interval read to its AbilityData field.",
+           "Trace the selected target through buff/missile damage and expiry."],
+  "AOeq": ["Map the channel pulse to DataA-D and interruption cleanup."]
+}
+```
+
+Save that as `claims.json`, then pass `--claims-file claims.json`. Confirmed
+preferred VAs can be included with `--native-address Apxf=0x00C0ECD0,0x00C0F1E0`;
+the packet prints the matching cached-Ghidra command. Use addresses only after
+checking them against the executable hash in the generated report. MPQ sizes
+are recorded by default; `--hash-data-archives` also hashes installed archives
+and can read several gigabytes. Missing rawcodes or unresolved tooltip rows are
+kept visible in the report, and the command exits nonzero if an audit command
+fails.
+
+The packet is an evidence worksheet, not an automatic verifier. An
+`ability_audit` class label is a lead; confirm registration/vtable identity in
+the pinned binary. Keep data, native control flow, Frida observations, and
+externally visible JASS results as separate evidence until the relevant claim
+is established.
+
 ## `extract_wc3_ability_classes.py`
 
 Extract the demo/TFT binaries' actual FOURCC-to-class registration mappings using Python's
