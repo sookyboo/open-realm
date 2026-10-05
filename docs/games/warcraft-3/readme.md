@@ -138,6 +138,8 @@ File formats, renderer notes, UI/FDF behavior, and gameplay coverage work used b
 - [Unit Stat Modifiers](unit-stat-modifiers.md): modifier ledgers, physical/spell/direct damage paths, and implementation checklist.
 - [Poison Attacks](poison-attacks.md): `Aven`/`Apoi`/`Apo2` on-hit buff state, DPS deferred to the status tick.
 - [Implemented Ability Verification Review](ability-verification-review.md): reproduced failures, lifecycle fixes, and permanent regression coverage.
+- [Retail Ability Architecture](ability-retail-architecture.md): exact-build registration, class instances, shared cast/target/status paths, and evidence limits.
+- [Shared Retail Ability Helpers](ability-shared-native-functions.md): reusable target, area, status, callback, and effect functions with caller counts.
 - [Retail JASS Probe Workflow](retail-camera-tracing.md): edition-correct campaign maps, fresh Retail captures, optional bounded Frida tracing, and repeatable rawcode-to-native-hook discovery.
 - [Campaign Map Audit](map-audit.md): bounded bulk runtime sweeps with per-map errors and retained logs.
 - [Save/Load](save-load.md): versioned game serializer, Hero walk/save/load campaign diagnostic.

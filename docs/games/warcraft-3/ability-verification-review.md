@@ -1501,7 +1501,8 @@ branch.
 
 See [shared native ability functions](ability-shared-native-functions.md) for
 exact-build helpers and Ghidra caller counts that can shorten these callback
-investigations.
+investigations. See [Retail ability architecture](ability-retail-architecture.md)
+for the recovered registration, instance, cast, and attached-status model.
 
 
 ### Jaina / Archmage remaining-fidelity follow-up (September 19, 2026)

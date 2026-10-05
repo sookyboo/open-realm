@@ -1,0 +1,194 @@
+# Warcraft III Retail ability architecture: recovered evidence
+
+This document summarizes the native ability structure recovered from local
+Retail binaries. It is a working map for static verification, not a complete
+reconstruction of Blizzard's source architecture. Native addresses and counts
+are build-specific.
+
+## Build identity and evidence rules
+
+The current shared-helper and recent class-path analysis uses the PE32 x86
+Retail executable with preferred image base `0x00400000` and SHA-256
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`. The
+cached full Ghidra project is `data/wc3-ghidra-full/Wc3Retail1292Full`.
+Earlier binary inheritance work used a different executable hash. Keep those
+addresses separate; a version label alone does not make VAs, RVAs, or section
+file offsets interchangeable.
+
+Evidence in this file is labeled by what the tools established:
+
+- **Registration evidence** ties a rawcode and descriptor to a class factory
+  in the exact executable.
+- **Static path evidence** ties a concrete class or caller to functions,
+  fields, callbacks, and branches in that executable.
+- **Runtime class evidence** confirms a factory return and vtable during the
+  observed run. It does not prove that an effect executed.
+- **Behavior evidence** requires a complete static branch/data path or a
+  suitable JASS-observed effect. A class name, tooltip, helper presence, or
+  native return by itself is not enough.
+
+## Identity: rawcode, implementation code, descriptor, instance
+
+AbilityData rows can have an authored row rawcode and a separate `code=`
+implementation code. For example, the exact-build data audit maps Carrion
+Swarm row `ACca` to implementation code `AUcs`. The executable's registration
+path at `0x00C31370` passes the `AUcs` FOURCC and class descriptor
+`0x011B7F44` to the generic registry at `0x007F6360`.
+
+Keep these identities distinct while tracing:
+
+1. **AbilityData row**: authored row values, strings, target fields and
+   aliases.
+2. **Implementation code**: the code used to select the native class in a
+   registration path.
+3. **Class descriptor / generator**: registration metadata used to create
+   instances.
+4. **Instance vtable**: constructor-installed dispatch table for an
+   individual ability object.
+5. **Buff/status FOURCC**: a separate attached instance that may be queried,
+   created, or removed by an ability.
+
+The Carrion Swarm constructor at `0x00C2FC20` writes instance vtable
+`0x00F887B0`; this is distinct from the generator table pointer
+`0x00F887A0` stored in its registration descriptor. Frida confirmed the
+observed `CAbilityCarrionSwarm` factory result had the expected instance
+vtable. The five-class TFT trace also matched the expected vtables for
+Immolation, Shadow Strike, Earthquake, Cluster Rockets, and Carrion Swarm.
+These results establish class paths for that run, not full ability behavior.
+
+Always resolve the data row using the same game data and edition as the
+executable, then confirm its implementation code and registration in that
+executable. A generated registry from a different hash is a search aid only.
+
+## Shared runtime structure
+
+The strongest currently recovered cross-ability mechanisms are:
+
+| Concern | Exact-build entry point | Recovered role |
+|---|---|---|
+| Class registration | `0x007F6360` | Generic descriptor/registry insertion; high call count is generic infrastructure, not gameplay evidence. |
+| Simple-spell validation | `0x00B28980` | Shared `CAbilitySimpleSpell` order validation reached directly by many classes. Its integer result is a native result code, not a boolean acceptance value. Concrete callers can continue with more validation after a zero result. |
+| Candidate target validation | `0x00682180`, `0x006AEA70`, `0x006ADA20` | Shared target rejection and target-mask/relation checks. Numeric target-mask categories and rejection values must be decoded in the ability's caller context. |
+| Area candidates | `0x0068EA00` | Shared area-unit enumeration. The caller-supplied center, radius, callback, and callback predicates determine the actual ability behavior. |
+| Attached instance lookup | `0x006D6570` | Looks up attached ability/status instances by rawcode; Phoenix Fire queries `Bpxf` and avoids a duplicate. Lookup alone says nothing about application or expiry. |
+| Attach and removal | `0x006D4560`, `0x006D8530` | Register an attached object with a unit and later notify/unlink it. The callers and virtual hooks determine what initiated the operation and the ability-specific inverse. |
+| Callback delivery | `0x007FBE90` | Generic callback/event forwarding through a virtual slot. An event ID or callback site must be traced to establish its lifecycle meaning. |
+| Damage/effect payload | `0x006A9940` | Initializes a payload that Carrion Swarm later dispatches through the target vtable at `+0x120`. It is not itself the damage applier. |
+
+Full call counts and caveats are in
+[shared native ability functions](ability-shared-native-functions.md).
+Treat each helper as a waypoint. To reuse it for a second ability, prove that
+the concrete caller reaches it with relevant arguments and data, then inspect
+the branch and resulting virtual operation.
+
+## Cast and effect paths
+
+Evidence so far supports layered execution rather than one universal
+`cast -> effect` function:
+
+- `CAbilitySimpleSpell` supplies a shared order-validation path, while
+  concrete classes may add checks afterward. Carrion Swarm's caller at
+  `0x00C2FA90` checks additional target flags after calling
+  `0x00B28980`.
+- A concrete class can own its scan, event, missile, status, or effect
+  callbacks. Carrion Swarm's native path creates a `CMissileCarrionSwarm`,
+  scans candidates, applies per-candidate predicates, initializes a payload,
+  and dispatches it to the target. Phoenix Fire instead has a scheduled event
+  that enumerates nearby units, rejects already-affected candidates, selects
+  one, and enters a status/effect setup path.
+- Ability instances may own nested callback/event members. Phoenix Fire's
+  code schedules event `0xD01B0`; the generic callback helper is involved in
+  delivery. The configured interval's exact AbilityData field and the
+  resulting damage/tick ownership remain unresolved.
+- Similar class names or shared parent classes do not imply identical target
+  masks, data-field meanings, damage, duration, or interruption behavior.
+
+For casts, preserve the native result values and continuation branches. A
+zero or nonzero from an order validator cannot be translated into
+accepted/rejected without following the caller and checking the observed
+JASS spell event or effect. The concrete class trace and the behavior trace
+are separate evidence.
+
+## Attached status and object lifecycle
+
+Retail stores ability/status objects as attached instances on a unit rather
+than the flat status rows used by OpenRealm. The exact-build helpers establish
+these common lifecycle operations:
+
+1. `0x006D4560` attaches/registers an instance, updates special cached
+   pointers, invokes virtual lifecycle hooks, and notifies existing attached
+   objects.
+2. `0x006D6570` searches attached instances by rawcode; Phoenix Fire uses it
+   to check for `Bpxf` before applying another effect.
+3. `0x006D8530` marks an object removed, notifies other attached objects,
+   unlinks it, updates list metadata, and clears selected cached pointers.
+4. Concrete buff/ability callbacks and the code that invokes these helpers
+   determine the actual duration, stacking, dispel, death, or inverse rules.
+
+OpenRealm provides useful contract comparisons in `unit_addtimedstatus`,
+`unit_expirestatus`, `UnitDispatchStatus`, and `S_UnitStatusAbilityEvent`.
+Those implementations use fixed status rows and procedure dispatch, so they
+help frame questions (apply/refresh/remove/tick/death) but do not establish
+Retail's object layout or callback behavior.
+
+## Serialization and mutable state
+
+Retail ability instances have class-specific save/load and cleanup methods.
+Exact class inspection found paired serializer callbacks for classes such as
+Carrion Swarm, Phoenix Fire, Mirror Image, Resurrection, Raven Form, and Root.
+The existence of a save/load override proves owned state is serialized, but
+not the gameplay role of every serialized field. Identify serializer helper
+calls, stream direction, member offsets, and the matching restore path before
+claiming persistence for a behavior.
+
+Do not treat a factory pointer, instance vtable, registry descriptor, or
+runtime object address as persistent identity. Reacquire the concrete class
+and attached object relationships after load when tracing saved state.
+
+## Using OpenRealm abilities as comparison cases
+
+OpenRealm is useful for choosing the native question to investigate:
+
+- Faerie Fire suggests examining enemy/alive validation, duplicate status,
+  duration, and target art.
+- Serpent Ward and `S_SummonAbilityUnits` suggest looking for shared
+  UnitID/count/duration reads, ownership, and timed life.
+- `S_ResolveAttackHit` and attack-bonus status callbacks suggest following
+  Retail attack-hit dispatch for orb/arrow effects. OpenRealm Cold Arrows is a
+  placeholder toggle and is not a behavior-equivalent reference.
+- `unit_expirestatus` suggests checking whether Retail removal invokes the
+  status's inverse before unlinking it.
+
+These are search hypotheses, not Retail evidence. Current gaps include a
+confirmed shared Retail summon constructor/timed-life path, the concrete
+attack-to-ability dispatch for on-hit effects, the buff creation/refresh and
+expiry scheduler, and complete virtual-hook meanings for attach/removal.
+
+## Reproducible inspection
+
+Verify the binary hash before using any address. Reuse the cached project for
+read-only inspection:
+
+```sh
+sha256sum 'data/Warcraft III/Warcraft III.exe'
+/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/data/wc3-ghidra-full" Wc3Retail1292Full \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath tools/ghidra \
+  -postScript Wc3DumpFunction.java \
+  0x00B28980 0x00C2FA90 0x00C31430 0x00C30BB0 \
+  0x00682180 0x006AEA70 0x006ADA20 0x0068EA00 \
+  0x006D4560 0x006D6570 0x006D8530 0x006A9940
+```
+
+Use `Wc3Callers.java` for direct incoming references and caller sites. Confirm
+the decompiler's x86 `thiscall` receiver in `ECX`, stack argument order,
+virtual slot offsets, and branch results in disassembly. Use Frida only when
+static analysis cannot settle a runtime receiver or virtual target. A hook
+should filter the ability order/object, preserve raw return values, and be
+paired with static caller evidence.
+
+For the full JASS/Frida workflow and known failure modes, see
+[ability verification review](ability-verification-review.md). For the
+separately recovered demo/TFT inheritance details and their build scope, see
+[ability inheritance binary evidence](ability-inheritance-binary.md).

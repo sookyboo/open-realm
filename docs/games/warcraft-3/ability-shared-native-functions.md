@@ -5,6 +5,8 @@ ability verification work. Addresses below apply only to the Retail executable
 with SHA-256
 `3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed` (PE32
 x86, preferred image base `0x00400000`). Re-derive them for another executable.
+For the larger picture of registration, instance identity, cast paths, and
+evidence limits, see [Retail ability architecture](ability-retail-architecture.md).
 
 ## Confirmed starting points
 
