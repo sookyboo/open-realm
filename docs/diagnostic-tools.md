@@ -63,6 +63,25 @@ that store a unit or ability fourcc (`ncgb`, `ANin`) print as fourcc, not `0`.
 Do not write a new SLK walker for this. `ability_audit` uses the same DDX
 schema as `g_metadata.c`.
 
+For a batch, use `tools/wc3_ability_verification_packet.py <rawcode...>` to
+capture both edition audits and resolved TFT tooltip output in one report:
+
+```sh
+python3 tools/wc3_ability_verification_packet.py Apxf AOeq \
+  --claims-file /tmp/ability-claims.json \
+  --native-address Apxf=0x00C0ECD0,0x00C0F1E0 \
+  --output /tmp/wc3-ability-packet.md
+```
+
+The report records the Retail executable SHA-256, archive names/sizes, data
+output, claim checklist, native trace worksheet, and a cached-Ghidra command
+for any confirmed addresses. `--hash-data-archives` adds hashes for the large
+local MPQs when archive-level provenance is needed. The generated worksheet
+does not infer runtime behavior: treat registry class labels as leads until
+registration/vtables are confirmed in the pinned executable. Leave Retail/JASS
+scenarios out when matching data and exact-build code settle the claim; fill
+the runtime question only for the remaining observable uncertainty.
+
 ## MPQ Inspection (mpqtool)
 
 - When investigating Warcraft III assets, prefer using the local CLI utility `build/bin/mpqtool` instead of guessing file paths.
