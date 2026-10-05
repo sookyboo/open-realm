@@ -71,7 +71,7 @@ The strongest currently recovered cross-ability mechanisms are:
 | Candidate target validation | `0x00682180`, `0x006AEA70`, `0x006ADA20` | Shared target rejection and target-mask/relation checks. Numeric target-mask categories and rejection values must be decoded in the ability's caller context. |
 | Area candidates | `0x0068EA00` | Shared area-unit enumeration. The caller-supplied center, radius, callback, and callback predicates determine the actual ability behavior. |
 | Attached instance lookup | `0x006D6570` | Looks up attached ability/status instances by rawcode; Phoenix Fire queries `Bpxf` and avoids a duplicate. Lookup alone says nothing about application or expiry. |
-| Attach and removal | `0x006D4560`, `0x006D8530` | Register an attached object with a unit and later notify/unlink it. The callers and virtual hooks determine what initiated the operation and the ability-specific inverse. |
+| Attach and removal | `0x006D4560`, `0x006D8530`, `0x006D87A0` | Register an attached object, filter attached objects for JASS buff-removal natives, and notify/unlink selected objects. `UnitRemoveBuffs` and `UnitRemoveBuffsEx` share the filter loop; class virtual predicates decide per-instance eligibility. |
 | Callback delivery | `0x007FBE90` | Generic callback/event forwarding through a virtual slot. An event ID or callback site must be traced to establish its lifecycle meaning. |
 | Damage/effect payload | `0x006A9940` | Initializes a payload that Carrion Swarm later dispatches through the target vtable at `+0x120`. It is not itself the damage applier. |
 
@@ -122,7 +122,22 @@ these common lifecycle operations:
    to check for `Bpxf` before applying another effect.
 3. `0x006D8530` marks an object removed, notifies other attached objects,
    unlinks it, updates list metadata, and clears selected cached pointers.
-4. Concrete buff/ability callbacks and the code that invokes these helpers
+4. `0x006D87A0` is the shared filter loop called by both JASS natives
+   `UnitRemoveBuffs` (`0x004AF5E0`) and `UnitRemoveBuffsEx` (`0x004AF610`).
+   The extended wrapper passes `physical`, `magic`, `timedLife`, `aura`,
+   `autoDispel`, `removePositive`, and `removeNegative` into the helper in
+   that internal order; the simple wrapper supplies fixed category switches
+   and forwards only its positive/negative arguments. The helper tests object
+   virtual predicates, calls `0x006D8530` for matches, and returns the number
+   removed internally. Several predicate slots are not semantically named
+   yet, so the branch conditions and concrete object's vtable must be checked
+   before claiming a class-specific filter result. For the `BTLF` instance
+   created by `UnitApplyTimedLife`, vtable slots `+0x1E0` and `+0x1E4` point
+   to `0x0046A9A0` and `0x0046A9C0`; both methods return zero. Since the loop
+   requires one of these polarity predicates to match, this `BTLF` instance
+   is statically excluded from both native removal paths even when the other
+   category switches allow timed life and auras.
+5. Concrete buff/ability callbacks and the code that invokes these helpers
    determine the actual duration, stacking, dispel, death, or inverse rules.
 
 The native `UnitApplyTimedLife` path is now partly recovered in this exact

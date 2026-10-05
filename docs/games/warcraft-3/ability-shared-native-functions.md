@@ -22,6 +22,7 @@ candidate shared mechanisms:
 | `0x0068EA00` | Area-unit enumeration | Phoenix Fire invokes it centered on the owner's position with a radius/configuration from the ability data object and callback `0x00C0F1E0`. Full-analysis Ghidra found 133 direct call references from 118 caller functions. |
 | `0x006D6570` | Attached ability/status instance lookup by rawcode | Function-body inspection shows fast paths for several fixed FOURCCs, then iteration over attached instances and comparison through their rawcode getter. Phoenix Fire queries `Bpxf` and rejects a candidate when the status instance is already present. Full-analysis Ghidra found 959 direct call references from 681 caller functions, making this the strongest high-reuse starting point. The lookup does not establish application, refresh, expiry, or dispel behavior. |
 | `0x006D4560` | Ability/status instance attachment to a unit | The body registers an instance, caches selected special rawcodes on the unit, invokes virtual lifecycle hooks on the new instance, and notifies already attached instances. Full-analysis Ghidra found 54 direct calls from 34 caller functions. This is a useful point to verify whether an ability's resulting status object actually becomes attached and enters shared unit lifecycle dispatch; it does not itself prove the ability-specific creation rules or expiry behavior. |
+| `0x006D87A0` | Shared JASS buff-filter and attached-instance removal loop | Both `UnitRemoveBuffs` (`0x004AF5E0`) and `UnitRemoveBuffsEx` (`0x004AF610`) resolve the unit and call this function. The extended wrapper reorders its category arguments into the helper's internal order; the simple wrapper supplies a fixed set of category switches. The helper walks attached instances, checks positive/negative and category predicates through virtual slots, and calls `0x006D8530` on matches. It fetches the next list entry before removal and returns a removal count internally. Full-analysis Ghidra found 27 direct calls from 22 functions. For the `BTLF` object created by `UnitApplyTimedLife`, vtable slots `+0x1E0` and `+0x1E4` point to `0x0046A9A0` and `0x0046A9C0`; both methods return zero. These are the two polarity predicates the loop requires when `removeNegative` or `removePositive` is enabled. Static flow therefore excludes this BTLF instance from both native removal calls, independent of the other category switches. Verify the concrete instance class before applying that conclusion to another timed status. |
 | `0x006D4B60` | Buff-object creation path used by `UnitApplyTimedLife` | The JASS native wrapper at `0x004AED50` resolves the unit and passes the requested buff code and duration here. This routine selects a buff prototype/factory, initializes the created object through virtual slot `+0x324`, attaches it through `0x006D4560`, then runs a post-attach helper. Its only direct caller found is the `UnitApplyTimedLife` wrapper, so this is a confirmed native path, not yet a shared spell-cast helper. The default branch selects `BTLF` via `0x006F4C40`. |
 | `0x006F6820` | Shared progress/timed-value callback in the `CBuffTimedLife` vtable | Constructor `0x006F0D60` installs vtable `0x00EA63AC`; slot `+0x328` points to this method. It reads the global game-time value at `0x0112D88C`, compares it with a float supplied by the caller, changes object flag `0x80`, and invokes slot `+0x354` on one branch. The concrete clock argument and branch meaning are not fully recovered; this is a useful timer/progress trace point, not proof of unit removal at expiry. |
 | `0x006F6BD0` | Shared lifecycle callback emitting event `0xD01C4` | This is slot `+0x354` in the `CBuffTimedLife` vtable above. It resets shared state, registers/updates a callback against the game-time value, and calls generic dispatcher `0x007FBF80` with event `0xD01C4`; a nonzero argument also invokes virtual slot `+0x30C`. The callback is referenced by many class vtables, so it is a shared lifecycle primitive. The event's semantic name and whether a particular caller uses it for expiry remain unresolved. |
@@ -70,12 +71,14 @@ comparison cases currently in the game module are:
 | `S_SpellDamageEnemiesInRadius` and status application in `s_spell.c` / `s_area_spell.c` | Common area enumeration followed by per-target filtering, damage, or status application | Retail `0x0068EA00` is a widely reused area-enumeration helper. Determine the callback and target predicates at each ability caller; enumeration alone does not establish the effect. |
 
 These analogues prioritize four Retail investigations: (1) locate the shared
-status-instance creation/refresh path adjacent to `0x006D6570`; (2) resolve the
-clock argument, event `0xD01C4`, and removal consequence around the `BTLF`
-vtable methods `0x006F6820` / `0x006F6BD0`, then determine whether spell summons
-reuse the `UnitApplyTimedLife` construction route; (3) find the attack-hit
-dispatch that reaches concrete ability handlers; and (4) identify whether
-summon abilities converge on a shared creation routine. For each, search cross
+status-instance creation/refresh path adjacent to `0x006D6570`; `UnitRemoveBuffs`
+and `UnitRemoveBuffsEx` now provide named entry points into the shared filter
+and removal path at `0x006D87A0` / `0x006D8530`; (2) resolve the clock argument,
+event `0xD01C4`, and removal consequence around the `BTLF` vtable methods
+`0x006F6820` / `0x006F6BD0`, then determine whether spell summons reuse the
+`UnitApplyTimedLife` construction route; (3) find the attack-hit dispatch that
+reaches concrete ability handlers; and (4) identify whether summon abilities
+converge on a shared creation routine. For each, search cross
 references from known ability callers, inspect the helper body, then compare
 at least two distinct ability classes before calling it shared. Add a native
 address here only after that exact-build call-chain evidence exists.
@@ -99,7 +102,7 @@ Use the cached full-analysis project for read-only call/reference inspection:
   -process 'Warcraft III.exe' -noanalysis \
   -scriptPath tools/ghidra \
   -postScript Wc3Callers.java 0x00682180 0x0068EA00 0x006D6570 \
-  0x006D4560 0x006D4B60 0x006D8530 0x006D4A10 \
+  0x006D4560 0x006D87A0 0x006D4B60 0x006D8530 0x006D4A10 \
   0x006EC8F0 0x006ECA60 \
   0x006AEA70 0x006ADA20 0x00B28980 0x007F6360 0x007FBE90 \
   0x006A9940 0x006ADB90
