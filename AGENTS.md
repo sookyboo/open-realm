@@ -123,6 +123,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | WC3 ability/item presentation art, effect edict lifetimes, JASS effect handles, consumable charge semantics | [docs/games/warcraft-3/ability-and-item-effects.md](docs/games/warcraft-3/ability-and-item-effects.md) |
 | WC3 ability implementation from data, behavior, and focused evidence | [docs/games/warcraft-3/ability-implementation.md](docs/games/warcraft-3/ability-implementation.md) |
 | WC3 ability verification review, Retail JASS probes, map workflow, and Frida evidence | [docs/games/warcraft-3/ability-verification-review.md](docs/games/warcraft-3/ability-verification-review.md) |
+| WC3 exact-build shared native helpers for ability target/effect/lifecycle verification | [docs/games/warcraft-3/ability-shared-native-functions.md](docs/games/warcraft-3/ability-shared-native-functions.md) |
 | WC3 creep ability aliases, `code=` mapping, parent-owned registry rows | [docs/games/warcraft-3/creep-ability-aliases.md](docs/games/warcraft-3/creep-ability-aliases.md) |
 <| WC3 item orb damage via `CAbilityAttackBonus` and `S_OrbOnHit` BuffID state | [docs/games/warcraft-3/item-orbs.md](docs/games/warcraft-3/item-orbs.md) |
 | WC3 poison on-hit buff state (`Aven`/`Apoi`/`Apo2`), DPS deferred to status tick | [docs/games/warcraft-3/poison-attacks.md](docs/games/warcraft-3/poison-attacks.md) |

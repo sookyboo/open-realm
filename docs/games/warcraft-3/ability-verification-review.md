@@ -1499,6 +1499,10 @@ data/tooltip evidence above can be reused without another Retail run, while a
 runtime probe is needed only if those static paths cannot settle an observable
 branch.
 
+See [shared native ability functions](ability-shared-native-functions.md) for
+exact-build helpers and Ghidra caller counts that can shorten these callback
+investigations.
+
 
 ### Jaina / Archmage remaining-fidelity follow-up (September 19, 2026)
 
