@@ -20,6 +20,7 @@ candidate shared mechanisms:
 | `0x0068EA00` | Area-unit enumeration | Phoenix Fire invokes it centered on the owner's position with a radius/configuration from the ability data object and callback `0x00C0F1E0`. Full-analysis Ghidra found 133 direct call references from 118 caller functions. |
 | `0x006D6570` | Attached ability/status instance lookup by rawcode | Function-body inspection shows fast paths for several fixed FOURCCs, then iteration over attached instances and comparison through their rawcode getter. Phoenix Fire queries `Bpxf` and rejects a candidate when the status instance is already present. Full-analysis Ghidra found 959 direct call references from 681 caller functions, making this the strongest high-reuse starting point. The lookup does not establish application, refresh, expiry, or dispel behavior. |
 | `0x006EC8F0` | Shared ability/effect object initialization | Phoenix Fire reaches this after selecting a target with the `Bpxf` definition. Its body copies authored configuration into object fields, calls virtual setters, and delegates additional initialization; full-analysis Ghidra found 15 direct calls from 15 caller functions. The object type and complete lifecycle contract remain to be mapped at each caller. |
+| `0x006ECA60` | Sibling ability/effect object initializer candidate | The body has a similar authored-data copy and virtual-setter pattern to `0x006EC8F0`, but writes a different object-field layout and delegates to `0x006E7D00`. Full-analysis Ghidra found 13 direct calls from 13 caller functions. This may identify another reusable object family while tracing applied effects; caller evidence is still needed before assigning it a gameplay role. |
 | `0x0067FB80` | Additional owner/target relation check | Called from Phoenix Fire's candidate callback. It examines owner/target flags and invokes shared validation; a stable semantic label is not established. Full-analysis Ghidra found 40 direct call references from 37 caller functions. |
 | `0x00699FD0` | Indexed candidate selection | Phoenix Fire calls this to choose one candidate from the collected area targets. Full-analysis Ghidra found seven direct call references from five caller functions; this is a narrower helper than target validation, enumeration, and buff lookup. |
 | `0x00B28980` | `CAbilitySimpleSpell` order validation | Full-analysis Ghidra found 23 direct calls plus 187 non-call references (including virtual/data references). Its return value is a native validation result, not an acceptance boolean. This function is already traced for Carrion Swarm and other simple-spell callers; use its result together with caller continuation and externally observable order/event state. |
@@ -84,7 +85,8 @@ Use the cached full-analysis project for read-only call/reference inspection:
   "$PWD/data/wc3-ghidra-full" Wc3Retail1292Full \
   -process 'Warcraft III.exe' -noanalysis \
   -scriptPath tools/ghidra \
-  -postScript Wc3Callers.java 0x00682180 0x0068EA00 0x006D6570 0x006EC8F0 \
+  -postScript Wc3Callers.java 0x00682180 0x0068EA00 0x006D6570 \
+  0x006EC8F0 0x006ECA60 \
   0x006AEA70 0x006ADA20 0x00B28980 0x007F6360 0x007FBE90 \
   0x006A9940 0x006ADB90
 ```
