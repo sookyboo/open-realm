@@ -31,6 +31,9 @@ candidate shared mechanisms:
 | `0x004AF460` | JASS `UnitMakeAbilityPermanent` wrapper | Resolves the unit, finds the attached instance by rawcode through `0x006D6570`, then increments or decrements the integer field at instance offset `+0x38` according to `permanent`. It returns whether an instance was found. This field is separate from disable counters `+0x3C` / `+0x40`; its downstream persistence/removal effect is not yet traced. |
 | `0x006D87A0` | Shared JASS buff-filter and attached-instance removal loop | Both `UnitRemoveBuffs` (`0x004AF5E0`) and `UnitRemoveBuffsEx` (`0x004AF610`) resolve the unit and call this function. The extended wrapper reorders its category arguments into the helper's internal order; the simple wrapper supplies a fixed set of category switches. The helper walks attached instances, checks positive/negative and category predicates through virtual slots, and calls `0x006D8530` on matches. It fetches the next list entry before removal and returns a removal count internally. Full-analysis Ghidra found 27 direct calls from 22 functions. For the `BTLF` object created by `UnitApplyTimedLife`, vtable slots `+0x1E0` and `+0x1E4` point to `0x0046A9A0` and `0x0046A9C0`; both methods return zero. These are the two polarity predicates the loop requires when `removeNegative` or `removePositive` is enabled. Static flow therefore excludes this BTLF instance from both native removal calls, independent of the other category switches. Verify the concrete instance class before applying that conclusion to another timed status. |
 | `0x006D4B60` | Buff-object creation path used by `UnitApplyTimedLife` | The JASS native wrapper at `0x004AED50` resolves the unit and passes the requested buff code and duration here. This routine selects a buff prototype/factory, initializes the created object through virtual slot `+0x324`, attaches it through `0x006D4560`, then runs a post-attach helper. Its only direct caller found is the `UnitApplyTimedLife` wrapper, so this is a confirmed native path, not yet a shared spell-cast helper. The default branch selects `BTLF` via `0x006F4C40`. |
+| `0x00687CA0` | Shared unit construction/setup helper reached by stock summon abilities | Spirit Wolf (`CAbilitySpiritWolf`, vtable `0x00F8910C`) reaches it through `0x00CAF240` from class callback `0x00C31B40`; Serpent Ward (`CAbilityWard`, vtable `0x00F8ABB8`) calls it directly from callback `0x00C34150`. The helper validates/normalizes placement, constructs a unit through `0x00685B20`, applies creation flags and further setup, and returns the new unit. It has 31 direct call references from 30 functions. These paths do not call the `UnitApplyTimedLife` wrapper or `0x006D4B60`; summon expiry and identity remain separate questions. |
+| `0x00CAF240` | Unit creation wrapper used by Spirit Wolf and other callers | Spirit Wolf passes its resolved summon code, owner, and placement through this wrapper; it validates the unit row and delegates construction to `0x00687CA0` with creation flags. It has 15 direct references. Serpent Ward bypasses this wrapper and calls `0x00687CA0` directly. Do not assume all summons use the wrapper just because the constructor is shared. |
+| `0x0068AB70` | Shared post-creation unit relation/update path | Both Spirit Wolf and Serpent Ward invoke this after their ability-specific setup for a successfully created unit. Its body updates unit/owner-related state and dispatches shared setup helpers; 29 direct references were found. The exact lifecycle contract and whether every caller passes a newly created summon are not established. |
 | `0x006F6820` | Shared progress/timed-value callback in the `CBuffTimedLife` vtable | Constructor `0x006F0D60` installs vtable `0x00EA63AC`; slot `+0x328` points to this method. It reads the global game-time value at `0x0112D88C`, compares it with a float supplied by the caller, changes object flag `0x80`, and invokes slot `+0x354` on one branch. The concrete clock argument and branch meaning are not fully recovered; this is a useful timer/progress trace point, not proof of unit removal at expiry. |
 | `0x006F6BD0` | Shared lifecycle callback emitting event `0xD01C4` | This is slot `+0x354` in the `CBuffTimedLife` vtable above. It resets shared state, registers/updates a callback against the game-time value, and calls generic dispatcher `0x007FBF80` with event `0xD01C4`; a nonzero argument also invokes virtual slot `+0x30C`. The callback is referenced by many class vtables, so it is a shared lifecycle primitive. The event's semantic name and whether a particular caller uses it for expiry remain unresolved. |
 | `0x006D8530` | Attached ability/status instance removal | The body marks the instance as removed, notifies sibling attached objects through a virtual hook, unlinks it from the owner's attached-instance list, refreshes list metadata, and clears cached pointers for selected rawcodes. Full-analysis Ghidra found 221 direct calls from 174 functions. This is a strong shared path for tracing dispel, expiry, death cleanup, or ability removal, but caller and virtual-hook analysis is still needed to identify which cause initiated each removal. |
@@ -98,10 +101,16 @@ These OpenRealm analogues prioritize the remaining Retail investigations:
    IDs and handler addresses are established, but these field and receiver
    meanings remain open.
 3. Resolve the clock argument, event `0xD01C4`, and removal consequence around
-   `BTLF` vtable methods `0x006F6820` / `0x006F6BD0`, then determine whether
-   spell summons reuse the `UnitApplyTimedLife` construction route.
+   `BTLF` vtable methods `0x006F6820` / `0x006F6BD0`. Spirit Wolf and Serpent
+   Ward have now been shown to share unit construction at `0x00687CA0`, but
+   neither uses the `UnitApplyTimedLife` route in its inspected spawn callback;
+   trace their summon-specific expiry paths separately.
 4. Find the attack-hit dispatch that reaches concrete ability handlers.
-5. Identify whether summon abilities converge on a shared creation routine.
+5. Extend the summon comparison from Spirit Wolf and Serpent Ward to Pocket
+   Factory and another summon class. `0x00687CA0` is a proven shared unit
+   constructor for the first two; Pocket Factory's periodic callback
+   `0x00C82310` uses a different data/timer dispatch and has not yet been
+   connected to this helper.
 
 For each investigation, follow references from known ability callers, inspect
 the helper body, and compare at least two distinct classes before calling a
@@ -129,6 +138,8 @@ Use the cached full-analysis project for read-only call/reference inspection:
   -postScript Wc3Callers.java 0x00682180 0x0068EA00 0x006D6570 \
   0x006D4560 0x00AF3BA0 0x006D61E0 0x0046E0C0 0x0046E630 \
   0x006D87A0 0x006D4B60 0x006D8530 0x006D4A10 \
+  0x00687CA0 0x00CAF240 0x0068AB70 0x00C31B40 0x00C34150 \
+  0x00C82310 \
   0x006EC8F0 0x006ECA60 \
   0x006AEA70 0x006ADA20 0x00B28980 0x007F6360 0x007FBE90 \
   0x006A9940 0x006ADB90

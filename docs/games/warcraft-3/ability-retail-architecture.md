@@ -207,6 +207,34 @@ whether stock spell summons use the native construction route remain open. See
 the [shared-helper map](ability-shared-native-functions.md) for the addresses
 and evidence limits.
 
+## Summoned unit construction
+
+The pinned build has a shared unit-construction path for Spirit Wolf and
+Serpent Ward, separate from the `UnitApplyTimedLife` buff-object path:
+
+- Spirit Wolf's `CAbilitySpiritWolf` vtable is `0x00F8910C`. Its creation
+  callback `0x00C31B40` resolves the summon type/count and placement, calls
+  `0x00CAF240`, then performs ability-specific setup and calls
+  `0x0068AB70` for each successfully created unit. `0x00CAF240` resolves the
+  unit row and delegates to `0x00687CA0`.
+- Serpent Ward's `CAbilityWard` vtable is `0x00F8ABB8`. Callback
+  `0x00C34150` resolves its authored unit/count and placement data, calls
+  `0x00687CA0` directly for each placement, applies ability-specific setup,
+  then calls `0x0068AB70` on successful creation.
+- `0x00687CA0` constructs/configures the unit through `0x00685B20` and has 31
+  direct call references from 30 functions in the pinned Ghidra project. The
+  direct callers show this helper is broader than these two abilities.
+  `0x0068AB70` has 29 direct references and is a shared post-creation
+  relation/update path; its full semantic contract is still being recovered.
+
+Neither inspected ability callback calls the `UnitApplyTimedLife` wrapper
+`0x004AED50` or buff creator `0x006D4B60`. This establishes shared unit
+construction for these two spell classes, not shared summon expiry or timed
+life. Pocket Factory's class callback `0x00C82310` follows a data/timer member
+dispatch and has not been connected to `0x00687CA0`; its periodic unit
+production remains a separate open path. See the exact-build evidence and
+reproduction notes in [shared native functions](ability-shared-native-functions.md).
+
 OpenRealm provides useful contract comparisons in `unit_addtimedstatus`,
 `unit_expirestatus`, `UnitDispatchStatus`, and `S_UnitStatusAbilityEvent`.
 Those implementations use fixed status rows and procedure dispatch, so they
