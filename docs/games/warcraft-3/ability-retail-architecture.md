@@ -76,7 +76,7 @@ The strongest currently recovered cross-ability mechanisms are:
 | Ability disable/enable | `0x006D61E0`, `0x0046E0C0`, `0x0046E630` | `BlzUnitDisableAbility` changes disable counters on the existing attached object. Shared transition routines invoke class virtual hooks only when the counter crosses the enabled/disabled boundary. |
 | Attach and removal | `0x006D4560`, `0x006D8530`, `0x006D87A0` | Register an attached object, filter attached objects for JASS buff-removal natives, and notify/unlink selected objects. `UnitRemoveAbility` directly removes a rawcode-matched instance; `UnitRemoveBuffs` and `UnitRemoveBuffsEx` share the filter loop, where class virtual predicates decide per-instance eligibility. |
 | Callback delivery | `0x007FBE90` | Generic callback/event forwarding through a virtual slot. An event ID or callback site must be traced to establish its lifecycle meaning. |
-| Damage/effect payload | `0x006A9940` | Initializes a payload that Carrion Swarm later dispatches through the target vtable at `+0x120`. It is not itself the damage applier. |
+| Damage/effect payload | `0x006A9940`, target vtable `+0x120` | Both the registered JASS `UnitDamageTarget` wrapper (`0x004AEF70`) and Carrion Swarm (`0x00C30BB0`) initialize an event payload and dispatch it through this victim slot. This confirms a shared damage-event handoff; the receiver implementation, mitigation, and final life mutation are not yet identified. |
 
 Full call counts and caveats are in
 [shared native ability functions](ability-shared-native-functions.md).
