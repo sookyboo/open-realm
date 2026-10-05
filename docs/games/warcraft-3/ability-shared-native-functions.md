@@ -95,6 +95,8 @@ comparison cases currently in the game module are:
 | `unit_expirestatus`, `UnitDispatchStatus`, and `unit_updatestatuses` in `m_unit.c`; Purge and Dispel Magic | Expiry/dispel removal ordering, inverse callbacks, death behavior, and whether timed-life removal kills or preserves the unit | Retail entry points are `UnitRemoveBuffs`, `UnitRemoveBuffsEx`, `UnitApplyTimedLife`, and `BlzUnitCancelTimedLife`; ability paths to compare include Purge (`Apg2`) and Dispel/Disenchant (`Adis`/`Adch`). OpenRealm dispatches `A_STATUS_REMOVE` before clearing a status slot and applies timed-life death after expiry cleanup. |
 | `S_SummonAbilityUnits` / `S_SummonAbilityAt` in `s_summon.c`; Serpent Ward, Spirit Wolves, Pocket Factory | Whether different summon classes share unit construction, owner/creator attribution, lifetime attachment, and timed removal | For Retail, follow those abilities' class callbacks to `0x00687CA0`, then compare their expiry path with JASS `UnitApplyTimedLife` and explicit `RemoveUnit`. OpenRealm routes summon creation through `S_SummonAbilityAt`, with `S_SpellApplyTimedLife` when duration is positive; Serpent Ward, Spirit Wolves, and Pocket Factory give distinct caller families. |
 | `CAbilityAttackBonus` / `S_OrbOnHit` in `s_item_stats.c` and `CAbilityPoisonAttack` / `S_PoisonOnHit` in `s_status_spells.c` | Whether passive ability instances are queried in a common hit dispatcher and how their authored `BuffID`/level reach status creation | Use Retail item orbs (`AIob`, `Aven`, `Apoi`, `Apo2`) and the matching attack-buff objects as distinct classes. Relevant JASS observables include `UnitDamageTarget` and damage event natives; OpenRealm's attack handlers make a good map of where to look, but its Cold Arrows stub is not useful evidence. |
+| Retail class registry: `Apoi`/`Aven`/`Aspo`/`Apo2`; OpenRealm `CAbilityPoisonAttack` and `S_PoisonOnHit` | Shared parent hooks versus subclass-specific hit behavior, plus the path from attacker ability to `Bpoi`/`Bpsd`/`BIpb`/`BIpd` attachment | Exact pinned registry maps `Apoi` to `CAbilityPoisonAttack` (`APas` parent), with `Aven` (`CAbilityVenomSpear`), `Aspo` (`CAbilitySlowPoison`), and `Apo2` (`CAbilityPoisonDamage`) below it. OpenRealm has one passive procedure and central on-hit handler. This is a focused class family for locating the Retail dispatch, but registration and inheritance alone do not prove a shared hit callback. |
+| Retail orb rows `AIob` and `AIpb`; OpenRealm `CAbilityAttackBonus` and `S_OrbOnHit` | Whether Retail's distinct frost/poison bonus classes converge on shared attack dispatch and status application | The pinned registry maps `AIob` to `CAbilityFrostDamageBonus` and `AIpb` to `CAbilityPoisonDamageBonus`, both under `AIDB`; OpenRealm currently routes both through `CAbilityAttackBonus`. Treat this as a Retail class split to investigate, not proof of behavior divergence. |
 
 These OpenRealm analogues prioritize the remaining Retail investigations:
 
@@ -121,10 +123,12 @@ These OpenRealm analogues prioritize the remaining Retail investigations:
    `UnitPauseTimedLife`, and `BlzUnitCancelTimedLife`; inspect
    `UnitRemoveBuffsEx` as a control for buff filtering.
 4. Find the attack-hit dispatch that reaches concrete ability handlers. Use
-   `S_ResolveAttackHit` as the OpenRealm map, then trace Retail orb damage and
-   poison classes separately. JASS `UnitDamageTarget` and damage-event natives
-   can help exercise the receiver, but do not substitute for finding the
-   ordinary attack callback path.
+   `S_ResolveAttackHit` as the OpenRealm map. Retail's class inventory narrows
+   the search to poison family `Apoi` → `Aven`/`Aspo`/`Apo2` and distinct
+   `AIob` / `AIpb` bonus classes; inspect their shared and overridden virtual
+   hooks before assuming one hit callback. JASS `UnitDamageTarget` and
+   damage-event natives can help exercise the receiver, but do not substitute
+   for finding the ordinary attack callback path.
 5. Extend the Pocket Factory trace from unit construction into the remaining
    factory and Clockwerk lifetime/removal callbacks. Impact callback
    `0x00C829F0` and periodic producer callback `0x00C831F0` both call shared
