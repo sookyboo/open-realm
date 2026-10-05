@@ -49,6 +49,16 @@ factory unit. Do not implement Pocket Factory production as `ANfy`.
 
 ## Runtime Ownership
 
+Retail static analysis of executable SHA-256
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed` confirms
+the two-stage creation path: `CAbilitySummonFactory` initializes an `MNsy`
+missile, whose impact callback creates the configured factory through
+`0x00687CA0` and attaches `BNfy` (`CBuffFactory`). The `BNfy` event callback
+then creates each configured Clockwerk through the same `0x00687CA0` helper
+and attaches `BNcg` (`CBuffClockworkGoblin`). These are distinct ability-owned
+and buff-owned callbacks; the address-level trace and Ghidra project details
+are in [the Retail shared-helper notes](ability-shared-native-functions.md).
+
 ```text
 AbilityData.slk (ANsy / ANs1 / ANs2 / ANs3)
   -> UnitID, Dur, DataA–E
