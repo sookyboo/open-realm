@@ -1089,6 +1089,7 @@ static void G_RunFrame(void) {
     jass_runevents(level.vm);
     G_UpdateTimerDialogs();
     G_UpdateLeaderboards();
+    G_UpdateMultiboards();
 
     /* A result action may call RemovePlayer() and then PauseGame(true) from
      * the JASS work above.  The pause takes effect immediately at the server
@@ -1419,6 +1420,7 @@ static void G_ClientBegin(edict_t *edict) {
     UI_WriteHoverLayout(edict);
     UI_WriteTimerDialogs(edict);
     UI_WriteLeaderboard(edict);
+    UI_WriteMultiboard(edict);
 
     G_AccumulatePlayerFood(client);
     /* Invalidate cache so the initial resource bar write always fires. */
