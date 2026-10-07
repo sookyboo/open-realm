@@ -537,7 +537,11 @@ static void CL_AddEntities(void) {
         if (elevator_debug && elevator_debug_lines < 384 &&
             (state->class_id == MAKEFOURCC('D','T','r','x') ||
              state->class_id == MAKEFOURCC('D','T','r','f')) &&
-            (!elevator_seen[state->number] || elevator_last_frame[state->number] != state->frame)) {
+            /* ElevatorPuzzle's ordinary Stand occupies 133..1333; skip its
+             * loop so the bounded trace captures transition and target poses. */
+            (!elevator_seen[state->number] || elevator_last_frame[state->number] != state->frame) &&
+            (!elevator_seen[state->number] || elevator_last_frame[state->number] < 133 ||
+             elevator_last_frame[state->number] >= 1333 || state->frame < 133 || state->frame >= 1333)) {
             fprintf(stderr,
                     "WC3_ELEVATOR client frame=%d ent=%u raw=%.4s model=%u pos=(%.1f,%.1f,%.1f) prevFrame=%u frame=%u\n",
                     cl.frame.serverframe, state->number, (cstring_t)&state->class_id,
