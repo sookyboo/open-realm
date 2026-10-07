@@ -138,9 +138,9 @@ See [Land Mines](land-mines.md) for the gameplay chain.
 
 ## `SPL` / `FPT` data flow
 
-`SPL` and `FPT` event objects resolve `Splats\SplatData.slk` in renderer asset scope.  The row supplies `Dir`, `file`, `Rows`, `Columns`, `Scale`, `Lifespan`, `Decay`, the lifespan/decay UV frame ranges, Start/Middle/End RGBA values, and retained `BlendMode`, `Water`, and `Sound` metadata.  The event snapshots the animated event-node world position into the same bounded renderer-only transient pool used by UBR.
+`SPL` and `FPT` event objects resolve `Splats\SplatData.slk` in renderer asset scope.  The row supplies `Dir`, `file`, `Rows`, `Columns`, `Scale`, `Lifespan`, `Decay`, the lifespan/decay UV frame ranges, Start/Middle/End RGBA values, and retained `BlendMode`, `Water`, and `Sound` metadata.  The event snapshots the animated event-node world position, including Z, into the same bounded renderer-only transient pool used by UBR.
 
-The terrain splat renderer accepts an explicit UV rectangle, so a SplatData atlas cell remains terrain-conforming even when the splat crosses tile boundaries and the generated polygons are clipped.  Atlas cells are numbered left-to-right, top-to-bottom from zero.  During `Lifespan`, the consumer advances once from `UVLifespanStart` to `UVLifespanEnd` while interpolating Start -> Middle colour; during `Decay`, it advances once from `UVDecayStart` to `UVDecayEnd` while interpolating Middle -> End colour.
+SPL/FPT and UBR splats conform to terrain at ordinary ground height. When their captured event Z is materially above terrain, the renderer draws them as a flat decal just above that height; this keeps effects attached to units on bridges and elevators. The flat path preserves the explicit UV rectangle, so a SplatData atlas cell remains correct. Terrain-conforming splats still clip to terrain tiles. Atlas cells are numbered left-to-right, top-to-bottom from zero. During `Lifespan`, the consumer advances once from `UVLifespanStart` to `UVLifespanEnd` while interpolating Start -> Middle colour; during `Decay`, it advances once from `UVDecayStart` to `UVDecayEnd` while interpolating Middle -> End colour.
 
 `LifespanRepeat` and `UVDecayRepeat` are parsed and retained but not yet applied: their exact retail repeat-count/wrap contract remains unverified. Likewise `BlendMode`, `Water`, and `Sound` are preserved but not guessed into renderer/audio behavior. A used row with one of those unsupported non-default fields produces one bounded warning, so the partial presentation contract is not silent. This keeps the implemented subset deterministic and data-driven without approximating the remaining semantics.
 
@@ -155,10 +155,10 @@ and map scope; the one-frame display must not be described as retail behavior.
 archive overrides take the same precedence as `SPN`.  The row supplies `Dir`,
 `file`, `Scale`, `BirthTime`, `PauseTime`, `Decay`, and the Start/Middle/End RGBA
 values. `BlendMode` and `Sound` are also parsed and retained.  The event snapshots the animated event-node world position into a
-bounded renderer-only transient.  Birth interpolates Start -> Middle, Pause
-holds Middle, and Decay interpolates Middle -> End.  The renderer uses the same
-terrain-conforming splat primitive as existing entity UberSplats; no gameplay
-entity or save/network state is created.
+bounded renderer-only transient. Birth interpolates Start -> Middle, Pause
+holds Middle, and Decay interpolates Middle -> End. The renderer uses the same
+terrain or raised-support splat paths as SPL/FPT; no gameplay entity or
+save/network state is created.
 
 The current generic splat primitive uses the engine's existing alpha-blended
 UberSplat path. `UberSplatData.BlendMode` values beyond the default blend path

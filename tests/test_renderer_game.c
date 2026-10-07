@@ -1,6 +1,47 @@
 /* Compile the WC3 game renderer into the headless renderer test. Function
  * sections let the linker retain R_RegisterMap and its dependencies without
  * requiring a GL context for unrelated draw paths. */
+#include "test.h"
+#include "renderer/r_local.h"
+
+static uint32_t test_flat_splat_count;
+static float test_flat_splat_z;
+static float test_terrain_height = 256.0f;
+static uint32_t test_splat_count;
+static vec2_t test_splat_origin;
+static float test_splat_radius;
+static color32_t test_splat_color;
+static vec2_t test_splat_uv_mins, test_splat_uv_maxs;
+static texture_t test_splat_texture;
+
+static float R_TestTerrainHeight(float x, float y) {
+    (void)x; (void)y;
+    return test_terrain_height;
+}
+
+static void R_TestFlatRectSplat(vec2_t const *mins, vec2_t const *maxs, float z,
+                                texture_t const *texture, splat_shader_t *shader, color32_t color) {
+    (void)texture; (void)shader;
+    test_flat_splat_count++;
+    test_flat_splat_z = z;
+    test_splat_count++;
+    test_splat_origin = MAKE(vec2_t, (mins->x + maxs->x) * 0.5f, (mins->y + maxs->y) * 0.5f);
+    test_splat_radius = (maxs->x - mins->x) * 0.5f;
+    test_splat_color = color;
+}
+
+static void R_TestFlatRectSplatUV(rectSplatParams_t const *params, float z) {
+    test_flat_splat_count++;
+    test_flat_splat_z = z;
+    test_splat_count++;
+    test_splat_origin = MAKE(vec2_t, (params->mins->x + params->maxs->x) * 0.5f,
+                             (params->mins->y + params->maxs->y) * 0.5f);
+    test_splat_radius = (params->maxs->x - params->mins->x) * 0.5f;
+    test_splat_color = params->color;
+    test_splat_uv_mins = *params->uv_mins;
+    test_splat_uv_maxs = *params->uv_maxs;
+}
+
 #define R_RegisterMap R_TestProductionRegisterMap
 #define R_BlightTexture R_TestProductionBlightTexture
 #define R_LoadModel R_TestProductionLoadModel
@@ -9,9 +50,19 @@
 #define R_ReleaseModel R_TestProductionReleaseModel
 #define MDLX_DrawSpriteInstance R_TestCursorSprite
 #define MDLX_FindSequenceByName R_TestCursorSequence
+#define R_RenderFlatRectSplat R_TestFlatRectSplat
+#define R_RenderFlatRectSplatUV R_TestFlatRectSplatUV
 #include "../games/warcraft-3/renderer/r_game.c"
+#undef R_RenderFlatRectSplat
+#undef R_RenderFlatRectSplatUV
 
-#include "test.h"
+#define R_GetHeightAtPoint R_TestTerrainHeight
+#define R_RenderFlatRectSplat R_TestFlatRectSplat
+#define R_GetEntityMatrix R_TestEntityMatrix
+#include "../renderer/r_ents.c"
+#undef R_GetHeightAtPoint
+#undef R_RenderFlatRectSplat
+#undef R_GetEntityMatrix
 
 extern void R_TestUseProductionModelLoader(bool enabled);
 extern cstring_t R_TestLastTextureLoad(void);
@@ -23,12 +74,6 @@ static handle_t test_renderer_archive;
 static char test_sound_path[512];
 static vec3_t test_sound_origin;
 static uint32_t test_sound_count;
-static uint32_t test_splat_count;
-static vec2_t test_splat_origin;
-static float test_splat_radius;
-static color32_t test_splat_color;
-static vec2_t test_splat_uv_mins, test_splat_uv_maxs;
-static texture_t test_splat_texture;
 
 TEST(renderer_game, null_splat_sound_is_treated_as_an_empty_optional_field) {
     wc3SplatData_t splat = { .name = "EmptySplat", .blend_mode = "0", .sound = "NULL" };
@@ -38,6 +83,33 @@ TEST(renderer_game, null_splat_sound_is_treated_as_an_empty_optional_field) {
     R_W3WarnUnsupportedUberSplatFields(&uber);
     T_ASSERT(!splat.unsupported_warned);
     T_ASSERT(!uber.unsupported_warned);
+}
+
+TEST(renderer_game, every_selected_unit_on_raised_support_emits_its_ring_above_the_deck) {
+    texture_t *saved_circle = tr.texture[TEX_SELECTION_CIRCLE];
+    uint32_t const saved_flat_count = test_flat_splat_count;
+    uint32_t const saved_splat_count = test_splat_count;
+    float const saved_terrain = test_terrain_height;
+
+    tr.texture[TEX_SELECTION_CIRCLE] = &test_splat_texture;
+    test_flat_splat_count = test_splat_count = 0;
+    test_terrain_height = 256.0f;
+    FOR_LOOP(i, 8) {
+        renderEntity_t entity = {
+            .origin = { 1728.0f + i * 16.0f, 5056.0f, 512.0f },
+            .flags = RF_SELECTED,
+            .radius = 32.0f,
+        };
+        vec2_t origin = { entity.origin.x, entity.origin.y };
+        R_RenderSelectedCircle(&entity, &origin);
+    }
+
+    T_EQ(test_flat_splat_count, 8);
+    T_FEQ(test_flat_splat_z, 513.0f, 0.001f);
+    tr.texture[TEX_SELECTION_CIRCLE] = saved_circle;
+    test_flat_splat_count = saved_flat_count;
+    test_splat_count = saved_splat_count;
+    test_terrain_height = saved_terrain;
 }
 
 TEST(renderer_game, splat_atlas_rejects_overflowing_dimensions) {
@@ -386,7 +458,7 @@ TEST(renderer_model, production_spl_dispatch_uses_splat_atlas_and_event_transfor
     mdxModel_t mdx = { .events = &event, .sequences = &sequence, .num_sequences = 1,
                        .pivots = &pivot, .num_pivots = 1 };
     model_t model = { .modeltype = ID_MDLX, .mdx = &mdx };
-    renderEntity_t entity = { .origin = { 10.0f, 20.0f, 30.0f }, .model = &model, .number = 10 };
+    renderEntity_t entity = { .origin = { 10.0f, 20.0f, 512.0f }, .model = &model, .number = 10 };
     wc3SplatData_t row = {
         .name = "TestSplat", .rows = 2, .columns = 2, .scale = 32.0f, .lifespan = 1.0f, .decay_time = 1.0f,
         .uv_lifespan_start = 0, .uv_lifespan_end = 1, .uv_decay_start = 2, .uv_decay_end = 3,
@@ -395,6 +467,7 @@ TEST(renderer_model, production_spl_dispatch_uses_splat_atlas_and_event_transfor
     };
     wc3SplatData_t *saved_rows = splat_data_rows;
     uint32_t saved_count = splat_data_count, saved_time = tr.viewDef.time;
+    float saved_terrain = test_terrain_height;
     render_phase_t saved_phase = tr.render_phase;
     wc3EventState_t saved_state = event_state[10];
 
@@ -403,11 +476,15 @@ TEST(renderer_model, production_spl_dispatch_uses_splat_atlas_and_event_transfor
     mdx.nodes[0] = &event.node; mdx.node_list[0] = &event.node; mdx.num_nodes = 1;
     splat_data_rows = &row; splat_data_count = 1;
     event_state[10] = (wc3EventState_t){ 0 }; R_W3ClearEventSplats();
-    test_splat_count = 0; tr.render_phase = RENDER_PHASE_SOLID; tr.viewDef.time = 0;
+    test_splat_count = test_flat_splat_count = 0;
+    test_terrain_height = 256.0f;
+    tr.render_phase = RENDER_PHASE_SOLID; tr.viewDef.time = 0;
 
     R_UpdateEntityPresentation(&entity);
     entity.frame = 150; tr.viewDef.time = 150; R_UpdateEntityPresentation(&entity);
     T_EQ(test_splat_count, 1);
+    T_EQ(test_flat_splat_count, 1);
+    T_FEQ(test_flat_splat_z, 516.0f, 0.001f);
     T_FEQ(test_splat_origin.x, 11.0f, 0.001f); T_FEQ(test_splat_origin.y, 22.0f, 0.001f);
     T_FEQ(test_splat_radius, 32.0f, 0.001f);
     T_FEQ(test_splat_uv_mins.x, 0.0f, 0.001f); T_FEQ(test_splat_uv_mins.y, 0.0f, 0.001f);
@@ -415,6 +492,7 @@ TEST(renderer_model, production_spl_dispatch_uses_splat_atlas_and_event_transfor
 
     tr.viewDef.time = 1150; R_W3DrawEventSplats();
     T_EQ(test_splat_count, 2);
+    T_EQ(test_flat_splat_count, 2);
     T_FEQ(test_splat_uv_mins.x, 0.0f, 0.001f); T_FEQ(test_splat_uv_mins.y, 0.5f, 0.001f);
     T_EQ(test_splat_color.r, 0); T_EQ(test_splat_color.g, 255); T_EQ(test_splat_color.b, 0);
     tr.viewDef.time = 2150; R_W3DrawEventSplats();
@@ -423,6 +501,7 @@ TEST(renderer_model, production_spl_dispatch_uses_splat_atlas_and_event_transfor
     R_W3ClearEventSplats();
     splat_data_rows = saved_rows; splat_data_count = saved_count;
     event_state[10] = saved_state; tr.viewDef.time = saved_time; tr.render_phase = saved_phase;
+    test_terrain_height = saved_terrain;
 }
 
 TEST(renderer_model, production_fpt_dispatch_uses_splat_data) {
@@ -446,7 +525,7 @@ TEST(renderer_model, production_ubr_dispatch_uses_data_lifetime_and_event_transf
     mdxModel_t mdx = { .events = &event, .sequences = &sequence, .num_sequences = 1,
                        .pivots = &pivot, .num_pivots = 1 };
     model_t model = { .modeltype = ID_MDLX, .mdx = &mdx };
-    renderEntity_t entity = { .origin = { 10.0f, 20.0f, 30.0f }, .model = &model, .number = 9 };
+    renderEntity_t entity = { .origin = { 10.0f, 20.0f, 512.0f }, .model = &model, .number = 9 };
     wc3UberSplatData_t row = {
         .name = "TestUber", .scale = 64.0f, .birth_time = 1.0f, .pause_time = 1.0f, .decay_time = 1.0f,
         .start_r = 1.0f, .start_a = 1.0f,
@@ -456,6 +535,7 @@ TEST(renderer_model, production_ubr_dispatch_uses_data_lifetime_and_event_transf
     };
     wc3UberSplatData_t *saved_rows = uber_splat_rows;
     uint32_t saved_count = uber_splat_count, saved_time = tr.viewDef.time;
+    float saved_terrain = test_terrain_height;
     render_phase_t saved_phase = tr.render_phase;
     wc3EventState_t saved_state = event_state[9];
 
@@ -464,11 +544,15 @@ TEST(renderer_model, production_ubr_dispatch_uses_data_lifetime_and_event_transf
     mdx.nodes[0] = &event.node; mdx.node_list[0] = &event.node; mdx.num_nodes = 1;
     uber_splat_rows = &row; uber_splat_count = 1;
     event_state[9] = (wc3EventState_t){ 0 }; R_W3ClearEventSplats();
-    test_splat_count = 0; tr.render_phase = RENDER_PHASE_SOLID; tr.viewDef.time = 0;
+    test_splat_count = test_flat_splat_count = 0;
+    test_terrain_height = 256.0f;
+    tr.render_phase = RENDER_PHASE_SOLID; tr.viewDef.time = 0;
 
     R_UpdateEntityPresentation(&entity);
     entity.frame = 150; tr.viewDef.time = 150; R_UpdateEntityPresentation(&entity);
     T_EQ(test_splat_count, 1);
+    T_EQ(test_flat_splat_count, 1);
+    T_FEQ(test_flat_splat_z, 516.0f, 0.001f);
     T_FEQ(test_splat_origin.x, 11.0f, 0.001f);
     T_FEQ(test_splat_origin.y, 22.0f, 0.001f);
     T_FEQ(test_splat_radius, 64.0f, 0.001f);
@@ -476,6 +560,7 @@ TEST(renderer_model, production_ubr_dispatch_uses_data_lifetime_and_event_transf
 
     tr.viewDef.time = 1650; R_W3DrawEventSplats();
     T_EQ(test_splat_count, 2);
+    T_EQ(test_flat_splat_count, 2);
     T_EQ(test_splat_color.r, 0); T_EQ(test_splat_color.g, 255); T_EQ(test_splat_color.b, 0);
     tr.viewDef.time = 3150; R_W3DrawEventSplats();
     T_EQ(test_splat_count, 2);
@@ -484,6 +569,7 @@ TEST(renderer_model, production_ubr_dispatch_uses_data_lifetime_and_event_transf
     R_W3ClearEventSplats();
     uber_splat_rows = saved_rows; uber_splat_count = saved_count;
     event_state[9] = saved_state; tr.viewDef.time = saved_time; tr.render_phase = saved_phase;
+    test_terrain_height = saved_terrain;
 }
 
 TEST(renderer_model, production_spn_child_dispatches_its_own_ubr_event) {

@@ -182,6 +182,8 @@ TEST(wc3_shadowmeld, owner_presentation_uses_smoothstep_ghost_alpha) {
     clent = &g_edicts[0];
     clent->client = &game.clients[0];
     clent->client->ps.number = 0;
+    /* The elevator deck is at z=512; height must not turn an owned Meld unit into RF_HIDDEN. */
+    fix.unit->s.origin.z = 512.0f;
     G_SetTimeOfDay(game.constants.duskTimeGameHours);
     G_UpdateTimeOfDay();
 
@@ -200,6 +202,7 @@ TEST(wc3_shadowmeld, owner_presentation_uses_smoothstep_ghost_alpha) {
     S_RunAbilityUpdates(fix.unit);
     T_ASSERT(S_ShadowMeldActive(fix.unit));
     T_FEQ(S_ShadowMeldPresentationAlpha(fix.unit), 0.35f, 0.001f);
+    T_ASSERT(!(fix.unit->s.renderfx & RF_HIDDEN));
     T_ASSERT(shadowmeld_datagram_tint(clent, fix.unit->s.number, &color));
     T_EQ(color.a, 89);
 

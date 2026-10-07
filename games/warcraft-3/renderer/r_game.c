@@ -349,7 +349,7 @@ typedef struct {
     wc3EventSplatKind_t kind;
     wc3SplatData_t *splat_row;
     wc3UberSplatData_t *uber_row;
-    vec2_t origin;
+    vec3_t origin;
     uint32_t start_time, serial;
     bool active;
 } wc3EventSplat_t;
@@ -1833,7 +1833,7 @@ static void R_W3EmitSplatEvent(wc3EventParams_t const *params) {
     *splat = (wc3EventSplat_t){
         .kind = WC3_EVENT_SPLAT_SPLAT,
         .splat_row = row,
-        .origin = MAKE(vec2_t, event_transform.v[12], event_transform.v[13]),
+        .origin = MAKE(vec3_t, event_transform.v[12], event_transform.v[13], event_transform.v[14]),
         .start_time = tr.viewDef.time,
         .serial = ++event_splat_serial,
         .active = true,
@@ -1874,7 +1874,7 @@ static void R_W3EmitUberSplatEvent(wc3EventParams_t const *params) {
     *splat = (wc3EventSplat_t){
         .kind = WC3_EVENT_SPLAT_UBER,
         .uber_row = row,
-        .origin = MAKE(vec2_t, event_transform.v[12], event_transform.v[13]),
+        .origin = MAKE(vec3_t, event_transform.v[12], event_transform.v[13], event_transform.v[14]),
         .start_time = tr.viewDef.time,
         .serial = ++event_splat_serial,
         .active = true,
@@ -1923,8 +1923,12 @@ static bool R_W3RenderEventSplat(wc3EventSplat_t *splat) {
         uv = R_W3SplatAtlasUV(row, frame);
         mins = MAKE(vec2_t, splat->origin.x - row->scale, splat->origin.y - row->scale);
         maxs = MAKE(vec2_t, splat->origin.x + row->scale, splat->origin.y + row->scale);
-        R_RenderRectSplatUV(&MAKE(rectSplatParams_t, .mins = &mins, .maxs = &maxs, .uv_mins = &uv.mins,
-            .uv_maxs = &uv.maxs, .texture = texture, .shader = R_SPLAT_SHADER(&tr.shader_default), .color = color));
+        rectSplatParams_t const params = MAKE(rectSplatParams_t, .mins = &mins, .maxs = &maxs, .uv_mins = &uv.mins,
+            .uv_maxs = &uv.maxs, .texture = texture, .shader = R_SPLAT_SHADER(&tr.shader_default), .color = color);
+        if (splat->origin.z > R_GetHeightAtPoint(splat->origin.x, splat->origin.y) + 8.0f)
+            R_RenderFlatRectSplatUV(&params, splat->origin.z + 1.0f);
+        else
+            R_RenderRectSplatUV(&params);
         if (total_ms <= 0.0f) splat->active = false;
         return true;
     } else {
@@ -1952,7 +1956,15 @@ static bool R_W3RenderEventSplat(wc3EventSplat_t *splat) {
             color = middle_color;
         else
             color = R_W3LerpSplatColor(middle_color, end_color, ((float)elapsed - birth_ms - pause_ms) / decay_ms);
-        R_RenderSplat(&splat->origin, row->scale, texture, R_SPLAT_SHADER(&tr.shader_default), color);
+        if (splat->origin.z > R_GetHeightAtPoint(splat->origin.x, splat->origin.y) + 8.0f) {
+            vec2_t mins = { splat->origin.x - row->scale, splat->origin.y - row->scale };
+            vec2_t maxs = { splat->origin.x + row->scale, splat->origin.y + row->scale };
+            R_RenderFlatRectSplat(&mins, &maxs, splat->origin.z + 1.0f,
+                                  texture, R_SPLAT_SHADER(&tr.shader_default), color);
+        } else {
+            vec2_t const origin = { splat->origin.x, splat->origin.y };
+            R_RenderSplat(&origin, row->scale, texture, R_SPLAT_SHADER(&tr.shader_default), color);
+        }
         if (total_ms <= 0.0f) splat->active = false;
         return true;
     }

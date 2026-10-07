@@ -725,6 +725,47 @@ void R_UpdateGroundSegment(war3map_t const *map, uint32_t sx, uint32_t sy) {
     }
 }
 
+void R_RenderFlatRectSplatUV(rectSplatParams_t const *params, float z)
+{
+    mat4_t model_matrix;
+    float const width = params && params->mins && params->maxs ? params->maxs->x - params->mins->x : 0.0f;
+    float const height = params && params->mins && params->maxs ? params->maxs->y - params->mins->y : 0.0f;
+    if (!params || !params->mins || !params->maxs || !params->uv_mins || !params->uv_maxs ||
+        !params->texture || width <= 0 || height <= 0) {
+        return;
+    }
+
+    vertex_t vertices[6] = {
+        { .position = { params->mins->x, params->mins->y, z }, .texcoord = { params->uv_mins->x, params->uv_maxs->y }, .normal = { 0, 0, 1 }, .color = params->color },
+        { .position = { params->maxs->x, params->mins->y, z }, .texcoord = { params->uv_maxs->x, params->uv_maxs->y }, .normal = { 0, 0, 1 }, .color = params->color },
+        { .position = { params->maxs->x, params->maxs->y, z }, .texcoord = { params->uv_maxs->x, params->uv_mins->y }, .normal = { 0, 0, 1 }, .color = params->color },
+        { .position = { params->mins->x, params->mins->y, z }, .texcoord = { params->uv_mins->x, params->uv_maxs->y }, .normal = { 0, 0, 1 }, .color = params->color },
+        { .position = { params->maxs->x, params->maxs->y, z }, .texcoord = { params->uv_maxs->x, params->uv_mins->y }, .normal = { 0, 0, 1 }, .color = params->color },
+        { .position = { params->mins->x, params->maxs->y, z }, .texcoord = { params->uv_mins->x, params->uv_mins->y }, .normal = { 0, 0, 1 }, .color = params->color },
+    };
+
+    Matrix4_identity(&model_matrix);
+
+    R_BindTexture(params->texture, 0);
+    R_SetTextureWrap(params->texture, false, false);
+
+    params->shader->state.viewProjection = tr.viewDef.viewProjectionMatrix;
+    params->shader->state.model = model_matrix;
+
+    R_Call(glEnable, GL_BLEND);
+    R_Call(glBlendFunc, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    R_Call(glDepthMask, GL_FALSE);
+    R_SetSplatDepthBias(true);
+    R_Call(glBindVertexArray, tr.buffer[RBUF_TEMP1]->vao);
+    R_Call(glBindBuffer, GL_ARRAY_BUFFER, tr.buffer[RBUF_TEMP1]->vbo);
+    R_Call(glBufferData, GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
+    R_StatsDraw(GL_TRIANGLES, sizeof(vertices) / sizeof(vertices[0]), 1);
+    R_ApplyShader(params->shader);
+    R_Call(glDrawArrays, GL_TRIANGLES, 0, sizeof(vertices) / sizeof(vertices[0]));
+    R_SetSplatDepthBias(false);
+    R_Call(glDepthMask, GL_TRUE);
+}
+
 void R_RenderFlatRectSplat(vec2_t const *mins,
                            vec2_t const *maxs,
                            float z,
@@ -732,40 +773,9 @@ void R_RenderFlatRectSplat(vec2_t const *mins,
                            splat_shader_t *shader,
                            color32_t color)
 {
-    mat4_t model_matrix;
-    float const width = maxs->x - mins->x;
-    float const height = maxs->y - mins->y;
-    if (!texture || width <= 0 || height <= 0) {
-        return;
-    }
-
-    vertex_t vertices[6] = {
-        { .position = { mins->x, mins->y, z }, .texcoord = { 0, 1 }, .normal = { 0, 0, 1 }, .color = color },
-        { .position = { maxs->x, mins->y, z }, .texcoord = { 1, 1 }, .normal = { 0, 0, 1 }, .color = color },
-        { .position = { maxs->x, maxs->y, z }, .texcoord = { 1, 0 }, .normal = { 0, 0, 1 }, .color = color },
-        { .position = { mins->x, mins->y, z }, .texcoord = { 0, 1 }, .normal = { 0, 0, 1 }, .color = color },
-        { .position = { maxs->x, maxs->y, z }, .texcoord = { 1, 0 }, .normal = { 0, 0, 1 }, .color = color },
-        { .position = { mins->x, maxs->y, z }, .texcoord = { 0, 0 }, .normal = { 0, 0, 1 }, .color = color },
-    };
-
-    Matrix4_identity(&model_matrix);
-
-    R_BindTexture(texture, 0);
-    R_SetTextureWrap(texture, false, false); /* this pass uses a 0..1 quad, so clamp the border instead of tiling */
-
-    shader->state.viewProjection = tr.viewDef.viewProjectionMatrix;
-    shader->state.model = model_matrix;
-
-    R_Call(glEnable, GL_BLEND);
-    R_Call(glBlendFunc, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    R_Call(glDepthMask, GL_FALSE);
-    R_Call(glBindVertexArray, tr.buffer[RBUF_TEMP1]->vao);
-    R_Call(glBindBuffer, GL_ARRAY_BUFFER, tr.buffer[RBUF_TEMP1]->vbo);
-    R_Call(glBufferData, GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
-    R_StatsDraw(GL_TRIANGLES, sizeof(vertices) / sizeof(vertices[0]), 1);
-    R_ApplyShader(shader);
-    R_Call(glDrawArrays, GL_TRIANGLES, 0, sizeof(vertices) / sizeof(vertices[0]));
-    R_Call(glDepthMask, GL_TRUE);
+    vec2_t const uv_mins = { 0, 0 }, uv_maxs = { 1, 1 };
+    R_RenderFlatRectSplatUV(&MAKE(rectSplatParams_t, .mins = mins, .maxs = maxs,
+        .uv_mins = &uv_mins, .uv_maxs = &uv_maxs, .texture = texture, .shader = shader, .color = color), z);
 }
 
 void R_RenderSplat(vec2_t const *position,

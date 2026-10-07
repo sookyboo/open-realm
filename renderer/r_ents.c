@@ -49,6 +49,12 @@ static bool R_EntityUsesRaisedSupport(renderEntity_t const *entity) {
     return entity->ground_offset > 0.0f || support_z > terrain_z + 8.0f;
 }
 
+static float R_EntityRaisedOverlayZ(renderEntity_t const *entity) {
+    if (entity->ground_offset > 0.0f)
+        return R_EntityRingZ(entity);
+    return entity->origin.z - entity->ground_offset + 1.0f;
+}
+
 static void R_RenderEntityGroundSplat(renderEntity_t const *entity,
                                       vec2_t const *origin,
                                       float radius,
@@ -58,7 +64,7 @@ static void R_RenderEntityGroundSplat(renderEntity_t const *entity,
     if (R_EntityUsesRaisedSupport(entity)) {
         vec2_t mins = { origin->x - radius, origin->y - radius };
         vec2_t maxs = { origin->x + radius, origin->y + radius };
-        R_RenderFlatRectSplat(&mins, &maxs, R_EntityRingZ(entity), texture, shader, color);
+        R_RenderFlatRectSplat(&mins, &maxs, R_EntityRaisedOverlayZ(entity), texture, shader, color);
     } else {
         R_RenderSplat(origin, radius, texture, shader, color);
     }
