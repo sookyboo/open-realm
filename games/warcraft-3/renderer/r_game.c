@@ -1332,10 +1332,10 @@ static bool R_W3WalkableSurfaceHit(renderEntity_t const *surface, float x, float
  * coarse destructable-origin support height with the highest authored MDX hit. */
 void R_ConformGroundSurfaces(viewDef_t *viewdef) {
     static uint32_t elevator_debug_lines;
-    static int elevator_debug_x_bucket[MAX_CLIENT_ENTITIES];
-    static int elevator_debug_y_bucket[MAX_CLIENT_ENTITIES];
-    static int elevator_debug_z_bucket[MAX_CLIENT_ENTITIES];
-    static bool elevator_debug_position_seen[MAX_CLIENT_ENTITIES];
+    static int elevator_debug_x_bucket[MAX_GAME_ENTITIES];
+    static int elevator_debug_y_bucket[MAX_GAME_ENTITIES];
+    static int elevator_debug_z_bucket[MAX_GAME_ENTITIES];
+    static bool elevator_debug_position_seen[MAX_GAME_ENTITIES];
     bool const elevator_debug = ri.CvarString &&
         atoi(ri.CvarString("wc3_elevator_debug", "0"));
     int const elevator_debug_unit = elevator_debug && ri.CvarString
