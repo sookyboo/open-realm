@@ -306,6 +306,8 @@ static void V_AddClientEntity(centity_t const *ent) {
     if (ent->current.flags & EF_GROUND_SURFACE) re.flags |= RF_GROUND_SURFACE;
     re.radius = ent->current.radius;
     re.ground_offset = ent->current.ground_offset;
+    re.ground_snapshot_z = ent->current.origin.z;
+    re.ground_snapshot_valid = true;
     re.tint_valid = ent->tint_valid;
     re.tint = ent->tint_valid ? ent->tint : COLOR32_WHITE;
     re.number = ent->current.number;

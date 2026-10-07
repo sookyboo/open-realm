@@ -1411,17 +1411,23 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
         }
 
         old_z = ent->origin.z;
-        if (found_surface)
-            ent->origin.z = MAX(ent->origin.z, authored_support + ent->ground_offset);
+        if (found_surface) {
+            float support_z = authored_support + ent->ground_offset;
+            if (ent->ground_snapshot_valid)
+                support_z = MAX(support_z, ent->ground_snapshot_z);
+            ent->origin.z = MAX(ent->origin.z, support_z);
+        }
         if (found_surface && elevator_debug &&
             log_debug_position &&
             fabsf(ent->origin.x - elevator_debug_x) <= elevator_debug_radius &&
             fabsf(ent->origin.y - elevator_debug_y) <= elevator_debug_radius &&
             elevator_debug_lines < 512) {
             fprintf(stderr,
-                    "WC3_ELEVATOR render conform unit=%u name='%s' xy=(%.1f,%.1f) z=%.1f->%.1f support=%.1f offset=%.1f surface=%u\n",
+                    "WC3_ELEVATOR render conform unit=%u name='%s' xy=(%.1f,%.1f) z=%.1f->%.1f snapshotZ=%.1f support=%.1f offset=%.1f surface=%u\n",
                     ent->number, ent->name ? ent->name : "", ent->origin.x, ent->origin.y,
-                    old_z, ent->origin.z, authored_support, ent->ground_offset,
+                    old_z, ent->origin.z,
+                    ent->ground_snapshot_valid ? ent->ground_snapshot_z : old_z,
+                    authored_support, ent->ground_offset,
                     hit_surface_number);
             elevator_debug_lines++;
         }
