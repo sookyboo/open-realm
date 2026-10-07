@@ -1141,10 +1141,17 @@ void M_CheckGround(edict_t *self) {
         for (edict_t *surface = level.ground_surfaces; surface; surface = surface->ground_next) {
             pathTex_t const *pathtex = surface->pathtex;
             pathTexTransform_t const transform = CM_GetPathTexTransform(surface);
+            float const support_radius = MAX(0.0f, self->collision);
             if (!surface->inuse || surface->destructable->dead ||
                 !surface->destructable->placement_solid || !pathtex) continue;
-            if (fabsf(self->s.origin.x - surface->s.origin.x) > transform.width * cell * 0.5f ||
-                fabsf(self->s.origin.y - surface->s.origin.y) > transform.height * cell * 0.5f) continue;
+            /* The unit model extends beyond its origin. Start applying a
+             * raised deck as soon as that collision footprint overlaps the
+             * pathing footprint, so the model cannot pass through the deck
+             * edge before its origin reaches the surface. */
+            if (fabsf(self->s.origin.x - surface->s.origin.x) >
+                    transform.width * cell * 0.5f + support_radius ||
+                fabsf(self->s.origin.y - surface->s.origin.y) >
+                    transform.height * cell * 0.5f + support_radius) continue;
             /* Warcraft elevator decks move by the same cliff-height multiple
              * stored by Blizzard.j in the destructable's occluder height. */
             {
