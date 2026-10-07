@@ -1141,7 +1141,12 @@ void M_CheckGround(edict_t *self) {
         for (edict_t *surface = level.ground_surfaces; surface; surface = surface->ground_next) {
             pathTex_t const *pathtex = surface->pathtex;
             pathTexTransform_t const transform = CM_GetPathTexTransform(surface);
-            float const support_radius = MAX(0.0f, self->collision);
+            /* Unit collision is intentionally smaller than its selection
+             * footprint. Use both here: support must cover the rendered unit
+             * as it overlaps a raised deck edge, even before its origin enters
+             * the deck's pathing footprint. This is visual support coverage,
+             * not a change to unit-vs-unit collision. */
+            float const support_radius = MAX(MAX(0.0f, self->collision), MAX(0.0f, self->s.radius));
             if (!surface->inuse || surface->destructable->dead ||
                 !surface->destructable->placement_solid || !pathtex) continue;
             /* The unit model extends beyond its origin. Start applying a
