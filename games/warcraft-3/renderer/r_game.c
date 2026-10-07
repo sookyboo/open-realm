@@ -1332,6 +1332,10 @@ static bool R_W3WalkableSurfaceHit(renderEntity_t const *surface, float x, float
  * coarse destructable-origin support height with the highest authored MDX hit. */
 void R_ConformGroundSurfaces(viewDef_t *viewdef) {
     static uint32_t elevator_debug_lines;
+    static int elevator_debug_x_bucket[MAX_CLIENT_ENTITIES];
+    static int elevator_debug_y_bucket[MAX_CLIENT_ENTITIES];
+    static int elevator_debug_z_bucket[MAX_CLIENT_ENTITIES];
+    static bool elevator_debug_position_seen[MAX_CLIENT_ENTITIES];
     bool const elevator_debug = ri.CvarString &&
         atoi(ri.CvarString("wc3_elevator_debug", "0"));
     int const elevator_debug_unit = elevator_debug && ri.CvarString
@@ -1341,19 +1345,39 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
     float const elevator_debug_y = elevator_debug && ri.CvarString
         ? (float)atof(ri.CvarString("wc3_elevator_debug_y", "5120")) : 5120.0f;
     float const elevator_debug_radius = elevator_debug && ri.CvarString
-        ? (float)atof(ri.CvarString("wc3_elevator_debug_radius", "512")) : 512.0f;
+        ? (float)atof(ri.CvarString("wc3_elevator_debug_radius", "256")) : 256.0f;
     if (!viewdef || (viewdef->rdflags & RDF_NOWORLDMODEL)) return;
 
     FOR_LOOP(i, viewdef->num_entities) {
         renderEntity_t *ent = &viewdef->entities[i];
         float authored_support = 0.0f;
         bool found_surface = false;
+        bool log_debug_position = false;
         float old_z;
         uint32_t hit_surface_number = 0;
 
         if (!(ent->flags & RF_GROUND_CONFORM) || (ent->flags & RF_HIDDEN) ||
             (ent->flags & RF_GROUND_SURFACE) || !ent->model) {
             continue;
+        }
+
+        if (elevator_debug && ent->number < MAX_CLIENT_ENTITIES &&
+            (!elevator_debug_unit || ent->number == (uint32_t)elevator_debug_unit) &&
+            fabsf(ent->origin.x - elevator_debug_x) <= elevator_debug_radius &&
+            fabsf(ent->origin.y - elevator_debug_y) <= elevator_debug_radius) {
+            int const x_bucket = (int)floorf(ent->origin.x / 32.0f);
+            int const y_bucket = (int)floorf(ent->origin.y / 32.0f);
+            int const z_bucket = (int)floorf(ent->origin.z / 16.0f);
+            log_debug_position = !elevator_debug_position_seen[ent->number] ||
+                elevator_debug_x_bucket[ent->number] != x_bucket ||
+                elevator_debug_y_bucket[ent->number] != y_bucket ||
+                elevator_debug_z_bucket[ent->number] != z_bucket;
+            if (log_debug_position) {
+                elevator_debug_position_seen[ent->number] = true;
+                elevator_debug_x_bucket[ent->number] = x_bucket;
+                elevator_debug_y_bucket[ent->number] = y_bucket;
+                elevator_debug_z_bucket[ent->number] = z_bucket;
+            }
         }
 
         FOR_LOOP(j, viewdef->num_entities) {
@@ -1363,9 +1387,7 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
 
             if (!(surface->flags & RF_GROUND_SURFACE)) continue;
             hit = R_W3WalkableSurfaceHit(surface, ent->origin.x, ent->origin.y, &hit_z);
-            if (elevator_debug && (!elevator_debug_unit ||
-                                   ent->number == (uint32_t)elevator_debug_unit) &&
-                elevator_debug_lines < 256 &&
+            if (log_debug_position && elevator_debug_lines < 512 &&
                 fabsf(ent->origin.x - elevator_debug_x) <= elevator_debug_radius &&
                 fabsf(ent->origin.y - elevator_debug_y) <= elevator_debug_radius &&
                 fabsf(surface->origin.x - elevator_debug_x) <= elevator_debug_radius &&
@@ -1392,10 +1414,10 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
         if (found_surface)
             ent->origin.z = authored_support + ent->ground_offset;
         if (found_surface && elevator_debug &&
-            (!elevator_debug_unit || ent->number == (uint32_t)elevator_debug_unit) &&
+            log_debug_position &&
             fabsf(ent->origin.x - elevator_debug_x) <= elevator_debug_radius &&
             fabsf(ent->origin.y - elevator_debug_y) <= elevator_debug_radius &&
-            elevator_debug_lines < 256) {
+            elevator_debug_lines < 512) {
             fprintf(stderr,
                     "WC3_ELEVATOR render conform unit=%u name='%s' xy=(%.1f,%.1f) z=%.1f->%.1f support=%.1f offset=%.1f surface=%u\n",
                     ent->number, ent->name ? ent->name : "", ent->origin.x, ent->origin.y,
