@@ -37,6 +37,33 @@ static float R_EntityRingZ(renderEntity_t const *entity) {
     return entity->origin.z - 1.0f;
 }
 
+/* Ground overlays normally conform to terrain. When the renderer has raised a
+ * unit onto a bridge, elevator, or other authored support, that puts the
+ * overlay underneath the support mesh. Keep the terrain path for ordinary
+ * ground units, but place overlays at the unit's rendered ground plane when
+ * it is materially above terrain. */
+static bool R_EntityUsesRaisedSupport(renderEntity_t const *entity) {
+    float const support_z = entity->origin.z - entity->ground_offset;
+    float const terrain_z = R_GetHeightAtPoint(entity->origin.x, entity->origin.y);
+
+    return entity->ground_offset > 0.0f || support_z > terrain_z + 8.0f;
+}
+
+static void R_RenderEntityGroundSplat(renderEntity_t const *entity,
+                                      vec2_t const *origin,
+                                      float radius,
+                                      texture_t const *texture,
+                                      splat_shader_t *shader,
+                                      color32_t color) {
+    if (R_EntityUsesRaisedSupport(entity)) {
+        vec2_t mins = { origin->x - radius, origin->y - radius };
+        vec2_t maxs = { origin->x + radius, origin->y + radius };
+        R_RenderFlatRectSplat(&mins, &maxs, R_EntityRingZ(entity), texture, shader, color);
+    } else {
+        R_RenderSplat(origin, radius, texture, shader, color);
+    }
+}
+
 static bool R_EntityInView(renderEntity_t const *entity) {
     box3_t bounds;
     mat4_t matrix;
@@ -193,7 +220,8 @@ uint32_t selCircles[NUM_SELECTION_CIRCLES] = { 100, 300, 100000 };
 
 static void R_RenderUberSplat(renderEntity_t const *entity, vec2_t const *origin) {
     if (R_ShouldRenderUberSplat(entity)) {
-        R_RenderSplat(origin, entity->splatsize, entity->splat, R_SPLAT_SHADER(&tr.shader_default), COLOR32_WHITE);
+        R_RenderEntityGroundSplat(entity, origin, entity->splatsize, entity->splat,
+                                  R_SPLAT_SHADER(&tr.shader_default), COLOR32_WHITE);
     }
 }
 
@@ -275,16 +303,10 @@ static void R_RenderSelectedCircle(renderEntity_t const *entity, vec2_t const *o
         FOR_LOOP(i, NUM_SELECTION_CIRCLES) {
             if ((radius * 2) > selCircles[i])
                 continue;
-            vec2_t mins = { origin->x - radius, origin->y - radius };
-            vec2_t maxs = { origin->x + radius, origin->y + radius };
             /* Flying units carry their selection circle with them; ground units
              * retain terrain-conforming rings for ramps and uneven terrain. */
-            if (entity->ground_offset > 0.0f)
-                R_RenderFlatRectSplat(&mins, &maxs, R_EntityRingZ(entity),
-                                      tr.texture[TEX_SELECTION_CIRCLE+i], R_SPLAT_SHADER(&tr.shader_splat), color);
-            else
-                R_RenderSplat(origin, radius, tr.texture[TEX_SELECTION_CIRCLE+i],
-                              R_SPLAT_SHADER(&tr.shader_splat), color);
+            R_RenderEntityGroundSplat(entity, origin, radius, tr.texture[TEX_SELECTION_CIRCLE+i],
+                                      R_SPLAT_SHADER(&tr.shader_splat), color);
             break;
         }
     }
@@ -296,14 +318,8 @@ static void R_RenderEntityIndicator(renderEntity_t const *entity, vec2_t const *
     float radius = R_SelectionRadius(entity);
     FOR_LOOP(i, NUM_SELECTION_CIRCLES) {
         if ((radius * 2) > selCircles[i]) continue;
-        vec2_t mins = { entity->origin.x - radius, entity->origin.y - radius };
-        vec2_t maxs = { entity->origin.x + radius, entity->origin.y + radius };
-        if (entity->ground_offset > 0.0f)
-            R_RenderFlatRectSplat(&mins, &maxs, R_EntityRingZ(entity),
-                                  tr.texture[TEX_SELECTION_CIRCLE+i], R_SPLAT_SHADER(&tr.shader_splat), entity->indicator);
-        else
-            R_RenderSplat(origin, radius, tr.texture[TEX_SELECTION_CIRCLE+i],
-                          R_SPLAT_SHADER(&tr.shader_splat), entity->indicator);
+        R_RenderEntityGroundSplat(entity, origin, radius, tr.texture[TEX_SELECTION_CIRCLE+i],
+                                  R_SPLAT_SHADER(&tr.shader_splat), entity->indicator);
         break;
     }
 }
@@ -328,15 +344,9 @@ static void R_RenderHoverHighlight(renderEntity_t const *entity) {
     FOR_LOOP(i, NUM_SELECTION_CIRCLES) {
         if ((radius * 2) > selCircles[i])
             continue;
-        vec2_t mins = { entity->origin.x - radius, entity->origin.y - radius };
-        vec2_t maxs = { entity->origin.x + radius, entity->origin.y + radius };
-        if (entity->ground_offset > 0.0f)
-            R_RenderFlatRectSplat(&mins, &maxs, R_EntityRingZ(entity),
-                                  tr.texture[TEX_SELECTION_CIRCLE+i], R_SPLAT_SHADER(&tr.shader_splat), color);
-        else
-            R_RenderSplat(&(vec2_t){ entity->origin.x, entity->origin.y },
-                          radius, tr.texture[TEX_SELECTION_CIRCLE+i],
-                          R_SPLAT_SHADER(&tr.shader_splat), color);
+        R_RenderEntityGroundSplat(entity, &(vec2_t){ entity->origin.x, entity->origin.y },
+                                  radius, tr.texture[TEX_SELECTION_CIRCLE+i],
+                                  R_SPLAT_SHADER(&tr.shader_splat), color);
         break;
     }
 }
