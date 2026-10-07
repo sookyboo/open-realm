@@ -31,6 +31,27 @@ TEST(wc3_destructable, unknown_entity_without_data_is_not_destructable) {
     T_ASSERT(!G_IsDestructable(&ent));
 }
 
+TEST(wc3_destructable, one_shot_animation_keeps_its_terminal_pose) {
+    animation_t animation = { .interval = { 10, 12 }, .flags = 1, .name = "Death" };
+    destructable_t destructable = {0};
+    edict_t ent = {
+        .inuse = true,
+        .class_id = MAKEFOURCC('D', 'T', 'r', 'x'),
+        .destructable = &destructable,
+        .animation = &animation,
+        .animation_override = true,
+        .animation_speed = 100.0f,
+        .s = { .frame = 11 },
+    };
+
+    G_RunDestructableAnimation(&ent);
+    T_EQ(ent.s.frame, 11);
+    T_ASSERT(ent.animation_override);
+    G_RunDestructableAnimation(&ent);
+    T_EQ(ent.s.frame, 11);
+    T_ASSERT(ent.animation_override);
+}
+
 typedef struct {
     uint16_t width;
     uint16_t height;

@@ -608,6 +608,53 @@ void G_SetUnitAnimation(edict_t *unit, cstring_t animname) {
     if (!unit->animation) unit->animation = G_GetUnitAnimation(unit, request);
 }
 
+/* Destructables do not have unit move callbacks, but JASS presentation
+ * sequences still need a clock. MDX sequence flag 0x1 marks a one-shot. */
+void G_RunDestructableAnimation(edict_t *ent) {
+    animation_t const *anim;
+    uint32_t start, end, next;
+
+    if (!G_IsDestructable(ent) || !ent->animation_override || !(anim = ent->animation))
+        return;
+    start = anim->interval[0];
+    end = anim->interval[1];
+    if (end <= start) return;
+    next = ent->s.frame + (uint32_t)MAX(0.0f, FRAMETIME * ent->animation_speed);
+    if (ent->s.frame < start || ent->s.frame >= end) {
+        ent->s.frame = start;
+    } else if (next >= end) {
+        if (anim->flags & 1) {
+            if (ent->queued_animation[0]) {
+                char queued[WC3_ANIMATION_REQUEST_SIZE];
+                strlcpy(queued, ent->queued_animation, sizeof(queued));
+                ent->queued_animation[0] = '\0';
+                G_SetUnitAnimation(ent, queued);
+                if (ent->animation) ent->s.frame = ent->animation->interval[0];
+                if (gi.CvarString && atoi(gi.CvarString("wc3_elevator_debug", "0")) &&
+                    (ent->class_id == MAKEFOURCC('D','T','r','x') ||
+                     ent->class_id == MAKEFOURCC('D','T','r','f'))) {
+                    fprintf(stderr,
+                            "WC3_ELEVATOR animation raw=%.4s completed=%s queued=%s next=%s frame=%u interval=%u..%u flags=0x%x\n",
+                            (cstring_t)&ent->class_id, anim->name, queued,
+                            ent->animation ? ent->animation->name : "<missing>", ent->s.frame,
+                            ent->animation ? ent->animation->interval[0] : 0,
+                            ent->animation ? ent->animation->interval[1] : 0, anim->flags);
+                }
+            } else {
+                ent->s.frame = end - 1;
+                /* Keep the terminal pose authoritative. Destructables have no
+                 * normal animation driver to take over; clearing the override
+                 * lets later snapshot state fall back to the model's default
+                 * sequence (which can put an elevator back at level one). */
+            }
+        } else {
+            ent->s.frame = start + (next - start) % (end - start);
+        }
+    } else {
+        ent->s.frame = next;
+    }
+}
+
 void G_AddUnitAnimationProperties(edict_t *unit, cstring_t properties, bool add) {
     animationTagSet_t current = {0};
     animationTagSet_t changed = {0};
