@@ -78,8 +78,8 @@ enum {
 
 static uint32_t const save_magic = MAKEFOURCC('W', '3', 'S', 'V');
 static uint32_t const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
-/* Version 68 adds construction_t duration_ms and Tiny construction type to version 67 dialog generations. */
-static uint32_t const save_version = 68;
+/* Version 69 adds persistent WC3 water-base color state to version 68. */
+static uint32_t const save_version = 69;
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
 #define UMOVE_RELOC_RANGE (64 << 20) // bytes; every umove_t is static data in libgame, so a valid offset from the anchor stays well inside one module image
@@ -498,6 +498,7 @@ static field_t const level_fields[] = {
     F(level_locals, environment_fog.defaults.density, F_FLOAT),
     F(level_locals, environment_fog.defaults.color, F_VECTOR),
     F(level_locals, environment_fog.defaults_valid, F_INT),
+    F(level_locals, water_base_color, F_INT),
     F(level_locals, camera_bounds, F_VECTOR),
     F(level_locals, started, F_INT),
     F(level_locals, scriptsConfigured, F_INT),
@@ -2251,6 +2252,7 @@ bool ReadGame(cstring_t filename) {
     /* Configstrings were rebuilt while reloading the map. Re-publish the
      * restored authoritative scene fog before client-side presentation resumes. */
     G_EnvironmentFogPublish();
+    G_WaterBaseColorPublish();
     /* Client-side decoders are presentation state, not part of the save file.
      * Re-emit the restored semantic music state for clients that remained
      * connected across the load. */

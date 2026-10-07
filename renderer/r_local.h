@@ -180,6 +180,7 @@ typedef struct defaultState_s {
     bool fogEnable;
     vec3_t fogColor;
     vec2_t fogParams;
+    vec4_t baseColor;
 } defaultState_t;
 
 

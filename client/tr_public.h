@@ -230,6 +230,8 @@ typedef struct {
     float fogStart;
     float fogEnd;
     vec3_t fogColor;
+    /* Generic runtime tint consumed by renderers that draw water surfaces. */
+    vec4_t waterBaseColor;
 } viewDef_t;
 
 struct modelInfo_s {
