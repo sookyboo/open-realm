@@ -1330,12 +1330,17 @@ static bool R_W3WalkableSurfaceHit(renderEntity_t const *surface, float x, float
  * explicit server-authored altitude offset (WC3 FlyHeight) and replace only the
  * coarse destructable-origin support height with the highest authored MDX hit. */
 void R_ConformGroundSurfaces(viewDef_t *viewdef) {
+    static uint32_t elevator_debug_lines;
+    bool const elevator_debug = ri.CvarString &&
+        atoi(ri.CvarString("wc3_elevator_debug", "0"));
     if (!viewdef || (viewdef->rdflags & RDF_NOWORLDMODEL)) return;
 
     FOR_LOOP(i, viewdef->num_entities) {
         renderEntity_t *ent = &viewdef->entities[i];
         float authored_support = 0.0f;
         bool found_surface = false;
+        float old_z;
+        uint32_t hit_surface_number = 0;
 
         if (!(ent->flags & RF_GROUND_CONFORM) || (ent->flags & RF_HIDDEN) ||
             (ent->flags & RF_GROUND_SURFACE) || !ent->model) {
@@ -1345,17 +1350,40 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
         FOR_LOOP(j, viewdef->num_entities) {
             renderEntity_t const *surface = &viewdef->entities[j];
             float hit_z;
+            bool hit;
 
             if (!(surface->flags & RF_GROUND_SURFACE)) continue;
-            if (!R_W3WalkableSurfaceHit(surface, ent->origin.x, ent->origin.y, &hit_z)) continue;
+            hit = R_W3WalkableSurfaceHit(surface, ent->origin.x, ent->origin.y, &hit_z);
+            if (elevator_debug && elevator_debug_lines < 256 &&
+                fabsf(surface->origin.x - ent->origin.x) < 512.0f &&
+                fabsf(surface->origin.y - ent->origin.y) < 512.0f) {
+                fprintf(stderr,
+                        "WC3_ELEVATOR render candidate unit=%u name='%s' xy=(%.1f,%.1f) z=%.1f offset=%.1f surface=%u xy=(%.1f,%.1f) z=%.1f hit=%d hitZ=%.1f flags=0x%x\n",
+                        ent->number, ent->name ? ent->name : "", ent->origin.x, ent->origin.y,
+                        ent->origin.z, ent->ground_offset, surface->number,
+                        surface->origin.x, surface->origin.y, surface->origin.z,
+                        hit, hit ? hit_z : 0.0f, surface->flags);
+                elevator_debug_lines++;
+            }
+            if (!hit) continue;
             if (!found_surface || hit_z > authored_support) {
                 authored_support = hit_z;
                 found_surface = true;
+                hit_surface_number = surface->number;
             }
         }
 
+        old_z = ent->origin.z;
         if (found_surface)
             ent->origin.z = authored_support + ent->ground_offset;
+        if (found_surface && elevator_debug && elevator_debug_lines < 256) {
+            fprintf(stderr,
+                    "WC3_ELEVATOR render conform unit=%u name='%s' xy=(%.1f,%.1f) z=%.1f->%.1f support=%.1f offset=%.1f surface=%u\n",
+                    ent->number, ent->name ? ent->name : "", ent->origin.x, ent->origin.y,
+                    old_z, ent->origin.z, authored_support, ent->ground_offset,
+                    hit_surface_number);
+            elevator_debug_lines++;
+        }
     }
 }
 
