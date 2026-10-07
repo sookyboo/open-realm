@@ -226,6 +226,8 @@ implement JASS `Preload` asset prefetch, or expose staged byte/task loading prog
 loads the named JASS preload script through the game-data reader and invokes its required `PreloadFiles` entry point.
 Missing scripts or entry points raise a JASS runtime error. The `Preload` calls inside that script remain no-ops until
 a generic client-owned resource-prefetch contract exists.
+Set `wc3_preload_debug 1` to log script load/entry-point execution and each requested asset path to stderr; each asset
+line reports `result=not-prefetched` so successful script execution is not mistaken for asset loading.
 `war3map.w3u` now applies the
 registered `UnitBalance`/`UnitProfile`/`UnitUI` subset (including balance/stock values, Required Animation Names, and custom model
 paths), but the remaining Data/Weapons tables and full AbilityMetaData-driven `war3map.w3a` field coverage remain separate data-layer work;

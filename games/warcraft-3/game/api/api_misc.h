@@ -1844,12 +1844,21 @@ uint32_t IsNoVictoryCheat(jass_t *j) {
 uint32_t IsNoDefeatCheat(jass_t *j) {
     return jass_pushboolean(j, 0);
 }
+static bool G_PreloadDebugEnabled(void) {
+    return gi.CvarString && atoi(gi.CvarString("wc3_preload_debug", "0")) != 0;
+}
+
 uint32_t Preload(jass_t *j) {
-    //cstring_t filename = jass_checkstring(j, 1);
+    cstring_t filename = jass_checkstring(j, 1);
+    if (G_PreloadDebugEnabled())
+        fprintf(stderr, "WC3_PRELOAD asset-request path=\"%s\" result=not-prefetched\n",
+                filename ? filename : "(null)");
     return 0;
 }
 uint32_t PreloadEnd(jass_t *j) {
-    //float timeout = jass_checknumber(j, 1);
+    if (G_PreloadDebugEnabled())
+        fprintf(stderr, "WC3_PRELOAD end-marker timeout=%.3f asset_prefetch=unimplemented\n",
+                (double)jass_checknumber(j, 1));
     return 0;
 }
 uint32_t PreloadGenClear(jass_t *j) {
@@ -1865,6 +1874,9 @@ uint32_t PreloadGenEnd(jass_t *j) {
 uint32_t Preloader(jass_t *j) {
     cstring_t filename = jass_checkstring(j, 1);
     jass_t *root = jass_getroot(j);
+    bool const debug = G_PreloadDebugEnabled();
+    if (debug)
+        fprintf(stderr, "WC3_PRELOAD begin script=\"%s\"\n", filename ? filename : "(null)");
     if (!filename || !*filename) {
         jass_rterror(j, "Preloader: expected a non-empty script filename");
         return 0;
@@ -1883,7 +1895,11 @@ uint32_t Preloader(jass_t *j) {
         jass_rterror(j, "Preloader: preload script has no PreloadFiles function");
         return 0;
     }
+    if (debug) fprintf(stderr, "WC3_PRELOAD loaded script=\"%s\" entry=PreloadFiles\n", filename);
     jass_callbyname(root, "PreloadFiles", false);
+    if (debug)
+        fprintf(stderr, "WC3_PRELOAD complete script=\"%s\" runtime_error=%d asset_prefetch=unimplemented\n",
+                filename, (int)jass_rterror_pending(root));
     return 0;
 }
 
