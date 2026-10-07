@@ -24,8 +24,10 @@ references to those registrations, and disables the trigger without freeing the 
 an executing callback. This is intentionally stronger than `DisableTrigger`: destroyed one-shot triggers cannot continue
 receiving already-queued region/unit/state notifications. `Preloader(filename)` now follows the Warsmash-compatible
 script contract by loading the named JASS file through the normal game-data reader and invoking its `PreloadFiles`
-entry point. Missing files and missing entry points raise a JASS runtime error. The underlying `Preload` resource request
-is still a placeholder, so this implements preload-script execution but not client asset prefetch. `SetUnitLookAt` /
+entry point. Missing files and missing entry points raise a JASS runtime error. `Preload` now registers MDX/MDL models,
+BLP/TGA images, and WAV/MP3 sounds through the ordinary server resource indices, causing clients to load them through
+the existing configstring precache path. Other file types are read through the mounted game-data filesystem and then
+released; this may warm the underlying OS/archive cache but does not retain a decoded client-side resource. `SetUnitLookAt` /
 `ResetUnitLookAt` remain placeholders because
 the renderer has no head/turret target-facing constraint or generic game-to-client payload for one yet.
 

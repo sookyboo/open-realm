@@ -1848,16 +1848,56 @@ static bool G_PreloadDebugEnabled(void) {
     return gi.CvarString && atoi(gi.CvarString("wc3_preload_debug", "0")) != 0;
 }
 
+static cstring_t G_PreloadExtension(cstring_t filename) {
+    cstring_t extension = filename ? strrchr(filename, '.') : NULL;
+    cstring_t slash = filename ? strrchr(filename, '\\') : NULL;
+    cstring_t forward_slash = filename ? strrchr(filename, '/') : NULL;
+    if (forward_slash && (!slash || forward_slash > slash)) slash = forward_slash;
+    return extension && (!slash || extension > slash) ? extension : "";
+}
+
 uint32_t Preload(jass_t *j) {
     cstring_t filename = jass_checkstring(j, 1);
-    if (G_PreloadDebugEnabled())
-        fprintf(stderr, "WC3_PRELOAD asset-request path=\"%s\" result=not-prefetched\n",
-                filename ? filename : "(null)");
+    cstring_t extension = G_PreloadExtension(filename);
+    int index = 0;
+    cstring_t kind = "file";
+    cstring_t result = "not-found";
+
+    if (filename && *filename) {
+        if (!strcasecmp(extension, ".mdx") || !strcasecmp(extension, ".mdl")) {
+            kind = "model";
+            index = gi.ModelIndex ? gi.ModelIndex(filename) : 0;
+            result = index ? "registered" : "registration-failed";
+        } else if (!strcasecmp(extension, ".blp") || !strcasecmp(extension, ".tga")) {
+            kind = "image";
+            index = gi.ImageIndex ? gi.ImageIndex(filename) : 0;
+            result = index ? "registered" : "registration-failed";
+        } else if (!strcasecmp(extension, ".wav") || !strcasecmp(extension, ".mp3")) {
+            kind = "sound";
+            index = gi.SoundIndex ? gi.SoundIndex(filename) : 0;
+            result = index ? "registered" : "registration-failed";
+        } else if (gi.ReadFile) {
+            uint32_t size = 0;
+            handle_t data = gi.ReadFile(filename, &size);
+            if (data) {
+                gi.MemFree(data);
+                result = "read";
+            }
+        }
+    }
+    if (G_PreloadDebugEnabled()) {
+        if (!strcmp(kind, "file"))
+            fprintf(stderr, "WC3_PRELOAD asset-request path=\"%s\" kind=%s result=%s\n",
+                    filename ? filename : "(null)", kind, result);
+        else
+            fprintf(stderr, "WC3_PRELOAD asset-request path=\"%s\" kind=%s index=%d result=%s\n",
+                    filename, kind, index, result);
+    }
     return 0;
 }
 uint32_t PreloadEnd(jass_t *j) {
     if (G_PreloadDebugEnabled())
-        fprintf(stderr, "WC3_PRELOAD end-marker timeout=%.3f asset_prefetch=unimplemented\n",
+        fprintf(stderr, "WC3_PRELOAD end-marker timeout=%.3f\n",
                 (double)jass_checknumber(j, 1));
     return 0;
 }
@@ -1898,7 +1938,7 @@ uint32_t Preloader(jass_t *j) {
     if (debug) fprintf(stderr, "WC3_PRELOAD loaded script=\"%s\" entry=PreloadFiles\n", filename);
     jass_callbyname(root, "PreloadFiles", false);
     if (debug)
-        fprintf(stderr, "WC3_PRELOAD complete script=\"%s\" runtime_error=%d asset_prefetch=unimplemented\n",
+        fprintf(stderr, "WC3_PRELOAD complete script=\"%s\" runtime_error=%d\n",
                 filename, (int)jass_rterror_pending(root));
     return 0;
 }
