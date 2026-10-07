@@ -29,6 +29,7 @@ void setup_test_world(void);
 void CM_SetupTestPathmap(uint32_t width, uint32_t height, uint8_t const *cells);
 void CM_SetupTestWorldBounds(box2_t const *bounds);
 bool run_test_jass(cstring_t src);
+bool run_test_jass_error(cstring_t src, cstring_t expected);
 extern player_t *currentplayer;
 void unit_die(edict_t *self, edict_t *attacker);
 void unit_build(edict_t *self, uint32_t class_id);
@@ -8149,6 +8150,26 @@ TEST(wc3_api, preloader_executes_preloadfiles_from_game_data) {
         "  call Preloader(\"Scripts\\\\test_preloader.j\")\n"
         "  call BJassAssert(preloader_hits == 1, \"PreloadFiles did not execute\")\n"
         "endfunction\n"));
+}
+
+TEST(wc3_api, preloader_reports_missing_script) {
+    reset_entities();
+    setup_test_world();
+    T_ASSERT(run_test_jass_error(
+        "function main takes nothing returns nothing\n"
+        "  call Preloader(\"Scripts\\\\missing_preloader.j\")\n"
+        "endfunction\n",
+        "Preloader: unable to load preload script"));
+}
+
+TEST(wc3_api, preloader_reports_missing_entry_point) {
+    reset_entities();
+    setup_test_world();
+    T_ASSERT(run_test_jass_error(
+        "function main takes nothing returns nothing\n"
+        "  call Preloader(\"Scripts\\\\test_preloader_no_entry.j\")\n"
+        "endfunction\n",
+        "Preloader: preload script has no PreloadFiles function"));
 }
 
 TEST(wc3_api, destroy_trigger_retires_registered_and_queued_events) {

@@ -1864,13 +1864,26 @@ uint32_t PreloadGenEnd(jass_t *j) {
 }
 uint32_t Preloader(jass_t *j) {
     cstring_t filename = jass_checkstring(j, 1);
-    if (!filename || !*filename) return 0;
+    jass_t *root = jass_getroot(j);
+    if (!filename || !*filename) {
+        jass_rterror(j, "Preloader: expected a non-empty script filename");
+        return 0;
+    }
 
     /* Preloader files are JASS snippets whose PreloadFiles entry point issues
      * the actual Preload calls. jass_dofile uses the normal game-data reader,
      * so map/archive search rules remain authoritative. */
-    if (jass_dofile(j, filename) && jass_functionbyname(j, "PreloadFiles"))
-        jass_callbyname(j, "PreloadFiles", false);
+    if (!jass_dofile(root, filename)) {
+        fprintf(stderr, "WC3 Preloader: unable to load preload script '%s'\n", filename);
+        jass_rterror(j, "Preloader: unable to load preload script");
+        return 0;
+    }
+    if (!jass_functionbyname(root, "PreloadFiles")) {
+        fprintf(stderr, "WC3 Preloader: script '%s' has no PreloadFiles function\n", filename);
+        jass_rterror(j, "Preloader: preload script has no PreloadFiles function");
+        return 0;
+    }
+    jass_callbyname(root, "PreloadFiles", false);
     return 0;
 }
 
