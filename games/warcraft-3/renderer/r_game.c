@@ -10,6 +10,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <math.h>
+#include <stdlib.h>
 
 void _W3M_RegisterMap(cstring_t mapFileName);
 void _W3M_DrawWorld(void);
@@ -1335,6 +1336,12 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
         atoi(ri.CvarString("wc3_elevator_debug", "0"));
     int const elevator_debug_unit = elevator_debug && ri.CvarString
         ? atoi(ri.CvarString("wc3_elevator_debug_unit", "0")) : 0;
+    float const elevator_debug_x = elevator_debug && ri.CvarString
+        ? (float)atof(ri.CvarString("wc3_elevator_debug_x", "1792")) : 1792.0f;
+    float const elevator_debug_y = elevator_debug && ri.CvarString
+        ? (float)atof(ri.CvarString("wc3_elevator_debug_y", "5120")) : 5120.0f;
+    float const elevator_debug_radius = elevator_debug && ri.CvarString
+        ? (float)atof(ri.CvarString("wc3_elevator_debug_radius", "512")) : 512.0f;
     if (!viewdef || (viewdef->rdflags & RDF_NOWORLDMODEL)) return;
 
     FOR_LOOP(i, viewdef->num_entities) {
@@ -1359,6 +1366,10 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
             if (elevator_debug && (!elevator_debug_unit ||
                                    ent->number == (uint32_t)elevator_debug_unit) &&
                 elevator_debug_lines < 256 &&
+                fabsf(ent->origin.x - elevator_debug_x) <= elevator_debug_radius &&
+                fabsf(ent->origin.y - elevator_debug_y) <= elevator_debug_radius &&
+                fabsf(surface->origin.x - elevator_debug_x) <= elevator_debug_radius &&
+                fabsf(surface->origin.y - elevator_debug_y) <= elevator_debug_radius &&
                 fabsf(surface->origin.x - ent->origin.x) < 512.0f &&
                 fabsf(surface->origin.y - ent->origin.y) < 512.0f) {
                 fprintf(stderr,
@@ -1382,6 +1393,8 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
             ent->origin.z = authored_support + ent->ground_offset;
         if (found_surface && elevator_debug &&
             (!elevator_debug_unit || ent->number == (uint32_t)elevator_debug_unit) &&
+            fabsf(ent->origin.x - elevator_debug_x) <= elevator_debug_radius &&
+            fabsf(ent->origin.y - elevator_debug_y) <= elevator_debug_radius &&
             elevator_debug_lines < 256) {
             fprintf(stderr,
                     "WC3_ELEVATOR render conform unit=%u name='%s' xy=(%.1f,%.1f) z=%.1f->%.1f support=%.1f offset=%.1f surface=%u\n",
