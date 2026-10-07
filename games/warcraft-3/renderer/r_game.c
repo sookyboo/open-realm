@@ -1327,9 +1327,9 @@ static bool R_W3WalkableSurfaceHit(renderEntity_t const *surface, float x, float
 
 /* Warsmash keeps walkable destructable height as presentation state: the
  * simulation decides whether a unit may traverse the bridge, while the model
- * collision/geoset geometry supplies the exact visual support Z. Preserve the
- * explicit server-authored altitude offset (WC3 FlyHeight) and replace only the
- * coarse destructable-origin support height with the highest authored MDX hit. */
+ * collision/geoset geometry can refine its visual support Z. Preserve the
+ * server-authored height as a floor because animated surfaces may trace below
+ * their authored walkable deck; allow MDX geometry to raise it when needed. */
 void R_ConformGroundSurfaces(viewDef_t *viewdef) {
     static uint32_t elevator_debug_lines;
     static int elevator_debug_x_bucket[MAX_GAME_ENTITIES];
@@ -1361,7 +1361,7 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
             continue;
         }
 
-        if (elevator_debug && ent->number < MAX_CLIENT_ENTITIES &&
+        if (elevator_debug && ent->number < MAX_GAME_ENTITIES &&
             (!elevator_debug_unit || ent->number == (uint32_t)elevator_debug_unit) &&
             fabsf(ent->origin.x - elevator_debug_x) <= elevator_debug_radius &&
             fabsf(ent->origin.y - elevator_debug_y) <= elevator_debug_radius) {
@@ -1412,7 +1412,7 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
 
         old_z = ent->origin.z;
         if (found_surface)
-            ent->origin.z = authored_support + ent->ground_offset;
+            ent->origin.z = MAX(ent->origin.z, authored_support + ent->ground_offset);
         if (found_surface && elevator_debug &&
             log_debug_position &&
             fabsf(ent->origin.x - elevator_debug_x) <= elevator_debug_radius &&
