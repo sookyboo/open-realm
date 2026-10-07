@@ -1333,6 +1333,8 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
     static uint32_t elevator_debug_lines;
     bool const elevator_debug = ri.CvarString &&
         atoi(ri.CvarString("wc3_elevator_debug", "0"));
+    int const elevator_debug_unit = elevator_debug && ri.CvarString
+        ? atoi(ri.CvarString("wc3_elevator_debug_unit", "0")) : 0;
     if (!viewdef || (viewdef->rdflags & RDF_NOWORLDMODEL)) return;
 
     FOR_LOOP(i, viewdef->num_entities) {
@@ -1354,7 +1356,9 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
 
             if (!(surface->flags & RF_GROUND_SURFACE)) continue;
             hit = R_W3WalkableSurfaceHit(surface, ent->origin.x, ent->origin.y, &hit_z);
-            if (elevator_debug && elevator_debug_lines < 256 &&
+            if (elevator_debug && (!elevator_debug_unit ||
+                                   ent->number == (uint32_t)elevator_debug_unit) &&
+                elevator_debug_lines < 256 &&
                 fabsf(surface->origin.x - ent->origin.x) < 512.0f &&
                 fabsf(surface->origin.y - ent->origin.y) < 512.0f) {
                 fprintf(stderr,
@@ -1376,7 +1380,9 @@ void R_ConformGroundSurfaces(viewDef_t *viewdef) {
         old_z = ent->origin.z;
         if (found_surface)
             ent->origin.z = authored_support + ent->ground_offset;
-        if (found_surface && elevator_debug && elevator_debug_lines < 256) {
+        if (found_surface && elevator_debug &&
+            (!elevator_debug_unit || ent->number == (uint32_t)elevator_debug_unit) &&
+            elevator_debug_lines < 256) {
             fprintf(stderr,
                     "WC3_ELEVATOR render conform unit=%u name='%s' xy=(%.1f,%.1f) z=%.1f->%.1f support=%.1f offset=%.1f surface=%u\n",
                     ent->number, ent->name ? ent->name : "", ent->origin.x, ent->origin.y,
