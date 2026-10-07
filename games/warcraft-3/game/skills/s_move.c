@@ -1124,10 +1124,15 @@ static bool move_fallback_steer(edict_t *self, moveAvoidPolicy_t policy) {
  * max(terrain, water).  Walkable destructables can raise every movement type
  * except float, matching Warsmash's "boats can't go on bridges" rule. */
 void M_CheckGround(edict_t *self) {
+    static uint32_t elevator_debug_lines;
     cstring_t const movetp = M_UnitMoveTypeName(self);
     bool const floating = movetp && !strcmp(movetp, "float");
     float height = CM_GetHeightAtPoint(self->s.origin.x, self->s.origin.y);
+    float const terrain_height = height;
     float const cell = CM_PathCellWorldSize();
+    edict_t *walk_surface = NULL;
+    float walk_surface_height = 0.0f;
+    float const old_z = self->s.origin.z;
 
     if (M_UnitUsesWaterSurface(self, movetp))
         height = MAX(height, CM_GetWaterHeightAtPoint(self->s.origin.x, self->s.origin.y));
@@ -1140,11 +1145,36 @@ void M_CheckGround(edict_t *self) {
                 !surface->destructable->placement_solid || !pathtex) continue;
             if (fabsf(self->s.origin.x - surface->s.origin.x) > transform.width * cell * 0.5f ||
                 fabsf(self->s.origin.y - surface->s.origin.y) > transform.height * cell * 0.5f) continue;
-            height = MAX(height, surface->s.origin.z);
+            /* Warcraft elevator decks move by the same cliff-height multiple
+             * stored by Blizzard.j in the destructable's occluder height. */
+            {
+                float const deck_height = surface->s.origin.z +
+                    surface->destructable->occluder_height;
+                if (deck_height >= height) {
+                    height = deck_height;
+                    walk_surface = surface;
+                    walk_surface_height = deck_height;
+                }
+            }
         }
     }
     self->s.ground_offset = self->unitinfo.FlyHeight;
     self->s.origin.z = height + self->s.ground_offset;
+    if (walk_surface &&
+        (walk_surface->class_id == MAKEFOURCC('D','T','r','x') ||
+         walk_surface->class_id == MAKEFOURCC('D','T','r','f')) &&
+        gi.CvarString && atoi(gi.CvarString("wc3_elevator_debug", "0")) &&
+        elevator_debug_lines++ < 256) {
+        fprintf(stderr,
+                "WC3_ELEVATOR ground unit=%.4s#%u pos=(%.1f,%.1f) unitZ=%.3f->%.3f terrainZ=%.3f elevator=%.4s#%u pos=(%.1f,%.1f,%.1f) deckZ=%.3f occH=%.3f flyH=%.3f seq=%s frame=%u\n",
+                (cstring_t)&self->class_id, self->s.number, self->s.origin.x, self->s.origin.y,
+                old_z, self->s.origin.z, terrain_height,
+                (cstring_t)&walk_surface->class_id, walk_surface->s.number,
+                walk_surface->s.origin.x, walk_surface->s.origin.y, walk_surface->s.origin.z,
+                walk_surface_height, walk_surface->destructable->occluder_height, self->s.ground_offset,
+                walk_surface->animation ? walk_surface->animation->name : "<none>",
+                walk_surface->s.frame);
+    }
 }
 
 float M_DistanceToGoal(edict_t *ent) {
