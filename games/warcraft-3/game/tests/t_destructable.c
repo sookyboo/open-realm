@@ -31,7 +31,7 @@ TEST(wc3_destructable, unknown_entity_without_data_is_not_destructable) {
     T_ASSERT(!G_IsDestructable(&ent));
 }
 
-TEST(wc3_destructable, one_shot_animation_releases_override_at_terminal_pose) {
+TEST(wc3_destructable, one_shot_animation_holds_terminal_pose_against_tree_move) {
     animation_t animation = { .interval = { 10, 12 }, .flags = 1, .name = "Death" };
     destructable_t destructable = {0};
     edict_t ent = {
@@ -46,7 +46,12 @@ TEST(wc3_destructable, one_shot_animation_releases_override_at_terminal_pose) {
 
     G_RunDestructableAnimation(&ent);
     T_EQ(ent.s.frame, 11);
-    T_ASSERT(!ent.animation_override);
+    T_ASSERT(ent.animation_override);
+    M_MoveFrame(&ent);
+    T_EQ(ent.s.frame, 11);
+    G_RunDestructableAnimation(&ent);
+    T_EQ(ent.s.frame, 11);
+    T_ASSERT(ent.animation_override);
 }
 
 typedef struct {

@@ -100,6 +100,10 @@ void M_MoveFrame(edict_t *self) {
     }
     if (self->aiflags & AI_HOLD_FRAME)
         return;
+    /* JASS destructable animations have their own clock in
+     * G_RunDestructableAnimation; don't let tree_move_stand restart them. */
+    if (G_IsDestructable(self) && self->animation_override)
+        return;
     umove_t const *move = self->currentmove;
     animation_t const *anim = self->animation;
     float frame_step = MAX(0.0f, FRAMETIME * self->animation_speed);

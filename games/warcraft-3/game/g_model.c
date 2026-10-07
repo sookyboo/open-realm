@@ -619,6 +619,8 @@ void G_RunDestructableAnimation(edict_t *ent) {
     start = anim->interval[0];
     end = anim->interval[1];
     if (end <= start) return;
+    if ((anim->flags & 1) && ent->s.frame == end - 1 && !ent->queued_animation[0])
+        return; /* terminal pose is held; M_MoveFrame is gated while override is active */
     next = ent->s.frame + (uint32_t)MAX(0.0f, FRAMETIME * ent->animation_speed);
     if (ent->s.frame < start || ent->s.frame >= end) {
         ent->s.frame = start;
@@ -642,7 +644,6 @@ void G_RunDestructableAnimation(edict_t *ent) {
                 }
             } else {
                 ent->s.frame = end - 1;
-                ent->animation_override = false;
                 if (gi.CvarString && atoi(gi.CvarString("wc3_elevator_debug", "0")) &&
                     (ent->class_id == MAKEFOURCC('D','T','r','x') ||
                      ent->class_id == MAKEFOURCC('D','T','r','f'))) {
