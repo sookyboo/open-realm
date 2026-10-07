@@ -222,7 +222,10 @@ model that falls back to the base path, including scope clearing at a registrati
 
 This is intentionally narrower than a full Warsmash-style data-source stack. The current transition still does
 **not** rebuild all WC3 SLK/TXT data from scratch for every unrelated reason, merge all `war3map.w3t/.w3b/.w3d/.w3q` object modifications,
-implement JASS `Preload`/`Preloader`, or expose staged byte/task loading progress. `war3map.w3u` now applies the
+implement JASS `Preload` asset prefetch, or expose staged byte/task loading progress. `Preloader(filename)` now
+loads the named JASS preload script through the game-data reader and invokes `PreloadFiles` when present, but the
+`Preload` calls inside that script remain no-ops until a generic client-owned resource-prefetch contract exists.
+`war3map.w3u` now applies the
 registered `UnitBalance`/`UnitProfile`/`UnitUI` subset (including balance/stock values, Required Animation Names, and custom model
 paths), but the remaining Data/Weapons tables and full AbilityMetaData-driven `war3map.w3a` field coverage remain separate data-layer work;
 do not infer those capabilities from the renderer's map-import lookup. DotA 6.83d ships heroes, items, and

@@ -212,3 +212,12 @@ dialog and button, with the authoritative player ID and one-based clicked
 handle IDs. This response context is copied to a coroutine, so
 `GetClickedButton` / `GetClickedDialog` continue to work after a trigger wait.
 See [JASS choice dialogs](jass-dialogs.md) for lifecycle and limitations.
+
+## Trigger destruction
+
+`DestroyTrigger` retires every live `event_t` registration whose `trigger` points at the destroyed trigger. Retirement
+also nulls any queued `gameEvent_t.responseTo` references before the event slot can be reused, so an event published
+immediately before destruction cannot accidentally dispatch either the destroyed trigger or a later registration that
+reuses the same slot. The trigger object itself remains in the map-lifetime trigger registry and is marked disabled;
+this avoids freeing action/condition storage underneath a callback that destroys its own trigger. `DisableTrigger`
+remains distinct: it leaves registrations intact so `EnableTrigger` can resume them.

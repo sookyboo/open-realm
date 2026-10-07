@@ -19,6 +19,15 @@ calling strict `jass_checkcode()`; non-null handlers still require the exact
 fast-forward or ESC skip. HiveWorkshop's timer reset examples confirm the same
 native behavior, commonly followed by `PauseTimer` when resetting getter state.
 
+`DestroyTrigger` now retires every live event registration owned by the trigger, clears queued `responseTo`
+references to those registrations, and disables the trigger without freeing the map-lifetime trigger object underneath
+an executing callback. This is intentionally stronger than `DisableTrigger`: destroyed one-shot triggers cannot continue
+receiving already-queued region/unit/state notifications. `Preloader(filename)` now follows the Warsmash-compatible
+script contract by loading the named JASS file through the normal game-data reader and invoking its `PreloadFiles`
+entry point when present. The underlying `Preload` resource request is still a placeholder, so this implements
+preload-script execution but not client asset prefetch. `SetUnitLookAt` / `ResetUnitLookAt` remain placeholders because
+the renderer has no head/turret target-facing constraint or generic game-to-client payload for one yet.
+
 The AI-only `UnitInvis(unit)` native reports intrinsic active invisibility through `S_UnitHasInvisibilityState()`; it
 does not incorporate owner/shared vision or detector coverage. Stock `common.ai` calls it separately from
 `IsUnitDetected(target, ai_player)`. The latter and `IsUnitInvisible(unit, player)` remain placeholders in

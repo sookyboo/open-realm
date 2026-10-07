@@ -1863,7 +1863,14 @@ uint32_t PreloadGenEnd(jass_t *j) {
     return 0;
 }
 uint32_t Preloader(jass_t *j) {
-    //cstring_t filename = jass_checkstring(j, 1);
+    cstring_t filename = jass_checkstring(j, 1);
+    if (!filename || !*filename) return 0;
+
+    /* Preloader files are JASS snippets whose PreloadFiles entry point issues
+     * the actual Preload calls. jass_dofile uses the normal game-data reader,
+     * so map/archive search rules remain authoritative. */
+    if (jass_dofile(j, filename) && jass_functionbyname(j, "PreloadFiles"))
+        jass_callbyname(j, "PreloadFiles", false);
     return 0;
 }
 
