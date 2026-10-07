@@ -642,10 +642,7 @@ void G_RunDestructableAnimation(edict_t *ent) {
                 }
             } else {
                 ent->s.frame = end - 1;
-                /* Keep the terminal pose authoritative. Destructables have no
-                 * normal animation driver to take over; clearing the override
-                 * lets later snapshot state fall back to the model's default
-                 * sequence (which can put an elevator back at level one). */
+                ent->animation_override = false;
             }
         } else {
             ent->s.frame = start + (next - start) % (end - start);
