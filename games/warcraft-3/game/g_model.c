@@ -643,6 +643,16 @@ void G_RunDestructableAnimation(edict_t *ent) {
             } else {
                 ent->s.frame = end - 1;
                 ent->animation_override = false;
+                if (gi.CvarString && atoi(gi.CvarString("wc3_elevator_debug", "0")) &&
+                    (ent->class_id == MAKEFOURCC('D','T','r','x') ||
+                     ent->class_id == MAKEFOURCC('D','T','r','f'))) {
+                    fprintf(stderr,
+                            "WC3_ELEVATOR terminal raw=%.4s pos=(%.1f,%.1f,%.1f) seq=%s frame=%u interval=%u..%u override=%u occH=%.3f queued=%s\n",
+                            (cstring_t)&ent->class_id, ent->s.origin.x, ent->s.origin.y, ent->s.origin.z,
+                            anim->name, ent->s.frame, start, end, ent->animation_override,
+                            ent->destructable ? ent->destructable->occluder_height : 0.0f,
+                            ent->queued_animation[0] ? ent->queued_animation : "<none>");
+                }
             }
         } else {
             ent->s.frame = start + (next - start) % (end - start);

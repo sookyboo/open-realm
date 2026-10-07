@@ -525,10 +525,28 @@ static void CL_AddCursorSplat(void) {
 }
 
 static void CL_AddEntities(void) {
+    static uint32_t elevator_debug_lines;
+    static uint32_t elevator_last_frame[MAX_CLIENT_ENTITIES];
+    static bool elevator_seen[MAX_CLIENT_ENTITIES];
+    bool const elevator_debug = Cvar_Integer("wc3_elevator_debug", 0) != 0;
+
     S_BeginLoopingSounds();
     FOR_LOOP(i, cl.num_active) {
         centity_t *cent = &cl.ents[cl.active_entities[i]];
         entityState_t const *state = &cent->current;
+        if (elevator_debug && elevator_debug_lines < 384 &&
+            (state->class_id == MAKEFOURCC('D','T','r','x') ||
+             state->class_id == MAKEFOURCC('D','T','r','f')) &&
+            (!elevator_seen[state->number] || elevator_last_frame[state->number] != state->frame)) {
+            fprintf(stderr,
+                    "WC3_ELEVATOR client frame=%d ent=%u raw=%.4s model=%u pos=(%.1f,%.1f,%.1f) prevFrame=%u frame=%u\n",
+                    cl.frame.serverframe, state->number, (cstring_t)&state->class_id,
+                    state->model, state->origin.x, state->origin.y, state->origin.z,
+                    cent->prev.frame, state->frame);
+            elevator_seen[state->number] = true;
+            elevator_last_frame[state->number] = state->frame;
+            elevator_debug_lines++;
+        }
         if (state->sound && !state->event && state->sound < MAX_SOUNDS &&
             cl.configstrings[CS_SOUNDS + state->sound][0])
             S_UpdateLoopingSound(state->number, cl.configstrings[CS_SOUNDS + state->sound],
