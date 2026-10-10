@@ -66,6 +66,8 @@ The server's existing `G_FowPlayerCanSeeEntity()` remains the foreign-entity vis
 
 The client receives current and explored fog as separate planes, so world fog and minimap fog consume the same authoritative state while the minimap camera box continues to derive from camera state independently.
 
+The WC3 model renderer applies gameplay fog after the shaded/unshaded material branch. This is required for unshaded doodad and model layers: their lighting bypass must not bypass fog of war. A zero fog texture sample discards the fragment, hiding it in unexplored terrain; nonzero samples attenuate its RGB according to the fog texture. Entities authored with `RF_NO_FOGOFWAR` use the renderer's white fog texture and remain unaffected by this mask. The model shader binds the fog texture on texture unit 2, matching the model shader's sampler layout.
+
 Day/night sight-radius selection consumes the server-owned clock documented in [time-of-day.md](time-of-day.md); fog must not derive a
 second clock from `level.time`.
 

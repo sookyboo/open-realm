@@ -507,12 +507,13 @@ const shader_desc_t sd_model = {
         "    light -= v_shadowlight * (1.0 - shadow_visibility(u_shadowmap, v_shadow));\n"
         "#endif\n"
         "    light = min(light, vec3(1.0));\n"
-        "#ifdef USE_FOGOFWAR\n"
-        "    col.rgb *= get_fogofwar() * light;\n"
-        "#else\n"
         "    col.rgb *= light;\n"
-        "#endif\n"
         "  }\n"
+        "#ifdef USE_FOGOFWAR\n"
+        "  float fog = get_fogofwar();\n"
+        "  if (fog <= 0.0) discard;\n"
+        "  col.rgb *= fog;\n"
+        "#endif\n"
         BZ_SCENE_FOG_GLSL
         "  if (u_alphaKey) {\n"
         "#ifndef BZ_USE_MSAA\n"
@@ -595,6 +596,9 @@ static void R_LoadModelShader(modelProg_t *out, bool instancing) {
     R_LoadShader(&sd_model, R_ShaderDefines(instancing), out);
 
     out->state.alphaCutoff = 0.5f;
+#ifdef USE_FOGOFWAR
+    out->state.fogOfWar = 2;
+#endif
 }
 
 /* Returns the shared model shader, compiling it on first call. All three model
