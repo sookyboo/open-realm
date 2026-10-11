@@ -94,3 +94,6 @@ The WC3 API tests cover:
 
 Runtime campaign validation should additionally check that a camera-only pan into unexplored terrain remains masked and that a
 cinematic reveal can show a remote area without coupling camera movement to fog mutation.
+
+The headless renderer model suite also checks that the generated fragment shader applies fog after the unshaded lighting branch,
+discards zero fog samples, and assigns texture unit 2 to the fog sampler for both regular and instanced model programs.
