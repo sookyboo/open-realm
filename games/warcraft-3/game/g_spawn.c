@@ -939,8 +939,10 @@ void G_SpawnEntities(void) {
             ent->s.scale = row->defScale > 0.0f ? row->defScale : 1.0f;
         }
         SP_CallSpawn(ent);
-        if (ent->s.flags & EF_UNIT)
+        if (ent->s.flags & EF_UNIT) {
+            G_PlayerScoreTraceLifecycle(ent, "map_unit_enter");
             G_PlayerScoreUnitTrained(ent); /* preplaced map units count */
+        }
         if ((S_GoldMineIsMine(ent) || S_GoldMineIsOverlay(ent)) && doodad->goldAmount != (uint32_t)-1)
             ent->resources = doodad->goldAmount;
         if (ent->svflags & SVF_MONSTER) G_ApplyMapUnitTeamColor(ent, doodad);
