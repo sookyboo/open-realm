@@ -732,8 +732,19 @@ static bool CL_WindowSetScroll(clientWindow_t *window, uiFrame_t *owner, float v
         value = 0.0f;
     }
     value = MIN(1.0f, MAX(0.0f, value));
+    if (fabsf(owner->value - value) < 0.00001f) return true;
     owner->value = value;
     CL_WindowRememberScroll(window, owner->number, value);
+    /* A standalone server-authored scrollbar may own a paged table instead
+     * of a client TEXTAREA/LISTBOX. Send its new normalized position only in
+     * response to user input, never when restoring a saved scroll position. */
+    if (owner->flags.type == FT_SCROLLBAR && owner->onclick[0]) {
+        char command[CMDARG_LEN * 4], source[CMDARG_LEN * 2];
+        snprintf(source, sizeof(source), "%s %.6f", owner->onclick, value);
+        if (CL_WindowFormatCommand(window, source,
+                &MAKE(windowTextOut_t, .data = command, .size = sizeof(command))))
+            Cmd_ForwardToServer(command);
+    }
     /* TextArea scrollbars mirror their parent's local viewport state. */
     FOR_LOOP(i, SCR_NumFrames()) {
         uiFrame_t *child = SCR_Frame(i);
