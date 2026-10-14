@@ -420,7 +420,6 @@ void unit_die(edict_t *self, edict_t *attacker) {
     uint32_t selected_mask;
 
     if (!self || (self->svflags & SVF_DEADMONSTER)) return;
-    G_PlayerScoreTraceLifecycle(self, "death_begin");
     selected_mask = self->selected;
 
     S_AvatarExpire(self);
@@ -1332,7 +1331,6 @@ edict_t *unit_create(uint32_t player, uint32_t unitid, vec2_t const *location, f
     }
     unit->s.angle = facing * M_PI / 180;
     G_ActivateUnitFood(unit);
-    G_PlayerScoreTraceLifecycle(unit, "jass_create_enter");
     G_PlayerScoreUnitTrained(unit); /* immediately entered play, not queued */
     G_BotUnitReady(unit);
     return unit;
