@@ -18,7 +18,7 @@ workflow](retail-shared-ability-re.md).
 |---|---|---|
 | Target validation | `0x00682180`, `0x00682210`, `0x006822E0`, pair accessor `0x007FC7E0` | Two shared gates then registered-validator vtable calls at +0x26C. The pair accessor is also called by Cold Arrow effect routine `0x00C5C9D0`; this confirms low-level reuse only. See [target validator disassembly](ability-probes/targeting.md#target-validator-static-disassembly-retail-1292). |
 | Area target selection | `0x0068EA00`, `0x00699FD0` | Determine each ability's selection policy and field mapping. |
-| Ability instances | `0x00AF3BA0` factory, `0x006D4560` attach, `0x006D6570` lookup | Trace class behavior beyond factory/attachment. |
+| Ability instances | `0x00AF3BA0` factory, `0x006D4560` attach, `0x006D6570` lookup | Poison (`Bpoi`) and Cold Arrow (`BHca`) both use this lookup before refresh-or-create; trace their still-unknown event producers. |
 | Rank/availability | Shared rank hooks; enable/disable transitions | Identify remaining instance gates and permanence effects. |
 | Status lifecycle | `0x006D87A0` filter, `0x006D8530` removal, `0x006D4B60` timed-life creation | `UnitRemoveAbility`, buff filtering, and Mana Shield depletion converge on removal; BTLF fails positive/negative buff predicates. Trace natural expiry and summon-specific cleanup. See [lifecycle evidence](ability-probes/status-lifecycle.md). |
 | Attached object install | `0x006D4880` | Poison status and Pocket Factory buff paths attach class-specific instances through this wrapper, then notify the owner. See [combat evidence](ability-probes/combat.md#shared-attached-buff-installation-path). |
