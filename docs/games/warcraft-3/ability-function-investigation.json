@@ -913,7 +913,7 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "Function-body inspection shows fast paths for several fixed FOURCCs, then iteration over attached instances and comparison through their rawcode getter. Phoenix Fire queries Bpxf and rejects a candidate when the status instance is already present. Full-analysis Ghidra found 959 direct call references from 681 caller functions, making this the strongest high-reuse starting point. The lookup does not establish application, refresh, expiry, or dispel behavior.",
+      "evidence_summary": "Function-body inspection shows fast paths for several fixed FOURCCs, then iteration over attached instances and comparison through their rawcode getter. Phoenix Fire queries Bpxf and rejects a candidate when the status instance is already present. Poison callback 0x00BDCF70 calls it at 0x00BDD088 for Bpoi; Cold Arrow effect routine 0x00C5C9D0 calls it at 0x00C5CA74 for BHca. Both use the result in refresh-or-create logic. Full-analysis Ghidra found 959 direct call references from 681 caller functions. Lookup alone does not establish application, expiry, or dispel behavior.",
       "related_addresses": [],
       "source": {
         "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
@@ -2271,6 +2271,40 @@
     },
     {
       "from": {
+        "va": "0x00bdcf70",
+        "rva": "0x007dcf70"
+      },
+      "to": {
+        "va": "0x006d6570",
+        "rva": "0x002d6570"
+      },
+      "kind": "direct_call",
+      "context": "Poison callback looks up an existing Bpoi attached instance before choosing refresh or creation.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared attached-buff installation path"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c5c9d0",
+        "rva": "0x0085c9d0"
+      },
+      "to": {
+        "va": "0x006d6570",
+        "rva": "0x002d6570"
+      },
+      "kind": "direct_call",
+      "context": "Cold Arrow effect routine looks up an existing BHca attached instance before choosing refresh or creation.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared attached-buff installation path"
+      }
+    },
+    {
+      "from": {
         "va": "0x00687ca0",
         "rva": "0x00287ca0"
       },
@@ -2498,5 +2532,5 @@
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
   },
   "entry_count": 50,
-  "verified_relationship_count": 41
+  "verified_relationship_count": 43
 }

@@ -47,6 +47,12 @@ creation/configuration:
   rejects a missing or inactive entry, and returns the value at `+0x54`.
   This is verified helper reuse, but does not prove the Cold Arrow call makes
   the same target-validation decision or identifies the attack-event producer.
+- Poison and Cold Arrow also converge on attached-instance lookup
+  `0x006D6570`: Poison callback `0x00BDCF70` calls it at `0x00BDD088` while
+  looking for `Bpoi`, and Cold Arrow effect routine `0x00C5C9D0` calls it at
+  `0x00C5CA74` while looking for `BHca`. Both refresh an existing object via
+  virtual `+0x388` or construct and attach a new one. This verifies shared
+  lookup across two status classes; it does not identify their event producer.
 
 Reproduce the wrapper disassembly with:
 
