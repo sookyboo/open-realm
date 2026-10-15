@@ -369,7 +369,7 @@
       "label": "Additional owner/target relation check",
       "category": "targeting",
       "status": "partially_resolved",
-      "confidence": "low",
+      "confidence": "medium",
       "addresses": [
         {
           "va": "0x0067fb80",
@@ -402,8 +402,21 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "Phoenix Fire's candidate callback passes the candidate classification through this helper. It checks common target rejection paths and registered validators. Numeric returns are internal rejection codes, not damage or an order-acceptance boolean. Full-analysis Ghidra found 64 direct call references from 64 caller functions.",
-      "related_addresses": [],
+      "evidence_summary": "Exact-build disassembly shows two common target-state rejection predicates run first. If both return zero, the helper walks a global linked registry (iterator accessor 0x007FC7E0), invokes each registered validator's vtable slot +0x26C with the candidate and context, and stops at the first nonzero return. Phoenix Fire's candidate callback at 0x00C0F1E0 is one verified caller; Ghidra analysis found 64 direct call references from 64 functions. Returns are internal validation results, not damage or a general order-acceptance boolean. Predicate meanings and runtime registry membership remain unresolved.",
+      "related_addresses": [
+        {
+          "va": "0x00682210",
+          "rva": "0x00282210"
+        },
+        {
+          "va": "0x006822e0",
+          "rva": "0x002822e0"
+        },
+        {
+          "va": "0x007fc7e0",
+          "rva": "0x003fc7e0"
+        }
+      ],
       "source": {
         "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
         "section": "Confirmed starting points",
@@ -1670,6 +1683,23 @@
     "verified_relationships": "Explicit caller/callee, virtual-dispatch, or callback edges established by source notes; unlike related_addresses, these are asserted relationships."
   },
   "verified_relationships": [
+    {
+      "from": {
+        "va": "0x00682180",
+        "rva": "0x00282180"
+      },
+      "to": {
+        "va": "0x007fc7e0",
+        "rva": "0x003fc7e0"
+      },
+      "kind": "direct_call",
+      "context": "After common predicates pass, general target validation uses this linked-registry iterator accessor to enumerate registered validators.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/targeting.md",
+        "section": "Target validator static disassembly"
+      }
+    },
     {
       "from": {
         "va": "0x004aef70",

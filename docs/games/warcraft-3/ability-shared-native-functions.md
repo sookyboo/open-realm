@@ -6,7 +6,7 @@ PE32 x86, SHA-256
 image base `0x00400000`. Re-derive every address for a different hash.
 
 The [machine-readable inventory](ability-function-investigation.json) is the
-source of record: 48 functions, 30 verified relationships, explicit confidence
+source of record: 48 functions, 31 verified relationships, explicit confidence
 and unresolved semantics. This page gives only the starting points. For context
 and procedures, see [ability research](ability-research.md), [Retail
 architecture](ability-retail-architecture.md), and the [repeatable RE
@@ -16,7 +16,7 @@ workflow](retail-shared-ability-re.md).
 
 | Investigation | Useful starting points | Main unresolved question |
 |---|---|---|
-| Target validation | `0x00682180`, `0x006AEA70`, `0x006ADA20` | Correlate rejection values and predicates to callers/data. |
+| Target validation | `0x00682180`, `0x00682210`, `0x006822E0` | Two shared gates then registered-validator vtable calls at +0x26C; decode predicate returns and trace registry membership. See [target validator disassembly](ability-probes/targeting.md#target-validator-static-disassembly-retail-1292). |
 | Area target selection | `0x0068EA00`, `0x00699FD0` | Determine each ability's selection policy and field mapping. |
 | Ability instances | `0x00AF3BA0` factory, `0x006D4560` attach, `0x006D6570` lookup | Trace class behavior beyond factory/attachment. |
 | Rank/availability | Shared rank hooks; enable/disable transitions | Identify remaining instance gates and permanence effects. |
