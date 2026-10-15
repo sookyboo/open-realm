@@ -811,6 +811,10 @@
         {
           "va": "0x00c829f0",
           "rva": "0x008829f0"
+        },
+        {
+          "va": "0x00c5c9d0",
+          "rva": "0x0085c9d0"
         }
       ],
       "source": {
@@ -1748,6 +1752,23 @@
   "verified_relationships": [
     {
       "from": {
+        "va": "0x00c5c9d0",
+        "rva": "0x0085c9d0"
+      },
+      "to": {
+        "va": "0x006d4880",
+        "rva": "0x002d4880"
+      },
+      "kind": "direct_call",
+      "context": "Cold Arrows target-effect path installs the configured BHca status through the shared object-attachment wrapper.",
+      "confidence": "medium",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared attached-buff installation path"
+      }
+    },
+    {
+      "from": {
         "va": "0x006d4880",
         "rva": "0x002d4880"
       },
@@ -2400,5 +2421,5 @@
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
   },
   "entry_count": 49,
-  "verified_relationship_count": 38
+  "verified_relationship_count": 39
 }

@@ -6,7 +6,7 @@ PE32 x86, SHA-256
 image base `0x00400000`. Re-derive every address for a different hash.
 
 The [machine-readable inventory](ability-function-investigation.json) is the
-source of record: 49 functions, 38 verified relationships, explicit confidence
+source of record: 49 functions, 39 verified relationships, explicit confidence
 and unresolved semantics. This page gives only the starting points. For context
 and procedures, see [ability research](ability-research.md), [Retail
 architecture](ability-retail-architecture.md), and the [repeatable RE
