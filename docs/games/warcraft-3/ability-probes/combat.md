@@ -40,6 +40,13 @@ creation/configuration:
   `CAbilityColdArrows` accessor is `0x00C5CBC0`. In either case, this is
   effect application after target selection, not evidence of the attack-event
   producer.
+- This effect routine also calls `0x007FC7E0` with the pair at `this+0x2C`,
+  after checking the paired fields at `+0x2C/+0x30`. The same helper is used
+  by general target validation `0x00682180` to walk its validator registry.
+  Disassembly shows `0x007FC7E0` resolves a stored pair through `0x004707F0`,
+  rejects a missing or inactive entry, and returns the value at `+0x54`.
+  This is verified helper reuse, but does not prove the Cold Arrow call makes
+  the same target-validation decision or identifies the attack-event producer.
 
 Reproduce the wrapper disassembly with:
 

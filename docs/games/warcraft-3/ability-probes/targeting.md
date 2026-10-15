@@ -26,6 +26,11 @@ Thus this is broad validation infrastructure, but the set of callers should
 not all be assumed to represent spell casts. Return values are internal
 rejection results, not a universal acceptance boolean.
 
+Cold Arrow effect routine `0x00C5C9D0` also directly calls this same accessor
+for its own `this+0x2C/+0x30` pair. This confirms reuse of the linked-pair
+resolver outside the validator walk; the separate call site does not establish
+that Cold Arrow applies the registry's target-validation rules.
+
 Reproduce the disassembly against the pinned executable:
 
 ```sh
