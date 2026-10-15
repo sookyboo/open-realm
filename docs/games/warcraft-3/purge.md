@@ -103,4 +103,4 @@ This supports the retail tooltip contract: `Apg2` movement immobilization and
 reduction applies to enemies, while an allied target is accepted without a
 comparable movement effect. The probe does not establish an exact pause
 duration or slow curve, or whether the allied cast dispels buffs. See the full
-probe setup and raw output in the [Retail probe log](ability-retail-probe-log.md#retail-purge-friendly-and-hostile-target-verification-october-4-2026).
+probe setup and raw output in the [Retail probe log](ability-probes/targeting.md#retail-purge-friendly-and-hostile-target-verification-october-4-2026).

@@ -8,7 +8,7 @@ verified behavioral contract, not just a renamed function or a list of callers.
 The current investigation's exact-build findings are in
 [ability-shared-native-functions.md](ability-shared-native-functions.md); the
 ability-specific evidence and probes are in
-[ability-retail-probe-log.md](ability-retail-probe-log.md). This guide
+[probe evidence index](ability-probes/README.md). This guide
 explains how to extend that work for attack hit dispatch, status expiry/removal,
 target validation, and summon cleanup.
 
@@ -180,7 +180,7 @@ operation has completed.
 Use JASS to trigger repeatable inputs and record externally visible outcomes.
 Keep the original map unchanged, retain a control copy, and vary one property at
 a time. Existing Retail map preparation and replay steps are in
-[ability-retail-probe-log.md](ability-retail-probe-log.md).
+[probe evidence index](ability-probes/README.md).
 
 | System | Comparisons | Evidence to collect |
 |---|---|---|
@@ -259,7 +259,7 @@ executable hash. The database's schema and examples are self-describing.
 ## Suggested investigation order
 
 The existing queue is maintained in
-[ability-retail-probe-log.md](ability-retail-probe-log.md#remaining-native-inspection-queue);
+[ability-retail-probe-log.md](ability-probes/native-triage.md#remaining-native-inspection-queue);
 this ordering is a practical starting point, not a substitute for that queue.
 
 1. **Target validation:** controlled valid/invalid cases often expose clear
@@ -283,6 +283,6 @@ static inspection.
 
 - [Shared Retail native ability functions](ability-shared-native-functions.md)
 - [Concise verification status](ability-verification-review.md)
-- [Detailed Retail probe log and remaining native inspection queue](ability-retail-probe-log.md)
+- [Focused probe index and native inspection queue](ability-probes/README.md)
 - [Ability implementation from data, behavior, and focused evidence](ability-implementation.md)
 - [Retail ability architecture](ability-retail-architecture.md)

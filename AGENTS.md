@@ -135,10 +135,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | WC3 Goblin Land Mines `AIpm`/`Amin`/`Amnx`, delayed death AOE, targeted-item charge completion | [docs/games/warcraft-3/land-mines.md](docs/games/warcraft-3/land-mines.md) |
 | WC3 ability/item presentation art, effect edict lifetimes, JASS effect handles, consumable charge semantics | [docs/games/warcraft-3/ability-and-item-effects.md](docs/games/warcraft-3/ability-and-item-effects.md) |
 | WC3 ability implementation from data, behavior, and focused evidence | [docs/games/warcraft-3/ability-implementation.md](docs/games/warcraft-3/ability-implementation.md) |
-| WC3 Retail reverse engineering: shared ability functions, virtual dispatch, Frida and JASS probes | [docs/games/warcraft-3/retail-shared-ability-re.md](docs/games/warcraft-3/retail-shared-ability-re.md) |
-| WC3 Retail ability function investigation database (exact-build VA/RVA, evidence, status) | [docs/games/warcraft-3/ability-function-investigation.json](docs/games/warcraft-3/ability-function-investigation.json) |
-| WC3 Retail ability probe log: JASS/Frida evidence, replay steps, native traces, open questions | [docs/games/warcraft-3/ability-retail-probe-log.md](docs/games/warcraft-3/ability-retail-probe-log.md) |
-| WC3 Retail ability verification status and next investigation | [docs/games/warcraft-3/ability-verification-review.md](docs/games/warcraft-3/ability-verification-review.md) |
+| WC3 ability research entry point: implementation coverage, Retail status, shared helpers, and topic-indexed evidence | [docs/games/warcraft-3/ability-research.md](docs/games/warcraft-3/ability-research.md) |
 | WC3 ability lifecycle fixes, save behavior, and regression review | [docs/games/warcraft-3/ability-lifecycle-review.md](docs/games/warcraft-3/ability-lifecycle-review.md) |
 | WC3 Tiny Structures, item-owned construction, shared placement cursor, racial Tiny Great Hall | [docs/games/warcraft-3/tiny-structures.md](docs/games/warcraft-3/tiny-structures.md) |
 | WC3 creep ability aliases, `code=` mapping, parent-owned registry rows | [docs/games/warcraft-3/creep-ability-aliases.md](docs/games/warcraft-3/creep-ability-aliases.md) |

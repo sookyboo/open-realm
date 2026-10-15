@@ -324,5 +324,5 @@ paired with static caller evidence.
 
 For the current JASS/Frida process and open questions, see the
 [Retail verification status](ability-verification-review.md) and
-[probe log](ability-retail-probe-log.md). For the separately recovered demo/TFT inheritance details and their build scope, see
+[probe evidence index](ability-probes/README.md). For the separately recovered demo/TFT inheritance details and their build scope, see
 [ability inheritance binary evidence](ability-inheritance-binary.md).

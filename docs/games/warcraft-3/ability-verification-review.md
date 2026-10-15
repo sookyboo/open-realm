@@ -2,7 +2,7 @@
 
 This page summarizes exact-build Retail research. Detailed observations,
 replay manifests, raw outputs, and native trace addresses are in the
-[Retail ability probe log](ability-retail-probe-log.md). The
+[probe evidence index](ability-probes/README.md). The
 [machine-readable function inventory](ability-function-investigation.json)
 tracks 48 function records and 27 verified relationships for the pinned build.
 Use the [shared-function workflow](retail-shared-ability-re.md) to extend it.
@@ -42,11 +42,11 @@ prove gameplay behavior.
 
 ## Detailed evidence
 
-- [Charm probe](ability-retail-probe-log.md#retail-charm-target-verification-october-4-2026)
-- [Purge probe](ability-retail-probe-log.md#retail-purge-friendly-and-hostile-target-verification-october-4-2026)
-- [Multi-ability batch](ability-retail-probe-log.md#tft-multi-ability-retail-batch-with-frida-october-4-2026)
-- [Carrion Swarm probe and trace](ability-retail-probe-log.md#retail-carrion-swarm-target-cap-filters-and-line-width-october-5-2026)
-- [Phoenix Fire native path](ability-retail-probe-log.md#phoenix-fire-native-path-periodic-acquisition-and-target-gates)
-- [Remaining native inspection queue](ability-retail-probe-log.md#remaining-native-inspection-queue)
+- [Charm probe](ability-probes/targeting.md#retail-charm-target-verification-october-4-2026)
+- [Purge probe](ability-probes/targeting.md#retail-purge-friendly-and-hostile-target-verification-october-4-2026)
+- [Multi-ability batch](ability-probes/multi-ability-batch.md#tft-multi-ability-retail-batch-with-frida-october-4-2026)
+- [Carrion Swarm probe and trace](ability-probes/combat.md#retail-carrion-swarm-target-cap-filters-and-line-width-october-5-2026)
+- [Phoenix Fire native path](ability-probes/native-triage.md#phoenix-fire-native-path-periodic-acquisition-and-target-gates)
+- [Remaining native inspection queue](ability-probes/native-triage.md#remaining-native-inspection-queue)
 
 See also [ability lifecycle fixes and regression coverage](ability-lifecycle-review.md).
