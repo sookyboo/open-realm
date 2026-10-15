@@ -883,8 +883,21 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "The body marks the instance as removed, notifies sibling attached objects through a virtual hook, unlinks it from the owner's attached-instance list, refreshes list metadata, and clears cached pointers for selected rawcodes. Full-analysis Ghidra found 221 direct calls from 174 functions. This is a strong shared path for tracing dispel, expiry, death cleanup, or ability removal, but caller and virtual-hook analysis is still needed to identify which cause initiated each removal.",
-      "related_addresses": [],
+      "evidence_summary": "Exact-build disassembly confirms the function rejects null/already-removed instances, sets the removed flag, walks sibling attached objects and calls their vtable slot +0x1A8 with the removed instance, updates the owner's linked-list metadata, invokes the removed object's +0x1A8 hook, and detaches it. It also clears owner cached pointers for selected rawcodes. Verified callers include UnitRemoveAbility (0x004AF590), the shared UnitRemoveBuffs/UnitRemoveBuffsEx loop (0x006D87A0), and Mana Shield depletion (0x00C7A3F0). Full-analysis Ghidra found 221 direct call references from 174 functions. The initiating cause still depends on caller and object class.",
+      "related_addresses": [
+        {
+          "va": "0x004af590",
+          "rva": "0x000af590"
+        },
+        {
+          "va": "0x006d87a0",
+          "rva": "0x002d87a0"
+        },
+        {
+          "va": "0x00c7a3f0",
+          "rva": "0x0087a3f0"
+        }
+      ],
       "source": {
         "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
         "section": "Confirmed starting points",
@@ -907,7 +920,7 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "Both UnitRemoveBuffs (0x004AF5E0) and UnitRemoveBuffsEx (0x004AF610) resolve the unit and call this function. The extended wrapper reorders its category arguments into the helper's internal order; the simple wrapper supplies a fixed set of category switches. The helper walks attached instances, checks positive/negative and category predicates through virtual slots, and calls 0x006D8530 on matches. It fetches the next list entry before removal and returns a removal count internally. Full-analysis Ghidra found 27 direct calls from 22 functions. For the BTLF object created by UnitApplyTimedLife, vtable slots +0x1E0 and +0x1E4 point to 0x0046A9A0 and 0x0046A9C0; both methods return zero. These are the two polarity predicates the loop requires when removeNegative or removePositive is enabled. Static flow therefore excludes this BTLF instance from both native removal calls, independent of the other category switches. Verify the concrete instance class before applying that conclusion to another timed status.",
+      "evidence_summary": "Both UnitRemoveBuffs (0x004AF5E0) and UnitRemoveBuffsEx (0x004AF610) call this function. It walks attached instances, applies polarity and category predicates through virtual slots, and calls 0x006D8530 for matches after fetching the next list entry. For the BTLF object created by UnitApplyTimedLife, vtable slots +0x1E0 and +0x1E4 resolve to 0x0046A9A0 and 0x0046A9C0; both return zero. Since the filter requires one polarity predicate when removeNegative or removePositive is enabled, BTLF is excluded from both polarity-selected removal paths regardless of other category switches. This distinction is specific to the verified BTLF class. Full-analysis Ghidra found 27 direct calls from 22 functions.",
       "related_addresses": [
         {
           "va": "0x004af5e0",
@@ -1683,6 +1696,57 @@
     "verified_relationships": "Explicit caller/callee, virtual-dispatch, or callback edges established by source notes; unlike related_addresses, these are asserted relationships."
   },
   "verified_relationships": [
+    {
+      "from": {
+        "va": "0x004af590",
+        "rva": "0x000af590"
+      },
+      "to": {
+        "va": "0x006d8530",
+        "rva": "0x002d8530"
+      },
+      "kind": "direct_call",
+      "context": "UnitRemoveAbility removes a rawcode-matched attached instance through the shared removal routine.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/status-lifecycle.md",
+        "section": "Attached status removal path"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006d87a0",
+        "rva": "0x002d87a0"
+      },
+      "to": {
+        "va": "0x006d8530",
+        "rva": "0x002d8530"
+      },
+      "kind": "direct_call",
+      "context": "UnitRemoveBuffs and UnitRemoveBuffsEx share this filtering loop, which delegates matched instances to the shared removal routine.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/status-lifecycle.md",
+        "section": "Attached status removal path"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c7a3f0",
+        "rva": "0x0087a3f0"
+      },
+      "to": {
+        "va": "0x006d8530",
+        "rva": "0x002d8530"
+      },
+      "kind": "direct_call",
+      "context": "Mana Shield depletion invokes shared attached-instance removal after its depletion conditions.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/status-lifecycle.md",
+        "section": "Attached status removal path"
+      }
+    },
     {
       "from": {
         "va": "0x00682180",
