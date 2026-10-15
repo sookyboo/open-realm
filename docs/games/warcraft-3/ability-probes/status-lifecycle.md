@@ -46,10 +46,26 @@ This does not identify BTLF's natural-expiry callback or prove that all summon
 expiration uses this route. Summon-specific cleanup and entity deletion remain
 separate investigations.
 
+## Timed-life callback boundary
+
+The pinned `CBuffTimedLife` vtable at `0x00EA63AC` maps slot `+0x328` to
+`0x006F6820`, slot `+0x354` to `0x006F6BD0`, and slot `+0x30C` to
+`0x006F73D0`. The timed/progress callback can reach `+0x354`; that routine
+dispatches event `0xD01C4` through `0x007FBF80`. When its second argument is
+nonzero, it also calls `+0x30C`. In this vtable that resolves to
+`0x006F73D0`, which walks an embedded child-object collection and sends
+virtual callbacks at child slots `+0x8C` and `+0x90`.
+
+This reveals a shared lifecycle notification/fan-out path inside timed-life
+objects. The inspected methods do not directly call `0x006D8530`, so the
+evidence does not yet show that this callback removes BTLF, kills its owner, or
+cleans up a summoned unit. Resolve the event consumer and the producer of the
+nonzero callback argument before assigning expiry semantics.
+
 ## Reproduce
 
 ```sh
-r2 -q -c 'e scr.color=0; pd 150 @ 0x006d8530; pd 100 @ 0x006d87a0; pd 55 @ 0x004af590; pd 90 @ 0x00c7a3f0; q' \
+r2 -q -c 'e scr.color=0; pd 150 @ 0x006d8530; pd 100 @ 0x006d87a0; pd 55 @ 0x004af590; pd 90 @ 0x00c7a3f0; pd 70 @ 0x006f6bd0; pd 55 @ 0x006f73d0; q' \
   'data/Warcraft III/Warcraft III.exe'
 ```
 
