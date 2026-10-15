@@ -30,6 +30,13 @@ creation/configuration:
 - Pocket Factory missile impact callback `0x00C829F0` creates a `BNfy`
   `CBuffFactory` object after constructing the factory unit, then attaches
   it through the same wrapper. This is a different ability and buff class.
+- Cold Arrows target-effect routine `0x00C5C9D0` rejects selected target
+  states, builds the configured effect context, and looks up `BHca`. It
+  refreshes an existing status through virtual `+0x388`, or creates/configures
+  a new status and attaches it through `0x006D4880`. The nearby exact-build
+  class accessor `0x00C5CBC0` returns `CAbilityColdArrows`; this identifies
+  the class family for the code, but the caller that delivers the attack event
+  into this routine remains unresolved.
 
 Reproduce the wrapper disassembly with:
 
@@ -38,8 +45,9 @@ r2 -q -c 'e scr.color=0; pd 12 @ 0x006d4880; pd 12 @ 0x006f6e80; q' \
   'data/Warcraft III/Warcraft III.exe'
 ```
 
-The exact attack-to-poison producer and argument meanings remain the next
-combat investigation; do not infer them from this shared attachment path.
+The exact attack-to-poison/Cold-Arrows producer and argument meanings remain
+the next combat investigation; do not infer them from this shared attachment
+path.
 
 ## Damage payload and receiver path (Retail 1.29.2)
 
