@@ -6,7 +6,7 @@ PE32 x86, SHA-256
 image base `0x00400000`. Re-derive every address for a different hash.
 
 The [machine-readable inventory](ability-function-investigation.json) is the
-source of record: 48 functions, 31 verified relationships, explicit confidence
+source of record: 48 functions, 34 verified relationships, explicit confidence
 and unresolved semantics. This page gives only the starting points. For context
 and procedures, see [ability research](ability-research.md), [Retail
 architecture](ability-retail-architecture.md), and the [repeatable RE
@@ -20,7 +20,7 @@ workflow](retail-shared-ability-re.md).
 | Area target selection | `0x0068EA00`, `0x00699FD0` | Determine each ability's selection policy and field mapping. |
 | Ability instances | `0x00AF3BA0` factory, `0x006D4560` attach, `0x006D6570` lookup | Trace class behavior beyond factory/attachment. |
 | Rank/availability | Shared rank hooks; enable/disable transitions | Identify remaining instance gates and permanence effects. |
-| Status lifecycle | `0x006D87A0` filter, `0x006D8530` removal, `0x006D4B60` timed-life creation | Compare expiry, dispel, death, refresh, and callback order. |
+| Status lifecycle | `0x006D87A0` filter, `0x006D8530` removal, `0x006D4B60` timed-life creation | `UnitRemoveAbility`, buff filtering, and Mana Shield depletion converge on removal; BTLF fails positive/negative buff predicates. Trace natural expiry and summon-specific cleanup. See [lifecycle evidence](ability-probes/status-lifecycle.md). |
 | Damage | `0x006A9940` payload setup; `0x006677C0` unit receiver | `UnitDamageTarget` and Carrion Swarm converge on this layer; connect ordinary attack-hit dispatch and decode payload fields. See [combat evidence](ability-probes/combat.md#damage-payload-and-receiver-path-retail-1292). |
 | Poison/on-hit | `0x00BDCF70`, `0x006EF880`, Apoi hooks `+0xF8/+0xFC` | Compare poison classes and recover callback arguments/event producer. |
 | Summons | `0x00687CA0` shared unit construction | Separate summon-specific expiry from generic timed life/removal. |
