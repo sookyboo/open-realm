@@ -7,6 +7,8 @@ with SHA-256
 x86, preferred image base `0x00400000`). Re-derive them for another executable.
 For the larger picture of registration, instance identity, cast paths, and
 evidence limits, see [Retail ability architecture](ability-retail-architecture.md).
+For a reusable workflow to find and validate shared functions, see
+[Retail shared-ability reverse engineering](retail-shared-ability-re.md).
 
 ## Confirmed starting points
 

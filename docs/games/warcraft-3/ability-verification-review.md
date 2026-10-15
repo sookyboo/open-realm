@@ -14,6 +14,8 @@ and lifecycle coverage, and correct additional failures exposed by that work.
 The four new suites contain 37 tests / 302 assertions, passing in both ROC and
 TFT modes. Five save-schema tests additionally cover the new channel fields.
 This verifies the named contracts, not exhaustive retail parity or rendered art.
+For the reusable workflow behind shared-function discovery, see
+[Retail shared-ability reverse engineering](retail-shared-ability-re.md).
 
 ## Prefer exact-build code validation when it settles the question
 
