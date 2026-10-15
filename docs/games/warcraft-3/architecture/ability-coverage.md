@@ -3,7 +3,7 @@
 This note tracks the current OpenWarcraft3 game-side ability registry against
 the reference ability base-code list used for parity work.
 
-See the [implemented ability verification review](../ability-verification-review.md) for the
+See the [ability lifecycle review](../ability-lifecycle-review.md) for the
 September 2026 source audit, lifecycle fixes, and current coverage limits.
 
 Primary local files:

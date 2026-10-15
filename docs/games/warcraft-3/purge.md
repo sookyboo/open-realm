@@ -15,13 +15,8 @@ unregistered here. Orb/totem `AIpg` / `AIps` are out of scope.
 | `AIlp` | ROC and TFT | Item Purge / Lightning Purge |
 | `ACpu` | ROC and TFT | creep Purge — unregistered |
 
-Casting strips every timed status from the target and deals `DataC` damage when
-`target->owner` is set (summoned). The movement slow/pause is applied only to
-hostile targets. A friendly cast still performs its dispel without adding
-`Bprg` or stopping movement. Retail JASS verification of stock TFT `Apg2`
-confirmed the distinction: at 1.5 seconds the friendly target moved 382.881
-units versus 403.491 for its unpurged control; the hostile target moved 80.865
-versus 385.253. This does not establish behavior for the other aliases.
+Casting strips every timed status from the target, applies the Purge slow buff,
+and deals `DataC` damage when `target->owner` is set (summoned).
 
 ## Authored fields
 
@@ -61,8 +56,7 @@ AbilityData.slk (Aprg / Apg2 / AIlp)
   -> DataA/C/D/E, Dur/HeroDur, BuffID, targs, Cost, Rng
 CAbilityPurge
   -> clear timed statuses (skip S_StatusIsUndispellable; Cyclone DataA==0)
-  -> hostile target only: unit_addtimedstatus(BuffID or Bprg); store spell->code in status.data
-  -> friendly target: dispel only; no Purge movement status
+  -> unit_addtimedstatus(BuffID or Bprg); store spell->code in status.data
   -> S_SpellDamage(DataC) when target->owner
 S_PurgeMoveReduction / S_PurgeIsImmobilized
   -> read DataA/D/E from status.data (casting rawcode), not hardcoded Aprg
@@ -92,9 +86,8 @@ make test-wc3-engine WC3_PATTERN='wc3_spell.purge*'
 
 Focused tests cover alias procedure sharing, Aprg authored DataA slow,
 Apg2 DataD immobilize + expiry restore, Hero DataE pause, summoned DataC
-damage, gradual post-pause recovery, and friendly dispel without movement
-status. `t_spell.c` also verifies hostile slow and summon damage with explicit
-player-relation setup.
+damage, and gradual post-pause recovery. Existing `t_spell.c` Purge cases must
+keep passing.
 
 ### Retail JASS observation (October 4, 2026)
 
@@ -105,9 +98,9 @@ hostile case, the target belonged to Player 12. Both casts spent approximately
 the authored 75 mana after accounting for regeneration, confirming completed
 casts. At 1.5 seconds after casting, the allied target had moved 382.881 units
 versus 403.491 for its control. The hostile target had moved 80.865 versus
-385.253, and at 3.5 seconds had moved 108.837 versus 608.150. This supports
-the retail tooltip contract: `Apg2` movement immobilization and reduction
-applies to enemies, while an allied target is accepted without a comparable
-movement effect. The probe does not establish an exact pause duration or slow
-curve, or whether the allied cast dispels buffs. See the full probe setup and
-raw output in [ability verification review](ability-verification-review.md#retail-purge-friendly-and-hostile-target-verification-october-4-2026).
+385.253 for its control, and at 3.5 seconds had moved 108.837 versus 608.150.
+This supports the retail tooltip contract: `Apg2` movement immobilization and
+reduction applies to enemies, while an allied target is accepted without a
+comparable movement effect. The probe does not establish an exact pause
+duration or slow curve, or whether the allied cast dispels buffs. See the full
+probe setup and raw output in the [Retail probe log](ability-retail-probe-log.md#retail-purge-friendly-and-hostile-target-verification-october-4-2026).

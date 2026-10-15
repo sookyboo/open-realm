@@ -28,7 +28,7 @@ selection intact. Removal disables a selected ability; acquisition accepts
 runtime-added abilities and does not require a static UnitAbilities entry.
 
 `abilityCall_t` is a message-tagged union: boolean messages must not decode
-`call->target`. See [ability verification](ability-verification-review.md) for
+`call->target`. See [ability lifecycle review](ability-lifecycle-review.md) for
 alias, switching, removal and crash regression coverage.
 
 ## Default active ability

@@ -1,0 +1,2141 @@
+{
+  "schema_version": 1,
+  "title": "Warcraft III Retail shared ability function investigation",
+  "executable": {
+    "sha256": "3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed",
+    "version": "Retail build documented in ability investigation notes",
+    "architecture": "PE32 x86",
+    "module": "Warcraft III.exe",
+    "preferred_image_base": "0x00400000"
+  },
+  "address_convention": {
+    "canonical": "RVA relative to module base for this exact executable",
+    "runtime_conversion": "RVA = runtime address - runtime module base",
+    "warning": "Re-derive addresses for any executable whose SHA-256 differs."
+  },
+  "status_values": {
+    "observed": "Function or path behavior is statically/dynamically documented; this does not imply a complete gameplay contract.",
+    "partially_resolved": "Some function behavior is documented while key semantics or callers remain open.",
+    "candidate": "A useful waypoint or suspected shared helper without a confirmed semantic contract."
+  },
+  "confidence_values": [
+    "low",
+    "medium",
+    "high"
+  ],
+  "sources": [
+    "docs/games/warcraft-3/ability-shared-native-functions.md",
+    "docs/games/warcraft-3/ability-retail-probe-log.md"
+  ],
+  "functions": [
+    {
+      "id": "fn_0006b3c0_0006b3e0",
+      "label": "Shared one-rank update primitives",
+      "category": "ability_rank",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x0046b3c0",
+          "rva": "0x0006b3c0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x0046b3e0",
+          "rva": "0x0006b3e0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "The common up/down hook 0x00B498D0 / 0x00B498F0 calls these to increment/decrement the instance field at +0x50, then refresh the level-indexed value at +0x4C through 0x0046FA80. The exact-build vtables for Immolation (0x00F277EC), Carrion Swarm (0x00F887B0), Shadow Strike (0x00F98714), and Cluster Rockets (0x00FB2C6C) point directly to these common hooks at +0x2E4 / +0x2E8. Earthquake (0x00F85CF0) uses wrappers 0x00C298D0 / 0x00C298F0, which call the common hooks and then an additional virtual slot +0x434. This is a high-value shared rank lifecycle with a visible class-specific extension point.",
+      "related_addresses": [
+        {
+          "va": "0x00b498d0",
+          "rva": "0x007498d0"
+        },
+        {
+          "va": "0x00b498f0",
+          "rva": "0x007498f0"
+        },
+        {
+          "va": "0x0046fa80",
+          "rva": "0x0006fa80"
+        },
+        {
+          "va": "0x00f277ec",
+          "rva": "0x00b277ec"
+        },
+        {
+          "va": "0x00f887b0",
+          "rva": "0x00b887b0"
+        },
+        {
+          "va": "0x00f98714",
+          "rva": "0x00b98714"
+        },
+        {
+          "va": "0x00fb2c6c",
+          "rva": "0x00bb2c6c"
+        },
+        {
+          "va": "0x00f85cf0",
+          "rva": "0x00b85cf0"
+        },
+        {
+          "va": "0x00c298d0",
+          "rva": "0x008298d0"
+        },
+        {
+          "va": "0x00c298f0",
+          "rva": "0x008298f0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function_group",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_0006e0c0_0006e630",
+      "label": "Shared attached-ability disable/enable state transitions",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x0046e0c0",
+          "rva": "0x0006e0c0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x0046e630",
+          "rva": "0x0006e630",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Disable increments the ability instance counter at +0x3C; the first transition from zero invokes virtual +0xE0, clears instance flag bit 0x2, and invokes +0xC4. Enable decrements the same counter; a transition from positive to below one invokes +0xE4 and may restore flag bit 0x2 plus invoke +0xC8, depending on unit flag +0x164 & 4. Both paths refresh shared UI state. A secondary instance counter at +0x40 is also adjusted based on the wrapper's hideUI argument. Full-analysis Ghidra found 107 direct callers of disable and 99 of enable. In sampled exact-build vtables, Carrion Swarm (0x00F887B0), Shadow Strike (0x00F98714), and Cluster Rockets (0x00FB2C6C) use defaults at these hooks: +0xC4=0x0046A470, +0xC8=0x0046A480, +0xE0=0x0046A4A0, +0xE4=0x0046A500. Immolation (0x00F277EC) overrides +0xC4=0x00B6D6D0 and +0xE4=0x00B6D6F0; Earthquake (0x00F85CF0) overrides +0xC4=0x00C29CB0 and +0xC8=0x00C29CD0. The counters can be adjusted without a transition, so inspect callers and class hooks before assigning exact gameplay meaning to every branch.",
+      "related_addresses": [
+        {
+          "va": "0x00f887b0",
+          "rva": "0x00b887b0"
+        },
+        {
+          "va": "0x00f98714",
+          "rva": "0x00b98714"
+        },
+        {
+          "va": "0x00fb2c6c",
+          "rva": "0x00bb2c6c"
+        },
+        {
+          "va": "0x0046a470",
+          "rva": "0x0006a470"
+        },
+        {
+          "va": "0x0046a480",
+          "rva": "0x0006a480"
+        },
+        {
+          "va": "0x0046a4a0",
+          "rva": "0x0006a4a0"
+        },
+        {
+          "va": "0x0046a500",
+          "rva": "0x0006a500"
+        },
+        {
+          "va": "0x00f277ec",
+          "rva": "0x00b277ec"
+        },
+        {
+          "va": "0x00b6d6d0",
+          "rva": "0x0076d6d0"
+        },
+        {
+          "va": "0x00b6d6f0",
+          "rva": "0x0076d6f0"
+        },
+        {
+          "va": "0x00f85cf0",
+          "rva": "0x00b85cf0"
+        },
+        {
+          "va": "0x00c29cb0",
+          "rva": "0x00829cb0"
+        },
+        {
+          "va": "0x00c29cd0",
+          "rva": "0x00829cd0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function_group",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_000971c0_000aae20",
+      "label": "JASS GetUnitAbilityLevel / SetUnitAbilityLevel wrappers",
+      "category": "ability_lifecycle",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x004971c0",
+          "rva": "0x000971c0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x004aae20",
+          "rva": "0x000aae20",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "All four level natives share a preflight check for internal tag 0x2B61676C and object field +0x20 == 0; the meaning of this gate is not yet named. They then locate the attached instance through 0x006D6570. Get returns its stored zero-based rank at object offset +0x50, plus one, or zero if no eligible instance is found. Set clamps the requested level to [1, maxLevel] using 0x0046F5C0, then repeatedly invokes virtual +0x2E4 to raise or +0x2E8 to lower rank on that same instance. It does not remove/recreate the ability. IncUnitAbilityLevel (0x00498B20) and DecUnitAbilityLevel (0x0048F150) use the same virtual hooks with max/level-one bounds.",
+      "related_addresses": [
+        {
+          "va": "0x2b61676c",
+          "rva": "0x2b21676c"
+        },
+        {
+          "va": "0x006d6570",
+          "rva": "0x002d6570"
+        },
+        {
+          "va": "0x0046f5c0",
+          "rva": "0x0006f5c0"
+        },
+        {
+          "va": "0x00498b20",
+          "rva": "0x00098b20"
+        },
+        {
+          "va": "0x0048f150",
+          "rva": "0x0008f150"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function_group",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_000ae8f0_000af590",
+      "label": "JASS UnitAddAbility / UnitRemoveAbility wrappers",
+      "category": "ability_lifecycle",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x004ae8f0",
+          "rva": "0x000ae8f0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x004af590",
+          "rva": "0x000af590",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Registered in the native table at 0x0049B3C0. Add resolves the unit, looks up the requested rawcode and returns false if an instance already exists, then calls factory 0x00AF3BA0 inside synchronization helpers and returns whether it created an instance. Remove resolves the unit, looks up the rawcode, removes the found instance through 0x006D8530, and returns whether it found one. Both notify through 0x005F6D00 after a successful change. These named natives provide a direct, reproducible path into shared ability ownership and teardown.",
+      "related_addresses": [
+        {
+          "va": "0x0049b3c0",
+          "rva": "0x0009b3c0"
+        },
+        {
+          "va": "0x00af3ba0",
+          "rva": "0x006f3ba0"
+        },
+        {
+          "va": "0x006d8530",
+          "rva": "0x002d8530"
+        },
+        {
+          "va": "0x005f6d00",
+          "rva": "0x001f6d00"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function_group",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_000aef70",
+      "label": "JASS UnitDamageTarget damage-event handoff",
+      "category": "damage",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x004aef70",
+          "rva": "0x000aef70",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [
+        "0x120"
+      ],
+      "evidence_summary": "The wrapper is referenced by native registration initializer 0x0049B3C0. It resolves source unit and target widget handles, validates attack-type, damage-type, and weapon-type indices, initializes the payload through 0x006A9940, then calls the target's +0x120 virtual method. It returns true after dispatch. Carrion Swarm independently uses the same initializer and target slot after its own checks/value selection. The widget-typed native target does not guarantee unit-style mitigation; inspect the concrete receiver vtable.",
+      "related_addresses": [
+        {
+          "va": "0x0049b3c0",
+          "rva": "0x0009b3c0"
+        },
+        {
+          "va": "0x006a9940",
+          "rva": "0x002a9940"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_000af460",
+      "label": "JASS UnitMakeAbilityPermanent wrapper",
+      "category": "shared_native",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x004af460",
+          "rva": "0x000af460",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Resolves the unit, finds the attached instance by rawcode through 0x006D6570, then increments or decrements the integer field at instance offset +0x38 according to permanent. It returns whether an instance was found. This field is separate from disable counters +0x3C / +0x40; its downstream persistence/removal effect is not yet traced.",
+      "related_addresses": [
+        {
+          "va": "0x006d6570",
+          "rva": "0x002d6570"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_0027b920",
+      "label": "Configured damage-bonus matrix lookup",
+      "category": "damage",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x0067b920",
+          "rva": "0x0027b920",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Lazily loads seven eight-entry rows named DamageBonusSpells, DamageBonusNormal, DamageBonusPierce, DamageBonusSiege, DamageBonusMagic, DamageBonusChaos, and DamageBonusHero. It returns the matrix entry at param3 + param2 * 8; the CUnit damage receiver calls it with values derived from event payload offset +0x20 and unit offset +0x1EC (or constant 4 on one branch). Row names are established from configuration-string reads, but the two index enums and exact column meanings are not yet mapped. Ethereal adjustments are read separately through EtherealDamageBonus and allied-ethereal logic.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_0027fb80",
+      "label": "Additional owner/target relation check",
+      "category": "targeting",
+      "status": "partially_resolved",
+      "confidence": "low",
+      "addresses": [
+        {
+          "va": "0x0067fb80",
+          "rva": "0x0027fb80",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Called from Phoenix Fire's candidate callback. It examines owner/target flags and invokes shared validation; a stable semantic label is not established. Full-analysis Ghidra found 40 direct call references from 37 caller functions.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_00282180",
+      "label": "General spell target validation",
+      "category": "targeting",
+      "status": "partially_resolved",
+      "confidence": "low",
+      "addresses": [
+        {
+          "va": "0x00682180",
+          "rva": "0x00282180",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Phoenix Fire's candidate callback passes the candidate classification through this helper. It checks common target rejection paths and registered validators. Numeric returns are internal rejection codes, not damage or an order-acceptance boolean. Full-analysis Ghidra found 64 direct call references from 64 caller functions.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_00282210_002822e0",
+      "label": "Common target rejection predicates",
+      "category": "targeting",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00682210",
+          "rva": "0x00282210",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x006822e0",
+          "rva": "0x002822e0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Each has one direct call reference from 0x00682180; they consult target predicates and MagicImmunesResistUltimates. Exact semantic names for each rejection branch are not fully recovered.",
+      "related_addresses": [
+        {
+          "va": "0x00682180",
+          "rva": "0x00282180"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function_group",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_00287ca0",
+      "label": "Shared unit construction/setup helper reached by stock summon abilities",
+      "category": "summon",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00687ca0",
+          "rva": "0x00287ca0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Spirit Wolf (CAbilitySpiritWolf, vtable 0x00F8910C) reaches it through 0x00CAF240 from class callback 0x00C31B40; Serpent Ward (CAbilityWard, vtable 0x00F8ABB8) calls it directly from callback 0x00C34150. The helper validates/normalizes placement, constructs a unit through 0x00685B20, applies creation flags and further setup, and returns the new unit. It has 31 direct call references from 30 functions. These paths do not call the UnitApplyTimedLife wrapper or 0x006D4B60; summon expiry and identity remain separate questions.",
+      "related_addresses": [
+        {
+          "va": "0x00f8910c",
+          "rva": "0x00b8910c"
+        },
+        {
+          "va": "0x00caf240",
+          "rva": "0x008af240"
+        },
+        {
+          "va": "0x00c31b40",
+          "rva": "0x00831b40"
+        },
+        {
+          "va": "0x00f8abb8",
+          "rva": "0x00b8abb8"
+        },
+        {
+          "va": "0x00c34150",
+          "rva": "0x00834150"
+        },
+        {
+          "va": "0x00685b20",
+          "rva": "0x00285b20"
+        },
+        {
+          "va": "0x006d4b60",
+          "rva": "0x002d4b60"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_0028ab70",
+      "label": "Shared post-creation unit relation/update path",
+      "category": "shared_native",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x0068ab70",
+          "rva": "0x0028ab70",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Both Spirit Wolf and Serpent Ward invoke this after their ability-specific setup for a successfully created unit. Its body updates unit/owner-related state and dispatches shared setup helpers; 29 direct references were found. The exact lifecycle contract and whether every caller passes a newly created summon are not established.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_0028ea00",
+      "label": "Area-unit enumeration",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x0068ea00",
+          "rva": "0x0028ea00",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Phoenix Fire invokes it centered on the owner's position with a radius/configuration from the ability data object and callback 0x00C0F1E0. Full-analysis Ghidra found 133 direct call references from 118 caller functions.",
+      "related_addresses": [
+        {
+          "va": "0x00c0f1e0",
+          "rva": "0x0080f1e0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_00299fd0",
+      "label": "Indexed candidate selection",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "low",
+      "addresses": [
+        {
+          "va": "0x00699fd0",
+          "rva": "0x00299fd0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Phoenix Fire calls this to choose one candidate from the collected area targets. Full-analysis Ghidra found seven direct call references from five caller functions; this is a narrower helper than target validation, enumeration, and buff lookup.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002a9940",
+      "label": "Shared damage/event payload initializer",
+      "category": "damage",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006a9940",
+          "rva": "0x002a9940",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Full-analysis Ghidra found 49 direct calls from 47 functions. Its body writes payload fields and clears two counters/flags. Two traced paths converge on target virtual slot +0x120: registered UnitDamageTarget (0x004AEF70) and Carrion Swarm (0x00C30BB0). The initializer is shared, while receiver behavior differs by target class.",
+      "related_addresses": [
+        {
+          "va": "0x004aef70",
+          "rva": "0x000aef70"
+        },
+        {
+          "va": "0x00c30bb0",
+          "rva": "0x00830bb0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002ada20",
+      "label": "Target-mask and relation validation",
+      "category": "targeting",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006ada20",
+          "rva": "0x002ada20",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Checks input mask validity, intersects the requested mask with the expanded candidate mask from 0x006AEA70, then checks further target/owner relations through 0x006AD670; returns native rejection codes. It has six direct references from four functions and is reached through the broader gate 0x006ADB90. Useful for tracing why a target class is accepted or rejected, but less widely reused than 0x00682180.",
+      "related_addresses": [
+        {
+          "va": "0x006aea70",
+          "rva": "0x002aea70"
+        },
+        {
+          "va": "0x006ad670",
+          "rva": "0x002ad670"
+        },
+        {
+          "va": "0x006adb90",
+          "rva": "0x002adb90"
+        },
+        {
+          "va": "0x00682180",
+          "rva": "0x00282180"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002adb90",
+      "label": "Shared target/state gate candidate",
+      "category": "targeting",
+      "status": "candidate",
+      "confidence": "low",
+      "addresses": [
+        {
+          "va": "0x006adb90",
+          "rva": "0x002adb90",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Full-analysis Ghidra found 18 direct callers. The body checks target virtual state and flags and calls buff lookup 0x006D6570 on one branch. This is a promising adjacent predicate to compare across abilities, but its complete semantic contract has not been established.",
+      "related_addresses": [
+        {
+          "va": "0x006d6570",
+          "rva": "0x002d6570"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002aea70",
+      "label": "Grouped target-mask expansion",
+      "category": "targeting",
+      "status": "partially_resolved",
+      "confidence": "low",
+      "addresses": [
+        {
+          "va": "0x006aea70",
+          "rva": "0x002aea70",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Its body expands several grouped bits into normalized bit sets; 0x006ADA20 intersects the result with a candidate's target mask before returning a validation code. Full-analysis Ghidra found 21 direct calls from 13 functions. This can accelerate target-category checks (including corpse/structure/organic eligibility), but the numeric categories must be mapped from the specific ability's data and caller path before assigning names.",
+      "related_addresses": [
+        {
+          "va": "0x006ada20",
+          "rva": "0x002ada20"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002d4560",
+      "label": "Ability/status instance attachment to a unit",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006d4560",
+          "rva": "0x002d4560",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "The body registers an instance, caches selected special rawcodes on the unit, invokes virtual lifecycle hooks on the new instance, and notifies already attached instances. Full-analysis Ghidra found 54 direct calls from 34 caller functions. This is a useful point to verify whether an ability's resulting status object actually becomes attached and enters shared unit lifecycle dispatch; it does not itself prove the ability-specific creation rules or expiry behavior.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002d4a10",
+      "label": "Reference-counted attached-object state transition candidate",
+      "category": "shared_native",
+      "status": "candidate",
+      "confidence": "low",
+      "addresses": [
+        {
+          "va": "0x006d4a10",
+          "rva": "0x002d4a10",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "The body updates two counters on the owning object, performs work on transition conditions, looks up an attached instance through 0x006D6570, and visits other attached objects through virtual predicates before applying another virtual operation. Full-analysis Ghidra found 20 direct calls from 20 functions. This could help trace shared state changes or cleanup, but the affected state and virtual operations are not semantically identified yet. Treat it as a call-chain waypoint, not a verified ability contract.",
+      "related_addresses": [
+        {
+          "va": "0x006d6570",
+          "rva": "0x002d6570"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002d4b60",
+      "label": "Buff-object creation path used by UnitApplyTimedLife",
+      "category": "status_lifecycle",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006d4b60",
+          "rva": "0x002d4b60",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "The JASS native wrapper at 0x004AED50 resolves the unit and passes the requested buff code and duration here. This routine selects a buff prototype/factory, initializes the created object through virtual slot +0x324, attaches it through 0x006D4560, then runs a post-attach helper. Its only direct caller found is the UnitApplyTimedLife wrapper, so this is a confirmed native path, not yet a shared spell-cast helper. The default branch selects BTLF via 0x006F4C40.",
+      "related_addresses": [
+        {
+          "va": "0x004aed50",
+          "rva": "0x000aed50"
+        },
+        {
+          "va": "0x006d4560",
+          "rva": "0x002d4560"
+        },
+        {
+          "va": "0x006f4c40",
+          "rva": "0x002f4c40"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002d61e0_000af020",
+      "label": "JASS BlzUnitDisableAbility bridge",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006d61e0",
+          "rva": "0x002d61e0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x004af020",
+          "rva": "0x000af020",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "This is the only disable-by-rawcode native name found in the pinned executable; no UnitDisableAbility registration/string was found. The wrapper resolves the unit and passes ability rawcode, hideUI, and flag to this helper. The helper finds the existing attached instance through 0x006D6570, then routes to disable or enable counters. On enable it passes hideUI == false to the inverse counter path, so preserve the wrapper's argument mapping when evaluating UI behavior. The helper has one direct caller: the JASS wrapper.",
+      "related_addresses": [
+        {
+          "va": "0x006d6570",
+          "rva": "0x002d6570"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function_group",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002d6570",
+      "label": "Attached ability/status instance lookup by rawcode",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "low",
+      "addresses": [
+        {
+          "va": "0x006d6570",
+          "rva": "0x002d6570",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Function-body inspection shows fast paths for several fixed FOURCCs, then iteration over attached instances and comparison through their rawcode getter. Phoenix Fire queries Bpxf and rejects a candidate when the status instance is already present. Full-analysis Ghidra found 959 direct call references from 681 caller functions, making this the strongest high-reuse starting point. The lookup does not establish application, refresh, expiry, or dispel behavior.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002d8530",
+      "label": "Attached ability/status instance removal",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006d8530",
+          "rva": "0x002d8530",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "The body marks the instance as removed, notifies sibling attached objects through a virtual hook, unlinks it from the owner's attached-instance list, refreshes list metadata, and clears cached pointers for selected rawcodes. Full-analysis Ghidra found 221 direct calls from 174 functions. This is a strong shared path for tracing dispel, expiry, death cleanup, or ability removal, but caller and virtual-hook analysis is still needed to identify which cause initiated each removal.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002d87a0",
+      "label": "Shared JASS buff-filter and attached-instance removal loop",
+      "category": "status_lifecycle",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006d87a0",
+          "rva": "0x002d87a0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Both UnitRemoveBuffs (0x004AF5E0) and UnitRemoveBuffsEx (0x004AF610) resolve the unit and call this function. The extended wrapper reorders its category arguments into the helper's internal order; the simple wrapper supplies a fixed set of category switches. The helper walks attached instances, checks positive/negative and category predicates through virtual slots, and calls 0x006D8530 on matches. It fetches the next list entry before removal and returns a removal count internally. Full-analysis Ghidra found 27 direct calls from 22 functions. For the BTLF object created by UnitApplyTimedLife, vtable slots +0x1E0 and +0x1E4 point to 0x0046A9A0 and 0x0046A9C0; both methods return zero. These are the two polarity predicates the loop requires when removeNegative or removePositive is enabled. Static flow therefore excludes this BTLF instance from both native removal calls, independent of the other category switches. Verify the concrete instance class before applying that conclusion to another timed status.",
+      "related_addresses": [
+        {
+          "va": "0x004af5e0",
+          "rva": "0x000af5e0"
+        },
+        {
+          "va": "0x004af610",
+          "rva": "0x000af610"
+        },
+        {
+          "va": "0x006d8530",
+          "rva": "0x002d8530"
+        },
+        {
+          "va": "0x0046a9a0",
+          "rva": "0x0006a9a0"
+        },
+        {
+          "va": "0x0046a9c0",
+          "rva": "0x0006a9c0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002ec8f0",
+      "label": "Shared ability/effect object initialization",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006ec8f0",
+          "rva": "0x002ec8f0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Phoenix Fire reaches this after selecting a target with the Bpxf definition. Its body copies authored configuration into object fields, calls virtual setters, and delegates additional initialization; full-analysis Ghidra found 15 direct calls from 15 caller functions. The object type and complete lifecycle contract remain to be mapped at each caller.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002eca60",
+      "label": "Sibling ability/effect object initializer candidate",
+      "category": "shared_native",
+      "status": "candidate",
+      "confidence": "low",
+      "addresses": [
+        {
+          "va": "0x006eca60",
+          "rva": "0x002eca60",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "The body has a similar authored-data copy and virtual-setter pattern to 0x006EC8F0, but writes a different object-field layout and delegates to 0x006E7D00. Full-analysis Ghidra found 13 direct calls from 13 caller functions. This may identify another reusable object family while tracing applied effects; caller evidence is still needed before assigning it a gameplay role.",
+      "related_addresses": [
+        {
+          "va": "0x006ec8f0",
+          "rva": "0x002ec8f0"
+        },
+        {
+          "va": "0x006e7d00",
+          "rva": "0x002e7d00"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002ece00",
+      "label": "Shared configuration / presentation initializer candidate",
+      "category": "shared_native",
+      "status": "candidate",
+      "confidence": "low",
+      "addresses": [
+        {
+          "va": "0x006ece00",
+          "rva": "0x002ece00",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Called by 0x006EC8F0; the body initializes virtual string/config fields, reads a target's state and position, and enters additional effect setup paths. It has 20 direct references from 19 caller functions. It is promising for tracing effect initialization, but the object family and caller-specific contract are not yet established.",
+      "related_addresses": [
+        {
+          "va": "0x006ec8f0",
+          "rva": "0x002ec8f0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002f6820",
+      "label": "Shared progress/timed-value callback in the CBuffTimedLife vtable",
+      "category": "status_lifecycle",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006f6820",
+          "rva": "0x002f6820",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Constructor 0x006F0D60 installs vtable 0x00EA63AC; slot +0x328 points to this method. It reads the global game-time value at 0x0112D88C, compares it with a float supplied by the caller, changes object flag 0x80, and invokes slot +0x354 on one branch. The concrete clock argument and branch meaning are not fully recovered; this is a useful timer/progress trace point, not proof of unit removal at expiry.",
+      "related_addresses": [
+        {
+          "va": "0x006f0d60",
+          "rva": "0x002f0d60"
+        },
+        {
+          "va": "0x00ea63ac",
+          "rva": "0x00aa63ac"
+        },
+        {
+          "va": "0x0112d88c",
+          "rva": "0x00d2d88c"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002f6bd0",
+      "label": "Shared lifecycle callback emitting event 0xD01C4",
+      "category": "event_dispatch",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006f6bd0",
+          "rva": "0x002f6bd0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "This is slot +0x354 in the CBuffTimedLife vtable above. It resets shared state, registers/updates a callback against the game-time value, and calls generic dispatcher 0x007FBF80 with event 0xD01C4; a nonzero argument also invokes virtual slot +0x30C. The callback is referenced by many class vtables, so it is a shared lifecycle primitive. The event's semantic name and whether a particular caller uses it for expiry remain unresolved.",
+      "related_addresses": [
+        {
+          "va": "0x007fbf80",
+          "rva": "0x003fbf80"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_003f6360",
+      "label": "Generic descriptor/registry registration",
+      "category": "registration",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x007f6360",
+          "rva": "0x003f6360",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Full-analysis Ghidra found 1,077 direct calls from 1,076 functions. Known ability-registration code passes a class descriptor and rawcode here (for example AUcs at caller 0x00C31370), so it can help prove rawcode-to-class registration in this executable. Its large count reflects a generic registry mechanism, not shared gameplay behavior.",
+      "related_addresses": [
+        {
+          "va": "0x00c31370",
+          "rva": "0x00831370"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_003fbe90",
+      "label": "Generic callback/event delivery",
+      "category": "event_dispatch",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x007fbe90",
+          "rva": "0x003fbe90",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Full-analysis Ghidra found 390 direct calls from 345 functions. Its body forwards an event identifier and arguments through a callback object's virtual slot +0x8; Phoenix Fire uses it to deliver event 0xD01B0 to its owned event member. This is useful for tracing event-driven ability lifecycles, but does not alone prove a timer duration or expiry contract.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_006f3ba0",
+      "label": "AbilityData-driven ability instance factory",
+      "category": "ability_factory",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00af3ba0",
+          "rva": "0x006f3ba0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "UnitAddAbility reaches this after rejecting an existing instance with 0x006D6570. The factory resolves the AbilityData row, dispatches on its implementation code at row offset +0x30 to concrete class constructors, initializes the instance through virtual slot +0x80 with the owner and data at row offset +0x18, then attaches through 0x006D4560. Full-analysis Ghidra found 10 direct calls from 10 functions. This is a strong route for connecting named JASS add/remove calls to class-specific constructors; the factory's large implementation-code switch is not itself proof of a class's runtime behavior.",
+      "related_addresses": [
+        {
+          "va": "0x006d6570",
+          "rva": "0x002d6570"
+        },
+        {
+          "va": "0x006d4560",
+          "rva": "0x002d4560"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_00728980",
+      "label": "CAbilitySimpleSpell order validation",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00b28980",
+          "rva": "0x00728980",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Full-analysis Ghidra found 23 direct calls plus 187 non-call references (including virtual/data references). Its return value is a native validation result, not an acceptance boolean. This function is already traced for Carrion Swarm and other simple-spell callers; use its result together with caller continuation and externally observable order/event state.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_007dcf70",
+      "label": "Shared poison-buff callback for CBuffPoisonAttack (Bpoi) and CBuffSlowPoison (Bspo), vtable +0x364",
+      "category": "status_lifecycle",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00bdcf70",
+          "rva": "0x007dcf70",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "The method reads configured values from its instance and incoming context, branches to a Bpsi stack-poison object path when mode bits are set, and otherwise looks up an existing Bpoi on its third parameter. It refreshes that object through virtual +0x388, or creates/configures a Bpoi object through 0x00BE1A00, initializes it through +0x380, and attaches it with 0x006D4880. This gives a concrete shared poison status creation/refresh path. The event producer and exact parameter contract are not yet established, so this alone does not prove the ordinary attack-hit dispatcher.",
+      "related_addresses": [
+        {
+          "va": "0x00be1a00",
+          "rva": "0x007e1a00"
+        },
+        {
+          "va": "0x006d4880",
+          "rva": "0x002d4880"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_0080d7d0",
+      "label": "CAbilityPhoenixFire scheduled event setup",
+      "category": "ability_callback",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00c0d7d0",
+          "rva": "0x0080d7d0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Observed: reads configured interval through virtual slot +0x2EC and schedules event 0xD01B0 against this+0x84. Exact interval field-to-AbilityData mapping remains open.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-retail-probe-log.md",
+        "section": "Phoenix Fire native path: periodic acquisition and target gates",
+        "anchor": "phoenix-fire-native-path-periodic-acquisition-and-target-gates"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_0080d820",
+      "label": "CAbilityPhoenixFire scheduled event handler",
+      "category": "ability_callback",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00c0d820",
+          "rva": "0x0080d820",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Observed: filters for event 0xD01B0 and calls 0x00C0ECD0.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-retail-probe-log.md",
+        "section": "Phoenix Fire native path: periodic acquisition and target gates",
+        "anchor": "phoenix-fire-native-path-periodic-acquisition-and-target-gates"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_0080ecd0",
+      "label": "CAbilityPhoenixFire periodic target acquisition",
+      "category": "ability_callback",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00c0ecd0",
+          "rva": "0x0080ecd0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Observed: obtains owner and position, invokes area enumeration 0x0068EA00 with callback 0x00C0F1E0, selects one surviving candidate through 0x00699FD0, then enters Bpxf setup through 0x006EC8F0. Exact damage/tick semantics remain open.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-retail-probe-log.md",
+        "section": "Phoenix Fire native path: periodic acquisition and target gates",
+        "anchor": "phoenix-fire-native-path-periodic-acquisition-and-target-gates"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_0080f1e0",
+      "label": "CAbilityPhoenixFire area candidate callback",
+      "category": "ability_callback",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00c0f1e0",
+          "rva": "0x0080f1e0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Observed: applies target classification validation through 0x00682180, rejects existing Bpxf via 0x006D6570, and performs an additional relationship check through 0x0067FB80. Some predicate meanings remain unresolved.",
+      "related_addresses": [],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-retail-probe-log.md",
+        "section": "Phoenix Fire native path: periodic acquisition and target gates",
+        "anchor": "phoenix-fire-native-path-periodic-acquisition-and-target-gates"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_008828a0_008829f0",
+      "label": "Pocket Factory summon missile setup and impact",
+      "category": "summon",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00c828a0",
+          "rva": "0x008828a0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00c829f0",
+          "rva": "0x008829f0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "CAbilitySummonFactory callback 0x00C82310 resolves the MNsy missile row and dispatches virtual slot +0xD4; the pinned CMissileSummonFactory vtable 0x00FB48A0 maps setup to 0x00C828A0. Impact callback 0x00C829F0 creates the configured factory unit through shared constructor 0x00687CA0, then creates a BNfy CBuffFactory object through 0x00C86370 and attaches it with 0x006D4880. This proves the spell missile impact uses the shared unit-construction helper; the buff attachment is a class-specific path, separate from UnitApplyTimedLife helper 0x006D4B60.",
+      "related_addresses": [
+        {
+          "va": "0x00c82310",
+          "rva": "0x00882310"
+        },
+        {
+          "va": "0x00fb48a0",
+          "rva": "0x00bb48a0"
+        },
+        {
+          "va": "0x00687ca0",
+          "rva": "0x00287ca0"
+        },
+        {
+          "va": "0x00c86370",
+          "rva": "0x00886370"
+        },
+        {
+          "va": "0x006d4880",
+          "rva": "0x002d4880"
+        },
+        {
+          "va": "0x006d4b60",
+          "rva": "0x002d4b60"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function_group",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_00883130_008831f0",
+      "label": "Pocket Factory periodic production setup and event callback",
+      "category": "event_dispatch",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00c83130",
+          "rva": "0x00883130",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00c831f0",
+          "rva": "0x008831f0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Factory setup stores its authored configuration and registers for event 0xD01C3 through 0x007FBE90. Callback 0x00C831F0 gates production through 0x0067DF90, creates each configured Clockwerk unit through 0x00687CA0, and attaches a BNcg CBuffClockworkGoblin object. Helper 0x00C86070 resolves that buff; 0x00C84880 creates it (its Ghidra decompiler return is wrong, but disassembly returns the object pointer). This traces periodic production independently from missile impact.",
+      "related_addresses": [
+        {
+          "va": "0x007fbe90",
+          "rva": "0x003fbe90"
+        },
+        {
+          "va": "0x0067df90",
+          "rva": "0x0027df90"
+        },
+        {
+          "va": "0x00687ca0",
+          "rva": "0x00287ca0"
+        },
+        {
+          "va": "0x00c86070",
+          "rva": "0x00886070"
+        },
+        {
+          "va": "0x00c84880",
+          "rva": "0x00884880"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function_group",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_00883940",
+      "label": "Separate CAbilityFactory production callback (ANfy)",
+      "category": "event_dispatch",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00c83940",
+          "rva": "0x00883940",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "This CAbilityFactory callback also handles event 0xD01C3 and calls 0x00687CA0, but it is a distinct class path. Pocket Factory's factory unit does not carry ability ANfy; its production is driven by attached BNfy callback 0x00C831F0. Keep the ability callback and buff callback separate when using caller counts or comparing implementations.",
+      "related_addresses": [
+        {
+          "va": "0x00687ca0",
+          "rva": "0x00287ca0"
+        },
+        {
+          "va": "0x00c831f0",
+          "rva": "0x008831f0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_008af240",
+      "label": "Unit creation wrapper used by Spirit Wolf and other callers",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00caf240",
+          "rva": "0x008af240",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Spirit Wolf passes its resolved summon code, owner, and placement through this wrapper; it validates the unit row and delegates construction to 0x00687CA0 with creation flags. It has 15 direct references. Serpent Ward bypasses this wrapper and calls 0x00687CA0 directly. Do not assume all summons use the wrapper just because the constructor is shared.",
+      "related_addresses": [
+        {
+          "va": "0x00687ca0",
+          "rva": "0x00287ca0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_00a9bc30",
+      "label": "Generic widget route 0x006BD260 / base value method 0x00664A60",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00e9bc30",
+          "rva": "0x00a9bc30",
+          "kind": "vtable"
+        }
+      ],
+      "object_offsets": [
+        "0x120",
+        "0x128"
+      ],
+      "evidence_summary": "CWidget +0x120 calls 0x006C0100, negates the input value, then dispatches through +0x128. The base CWidget +0x128 implementation writes zero to the output. Subclasses can override these methods; a successful UnitDamageTarget return only proves dispatch occurred.",
+      "related_addresses": [
+        {
+          "va": "0x006c0100",
+          "rva": "0x002c0100"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "vtable_record",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_00a9c504",
+      "label": "Unit damage receiver 0x006677C0 / value-change method 0x00668DB0",
+      "category": "damage",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00e9c504",
+          "rva": "0x00a9c504",
+          "kind": "vtable"
+        }
+      ],
+      "object_offsets": [
+        "0x120",
+        "0x128"
+      ],
+      "evidence_summary": "The CUnit constructor installs vtable 0x00E9C504. Its +0x120 method returns early when unit flag +0x164 has bit 0x100; checks MagicImmunesResistDamage and payload-class predicates; dispatches attached-object callbacks through slots +0xF8, +0xFC, and +0x100; reads configured DamageBonusSpells/Normal/Pierce/Siege/Magic/Chaos/Hero values through 0x0067B920; and applies configured ethereal adjustments. In its first attached-object pass, it invokes +0xFC only when that object's +0xF8 returns 1; other nonzero return values are collected for later callback phases. It calls 0x006A0630, computes an adjusted amount, then invokes its own +0x128 method (0x00668DB0) with the negative amount and returns the resulting value through an output pointer. This establishes a unit-specific mitigation/value-change path for unit targets in UnitDamageTarget and Carrion Swarm. Which attached-object groups correspond to ordinary attack-hit processing remains unresolved.",
+      "related_addresses": [
+        {
+          "va": "0x0067b920",
+          "rva": "0x0027b920"
+        },
+        {
+          "va": "0x006a0630",
+          "rva": "0x002a0630"
+        },
+        {
+          "va": "0x00668db0",
+          "rva": "0x00268db0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "vtable_record",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_00aa19f8",
+      "label": "Destructable route 0x006CE850 / value method 0x006CEF00",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00ea19f8",
+          "rva": "0x00aa19f8",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [
+        "0x120",
+        "0x128"
+      ],
+      "evidence_summary": "The destructable override delegates value change through the CWidget route, which virtually calls destructable +0x128, then checks the resulting destroyed state and enters an effect/lifecycle path. +0x128 updates the destructable's stored life value and calls 0x006D10C0 on a threshold transition. This is a separate route from the CUnit mitigation routine.",
+      "related_addresses": [
+        {
+          "va": "0x006d10c0",
+          "rva": "0x002d10c0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_00b81828",
+      "label": "Damage group 2: +0xF8=0x00C20940, +0xFC=0x00C20950, +0x364=0x00C20AF0",
+      "category": "damage",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00f81828",
+          "rva": "0x00b81828",
+          "kind": "vtable"
+        }
+      ],
+      "object_offsets": [
+        "0x120"
+      ],
+      "evidence_summary": "The Spirit Link buff's +0xF8 returns group 2; its +0xFC is therefore selected by the CUnit damage receiver's attached-object callback loop. The buff method inspects the incoming event and makes a virtual +0x364 call on an event-referenced object. Separately, the Spirit Link buff vtable's own +0x364 method (0x00C20AF0) enumerates SpiritLinkUnitData targets, initializes a secondary payload with mask 0x01000000, and dispatches it through each linked target's +0x120, temporarily setting and clearing target flag bit 0x100. This recovers a linked-unit damage redispatch path; the static event receiver identity at the +0xFC virtual call and the exact share fraction/data-field mapping remain unresolved.",
+      "related_addresses": [
+        {
+          "va": "0x00c20af0",
+          "rva": "0x00820af0"
+        },
+        {
+          "va": "0x01000000",
+          "rva": "0x00c00000"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "vtable_record",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_00bb03cc",
+      "label": "Damage group 5: +0xF8=0x00C7A3E0, +0xFC=0x00C7A3F0",
+      "category": "damage",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00fb03cc",
+          "rva": "0x00bb03cc",
+          "kind": "vtable"
+        }
+      ],
+      "object_offsets": [
+        "0x120"
+      ],
+      "evidence_summary": "The Mana Shield buff's +0xF8 returns group 5, routing its +0xFC method through the CUnit damage callback loop. The handler reads the incoming event amount (param2[4]) and buff floats at +0xD0, +0xD4, and +0xDC, updates its tracked values through numeric helpers, and calls 0x006D8530 to remove the buff when its depletion branches reach zero. It also calls 0x0069E310; that helper can emit mana-spend event 0xD02A0 when requested, but this callback passes its event flag as zero. Exact meanings of the three buff fields and the helper's resulting mana value are not fully recovered.",
+      "related_addresses": [
+        {
+          "va": "0x006d8530",
+          "rva": "0x002d8530"
+        },
+        {
+          "va": "0x0069e310",
+          "rva": "0x0029e310"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points",
+        "anchor": "confirmed-starting-points"
+      },
+      "record_kind": "vtable_record",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    }
+  ],
+  "record_schema": {
+    "id": "Stable identifier derived from one or more canonical RVAs.",
+    "label": "Provisional semantic label from the source notes.",
+    "category": "Broad searchable behavior family.",
+    "record_kind": "function, function_group, or vtable_record as represented by the source notes.",
+    "addresses": "VA/RVA pairs; kind distinguishes function addresses from vtable globals. A grouped record may contain multiple function addresses.",
+    "object_offsets": "Offsets explicitly written as vtable/object slots in the source heading.",
+    "evidence_summary": "Source-note evidence and caveats, preserved for auditability.",
+    "related_addresses": "Other addresses mentioned in that evidence; mentions are not automatically call edges.",
+    "source": "Repository document and stable section anchor from which the entry was seeded; avoids fragile line-number links.",
+    "verified_relationships": "Explicit caller/callee, virtual-dispatch, or callback edges established by source notes; unlike related_addresses, these are asserted relationships."
+  },
+  "verified_relationships": [
+    {
+      "from": {
+        "va": "0x004ae8f0",
+        "rva": "0x000ae8f0"
+      },
+      "to": {
+        "va": "0x00af3ba0",
+        "rva": "0x006f3ba0"
+      },
+      "kind": "direct_call",
+      "context": "UnitAddAbility reaches the AbilityData-driven instance factory.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004af590",
+        "rva": "0x000af590"
+      },
+      "to": {
+        "va": "0x006d8530",
+        "rva": "0x002d8530"
+      },
+      "kind": "direct_call",
+      "context": "UnitRemoveAbility removes the found attached instance through the shared removal path.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00af3ba0",
+        "rva": "0x006f3ba0"
+      },
+      "to": {
+        "va": "0x006d6570",
+        "rva": "0x002d6570"
+      },
+      "kind": "direct_call",
+      "context": "Factory path checks for an existing attached instance.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00af3ba0",
+        "rva": "0x006f3ba0"
+      },
+      "to": {
+        "va": "0x006d4560",
+        "rva": "0x002d4560"
+      },
+      "kind": "direct_call",
+      "context": "Factory attaches a successfully initialized ability instance.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004971c0",
+        "rva": "0x000971c0"
+      },
+      "to": {
+        "va": "0x006d6570",
+        "rva": "0x002d6570"
+      },
+      "kind": "direct_call",
+      "context": "GetUnitAbilityLevel looks up the attached instance.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004aae20",
+        "rva": "0x000aae20"
+      },
+      "to": {
+        "va": "0x006d6570",
+        "rva": "0x002d6570"
+      },
+      "kind": "direct_call",
+      "context": "SetUnitAbilityLevel looks up the attached instance.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006d87a0",
+        "rva": "0x002d87a0"
+      },
+      "to": {
+        "va": "0x006d8530",
+        "rva": "0x002d8530"
+      },
+      "kind": "direct_call",
+      "context": "Buff filter/removal loop removes matching attached instances.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006d4b60",
+        "rva": "0x002d4b60"
+      },
+      "to": {
+        "va": "0x006d4560",
+        "rva": "0x002d4560"
+      },
+      "kind": "direct_call",
+      "context": "UnitApplyTimedLife buff creation attaches the constructed BTLF object.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006ada20",
+        "rva": "0x002ada20"
+      },
+      "to": {
+        "va": "0x006aea70",
+        "rva": "0x002aea70"
+      },
+      "kind": "direct_call",
+      "context": "Target relation validator uses grouped target-mask expansion.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006ada20",
+        "rva": "0x002ada20"
+      },
+      "to": {
+        "va": "0x006ad670",
+        "rva": "0x002ad670"
+      },
+      "kind": "direct_call",
+      "context": "Target relation validator performs further owner/target relation checks.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00682180",
+        "rva": "0x00282180"
+      },
+      "to": {
+        "va": "0x00682210",
+        "rva": "0x00282210"
+      },
+      "kind": "direct_call",
+      "context": "General spell validator invokes a common rejection predicate.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00682180",
+        "rva": "0x00282180"
+      },
+      "to": {
+        "va": "0x006822e0",
+        "rva": "0x002822e0"
+      },
+      "kind": "direct_call",
+      "context": "General spell validator invokes a common rejection predicate.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00bdcf70",
+        "rva": "0x007dcf70"
+      },
+      "to": {
+        "va": "0x00be1a00",
+        "rva": "0x007e1a00"
+      },
+      "kind": "direct_call",
+      "context": "Poison callback creates/configures a Bpoi status object on one branch.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00bdcf70",
+        "rva": "0x007dcf70"
+      },
+      "to": {
+        "va": "0x006d4880",
+        "rva": "0x002d4880"
+      },
+      "kind": "direct_call",
+      "context": "Poison callback attaches the configured Bpoi status object.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00687ca0",
+        "rva": "0x00287ca0"
+      },
+      "to": {
+        "va": "0x00685b20",
+        "rva": "0x00285b20"
+      },
+      "kind": "direct_call",
+      "context": "Shared summon setup helper constructs the unit.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00caf240",
+        "rva": "0x008af240"
+      },
+      "to": {
+        "va": "0x00687ca0",
+        "rva": "0x00287ca0"
+      },
+      "kind": "direct_call",
+      "context": "Spirit Wolf wrapper validates authored row then delegates unit creation.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c829f0",
+        "rva": "0x008829f0"
+      },
+      "to": {
+        "va": "0x00687ca0",
+        "rva": "0x00287ca0"
+      },
+      "kind": "direct_call",
+      "context": "Pocket Factory missile impact constructs its configured factory unit.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c831f0",
+        "rva": "0x008831f0"
+      },
+      "to": {
+        "va": "0x00687ca0",
+        "rva": "0x00287ca0"
+      },
+      "kind": "direct_call",
+      "context": "Pocket Factory production callback constructs Clockwerk units.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006677c0",
+        "rva": "0x002677c0"
+      },
+      "to": {
+        "va": "0x006a0630",
+        "rva": "0x002a0630"
+      },
+      "kind": "direct_call",
+      "context": "CUnit damage receiver consumes the initialized payload then calls this helper during mitigation.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006677c0",
+        "rva": "0x002677c0"
+      },
+      "to": {
+        "va": "0x00668db0",
+        "rva": "0x00268db0"
+      },
+      "kind": "virtual_dispatch",
+      "context": "CUnit damage receiver invokes its +0x128 value-change method.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-shared-native-functions.md",
+        "section": "Confirmed starting points"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c0d820",
+        "rva": "0x0080d820"
+      },
+      "to": {
+        "va": "0x00c0ecd0",
+        "rva": "0x0080ecd0"
+      },
+      "kind": "direct_call",
+      "context": "Phoenix Fire event handler dispatches event 0xD01B0 to its periodic acquisition callback.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-retail-probe-log.md",
+        "section": "Phoenix Fire native path: periodic acquisition and target gates"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c0ecd0",
+        "rva": "0x0080ecd0"
+      },
+      "to": {
+        "va": "0x0068ea00",
+        "rva": "0x0028ea00"
+      },
+      "kind": "callback_dispatch",
+      "context": "Phoenix Fire periodic acquisition calls area enumeration with callback 0x00C0F1E0.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-retail-probe-log.md",
+        "section": "Phoenix Fire native path: periodic acquisition and target gates"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c0ecd0",
+        "rva": "0x0080ecd0"
+      },
+      "to": {
+        "va": "0x00699fd0",
+        "rva": "0x00299fd0"
+      },
+      "kind": "direct_call",
+      "context": "Phoenix Fire selects a surviving candidate through indexed selection.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-retail-probe-log.md",
+        "section": "Phoenix Fire native path: periodic acquisition and target gates"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c0ecd0",
+        "rva": "0x0080ecd0"
+      },
+      "to": {
+        "va": "0x006ec8f0",
+        "rva": "0x002ec8f0"
+      },
+      "kind": "direct_call",
+      "context": "Phoenix Fire continues selected target into Bpxf setup.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-retail-probe-log.md",
+        "section": "Phoenix Fire native path: periodic acquisition and target gates"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c0f1e0",
+        "rva": "0x0080f1e0"
+      },
+      "to": {
+        "va": "0x00682180",
+        "rva": "0x00282180"
+      },
+      "kind": "direct_call",
+      "context": "Phoenix Fire candidate callback validates candidate classification.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-retail-probe-log.md",
+        "section": "Phoenix Fire native path: periodic acquisition and target gates"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c0f1e0",
+        "rva": "0x0080f1e0"
+      },
+      "to": {
+        "va": "0x006d6570",
+        "rva": "0x002d6570"
+      },
+      "kind": "direct_call",
+      "context": "Phoenix Fire candidate callback rejects candidates already carrying Bpxf.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-retail-probe-log.md",
+        "section": "Phoenix Fire native path: periodic acquisition and target gates"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c0f1e0",
+        "rva": "0x0080f1e0"
+      },
+      "to": {
+        "va": "0x0067fb80",
+        "rva": "0x0027fb80"
+      },
+      "kind": "direct_call",
+      "context": "Phoenix Fire candidate callback performs an additional relation check.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-retail-probe-log.md",
+        "section": "Phoenix Fire native path: periodic acquisition and target gates"
+      }
+    }
+  ],
+  "relationship_kinds": {
+    "direct_call": "Direct call or delegation established by the source notes.",
+    "virtual_dispatch": "Virtual method dispatch established from receiver/vtable analysis.",
+    "callback_dispatch": "Call through a callback argument or registered callback path.",
+    "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
+  },
+  "entry_count": 48,
+  "verified_relationship_count": 27
+}
