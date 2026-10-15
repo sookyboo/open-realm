@@ -2,6 +2,41 @@
 
 Detailed controlled JASS experiments and replay steps for target outcomes. For current conclusions and open questions, see [verification status](../ability-verification-review.md).
 
+## Target validator static disassembly (Retail 1.29.2)
+
+Executable SHA-256:
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`
+(PE32 x86, image base `0x00400000`). In this build, `0x00682180` has a
+two-stage structure:
+
+1. It calls `0x00682210` and, only when that returns zero,
+   `0x006822E0`, passing the same `this` context, candidate and extra
+   argument. Either nonzero result short-circuits.
+2. It traverses a global linked registry using accessor `0x007FC7E0`.
+   For each entry, it calls virtual slot `+0x26C` with the candidate and
+   extra argument; the first nonzero result is returned.
+3. If all checks return zero, it returns zero.
+
+The iterator accessor resolves the current node's stored pair through
+`0x004707F0`, checks an entry state at `+0x20`, and returns its value at
+`+0x54`. The registry's purpose and live membership are not established.
+Phoenix Fire's candidate callback at `0x00C0F1E0` is a verified direct caller;
+Ghidra full analysis recorded 64 direct call references from 64 functions.
+Thus this is broad validation infrastructure, but the set of callers should
+not all be assumed to represent spell casts. Return values are internal
+rejection results, not a universal acceptance boolean.
+
+Reproduce the disassembly against the pinned executable:
+
+```sh
+r2 -q -c 'e scr.color=0; pdf @ 0x00682180; pdf @ 0x007fc7e0; pd 60 @ 0x00682210; pd 60 @ 0x006822e0; q' \
+  'data/Warcraft III/Warcraft III.exe'
+```
+
+The common predicates' semantic names, rejection codes, and concrete
+registered-validator implementations remain open. Record a runtime membership
+or behavior claim only after tracing a controlled positive/negative candidate.
+
 ## Retail Charm target verification (October 4, 2026)
 
 Retail behavior for Charm (`ANch`) was checked with a temporary JASS probe in
