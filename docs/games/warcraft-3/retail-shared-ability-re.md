@@ -8,7 +8,7 @@ verified behavioral contract, not just a renamed function or a list of callers.
 The current investigation's exact-build findings are in
 [ability-shared-native-functions.md](ability-shared-native-functions.md); the
 ability-specific evidence and probes are in
-[ability-verification-review.md](ability-verification-review.md). This guide
+[ability-retail-probe-log.md](ability-retail-probe-log.md). This guide
 explains how to extend that work for attack hit dispatch, status expiry/removal,
 target validation, and summon cleanup.
 
@@ -180,7 +180,7 @@ operation has completed.
 Use JASS to trigger repeatable inputs and record externally visible outcomes.
 Keep the original map unchanged, retain a control copy, and vary one property at
 a time. Existing Retail map preparation and replay steps are in
-[ability-verification-review.md](ability-verification-review.md).
+[ability-retail-probe-log.md](ability-retail-probe-log.md).
 
 | System | Comparisons | Evidence to collect |
 |---|---|---|
@@ -236,35 +236,30 @@ call counts.
 
 ## Evidence record
 
-Keep a machine-readable or tabular record for each candidate, linked to the raw
-trace, JASS script/map, and Ghidra function. For example:
+The current exact-build seed database is
+[ability-function-investigation.json](ability-function-investigation.json). It
+contains 48 entries extracted from the shared-function inventory and the
+Phoenix Fire callback trace. A record may group related wrappers or vtable
+methods when the source inventory discusses them together. Each entry stores
+VA and RVA, a searchable category, a status/confidence estimate, the source
+evidence text, mentioned related addresses, and its source document/section.
+The `related_addresses` list is deliberately not a call graph: an address
+mentioned in prose is not necessarily a direct caller or callee. Do not turn
+those mentions into edges without verifying the relation in disassembly or a
+trace. Grouped records should be split into individual function records when
+future analysis establishes distinct callers, arguments, or semantics.
 
-```json
-{
-  "build_sha256": "<exact executable hash>",
-  "module": "Warcraft III.exe",
-  "function_rva": "0x00300000",
-  "provisional_name": "DamageApplicationCandidate",
-  "confidence": "likely shared helper",
-  "observed_callers": [
-    { "caller_rva": "0x00100000", "scenario": "melee_hit" },
-    { "caller_rva": "0x00200000", "scenario": "projectile_impact" }
-  ],
-  "arguments": [
-    { "position": 0, "hypothesis": "target_object", "verified": false }
-  ],
-  "negative_controls": [],
-  "notes": "Validate caller arguments and state writes before naming the contract."
-}
-```
-
-Record raw captures, not only summaries, and distinguish observations from
-inferences. Preserve the exact executable hash and build with every result.
+When extending the database, retain raw evidence and distinguish observations
+from inferences. Add explicit caller/callee edges only when the source evidence
+establishes the relationship; record call-site RVA, virtual slot and concrete
+receiver where applicable. Link each record to the trace, JASS script/map, and
+Ghidra function. Record raw captures, not only summaries, and preserve the
+executable hash. The database's schema and examples are self-describing.
 
 ## Suggested investigation order
 
 The existing queue is maintained in
-[ability-verification-review.md](ability-verification-review.md#remaining-native-inspection-queue);
+[ability-retail-probe-log.md](ability-retail-probe-log.md#remaining-native-inspection-queue);
 this ordering is a practical starting point, not a substitute for that queue.
 
 1. **Target validation:** controlled valid/invalid cases often expose clear
@@ -287,6 +282,7 @@ static inspection.
 ## Sources and related references
 
 - [Shared Retail native ability functions](ability-shared-native-functions.md)
-- [Ability verification review and remaining native inspection queue](ability-verification-review.md)
+- [Concise verification status](ability-verification-review.md)
+- [Detailed Retail probe log and remaining native inspection queue](ability-retail-probe-log.md)
 - [Ability implementation from data, behavior, and focused evidence](ability-implementation.md)
 - [Retail ability architecture](ability-retail-architecture.md)

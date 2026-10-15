@@ -138,9 +138,12 @@ File formats, renderer notes, UI/FDF behavior, and gameplay coverage work used b
 <- [Item Orbs](item-orbs.md): `AIDB` orb DataA damage via `CAbilityAttackBonus`, `S_OrbOnHit` BuffID state.
 - [Unit Stat Modifiers](unit-stat-modifiers.md): modifier ledgers, physical/spell/direct damage paths, and implementation checklist.
 - [Poison Attacks](poison-attacks.md): `Aven`/`Apoi`/`Apo2` on-hit buff state and data-driven periodic DPS.
-- [Implemented Ability Verification Review](ability-verification-review.md): reproduced failures, lifecycle fixes, and permanent regression coverage.
+- [Ability Lifecycle Review](ability-lifecycle-review.md): reproduced failures, fixes, save behavior, and regression coverage.
+- [Retail Ability Verification Status](ability-verification-review.md): exact-build findings, open questions, and next investigation.
+- [Retail Ability Probe Log](ability-retail-probe-log.md): detailed JASS/Frida observations, replay steps, native traces, and open questions.
 - [Retail Ability Architecture](ability-retail-architecture.md): exact-build registration, class instances, shared cast/target/status paths, and evidence limits.
-- [Shared Retail Ability Helpers](ability-shared-native-functions.md): reusable target, area, status, callback, and effect functions with caller counts.
+- [Shared Retail Ability Helpers](ability-shared-native-functions.md): compact map of verified helpers; evidence is in the [function database](ability-function-investigation.json).
+- [Retail Ability Reverse Engineering](retail-shared-ability-re.md): repeatable Ghidra, radare2, Frida, and JASS workflow.
 - [Retail JASS Probe Workflow](retail-camera-tracing.md): edition-correct campaign maps, fresh Retail captures, optional bounded Frida tracing, and repeatable rawcode-to-native-hook discovery.
 - [Campaign Map Audit](map-audit.md): bounded bulk runtime sweeps with per-map errors and retained logs.
 - [Save/Load](save-load.md): versioned game serializer, Hero walk/save/load campaign diagnostic.

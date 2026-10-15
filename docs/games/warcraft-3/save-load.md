@@ -637,7 +637,7 @@ Save format version 16 adds the active WC3 environmental terrain-fog state and i
 
 Channel cast serials, saved origins, and owner/target incarnation stamps are persisted in version 21.
 The appended channel thinker callback roster and continuation tests are described in
-[ability verification](ability-verification-review.md#dispatch-and-persistence).
+[ability lifecycle review](ability-lifecycle-review.md#dispatch-and-persistence).
 
 Ability helper thinkers may also use the existing `channel_t` pool purely as a save-safe incarnation carrier.
 Reincarnation snapshots its Hero owner, Acid Bomb snapshots both caster and victim, Flare snapshots its caster, and the

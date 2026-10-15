@@ -4,6 +4,11 @@ This document summarizes the native ability structure recovered from local
 Retail binaries. It is a working map for static verification, not a complete
 reconstruction of Blizzard's source architecture. Native addresses and counts
 are build-specific.
+For the current exact-build helper map, see
+[shared native functions](ability-shared-native-functions.md) and the
+[machine-readable function inventory](ability-function-investigation.json).
+Detailed probe observations are kept in the
+[Retail probe log](ability-retail-probe-log.md).
 
 ## Build identity and evidence rules
 
@@ -317,7 +322,7 @@ static analysis cannot settle a runtime receiver or virtual target. A hook
 should filter the ability order/object, preserve raw return values, and be
 paired with static caller evidence.
 
-For the full JASS/Frida workflow and known failure modes, see
-[ability verification review](ability-verification-review.md). For the
-separately recovered demo/TFT inheritance details and their build scope, see
+For the current JASS/Frida process and open questions, see the
+[Retail verification status](ability-verification-review.md) and
+[probe log](ability-retail-probe-log.md). For the separately recovered demo/TFT inheritance details and their build scope, see
 [ability inheritance binary evidence](ability-inheritance-binary.md).
