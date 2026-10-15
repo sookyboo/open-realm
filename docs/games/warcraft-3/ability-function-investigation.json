@@ -1739,6 +1739,45 @@
       },
       "record_kind": "vtable_record",
       "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_003fc7e0",
+      "label": "Linked-pair registry accessor",
+      "category": "shared_native",
+      "status": "observed",
+      "confidence": "high",
+      "addresses": [
+        {
+          "va": "0x007fc7e0",
+          "rva": "0x003fc7e0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [
+        "0x20",
+        "0x54"
+      ],
+      "evidence_summary": "Given a stored pair through ECX, calls 0x004707F0 to resolve its entry, returns null for a missing entry or nonzero state at +0x20, and otherwise returns the entry value at +0x54. General target validator 0x00682180 uses it to iterate registered validators; Cold Arrow effect routine 0x00C5C9D0 also calls it on its own +0x2C pair. This proves shared pair-resolution infrastructure, not identical higher-level validation semantics.",
+      "related_addresses": [
+        {
+          "va": "0x004707f0",
+          "rva": "0x000707f0"
+        },
+        {
+          "va": "0x00682180",
+          "rva": "0x00282180"
+        },
+        {
+          "va": "0x00c5c9d0",
+          "rva": "0x0085c9d0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/targeting.md",
+        "section": "Target validator static disassembly"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
     }
   ],
   "record_schema": {
@@ -1901,6 +1940,40 @@
       },
       "kind": "direct_call",
       "context": "After common predicates pass, general target validation uses this linked-registry iterator accessor to enumerate registered validators.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/targeting.md",
+        "section": "Target validator static disassembly"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c5c9d0",
+        "rva": "0x0085c9d0"
+      },
+      "to": {
+        "va": "0x007fc7e0",
+        "rva": "0x003fc7e0"
+      },
+      "kind": "direct_call",
+      "context": "Cold Arrow effect routine resolves its own linked pair through the same accessor used by general target validation; this proves helper reuse, not shared target-decision semantics.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared attached-buff installation path"
+      }
+    },
+    {
+      "from": {
+        "va": "0x007fc7e0",
+        "rva": "0x003fc7e0"
+      },
+      "to": {
+        "va": "0x004707f0",
+        "rva": "0x000707f0"
+      },
+      "kind": "direct_call",
+      "context": "Linked-pair accessor delegates lookup of the stored pair to this resolver before checking entry state and returning its value.",
       "confidence": "high",
       "source": {
         "document": "docs/games/warcraft-3/ability-probes/targeting.md",
@@ -2424,6 +2497,6 @@
     "callback_dispatch": "Call through a callback argument or registered callback path.",
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
   },
-  "entry_count": 49,
-  "verified_relationship_count": 39
+  "entry_count": 50,
+  "verified_relationship_count": 41
 }
