@@ -1088,11 +1088,15 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "This is slot +0x354 in the CBuffTimedLife vtable above. It resets shared state, registers/updates a callback against the game-time value, and calls generic dispatcher 0x007FBF80 with event 0xD01C4; a nonzero argument also invokes virtual slot +0x30C. The callback is referenced by many class vtables, so it is a shared lifecycle primitive. The event's semantic name and whether a particular caller uses it for expiry remain unresolved.",
+      "evidence_summary": "In the CBuffTimedLife vtable, slot +0x354 points here. The method updates timer/progress state and dispatches event 0xD01C4 through 0x007FBF80; a nonzero second argument also invokes virtual slot +0x30C, which resolves in this vtable to 0x006F73D0. That method walks an embedded child-object collection and calls child slots +0x8C/+0x90. This establishes lifecycle notification fan-out, not unit or buff removal: neither inspected method directly calls 0x006D8530. Event semantics and the producer/meaning of the nonzero argument remain open.",
       "related_addresses": [
         {
           "va": "0x007fbf80",
           "rva": "0x003fbf80"
+        },
+        {
+          "va": "0x006f73d0",
+          "rva": "0x002f73d0"
         }
       ],
       "source": {
@@ -1696,6 +1700,23 @@
     "verified_relationships": "Explicit caller/callee, virtual-dispatch, or callback edges established by source notes; unlike related_addresses, these are asserted relationships."
   },
   "verified_relationships": [
+    {
+      "from": {
+        "va": "0x006f6bd0",
+        "rva": "0x002f6bd0"
+      },
+      "to": {
+        "va": "0x006f73d0",
+        "rva": "0x002f73d0"
+      },
+      "kind": "virtual_dispatch",
+      "context": "For CBuffTimedLife, a nonzero second callback argument invokes vtable slot +0x30C, which resolves to child lifecycle fan-out method 0x006F73D0.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/status-lifecycle.md",
+        "section": "Timed-life callback boundary"
+      }
+    },
     {
       "from": {
         "va": "0x004af590",
