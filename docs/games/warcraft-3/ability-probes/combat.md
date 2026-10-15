@@ -2,6 +2,45 @@
 
 Detailed attack, damage, and area-impact observations. For current conclusions, see [verification status](../ability-verification-review.md).
 
+## Damage payload and receiver path (Retail 1.29.2)
+
+Executable SHA-256:
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`
+(PE32 x86, image base `0x00400000`). This exact-build static pass confirms a
+shared damage-event layer for `UnitDamageTarget` and Carrion Swarm:
+
+- `0x004AEF70` resolves source/target handles and checks damage, attack, and
+  weapon indices. It initializes a stack payload with `0x006A9940`, then
+  dispatches through the target object's vtable slot `+0x120`.
+- `0x006A9940` stores five stack arguments into payload fields at
+  `+0x00..+0x14`, takes the payload destination in ECX, zeroes `+0x1C/+0x20`,
+  and returns the payload pointer. It is an initializer, not the applier.
+- For CUnit targets, slot `+0x120` resolves to `0x006677C0`. This receiver
+  handles unit flags, damage immunity/resistance, attached-object hooks, and
+  configured damage bonuses before applying a negative life delta through
+  slot `+0x128` (`0x00668DB0`). Generic widget targets use different
+  overrides, so the unit path must not be generalized to destructables.
+- Carrion Swarm's `0x00C30BB0` independently calls `0x006A9940` and
+  dispatches through slot `+0x120`, after missile candidate selection and
+  ability-specific checks. JASS damage and Carrion Swarm therefore converge
+  on common payload and receiver infrastructure. This does not establish the
+  ordinary weapon attack-hit producer.
+
+### Reproduce
+
+From the repository root, verify the executable hash, then run:
+
+```sh
+r2 -q -c 'e scr.color=0; af @ 0x004aef70; pdf @ 0x004aef70; pd 28 @ 0x006a9940; pd 100 @ 0x006677c0; q' \
+  'data/Warcraft III/Warcraft III.exe'
+```
+
+The Ghidra project can independently confirm the CUnit vtable at
+`0x00E9C504`, whose slot `+0x120` points to `0x006677C0`. RVAs and
+disassembly are only valid for the hash above. The argument semantics and
+ordinary attack caller remain unresolved; next compare an attack/on-hit
+producer against this receiver and a negative control with no hit.
+
 ## Retail Carrion Swarm target cap, filters, and line width (October 5, 2026)
 
 The follow-up used the same Warcraft III 1.29.2 Retail executable (SHA-256

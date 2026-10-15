@@ -292,7 +292,7 @@
       "object_offsets": [
         "0x120"
       ],
-      "evidence_summary": "The wrapper is referenced by native registration initializer 0x0049B3C0. It resolves source unit and target widget handles, validates attack-type, damage-type, and weapon-type indices, initializes the payload through 0x006A9940, then calls the target's +0x120 virtual method. It returns true after dispatch. Carrion Swarm independently uses the same initializer and target slot after its own checks/value selection. The widget-typed native target does not guarantee unit-style mitigation; inspect the concrete receiver vtable.",
+      "evidence_summary": "Exact-build disassembly confirms the wrapper resolves source unit and target widget handles, validates attack-type, damage-type, and weapon-type indices, initializes a stack payload through 0x006A9940, then calls the target's +0x120 virtual method and returns true after dispatch. Carrion Swarm independently initializes the same payload and dispatches through the same slot. For CUnit targets that slot resolves to 0x006677C0, which performs unit-specific mitigation and life mutation. This establishes shared payload/receiver infrastructure for JASS damage and Carrion Swarm, not the ordinary attack-hit caller.",
       "related_addresses": [
         {
           "va": "0x0049b3c0",
@@ -1531,7 +1531,7 @@
         "0x120",
         "0x128"
       ],
-      "evidence_summary": "The CUnit constructor installs vtable 0x00E9C504. Its +0x120 method returns early when unit flag +0x164 has bit 0x100; checks MagicImmunesResistDamage and payload-class predicates; dispatches attached-object callbacks through slots +0xF8, +0xFC, and +0x100; reads configured DamageBonusSpells/Normal/Pierce/Siege/Magic/Chaos/Hero values through 0x0067B920; and applies configured ethereal adjustments. In its first attached-object pass, it invokes +0xFC only when that object's +0xF8 returns 1; other nonzero return values are collected for later callback phases. It calls 0x006A0630, computes an adjusted amount, then invokes its own +0x128 method (0x00668DB0) with the negative amount and returns the resulting value through an output pointer. This establishes a unit-specific mitigation/value-change path for unit targets in UnitDamageTarget and Carrion Swarm. Which attached-object groups correspond to ordinary attack-hit processing remains unresolved.",
+      "evidence_summary": "The CUnit constructor installs vtable 0x00E9C504. Its +0x120 method returns early when unit flag +0x164 has bit 0x100; checks MagicImmunesResistDamage and payload-class predicates; dispatches attached-object callbacks through slots +0xF8, +0xFC, and +0x100; reads configured DamageBonusSpells/Normal/Pierce/Siege/Magic/Chaos/Hero values through 0x0067B920; and applies configured ethereal adjustments. In its first attached-object pass, it invokes +0xFC only when that object's +0xF8 returns 1; other nonzero return values are collected for later callback phases. It calls 0x006A0630, computes an adjusted amount, then invokes its own +0x128 method (0x00668DB0) with the negative amount and returns the resulting value through an output pointer. The independently inspected UnitDamageTarget and Carrion Swarm call sites both dispatch through +0x120, establishing shared unit-specific mitigation/value-change infrastructure for those paths. Which attached-object groups correspond to ordinary attack-hit processing remains unresolved.",
       "related_addresses": [
         {
           "va": "0x0067b920",
@@ -1670,6 +1670,57 @@
     "verified_relationships": "Explicit caller/callee, virtual-dispatch, or callback edges established by source notes; unlike related_addresses, these are asserted relationships."
   },
   "verified_relationships": [
+    {
+      "from": {
+        "va": "0x004aef70",
+        "rva": "0x000aef70"
+      },
+      "to": {
+        "va": "0x006a9940",
+        "rva": "0x002a9940"
+      },
+      "kind": "direct_call",
+      "context": "UnitDamageTarget wrapper initializes a stack damage-event payload before virtual dispatch through target slot +0x120.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Damage payload and receiver path"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004aef70",
+        "rva": "0x000aef70"
+      },
+      "to": {
+        "va": "0x006677c0",
+        "rva": "0x002677c0"
+      },
+      "kind": "virtual_dispatch",
+      "context": "For a CUnit target, UnitDamageTarget dispatches through target vtable slot +0x120 to the CUnit damage receiver.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Damage payload and receiver path"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006677c0",
+        "rva": "0x002677c0"
+      },
+      "to": {
+        "va": "0x00668db0",
+        "rva": "0x00268db0"
+      },
+      "kind": "virtual_dispatch",
+      "context": "CUnit damage receiver applies the computed negative life delta through its +0x128 value-change method.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Damage payload and receiver path"
+      }
+    },
     {
       "from": {
         "va": "0x004ae8f0",
