@@ -2,6 +2,45 @@
 
 Detailed attack, damage, and area-impact observations. For current conclusions, see [verification status](../ability-verification-review.md).
 
+## Shared attached-buff installation path
+
+For the pinned Retail executable (SHA-256
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`),
+`0x006D4880` is a shared wrapper that attaches a constructed object and
+performs the post-attach owner notification:
+
+```text
+0x006D4880: call 0x006D4560(owner, object)
+0x006D488B: call 0x006F6E80(object)
+```
+
+`0x006D4560` links the object into the owner's attached-instance list.
+`0x006F6E80` obtains the owner from object offset `+0x30` (or resolves a
+fallback owner), then calls `0x005F5A20`. This is shared attachment
+infrastructure; the final notification's semantic name remains unresolved.
+
+Two independently identified buff paths use the wrapper after class-specific
+creation/configuration:
+
+- Poison callback `0x00BDCF70` looks up existing `Bpoi`; on its creation
+  branch it constructs/configures a poison object and attaches it through
+  `0x006D4880`. Its refresh branch invokes the existing object's virtual
+  `+0x388`. This locates poison status installation/refresh but does not
+  identify the attack event producer.
+- Pocket Factory missile impact callback `0x00C829F0` creates a `BNfy`
+  `CBuffFactory` object after constructing the factory unit, then attaches
+  it through the same wrapper. This is a different ability and buff class.
+
+Reproduce the wrapper disassembly with:
+
+```sh
+r2 -q -c 'e scr.color=0; pd 12 @ 0x006d4880; pd 12 @ 0x006f6e80; q' \
+  'data/Warcraft III/Warcraft III.exe'
+```
+
+The exact attack-to-poison producer and argument meanings remain the next
+combat investigation; do not infer them from this shared attachment path.
+
 ## Damage payload and receiver path (Retail 1.29.2)
 
 Executable SHA-256:

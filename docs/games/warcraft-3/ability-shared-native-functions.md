@@ -6,7 +6,7 @@ PE32 x86, SHA-256
 image base `0x00400000`. Re-derive every address for a different hash.
 
 The [machine-readable inventory](ability-function-investigation.json) is the
-source of record: 48 functions, 34 verified relationships, explicit confidence
+source of record: 49 functions, 38 verified relationships, explicit confidence
 and unresolved semantics. This page gives only the starting points. For context
 and procedures, see [ability research](ability-research.md), [Retail
 architecture](ability-retail-architecture.md), and the [repeatable RE
@@ -21,6 +21,7 @@ workflow](retail-shared-ability-re.md).
 | Ability instances | `0x00AF3BA0` factory, `0x006D4560` attach, `0x006D6570` lookup | Trace class behavior beyond factory/attachment. |
 | Rank/availability | Shared rank hooks; enable/disable transitions | Identify remaining instance gates and permanence effects. |
 | Status lifecycle | `0x006D87A0` filter, `0x006D8530` removal, `0x006D4B60` timed-life creation | `UnitRemoveAbility`, buff filtering, and Mana Shield depletion converge on removal; BTLF fails positive/negative buff predicates. Trace natural expiry and summon-specific cleanup. See [lifecycle evidence](ability-probes/status-lifecycle.md). |
+| Attached object install | `0x006D4880` | Poison status and Pocket Factory buff paths attach class-specific instances through this wrapper, then notify the owner. See [combat evidence](ability-probes/combat.md#shared-attached-buff-installation-path). |
 | Damage | `0x006A9940` payload setup; `0x006677C0` unit receiver | `UnitDamageTarget` and Carrion Swarm converge on this layer; connect ordinary attack-hit dispatch and decode payload fields. See [combat evidence](ability-probes/combat.md#damage-payload-and-receiver-path-retail-1292). |
 | Poison/on-hit | `0x00BDCF70`, `0x006EF880`, Apoi hooks `+0xF8/+0xFC` | Compare poison classes and recover callback arguments/event producer. |
 | Summons | `0x00687CA0` shared unit construction | Separate summon-specific expiry from generic timed life/removal. |
@@ -38,10 +39,9 @@ mapping remain open; see the [focused native trace](ability-probes/native-triage
    use Mana Shield as a contrast.
 3. Follow Spirit Wolf, Serpent Ward, Mirror Image, and Pocket Factory from
    construction through their distinct expiry/removal routes.
-4. Extend poison/on-hit traces across `Aven`/`Aspo`/`Apo2` and `AIob`/`AIpb`.
-   The existing Apoi run links ordinary attack activity to poison callback and
-   missile lifecycle observations, but does not prove direct causality or
-   argument meanings.
+4. Trace the ordinary attack/on-hit producer into poison callback
+   `0x00BDCF70`; its Bpoi create/refresh and shared installation path are
+   known, but the producer and argument meanings are not.
 
 Open the matching records in the [inventory](ability-function-investigation.json)
 and relevant [probe report](ability-probes/README.md). OpenRealm code is a
