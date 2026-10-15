@@ -815,6 +815,10 @@
         {
           "va": "0x00c5c9d0",
           "rva": "0x0085c9d0"
+        },
+        {
+          "va": "0x00c5c9b0",
+          "rva": "0x0085c9b0"
         }
       ],
       "source": {
@@ -1760,7 +1764,7 @@
         "rva": "0x002d4880"
       },
       "kind": "direct_call",
-      "context": "Cold Arrows target-effect path installs the configured BHca status through the shared object-attachment wrapper.",
+      "context": "Cold Arrow effect routine 0x00C5C9D0 installs BHca through the shared wrapper. Its preceding 0x00C5C9B0 accessor names CMissileColdArrowSplash, suggesting impact handling; exact vtable association and the upstream attack-event producer remain unverified.",
       "confidence": "medium",
       "source": {
         "document": "docs/games/warcraft-3/ability-probes/combat.md",

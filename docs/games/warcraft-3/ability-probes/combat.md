@@ -30,13 +30,16 @@ creation/configuration:
 - Pocket Factory missile impact callback `0x00C829F0` creates a `BNfy`
   `CBuffFactory` object after constructing the factory unit, then attaches
   it through the same wrapper. This is a different ability and buff class.
-- Cold Arrows target-effect routine `0x00C5C9D0` rejects selected target
-  states, builds the configured effect context, and looks up `BHca`. It
-  refreshes an existing status through virtual `+0x388`, or creates/configures
-  a new status and attaches it through `0x006D4880`. The nearby exact-build
-  class accessor `0x00C5CBC0` returns `CAbilityColdArrows`; this identifies
-  the class family for the code, but the caller that delivers the attack event
-  into this routine remains unresolved.
+- Cold Arrow effect routine `0x00C5C9D0` rejects selected target states,
+  builds the configured effect context, and looks up `BHca`. It refreshes an
+  existing status through virtual `+0x388`, or creates/configures a new
+  status and attaches it through `0x006D4880`. The preceding accessor
+  `0x00C5C9B0` returns `CMissileColdArrowSplash`, so the address layout
+  points to splash-missile impact handling. Confirm its vtable slot before
+  treating that class association as final. The separate
+  `CAbilityColdArrows` accessor is `0x00C5CBC0`. In either case, this is
+  effect application after target selection, not evidence of the attack-event
+  producer.
 
 Reproduce the wrapper disassembly with:
 
