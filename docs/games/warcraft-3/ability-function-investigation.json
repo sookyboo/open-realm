@@ -775,6 +775,52 @@
       "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
     },
     {
+      "id": "fn_002d4880",
+      "label": "Shared attached-object install and owner notification wrapper",
+      "category": "status_lifecycle",
+      "status": "observed",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006d4880",
+          "rva": "0x002d4880",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [
+        "0x30"
+      ],
+      "evidence_summary": "Exact-build disassembly shows this helper calls 0x006D4560 to attach the supplied instance to its owner, then calls 0x006F6E80. The latter obtains/resolves the owner from object +0x30 and calls 0x005F5A20. Independently identified callers include poison callback 0x00BDCF70 (Bpoi creation branch) and Pocket Factory impact callback 0x00C829F0 (BNfy buff). The attached classes and creation logic differ, establishing shared installation infrastructure; the final owner notification semantics and attack event producer remain unresolved.",
+      "related_addresses": [
+        {
+          "va": "0x006d4560",
+          "rva": "0x002d4560"
+        },
+        {
+          "va": "0x006f6e80",
+          "rva": "0x002f6e80"
+        },
+        {
+          "va": "0x005f5a20",
+          "rva": "0x001f5a20"
+        },
+        {
+          "va": "0x00bdcf70",
+          "rva": "0x007dcf70"
+        },
+        {
+          "va": "0x00c829f0",
+          "rva": "0x008829f0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared attached-buff installation path"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Exact-build callees and independently identified ability-class callers."
+    },
+    {
       "id": "fn_002d4b60",
       "label": "Buff-object creation path used by UnitApplyTimedLife",
       "category": "status_lifecycle",
@@ -1702,6 +1748,57 @@
   "verified_relationships": [
     {
       "from": {
+        "va": "0x006d4880",
+        "rva": "0x002d4880"
+      },
+      "to": {
+        "va": "0x006d4560",
+        "rva": "0x002d4560"
+      },
+      "kind": "direct_call",
+      "context": "Shared object-install wrapper attaches the object to the owner.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared attached-buff installation path"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006d4880",
+        "rva": "0x002d4880"
+      },
+      "to": {
+        "va": "0x006f6e80",
+        "rva": "0x002f6e80"
+      },
+      "kind": "direct_call",
+      "context": "After attachment, wrapper sends an owner notification through the common post-attach helper.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared attached-buff installation path"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c829f0",
+        "rva": "0x008829f0"
+      },
+      "to": {
+        "va": "0x006d4880",
+        "rva": "0x002d4880"
+      },
+      "kind": "direct_call",
+      "context": "Pocket Factory impact attaches its configured BNfy buff through the common wrapper.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared attached-buff installation path"
+      }
+    },
+    {
+      "from": {
         "va": "0x006f6bd0",
         "rva": "0x002f6bd0"
       },
@@ -2302,6 +2399,6 @@
     "callback_dispatch": "Call through a callback argument or registered callback path.",
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
   },
-  "entry_count": 48,
-  "verified_relationship_count": 27
+  "entry_count": 49,
+  "verified_relationship_count": 38
 }
