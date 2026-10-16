@@ -145,6 +145,12 @@ def read_manifest(path: Path) -> dict[str, Any]:
         raise ProbeError("result_file must be a string path")
     if "metadata" in manifest and not isinstance(manifest["metadata"], dict):
         raise ProbeError("metadata must be a JSON object")
+    reloadable = manifest.get("jhcr_reloadable_functions", [])
+    if (not isinstance(reloadable, list)
+            or any(not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_]\w*", name)
+                   for name in reloadable)
+            or len({name.casefold() for name in reloadable}) != len(reloadable)):
+        raise ProbeError("jhcr_reloadable_functions must be an array of unique JASS function names")
     contract = manifest.get("capture_contract", {})
     if not isinstance(contract, dict):
         raise ProbeError("capture_contract must be a JSON object")
@@ -180,6 +186,27 @@ def function_range(script: str, name: str) -> tuple[int, int]:
     if end_match is None:
         raise ProbeError(f"function {name} has no endfunction")
     return start, matches[0].end() + end_match.end()
+
+
+def jass_functions(script: str) -> dict[str, str]:
+    """Return normalized top-level JASS function bodies; reject ambiguous layouts."""
+    pattern = re.compile(r"(?ms)^function\s+(\w+)\s+takes\b.*?^endfunction[ \t]*(?:\r?$)")
+    result: dict[str, str] = {}
+    for match in pattern.finditer(script):
+        name = match.group(1).casefold()
+        if name in result:
+            raise ProbeError(f"duplicate JASS function declaration: {match.group(1)}")
+        lines = [re.sub(r"//.*$", "", line).strip() for line in match.group(0).splitlines()]
+        result[name] = " ".join(" ".join(lines).split())
+    if not result:
+        raise ProbeError("could not find JASS function declarations for JHCR safety check")
+    return result
+
+
+def changed_jass_functions(baseline: str, updated: str) -> list[str]:
+    before, after = jass_functions(baseline), jass_functions(updated)
+    return sorted(name for name in before.keys() | after.keys()
+                  if before.get(name) != after.get(name))
 
 
 def globals_range(script: str) -> tuple[int, int]:
@@ -374,6 +401,8 @@ def prepare(args: argparse.Namespace) -> None:
                     raise ProbeError(f"JHCR input not found: {required}")
             jhcr_dir = output_dir / "jhcr"
             jhcr_dir.mkdir(exist_ok=True)
+            baseline_script = jhcr_dir / "source-war3map.j"
+            baseline_script.write_bytes(script_path.read_bytes())
             state_path = jhcr_dir / "state.bin"
             initialized_script = jhcr_dir / "war3map.j"
             run([str(jhcr_path), "init", str(common_j), str(blizzard_j), str(script_path),
@@ -384,6 +413,8 @@ def prepare(args: argparse.Namespace) -> None:
             edited_bytes = script_path.read_bytes()
             jhcr_config = {"executable": str(jhcr_path), "common_j": str(common_j),
                            "blizzard_j": str(blizzard_j), "state": str(state_path),
+                           "baseline_script": str(baseline_script),
+                           "reloadable_functions": manifest.get("jhcr_reloadable_functions", []),
                            "preload_path": str(args.jhcr_preload_path.expanduser().resolve())
                            if args.jhcr_preload_path else None}
         shutil.copyfile(map_path, output_map)
@@ -482,6 +513,20 @@ def jhcr_update(args: argparse.Namespace) -> None:
         raise ProbeError(f"JHCR state file is missing: {state_path}; prepare the map again with --jhcr")
     if preload_path is None or not preload_path.is_dir():
         raise ProbeError("provide an existing --preload-path (the active Warcraft CustomMapData directory)")
+    baseline_path = Path(config.get("baseline_script", ""))
+    if not baseline_path.is_file():
+        raise ProbeError("JHCR baseline script is missing; prepare the probe again with the current runner")
+    allowed = config.get("reloadable_functions")
+    if not isinstance(allowed, list) or any(not isinstance(name, str) for name in allowed):
+        raise ProbeError("jhcr_reloadable_functions must be an array of function names in the probe manifest")
+    changed = changed_jass_functions(
+        baseline_path.read_text(encoding="utf-8", errors="surrogateescape"),
+        source.read_text(encoding="utf-8", errors="surrogateescape"))
+    denied = sorted(set(changed) - {name.casefold() for name in allowed})
+    if denied:
+        raise ProbeError("JHCR update changes functions not explicitly allowed by "
+                         "jhcr_reloadable_functions: " + ", ".join(denied) +
+                         ". Active timer/event callbacks can stall after a successful reload.")
     lock_path = state_path.with_suffix(".lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -505,6 +550,7 @@ def jhcr_update(args: argparse.Namespace) -> None:
             generated = created[0]
             report = {"probe_id": record["id"], "created_at": datetime.now(timezone.utc).isoformat(),
                       "script": str(source), "script_sha256": sha256_file(source),
+                      "changed_functions": changed, "reload_guard": "passed",
                       "sequence_file": str(generated), "sequence_sha256": sha256_file(generated),
                       "sequence_size": generated.stat().st_size}
             updates = output_dir / "jhcr-updates"

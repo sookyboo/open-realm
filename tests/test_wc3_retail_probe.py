@@ -155,11 +155,15 @@ class JhcrUpdateTest(unittest.TestCase):
             state = probe_dir / "jhcr" / "state.bin"
             state.parent.mkdir()
             state.write_text("state")
+            baseline = state.parent / "source-war3map.j"
+            baseline.write_text("function Updated takes nothing returns nothing\nendfunction\n")
             script = root / "war3map.j"
             script.write_text("function Updated takes nothing returns nothing\nendfunction\n")
             (probe_dir / "probe.json").write_text(json.dumps({
                 "id": "test", "jhcr": {"executable": str(executable), "state": str(state),
-                                          "preload_path": str(preload)},
+                                          "preload_path": str(preload),
+                                          "baseline_script": str(baseline),
+                                          "reloadable_functions": []},
             }))
 
             sequence = 1
@@ -181,6 +185,55 @@ class JhcrUpdateTest(unittest.TestCase):
             self.assertEqual({json.loads(path.read_text())["sequence_file"] for path in reports},
                              {str(preload / "JHCR-cookie-2.txt"),
                               str(preload / "JHCR-cookie-3.txt")})
+            self.assertTrue(all(json.loads(path.read_text())["reload_guard"] == "passed"
+                                for path in reports))
+
+    def test_update_allows_only_manifest_approved_function_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            probe_dir = root / "probe"
+            probe_dir.mkdir()
+            preload = root / "CustomMapData"
+            preload.mkdir()
+            executable = root / "jhcr"
+            executable.touch()
+            state = root / "state"
+            state.touch()
+            baseline = root / "baseline.j"
+            baseline.write_text(
+                "function SS_Log takes string s returns nothing\ncall BJDebugMsg(s)\nendfunction\n"
+                "function SS_Tick takes nothing returns nothing\ncall SS_Log(\"old\")\nendfunction\n")
+            update = root / "war3map.j"
+            update.write_text(
+                "function SS_Log takes string s returns nothing\ncall BJDebugMsg(\"new: \" + s)\nendfunction\n"
+                "function SS_Tick takes nothing returns nothing\ncall SS_Log(\"old\")\nendfunction\n")
+            (probe_dir / "probe.json").write_text(json.dumps({
+                "id": "test", "jhcr": {"executable": str(executable), "state": str(state),
+                                          "preload_path": str(preload),
+                                          "baseline_script": str(baseline),
+                                          "reloadable_functions": ["SS_Log"]},
+            }))
+            args = SimpleNamespace(probe_dir=probe_dir, script=update, preload_path=None)
+
+            def publish(*_args, **_kwargs):
+                (preload / "JHCR-cookie-1.txt").write_text("payload")
+                return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+            with mock.patch.object(PROBE, "run", side_effect=publish):
+                PROBE.jhcr_update(args)
+            report = json.loads(next((probe_dir / "jhcr-updates").glob("*.json")).read_text())
+            self.assertEqual(report["changed_functions"], ["ss_log"])
+
+            update.write_text(update.read_text().replace('"old"', '"changed callback"'))
+            with mock.patch.object(PROBE, "run") as publish_mock:
+                with self.assertRaisesRegex(PROBE.ProbeError, "ss_tick"):
+                    PROBE.jhcr_update(args)
+                publish_mock.assert_not_called()
+
+    def test_function_change_detection_normalizes_formatting_and_comments(self):
+        before = "function Probe takes nothing returns nothing\ncall BJDebugMsg(\"x\")\nendfunction\n"
+        after = "function Probe takes nothing returns nothing // comment\n  call BJDebugMsg(\"x\") // note\nendfunction\n"
+        self.assertEqual(PROBE.changed_jass_functions(before, after), [])
 
     def test_update_fails_when_jhcr_does_not_create_a_fresh_payload(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -193,11 +246,15 @@ class JhcrUpdateTest(unittest.TestCase):
             executable.touch()
             state = root / "state"
             state.touch()
+            baseline = root / "baseline.j"
+            baseline.write_text("function Stable takes nothing returns nothing\nendfunction\n")
             script = root / "war3map.j"
-            script.touch()
+            script.write_text(baseline.read_text())
             (probe_dir / "probe.json").write_text(json.dumps({
                 "id": "test", "jhcr": {"executable": str(executable), "state": str(state),
-                                          "preload_path": str(preload)},
+                                          "preload_path": str(preload),
+                                          "baseline_script": str(baseline),
+                                          "reloadable_functions": []},
             }))
             args = SimpleNamespace(probe_dir=probe_dir, script=script, preload_path=None)
             with mock.patch.object(PROBE, "run", return_value=SimpleNamespace(

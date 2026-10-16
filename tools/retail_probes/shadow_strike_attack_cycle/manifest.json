@@ -12,6 +12,7 @@
     "ability_rawcodes": ["ACss"],
     "question": "Compare hit intervals before and after stock Shadow Strike against an untreated control attacker"
   },
+  "jhcr_reloadable_functions": ["SS_Log"],
   "output_name": "OrcX01-ShadowStrike-AttackCycle.w3x",
   "result_file": "/home/agent/.wine-war3/drive_c/users/agent/Documents/Warcraft III/CustomMapData/shadow-strike-attack-cycle.txt",
   "edits": [
