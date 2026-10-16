@@ -521,10 +521,10 @@ index d5bb77d5e..cb7ab9abf 100644
  void S_MoonGlaiveAttack(edict_t *attacker, edict_t *primary, int damage);
  void S_SlowPoisonOnHit(edict_t *attacker, edict_t *target);
 diff --git a/games/warcraft-3/game/skills/s_warden_abilities.c b/games/warcraft-3/game/skills/s_warden_abilities.c
-index a36ed33ee..7a7155b06 100644
+index a36ed33ee..b97ccaec9 100644
 --- a/games/warcraft-3/game/skills/s_warden_abilities.c
 +++ b/games/warcraft-3/game/skills/s_warden_abilities.c
-@@ -54,15 +54,81 @@ BZ_SIMPLE_SPELL_PROC(AbilityFanOfKnives) {
+@@ -54,15 +54,85 @@ BZ_SIMPLE_SPELL_PROC(AbilityFanOfKnives) {
  #undef FOK_HITS
  }
  
@@ -544,25 +544,29 @@ index a36ed33ee..7a7155b06 100644
 +                                  slot->data == MAKEFOURCC('A','C','s','s')) ? slot : NULL;
 +}
 +
-+static bool shadow_strike_slow_active(heroabilitystatus_t const *slot) {
-+    uint32_t start, slow_ms;
++static float shadow_strike_slow_scale(heroabilitystatus_t const *slot) {
++    uint32_t start, elapsed;
++    float progress;
 +    if (!slot || !slot->level || !slot->data || !slot->duration_ms ||
-+        slot->timestamp <= G_Time() || slot->timestamp < slot->duration_ms) return false;
++        slot->timestamp <= G_Time() || slot->timestamp < slot->duration_ms) return 0.0f;
 +    start = slot->timestamp - slot->duration_ms;
-+    slow_ms = (uint32_t)(MAX(0.0f, S_SpellData(slot->data, slot->rank, 4)) * 1000.0f);
-+    return slow_ms && G_Time() < start + slow_ms;
++    elapsed = G_Time() - start;
++    progress = MIN(1.0f, (float)elapsed / (float)slot->duration_ms);
++    /* Retail attack-cycle and movement samples show a decaying slow. Linear
++     * decay is a provisional fit; the exact native curve remains unresolved. */
++    return 1.0f - progress;
 +}
 +
 +float S_ShadowStrikeMoveReduction(edict_t const *unit) {
 +    heroabilitystatus_t const *slot = shadow_strike_status(unit);
-+    return shadow_strike_slow_active(slot) ?
-+        MAX(0.0f, MIN(0.9f, S_SpellData(slot->data, slot->rank, 2))) : 0.0f;
++    return slot ? MAX(0.0f, MIN(0.9f, S_SpellData(slot->data, slot->rank, 2))) *
++                  shadow_strike_slow_scale(slot) : 0.0f;
 +}
 +
 +float S_ShadowStrikeAttackReduction(edict_t const *unit) {
 +    heroabilitystatus_t const *slot = shadow_strike_status(unit);
-+    return shadow_strike_slow_active(slot) ?
-+        MAX(0.0f, MIN(0.9f, S_SpellData(slot->data, slot->rank, 3))) : 0.0f;
++    return slot ? MAX(0.0f, MIN(0.9f, S_SpellData(slot->data, slot->rank, 3))) *
++                  shadow_strike_slow_scale(slot) : 0.0f;
 +}
 +
 +static void shadow_strike_tick(edict_t *target, heroabilitystatus_t *slot) {
@@ -617,10 +621,10 @@ index a36ed33ee..7a7155b06 100644
  }
 diff --git a/warcraft3-ability-completion-implementation-status.tmp.md b/warcraft3-ability-completion-implementation-status.tmp.md
 new file mode 100644
-index 000000000..0fc3486e9
+index 000000000..41d6b00e0
 --- /dev/null
 +++ b/warcraft3-ability-completion-implementation-status.tmp.md
-@@ -0,0 +1,263 @@
+@@ -0,0 +1,270 @@
 +# WC3 Ability Completion — Temporary Patch Status
 +
 +This status accompanies `warcraft3-ability-completion.tmp.patch`. The patch is
@@ -659,7 +663,9 @@ index 000000000..0fc3486e9
 +- Track Faerie Fire's forced-vision contribution through status refresh,
 +  expiry, dispel and death cleanup.
 +- Add Shadow Strike initial damage and three-second poison pulses confirmed in
-+  Retail; the exact movement decay curve and ACss attack-rate effect remain open.
++  Retail. A controlled Retail attack-cycle capture also confirms decaying ACss
++  attack-rate reduction; this patch uses a provisional linear decay while the
++  exact movement/attack reduction curve remains open.
 +- Add Phoenix Fire passive target acquisition, direct damage and cooldown.
 +- Give Immolation one status-backed toggle state, recurring mana drain and
 +  ground-target damage pulses.
@@ -771,8 +777,13 @@ index 000000000..0fc3486e9
 +  tested allied ground/structure were not. Lateral hits reached 160 but not
 +  240 units. Travel fields/speed, width boundary and aliases remain open.
 +- Retail confirms rank-1 AEsh/ACss initial damage and five caster-sourced DataA
-+  pulses at three-second intervals; gradual speed recovery is confirmed, but its
-+  curve, DataD meaning, and ACss attack-rate effect remain unresolved.
++  pulses at three-second intervals. A controlled attack-cycle run confirms
++  ACss attack-rate reduction and recovery against an untreated lane. The exact
++  movement/attack decay formula and DataD meaning remain unresolved. Both
++  Mortar Team lanes measured 3.5-second baseline cycles; during ACss, the
++  treated lane stretched to 5.9, 5.6, then 3.9 seconds before returning to 3.5,
++  while the untreated lane stayed at 3.5. Raw Retail result SHA-256:
++  `cd0ed078eefa659bb01737b75df7c659e862fe8cedc46cb8e5d88d2f828b206a`.
 +- Phoenix Fire uses nearest eligible target, DataA as direct damage and the
 +  authored cooldown. Tie behavior, DataB, and any burn behavior need retail
 +  verification; no BuffID is present in the inspected row.
