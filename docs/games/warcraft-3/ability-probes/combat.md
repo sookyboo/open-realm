@@ -848,7 +848,16 @@ dispatches the prepared payload through target slot `+0x120` (CUnit target:
 pointer is present. This establishes a normal, direct attack impact path to
 the shared CUnit receiver. Other attack types 2, 3, and 5–8 construct or
 schedule missile/other effect objects, so their eventual impact paths still
-need individual tracing.
+need individual tracing. A focused pass on attack type 2 establishes its
+handoff boundary: the `type - 1` switch reaches `0x00B1D085`; that branch builds
+an effect record, offers it to source attached-object callback family
+`0x0068FD10`, then (if unhandled) configures an effect object via
+`0x006EB060` and invokes that object's virtual slot `+0xC8` with the record.
+This routine does not dispatch the prepared payload through target `+0x120`.
+The concrete runtime object/vtable, `+0xC8` implementation, and later impact
+callback are unresolved. This is a reproducible next waypoint for tracing a
+projectile attack to damage application, not evidence that all type-2 attacks
+share one impact implementation.
 
 The attack update wrapper and type switch can be reproduced with the existing
 Ghidra project:
