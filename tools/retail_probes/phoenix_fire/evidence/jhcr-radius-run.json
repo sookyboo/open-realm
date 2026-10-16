@@ -1,0 +1,40 @@
+{
+  "probe": "Phoenix Fire (Apxf) effective target-distance boundary",
+  "retail_build": "1.29.2.9231",
+  "retail_executable_sha256": "3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed",
+  "map": "War3xLocal.mpq:Maps/FrozenThrone/Campaign/OrcX01.w3x",
+  "execution": "Live JHCR update sequence 15 in the already-running, JHCR-instrumented OrcX01 map; API status 1 dispatched PF_Start, which wrote PF_META/PF_SETUP/PF_DONE.",
+  "scenario": "One Apxf hphx and one enemy hfoo. Target x was forced every 0.05 simulation seconds to 650 units for 10s, 550 for 10s, then 300 for 10s. A 1-damage UnitDamageTarget event validated the listener before the target life was restored.",
+  "observations": {
+    "ability_level": 1,
+    "at_650_units": "No Phoenix-source damage event; target life remained 100000 through the 10-second phase.",
+    "at_550_units": "Phoenix-source damage began 0.605s after moving into range; target life then fell during the phase.",
+    "at_300_units": "Phoenix-source damage continued during the final phase.",
+    "source_identity": "GetEventDamageSource() and the test Phoenix had the same GetHandleId() in recorded events.",
+    "jhcr_handle_comparison": "JHCR-evaluated unit equality returned false even when GetHandleId() values were equal, including the positive control. The sourceMatch boolean in raw records is invalid; handle IDs are the identity evidence."
+  },
+  "conclusion": "For this Retail build and target setup, Apxf damages a target at 550 units and does not damage it at 650 units. This brackets the effective boundary between 550 and 650 and is consistent with AbilityData Area=600.",
+  "not_established": [
+    "exact edge at 600 units",
+    "damage amount/composition",
+    "exact attack or periodic cadence",
+    "missile versus buff tick ownership",
+    "expiry/removal semantics"
+  ],
+  "capture": {
+    "file": "jhcr-radius-run.txt",
+    "sha256": "eeab0ed08387ad798f5d5fc10e043abc2978cb05bd9229cef45abfe635932443"
+  },
+  "jhcr_update": {
+    "sequence": 15,
+    "changed_functions": [
+      "PF_Damaged",
+      "PF_Start",
+      "PF_Tick",
+      "SS_Damaged",
+      "SS_Log"
+    ],
+    "source_sha256": "d5d3928ecf05c340c981051091908b5a64fe7ef450ba012733fed4c138b35244",
+    "runner_update_record": "/tmp/jhcr-shadow-strike-safe/probe/jhcr-updates/JHCR-646046902-15.json"
+  }
+}

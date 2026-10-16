@@ -155,25 +155,42 @@ Dur/HeroDur relationship, exact radius field, damage type, and expiry/removal
 behavior. Do not promote the tooltip or the presence of the missile class into
 proof of those details.
 
-#### Live probe attempt (October 16, 2026): inconclusive
+#### Live JHCR radius probe (October 16, 2026)
 
-The checked-in runner probe has not completed a standalone Retail run because
-the existing Warcraft process owns the active Wine prefix. A separate
-diagnostic update was applied to that process through its existing JHCR chat
-trigger. JHCR returned status `1`, and `GetUnitAbilityLevel` reported Apxf
-level 1 on all three spawned Phoenix units. However, all three `attack` orders
-were rejected, and the final capture contained no target damage-event records.
-Target life also fell substantially without matching records, so the current
-event logger/setup cannot support a gameplay conclusion.
+A focused update ran inside the existing JHCR-instrumented OrcX01 Retail map,
+so Warcraft did not need a second launch. It used one level-1 `hphx` with Apxf
+and one enemy `hfoo`. The target was held at exact center distances of 650,
+550, then 300 units for 10 seconds each by resetting its position every 0.05
+simulation seconds. A one-damage `UnitDamageTarget` positive control confirmed
+the damage-event listener before the target life was restored.
 
-Raw capture:
-`/home/agent/.wine-war3/drive_c/users/agent/Documents/Warcraft III/CustomMapData/phoenix-fire-jhcr-live.txt`,
-SHA-256 `7e492e640112da22a45d47253df9074b7269aec032893233350d785522fdef41`.
-The ad hoc JHCR updates under `/tmp/phoenix-fire-jhcr-update-*.j` are not
-replay inputs. The checked-in probe was corrected to use unpaused stationary
-enemy targets, disable fog, and record all target damage sources. It still
-needs a standalone Retail run before any Phoenix Fire behavior is considered
-verified. The original Warcraft process remains open.
+The target stayed at 100,000 life with no Phoenix-source events at 650 units.
+After moving it to 550, damage from the test Phoenix began 0.605 seconds later
+and continued; it also continued at 300. The source and test Phoenix had equal
+`GetHandleId()` values in the event records. This verifies an effective
+target-distance boundary above 550 and below 650 for this build and setup,
+consistent with the authored `Area=600`. It does not establish behavior at
+exactly 600 units.
+
+The live run exposed a JHCR instrumentation caveat: interpreted `unit == unit`
+returned false even in the positive control when both handles had equal
+`GetHandleId()` values. Therefore, the raw capture's `sourceMatch` boolean is
+invalid; source identity comes from the matching integer handle IDs. The event
+stream also contains several damage values, including 20, 2, and larger hits,
+so exact damage composition and cadence remain open. Missile-versus-buff tick
+ownership and expiry/removal behavior also remain open.
+
+Raw capture and machine-readable metadata:
+[JHCR radius run](../../../../tools/retail_probes/phoenix_fire/evidence/jhcr-radius-run.txt)
+and [run metadata](../../../../tools/retail_probes/phoenix_fire/evidence/jhcr-radius-run.json).
+The capture SHA-256 is
+`eeab0ed08387ad798f5d5fc10e043abc2978cb05bd9229cef45abfe635932443`.
+Earlier ad hoc attempts are superseded: they used attack orders or movable
+targets and did not support a range conclusion. The standalone runner map is
+still available for reproducing the probe in a fresh Retail run. Its checked-in
+JASS now uses the same one-target distance sweep; after the map starts, chat
+`-pf` reruns it in the same process. Use the runner's `prepare`/`launch`/`capture`
+workflow to preserve each rerun separately.
 
 The checked-in exact-build Ghidra project is `screenshots/ghidra/WarcraftIII`;
 its `functions.csv` records function boundaries. `Wc3DumpFunction.java` is not
