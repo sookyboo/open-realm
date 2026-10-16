@@ -859,6 +859,37 @@ callback are unresolved. This is a reproducible next waypoint for tracing a
 projectile attack to damage application, not evidence that all type-2 attacks
 share one impact implementation.
 
+### Shared typed effect-object resolver
+
+Both the type-2 attack branch and a separate engine effect path call
+`0x006EB060`. Full-analysis Ghidra reports exactly two direct callsites:
+`0x00B1D12E` in ordinary attack impact routine `0x00B1CCB0`, and `0x006ED460`
+in effect setup routine `0x006ED2D0` (itself called by `0x006EE920`). The
+resolver looks up class code `0x422D4D69` through the registry at
+`0x0115E9EC`, obtains a registered object through `0x00429B90`, queries its
+metadata, then replaces an output reference with a compatible object while
+maintaining reference counts. In the ordinary attack branch, that returned
+object receives the prepared effect record through virtual slot `+0xC8`.
+The other caller passes the object into `0x006ECE00` after populating an
+effect context.
+
+This narrows the type-2 path to a shared typed-object lookup and gives a second
+caller to compare, but does not identify the class represented by
+`0x422D4D69`, the returned object's runtime vtable, or its eventual impact
+receiver. Do not describe `0x006EB060` as a projectile factory until those are
+resolved.
+
+Reproduce the resolver and both direct callers in the pinned Ghidra project:
+
+```sh
+JAVA_TOOL_OPTIONS="-Duser.home=/dev/shm/ghidra-home ${JAVA_TOOL_OPTIONS:-}" \
+  /opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/screenshots/ghidra" WarcraftIII \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath /tmp/wc3-ghidra-inspect \
+  -postScript InspectFunctions.java 0x006EB060 0x006ED2D0
+```
+
 The attack update wrapper and type switch can be reproduced with the existing
 Ghidra project:
 

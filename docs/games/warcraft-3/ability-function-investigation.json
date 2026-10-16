@@ -4012,6 +4012,60 @@
       },
       "record_kind": "function_group",
       "related_addresses_semantics": "Four statically confirmed callers of the shared two-object gate. Also includes exact RTTI-identified missile vtable clients and their callback bodies. Also includes exact RTTI-identified missile vtable clients and their callback bodies."
+    },
+    {
+      "id": "fn_002eb060",
+      "label": "Shared typed effect-object resolver",
+      "category": "projectile",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006eb060",
+          "rva": "0x002eb060",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Full-analysis Ghidra reports exactly two direct callers: 0x00B1CCB0 at 0x00B1D12E (ordinary attack type-2 branch) and 0x006ED2D0 at 0x006ED460 (effect setup, called by 0x006EE920). It looks up class code 0x422D4D69 through registry global 0x0115E9EC and helper 0x00429B90, queries registered metadata, and replaces an output reference with a compatible object while maintaining reference counts. In the attack branch, the returned object receives the effect record through virtual slot +0xC8; the other caller passes it into 0x006ECE00. The code meaning, runtime object vtable, and eventual impact receiver remain unresolved.",
+      "related_addresses": [
+        {
+          "va": "0x00B1CCB0",
+          "rva": "0x0071CCB0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x006ED2D0",
+          "rva": "0x002ED2D0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x006EE920",
+          "rva": "0x002EE920",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x006ECE00",
+          "rva": "0x002ECE00",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x0115E9EC",
+          "rva": "0x00D5E9EC",
+          "kind": "global_va"
+        },
+        {
+          "va": "0x00429B90",
+          "rva": "0x00029B90",
+          "kind": "function_va"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared typed effect-object resolver"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the evidence; direct calls are asserted in verified_relationships."
     }
   ],
   "record_schema": {
@@ -9364,6 +9418,44 @@
         "document": "docs/games/warcraft-3/ability-probes/combat.md",
         "section": "Shared missile interaction gate and attached callbacks"
       }
+    },
+    {
+      "from": {
+        "va": "0x00B1CCB0",
+        "rva": "0x0071CCB0",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x006EB060",
+        "rva": "0x002EB060",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "Ordinary attack type-2 branch resolves a typed effect object before invoking its virtual +0xC8 method with the prepared record.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared typed effect-object resolver"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006ED2D0",
+        "rva": "0x002ED2D0",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x006EB060",
+        "rva": "0x002EB060",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "Separate engine effect setup resolves a compatible registered object, then passes it with the effect context to 0x006ECE00.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared typed effect-object resolver"
+      }
     }
   ],
   "relationship_kinds": {
@@ -9372,6 +9464,6 @@
     "callback_dispatch": "Call through a callback argument or registered callback path.",
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
   },
-  "entry_count": 84,
-  "verified_relationship_count": 306
+  "entry_count": 85,
+  "verified_relationship_count": 308
 }
