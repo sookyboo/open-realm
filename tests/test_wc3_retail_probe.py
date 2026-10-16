@@ -352,6 +352,47 @@ class CaptureTest(unittest.TestCase):
 
 
 class LaunchTest(unittest.TestCase):
+    def test_proc_scan_matches_warcraft_process_by_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = Path(tmp) / "proc"
+            process = proc / "4321"
+            process.mkdir(parents=True)
+            (process / "environ").write_bytes(b"HOME=/home/test\0WINEPREFIX=/tmp/wine-test\0")
+            (process / "cmdline").write_bytes(
+                b"Z:\\Warcraft III.exe\0-window\0")
+            matches = PROBE.find_running_retail_processes(Path("/tmp/wine-test"), proc)
+            self.assertEqual([item["pid"] for item in matches], ["4321"])
+            self.assertIn("Warcraft III.exe", matches[0]["command"])
+            self.assertEqual(PROBE.find_running_retail_processes(Path("/tmp/other"), proc), [])
+
+    def test_launch_refuses_a_second_retail_process_in_same_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "probe"
+            directory.mkdir()
+            executable = directory / "retail.exe"
+            executable.write_bytes(b"retail executable fixture")
+            control = directory / "control.w3x"
+            control.write_bytes(b"control map")
+            record = {
+                "id": "already-running-fixture",
+                "retail_executable": str(executable),
+                "retail_executable_sha256": PROBE.sha256_file(executable),
+                "control_map": str(control),
+                "control_map_sha256": PROBE.sha256_file(control),
+            }
+            (directory / "probe.json").write_text(json.dumps(record), encoding="utf-8")
+            args = SimpleNamespace(probe_dir=directory, control=True, wine="wine-fixture",
+                                   winepath="winepath-fixture", wine_prefix=Path("/tmp/test-prefix"),
+                                   control_confirmed=False)
+            with mock.patch.object(PROBE, "find_running_retail_processes", return_value=[{
+                    "pid": "9876", "command": "wine Warcraft III.exe"}]), \
+                 mock.patch.object(PROBE, "run") as path_call, \
+                 mock.patch.object(PROBE.subprocess, "Popen") as popen:
+                with self.assertRaisesRegex(PROBE.ProbeError, "already running.*PID 9876"):
+                    PROBE.launch(args)
+                path_call.assert_not_called()
+                popen.assert_not_called()
+
     def test_launch_converts_prepared_map_and_records_required_flags(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp) / "probe"

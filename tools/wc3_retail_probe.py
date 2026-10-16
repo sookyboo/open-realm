@@ -67,6 +67,46 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def normalized_wine_prefix(value: str | None, home: str | None = None) -> Path:
+    home_path = Path(home or str(Path.home())).expanduser()
+    raw = value or str(home_path / ".wine")
+    prefix = Path(raw).expanduser()
+    if not prefix.is_absolute():
+        prefix = home_path / prefix
+    return prefix.resolve()
+
+
+def find_running_retail_processes(prefix: Path, proc_root: Path = Path("/proc")) -> list[dict[str, str]]:
+    """Find Warcraft III processes whose Wine environment uses this prefix."""
+    matches: list[dict[str, str]] = []
+    game_names = {"warcraft iii.exe", "war3.exe", "frozen throne.exe"}
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError:
+        return matches
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            environment = {}
+            for item in (entry / "environ").read_bytes().split(b"\0"):
+                if b"=" in item:
+                    key, value = item.split(b"=", 1)
+                    environment[key.decode(errors="replace")] = value.decode(errors="replace")
+            command_parts = [part.decode(errors="replace") for part in
+                             (entry / "cmdline").read_bytes().split(b"\0") if part]
+        except OSError:
+            continue
+        process_prefix = normalized_wine_prefix(environment.get("WINEPREFIX"),
+                                                environment.get("HOME"))
+        if process_prefix != prefix:
+            continue
+        if not command_parts or Path(command_parts[0].replace("\\", "/")).name.casefold() not in game_names:
+            continue
+        matches.append({"pid": entry.name, "command": " ".join(command_parts)})
+    return matches
+
+
 def run(args: list[str], *, cwd: Path | None = None,
         env: dict[str, str] | None = None) -> subprocess.CompletedProcess[bytes]:
     result = subprocess.run(args, cwd=cwd, env=env, check=False, capture_output=True)
@@ -612,6 +652,17 @@ def launch(args: argparse.Namespace) -> None:
     environment = os.environ.copy()
     if args.wine_prefix:
         environment["WINEPREFIX"] = str(Path(args.wine_prefix).expanduser().resolve())
+    selected_prefix = normalized_wine_prefix(environment.get("WINEPREFIX"), environment.get("HOME"))
+    running = find_running_retail_processes(selected_prefix)
+    if running:
+        processes = "; ".join(f"PID {item['pid']}: {item['command']}" for item in running)
+        raise ProbeError(
+            f"Warcraft III is already running in Wine prefix {selected_prefix} ({processes}). "
+            "The runner stopped before starting a second instance because this Retail build "
+            "may fail to initialize twice in one prefix. A prepared map cannot be loaded into "
+            "an arbitrary active map. To continue without closing Warcraft, the active map "
+            "must already be JHCR-instrumented with this probe's matching state/cookie; "
+            "otherwise load the prepared map in a later session or use a separate configured Wine prefix.")
     converted = run([args.winepath, "-w", str(map_path)], env=environment)
     windows_map_path = converted.stdout.decode("utf-8", errors="replace").strip()
     if not windows_map_path:

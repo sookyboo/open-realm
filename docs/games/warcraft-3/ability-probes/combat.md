@@ -657,6 +657,15 @@ a running Retail process; each iteration still requires launching its
 prepared map. The operator must exit Retail after control confirmation, then
 finish the probe's documented UI sequence.
 
+Before either control or prepared launch, the probe runner checks `/proc` for
+Warcraft III processes using the selected Wine prefix. If one is active, it
+stops before calling `winepath` or starting another process and reports the
+matching PID. This avoids Retail's initialization Error 0 when a second game
+uses the same prefix. The runner cannot replace the map in an arbitrary active
+process. In-process work requires a map already initialized with the matching
+JHCR state/cookie; otherwise use a separate configured Wine prefix or wait
+until the current process can load the prepared map.
+
 The exact Carrion Swarm v6/v7 manifests are not checked in, so those runs cannot
 be replayed byte-for-byte from this checkout. For a new probe, create a
 scenario-specific manifest and JASS fragments under a new
