@@ -22,17 +22,16 @@ a scenario has a separately documented automation procedure.
 
 The checked-in [Shadow Strike attack-cycle probe](../../../../tools/retail_probes/shadow_strike_attack_cycle/manifest.json)
 is the ready-to-run example for this workflow.
-The [Phoenix Fire radius/cadence probe](../../../../tools/retail_probes/phoenix_fire/manifest.json)
-is prepared as a second example. It compares source-matched damage at 300,
-550, and 650 units. Its standalone prepared map has not yet completed a Retail
-run. A separate JHCR diagnostic attempt in the existing process was
-inconclusive: the ability level was present, but attack orders were rejected
-and target damage events were not captured. See the [Phoenix Fire native
-trace](native-triage.md#live-probe-attempt-october-16-2026-inconclusive). The
-runner now detects an active process in the selected Wine prefix and stops
-before launching a second instance. It cannot inject this prepared map into
-the existing process; use a separate configured prefix or load the prepared
-map in the existing process when its current scenario permits.
+The [Phoenix Fire radius probe](../../../../tools/retail_probes/phoenix_fire/manifest.json)
+uses a position-locked target at 650, 550, then 300 units. A live JHCR run in
+the already-running OrcX01 map found damage at 550 and 300, but none at 650;
+the exact 600-unit edge and damage cadence remain open. See the [Phoenix Fire
+native trace](native-triage.md#live-jhcr-radius-probe-october-16-2026) and its
+[raw capture](../../../../tools/retail_probes/phoenix_fire/evidence/jhcr-radius-run.txt).
+The runner detects an active process in the selected Wine prefix and stops
+before launching a second instance. It cannot inject a prepared map into an
+arbitrary active map; this live run instead extended the compatible loaded map
+through its existing JHCR state.
 For live JASS reload experiments without restarting Warcraft, follow the
 [JHCR 1.29 runbook](jhcr.md), which includes when to prefer JHCR and how to
 keep reloadable probes rerunnable and safe around active callbacks.

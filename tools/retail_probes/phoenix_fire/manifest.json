@@ -10,7 +10,7 @@
     "mode": "TFT",
     "retail_build": "1.29.2.9231",
     "ability_rawcodes": ["Apxf", "Bpxf"],
-    "question": "Measure source-matched Phoenix Fire damage cadence at 300/550/650 range"
+    "question": "Test Apxf at a locked 650-unit target distance, then move to 550 and 300; record source handles, damage events, and target life"
   },
   "output_name": "OrcX01-PhoenixFire-RadiusCadence.w3x",
   "result_file": "/home/agent/.wine-war3/drive_c/users/agent/Documents/Warcraft III/CustomMapData/phoenix-fire-radius-cadence.txt",
@@ -20,7 +20,7 @@
     {"function": "Trig_Intro_Skipped_Actions", "anchor": "call ConditionalTriggerExecute( gg_trg_Gameplay )", "where": "after", "text": "call PF_Start()"}
   ],
   "capture_contract": {
-    "required_markers": ["PF_META", "PF_DONE"],
+    "required_markers": ["PF_META", "PF_SETUP", "PF_CONTROL_BEGIN", "PF_CONTROL_END", "PF_PHASE distance=550", "PF_PHASE distance=300", "PF_DONE"],
     "inconclusive_markers": []
   }
 }

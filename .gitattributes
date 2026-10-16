@@ -1,1 +1,2 @@
 * text=auto eol=lf
+tools/retail_probes/phoenix_fire/evidence/*.txt -diff -text
