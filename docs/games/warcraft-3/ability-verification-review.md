@@ -36,8 +36,13 @@ prove gameplay behavior.
    call sites, receiver/slot, data reads, branches, and state writes.
 3. Use a short Frida trace only when static callers or runtime values remain
    ambiguous.
-4. Use the matching probe manifest and controlled JASS run only for an open
-   observable contract. Preserve a control map and raw result.
+4. For an open observable contract, start from the [Retail probe runner
+   workflow](ability-probes/README.md#running-a-retail-probe). Reuse or add a
+   manifest under `tools/retail_probes/`, prepare the map with
+   `tools/wc3_retail_probe.py`, then run the controlled JASS probe. Use
+   `tools/wc3_retail_probe_repeat.py` for independent repetitions. Preserve a
+   control map and raw result; don't create an untracked one-off harness when
+   the runner can manage the preparation and capture.
 5. Record uncertainty and negative controls in the
    [function inventory](ability-function-investigation.json).
 
