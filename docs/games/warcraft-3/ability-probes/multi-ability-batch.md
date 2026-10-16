@@ -197,18 +197,18 @@ named ability codes/classes. The TFT rows were read with
 Do not use the checked-in class registry as address authority here: it was
 generated from a different executable hash.
 
-The cached Ghidra project was reused without reanalysis. The local
-`Wc3DumpFunction.java` accepts several preferred VAs in one pass:
+The checked-in Ghidra project in `screenshots/ghidra/WarcraftIII` is the
+exact-build project; its checked-in `functions.csv` provides function
+boundaries. `Wc3DumpFunction.java` is not present in this checkout, so use the
+Ghidra GUI for decompilation/references and radare2 for reproducible
+instruction checks. Do not use the stale `/tmp/wc3-ghidra-ability` project.
 
 ```sh
 /opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
-  /tmp/wc3-ghidra-ability Wc3Retail1292 \
+  "$PWD/screenshots/ghidra" WarcraftIII \
   -process 'Warcraft III.exe' -noanalysis \
-  -scriptPath tools/ghidra \
-  -postScript Wc3DumpFunction.java \
-  0x00B28980 0x00CB6200 0x00C2FA90 0x00C2F890 0x00C303C0 \
-  0x00C2ED00 0x00C31430 0x00C31220 0x00C31120 0x006ADB90 \
-  0x00C30BB0 0x006A9940
+  -scriptPath "$PWD/screenshots/ghidra" \
+  -postScript ExportFunctionInventory.java /tmp/wc3-functions-check.csv
 ```
 
 For narrow instruction checks, radare2 confirmed the validator and Carrion
