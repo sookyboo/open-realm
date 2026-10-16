@@ -205,8 +205,10 @@ miss path. These raw argument relationships are established statically;
 the semantic meaning of bit `0x400` and field `+0x68` remains unknown.
 
 RTTI and the exact `CMissileDeathCoil` vtable (`0x00F752A0`) identify a
-concrete client of the second scan: slots `+0x15C` and `+0x168` resolve to
-`0x00B28A00` and `0x00B28B00`. The first callback returns the sentinel
+concrete client of the first and second scans: slots `+0x164` and `+0x168`
+resolve to `0x00B28A00` and `0x00B28B00`. `CMissilePossession` vtable
+`0x00F9B498` uses the same pair at those slots, confirming shared callback
+implementations across two missile classes. The `+0x164` callback returns the sentinel
 `0xDD` unless missile state/target checks pass; on its accepted route it
 compares the candidate unit's point with missile state, queries the missile's
 damage/category data, and dispatches through unit virtual slots `+0x308` or
@@ -226,7 +228,7 @@ family for the first scan, not evidence that the Death Coil and Lightning
 callbacks share an implementation. Vtable-derived slot targets are exact;
 their runtime registry participation is not yet confirmed dynamically.
 
-Reproduction: inspect `0x00F752A0` and `0x00F5D1B4` using the RTTI/vtable
+Reproduction: inspect `0x00F752A0`, `0x00F9B498`, and `0x00F5D1B4` using the RTTI/vtable
 scan described in `screenshots/ghidra/README.md`, then disassemble
 `0x00B28A00`, `0x00B28B00`, and `0x00BDB8E0` in the pinned executable.
 
