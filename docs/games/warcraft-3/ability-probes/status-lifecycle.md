@@ -104,10 +104,28 @@ relation object's gameplay purpose, its removal path, and whether all callers
 supply summoned units remain unresolved. Do not infer timed-life expiry or
 summon cleanup from this setup function alone.
 
+### Shared keyed-association updater
+
+The relation update above delegates to `0x0068A9A0`. Full-analysis Ghidra
+reports 45 direct call references from 43 functions. Its decompiler signature
+is `void __thiscall FUN_0068A9A0(int *context, undefined4 key, int *value)`.
+The function obtains shared context through `0x00477710`, allocates a `0x14`
+byte object with vtable `0x00E78664`, and uses `0x004E72C0`, `0x004E8180`,
+and reference/class checks while updating an association. The Spirit Wolf /
+Serpent Ward path calls it with key `0x00080254`; another wrapper,
+`0x0068ACD0`, calls it with key `0x0008023C` and has three direct callers:
+`0x00B19BD0`, `0x00B1C4F0`, and `0x00B24740`.
+
+This establishes a shared keyed-association update mechanism, not a summon
+registry. The key meanings, stored value semantics, lookup/removal lifecycle,
+and relationship to timed-life expiry remain unknown. The complete direct
+caller list is reproducible from the Ghidra project described in
+[`screenshots/ghidra/README.md`](../../../../screenshots/ghidra/README.md).
+
 Reproduce the central call chain with radare2:
 
 ```sh
-r2 -q -c 'e scr.color=0; pd 90 @ 0x00c31b40; pd 45 @ 0x00c31c30; pd 45 @ 0x00c34280; pd 90 @ 0x0068ab70; pd 60 @ 0x0068a9a0; pd 55 @ 0x004bc0f0; q' \
+r2 -q -c 'e scr.color=0; pd 90 @ 0x00c31b40; pd 45 @ 0x00c31c30; pd 45 @ 0x00c34280; pd 90 @ 0x0068ab70; pd 60 @ 0x0068a9a0; pd 55 @ 0x004bc0f0; pd 70 @ 0x0068acd0; q' \
   'data/Warcraft III/Warcraft III.exe'
 ```
 
