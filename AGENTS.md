@@ -136,6 +136,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | WC3 ability/item presentation art, effect edict lifetimes, JASS effect handles, consumable charge semantics | [docs/games/warcraft-3/ability-and-item-effects.md](docs/games/warcraft-3/ability-and-item-effects.md) |
 | WC3 ability implementation from data, behavior, and focused evidence | [docs/games/warcraft-3/ability-implementation.md](docs/games/warcraft-3/ability-implementation.md) |
 | WC3 ability research entry point: implementation coverage, Retail status, shared helpers, and topic-indexed evidence | [docs/games/warcraft-3/ability-research.md](docs/games/warcraft-3/ability-research.md) |
+| WC3 Retail 1.29 JHCR live reload setup, sequence state, Wine paths, and diagnostics | [docs/games/warcraft-3/ability-probes/jhcr.md](docs/games/warcraft-3/ability-probes/jhcr.md) |
 | WC3 ability lifecycle fixes, save behavior, and regression review | [docs/games/warcraft-3/ability-lifecycle-review.md](docs/games/warcraft-3/ability-lifecycle-review.md) |
 | WC3 Tiny Structures, item-owned construction, shared placement cursor, racial Tiny Great Hall | [docs/games/warcraft-3/tiny-structures.md](docs/games/warcraft-3/tiny-structures.md) |
 | WC3 creep ability aliases, `code=` mapping, parent-owned registry rows | [docs/games/warcraft-3/creep-ability-aliases.md](docs/games/warcraft-3/creep-ability-aliases.md) |

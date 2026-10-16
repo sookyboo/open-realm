@@ -16,6 +16,8 @@ a scenario has a separately documented automation procedure.
 
 The checked-in [Shadow Strike attack-cycle probe](../../../../tools/retail_probes/shadow_strike_attack_cycle/manifest.json)
 is the ready-to-run example for this workflow.
+For live JASS reload experiments without restarting Warcraft, follow the
+[JHCR 1.29 runbook](jhcr.md).
 
 | Report | Contains |
 |---|---|
