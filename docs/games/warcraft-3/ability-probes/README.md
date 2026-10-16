@@ -22,6 +22,14 @@ a scenario has a separately documented automation procedure.
 
 The checked-in [Shadow Strike attack-cycle probe](../../../../tools/retail_probes/shadow_strike_attack_cycle/manifest.json)
 is the ready-to-run example for this workflow.
+The [Phoenix Fire radius/cadence probe](../../../../tools/retail_probes/phoenix_fire/manifest.json)
+is prepared as a second example. It compares source-matched damage at 300,
+550, and 650 units, but has not yet been run in Retail. Preparation succeeded;
+the attempted second Retail process returned initialization Error 0 while the
+existing Warcraft process owned the active Wine prefix. The existing process
+was left running. Run this probe when its prepared map can be loaded without
+starting a competing instance in that prefix, and do not treat the manifest as
+verification evidence.
 For live JASS reload experiments without restarting Warcraft, follow the
 [JHCR 1.29 runbook](jhcr.md).
 
