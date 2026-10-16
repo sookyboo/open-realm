@@ -338,6 +338,35 @@ the time, its DataC=0.9 attack-rate reduction remained dynamically unverified
 because the Retail `BlzGetUnitAttackCooldown` query returned zero for both
 units. The focused attack-cycle result below supersedes that open item.
 
+#### Shadow Strike movement-speed curve (October 16, 2026)
+
+A separate 35-second Retail 1.29.2.9231 JASS probe compared rank-1 `AEsh`,
+rank-1 `ACss`, and an untreated control. It used three Neutral Hostile
+Footmen, set each reported movement speed to 400, position-locked them, and
+sampled `GetUnitMoveSpeed` every 0.25 seconds. Both casts were accepted and
+confirmed by `EVENT_UNIT_SPELL_EFFECT`; 19 baseline samples showed all three
+lanes at 400. Speeds below 150 are clamped by Retail's movement floor.
+
+| First sampled speed at or above | `AEsh` age after effect | `ACss` age after effect |
+|---:|---:|---:|
+| 200 | 0.25 s | 4.25 s |
+| 250 | 2.25 s | 6.25 s |
+| 300 | 4.25 s | 8.25 s |
+| 350 | 6.25 s | 10.25 s |
+| 390 | 10.25 s | 13.25 s |
+| 400 | 14.25 s | 15.25 s |
+
+At the first sample, `AEsh` reported 200 while `ACss` was clamped at 150;
+the control stayed at 400 throughout. This directly measures distinct
+movement-slow recovery curves consistent with their authored DataB values
+(0.5 and 0.9). The 0.25-second samples do not prove the engine's continuous
+decay formula or behavior between samples.
+
+Raw result: [retail-1292-run1.txt](../../../../tools/retail_probes/shadow_strike_movement/evidence/retail-1292-run1.txt),
+SHA-256 `f4df0b3182b480b98ecc796566e6272462125eee06cee5d381714f7f1be9fac1`.
+The rerunnable manifest and JASS are in
+[`tools/retail_probes/shadow_strike_movement/`](../../../../tools/retail_probes/shadow_strike_movement/).
+
 Raw event capture: `/tmp/wc3-shadow-events-verify/run/result.txt`, SHA-256
 `88aa2c6b6911224ffe0e3e8ba384bc65dae00d5fc49018cdca477499dd5e5e2b`.
 The source-filtered event rows and long-lived speed samples can be reviewed
