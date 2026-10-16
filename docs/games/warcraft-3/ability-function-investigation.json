@@ -292,7 +292,7 @@
       "object_offsets": [
         "0x120"
       ],
-      "evidence_summary": "Exact-build disassembly confirms the wrapper resolves source unit and target widget handles, validates attack-type, damage-type, and weapon-type indices, initializes a stack payload through 0x006A9940, then calls the target's +0x120 virtual method and returns true after dispatch. Carrion Swarm independently initializes the same payload and dispatches through the same slot. For CUnit targets that slot resolves to 0x006677C0, which performs unit-specific mitigation and life mutation. This establishes shared payload/receiver infrastructure for JASS damage and Carrion Swarm, not the ordinary attack-hit caller.",
+      "evidence_summary": "Exact-build disassembly confirms the wrapper resolves source unit and target widget handles, validates attack-type, damage-type, and weapon-type indices, initializes a stack payload through 0x006A9940, then calls the target's +0x120 virtual method and returns true after dispatch. Carrion Swarm independently initializes the same payload and dispatches through the same slot. For CUnit targets that slot resolves to 0x006677C0, which performs unit-specific mitigation and life mutation. Positive UnitDamagePoint processing (0x006EB640 -> 0x006E9ED0) also dispatches through +0x120. This establishes shared payload/receiver infrastructure for UnitDamageTarget, UnitDamagePoint, and Carrion Swarm, not the ordinary attack-hit caller.",
       "related_addresses": [
         {
           "va": "0x0049b3c0",
@@ -603,7 +603,7 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "Full-analysis Ghidra found 49 direct calls from 47 functions. Its body writes payload fields and clears two counters/flags. Two traced paths converge on target virtual slot +0x120: registered UnitDamageTarget (0x004AEF70) and Carrion Swarm (0x00C30BB0). The initializer is shared, while receiver behavior differs by target class.",
+      "evidence_summary": "Full-analysis Ghidra found 49 direct calls from 47 functions. Its body writes payload fields and clears two counters/flags. Three traced paths converge on target virtual slot +0x120: UnitDamageTarget (0x004AEF70), Carrion Swarm (0x00C30BB0), and positive UnitDamagePoint processing (0x006EB640 -> 0x006E9ED0). The initializer is shared, while receiver behavior differs by target class.",
       "related_addresses": [
         {
           "va": "0x004aef70",
@@ -1932,6 +1932,53 @@
       },
       "record_kind": "function",
       "related_addresses_semantics": "Addresses mentioned in evidence; explicit verified edges are listed separately."
+    },
+    {
+      "id": "fn_002eb640",
+      "label": "UnitDamagePoint area candidate processing",
+      "category": "damage",
+      "status": "partially_resolved",
+      "confidence": "high",
+      "addresses": [
+        {
+          "va": "0x006eb640",
+          "rva": "0x002eb640",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [
+        "0x120",
+        "0x128"
+      ],
+      "evidence_summary": "UnitDamagePoint reaches this processor directly or through timestamp dispatcher 0x006EC000. It enumerates area candidates, prepares WidgetDamageData, and calls 0x006E9ED0 per accepted candidate. Positive damage in 0x006E9ED0 initializes payload via 0x006A9940 and calls target virtual +0x120; negative/nonpositive handling includes +0x128 and an ethereal-heal adjustment. This confirms shared positive-damage receiver infrastructure; exact input meanings and filters remain partly unresolved.",
+      "related_addresses": [
+        {
+          "va": "0x004aeea0",
+          "rva": "0x000aeea0"
+        },
+        {
+          "va": "0x006ec000",
+          "rva": "0x002ec000"
+        },
+        {
+          "va": "0x006ecbf0",
+          "rva": "0x002ecbf0"
+        },
+        {
+          "va": "0x006e9ed0",
+          "rva": "0x002e9ed0"
+        },
+        {
+          "va": "0x006a9940",
+          "rva": "0x002a9940"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "UnitDamagePoint and direct life/state setters"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the source evidence; verified edges are listed separately."
     }
   ],
   "record_schema": {
@@ -3034,6 +3081,142 @@
         "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
         "section": "Effect creation"
       }
+    },
+    {
+      "from": {
+        "va": "0x004aeea0",
+        "rva": "0x000aeea0"
+      },
+      "to": {
+        "va": "0x006eb640",
+        "rva": "0x002eb640"
+      },
+      "kind": "related_call_path",
+      "context": "UnitDamagePoint selects the immediate area processor for its immediate operation.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "UnitDamagePoint and direct life/state setters"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004aeea0",
+        "rva": "0x000aeea0"
+      },
+      "to": {
+        "va": "0x006ec000",
+        "rva": "0x002ec000"
+      },
+      "kind": "related_call_path",
+      "context": "UnitDamagePoint selects timestamp-aware dispatch for scheduled work.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "UnitDamagePoint and direct life/state setters"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006ec000",
+        "rva": "0x002ec000"
+      },
+      "to": {
+        "va": "0x006ecbf0",
+        "rva": "0x002ecbf0"
+      },
+      "kind": "direct_call",
+      "context": "Future-timestamp path packages the operation through the delayed-work initializer.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "UnitDamagePoint and direct life/state setters"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006ec000",
+        "rva": "0x002ec000"
+      },
+      "to": {
+        "va": "0x006eb640",
+        "rva": "0x002eb640"
+      },
+      "kind": "direct_call",
+      "context": "Nonfuture path dispatches directly to the area processor.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "UnitDamagePoint and direct life/state setters"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006ecbf0",
+        "rva": "0x002ecbf0"
+      },
+      "to": {
+        "va": "0x006eb640",
+        "rva": "0x002eb640"
+      },
+      "kind": "related_call_path",
+      "context": "The scheduled object preserves the operation arguments for replay through the same area processor; scheduler callback edge is not yet resolved.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "UnitDamagePoint and direct life/state setters"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006eb640",
+        "rva": "0x002eb640"
+      },
+      "to": {
+        "va": "0x006e9ed0",
+        "rva": "0x002e9ed0"
+      },
+      "kind": "direct_call",
+      "context": "Area candidate loop passes accepted candidates to per-target processing.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "UnitDamagePoint and direct life/state setters"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006e9ed0",
+        "rva": "0x002e9ed0"
+      },
+      "to": {
+        "va": "0x006a9940",
+        "rva": "0x002a9940"
+      },
+      "kind": "direct_call",
+      "context": "Positive damage branch initializes the common WidgetDamageData payload.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "UnitDamagePoint and direct life/state setters"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006e9ed0",
+        "rva": "0x002e9ed0"
+      },
+      "to": {
+        "va": "0x00e9c624",
+        "rva": "0x00a9c624"
+      },
+      "kind": "virtual_dispatch",
+      "context": "Positive damage branch dispatches target virtual slot +0x120; CUnit vtable resolves this slot to 0x006677C0.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "UnitDamagePoint and direct life/state setters"
+      }
     }
   ],
   "relationship_kinds": {
@@ -3042,6 +3225,6 @@
     "callback_dispatch": "Call through a callback argument or registered callback path.",
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
   },
-  "entry_count": 54,
-  "verified_relationship_count": 64
+  "entry_count": 55,
+  "verified_relationship_count": 72
 }
