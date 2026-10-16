@@ -89,8 +89,10 @@ expiry kills or removes its owner.
 
 Exact-build callbacks `0x00C31B40` (Spirit Wolf) and `0x00C34150`
 (Serpent Ward) call shared helper `0x0068AB70` after successful unit
-construction. At the Spirit Wolf call site, `ECX` is the caster and the stack
-argument is the created unit returned by `0x00CAF240`. The helper obtains owner
+construction, at callsites `0x00C31C66` and `0x00C342C7`. At the Spirit Wolf
+call site, `ECX` is the caster and the stack argument is the created unit
+returned by `0x00CAF240`; Serpent Ward likewise passes its owner and newly
+created unit. The helper obtains owner
 context, passes caster/unit through `0x004BC0F0`, then creates or updates a
 relation object keyed by `0x00080254` through `0x0068A9A0`. It copies paired
 fields from matching attached ability data into relation-object offsets
@@ -105,7 +107,7 @@ summon cleanup from this setup function alone.
 Reproduce the central call chain with radare2:
 
 ```sh
-r2 -q -c 'e scr.color=0; pd 90 @ 0x00c31b40; pd 90 @ 0x0068ab70; pd 60 @ 0x0068a9a0; pd 55 @ 0x004bc0f0; q' \
+r2 -q -c 'e scr.color=0; pd 90 @ 0x00c31b40; pd 45 @ 0x00c31c30; pd 45 @ 0x00c34280; pd 90 @ 0x0068ab70; pd 60 @ 0x0068a9a0; pd 55 @ 0x004bc0f0; q' \
   'data/Warcraft III/Warcraft III.exe'
 ```
 
