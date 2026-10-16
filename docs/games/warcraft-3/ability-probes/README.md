@@ -8,7 +8,7 @@ current investigation; the overview and current work are in
 |---|---|
 | [Targeting probes](targeting.md) | Charm, Purge, and multi-ability JASS probes with replay steps. |
 | [Multi-ability native batch](multi-ability-batch.md) | TFT batch harness, outcomes, and validator/class trace. |
-| [Combat traces](combat.md) | Carrion Swarm, poison attack Frida observations, and attack callback analysis. |
+| [Combat traces](combat.md) | Carrion Swarm, the Retail Poison Attack/Venom Spear impact-to-Bpoi chain, Cold Arrow splash-missile effect endpoint, and damage receiver convergence. |
 | [Presentation natives](presentation-natives.md) | Retail JASS effect/animation native registrations, shared creation/request paths, and unresolved renderer behavior. |
 | [Status lifecycle traces](status-lifecycle.md) | Shared attached-instance removal, buff filtering, and the BTLF timed-life polarity boundary. |
 | [Native triage](native-triage.md) | Static class/callback reconnaissance, Phoenix Fire path, and remaining inspection queue. |

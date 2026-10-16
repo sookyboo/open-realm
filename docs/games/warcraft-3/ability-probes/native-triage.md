@@ -15,7 +15,9 @@ is still unsuitable as address authority because it belongs to another hash.
 The TFT `ability_audit -raw` rows identify the implementation codes below.
 Their class-name strings and reference functions were independently found in
 the exact executable with radare2 `iz` and inspected in the cached Ghidra
-project with `Wc3InspectAddresses.java`. The reference functions return the
+project. The previously cited `Wc3InspectAddresses.java` script is absent from
+this checkout; use the Ghidra GUI or radare2 to inspect the references. The
+reference functions return the
 matching `CAbility...` string, confirming these RTTI class identities. This
 proves class naming and enables targeted method inspection; it does not prove
 the ability's target or effect contract. The audit also resolves
@@ -153,12 +155,12 @@ Dur/HeroDur relationship, exact radius field, damage type, and expiry/removal
 behavior. Do not promote the tooltip or the presence of the missile class into
 proof of those details.
 
-The inspection can be reproduced in the cached exact-build Ghidra project by
-dumping `0x00C0D7D0`, `0x00C0D820`, `0x00C0ECD0`, `0x00C0F1E0`, `0x00682180`,
-`0x00682210`, `0x006822E0`, `0x006D6570`, `0x0067FB80`, and `0x006EC8F0` with
-`Wc3DumpFunction.java`. Cross-check target constants and short branch sequences
-with radare2 before assigning semantics, and retain the exact executable hash
-when reporting these addresses.
+The checked-in exact-build Ghidra project is `screenshots/ghidra/WarcraftIII`;
+its `functions.csv` records function boundaries. `Wc3DumpFunction.java` is not
+present in this checkout, so inspect these functions with the GUI and
+cross-check target constants and short branch sequences with radare2 before
+assigning semantics. Retain the exact executable hash when reporting these
+addresses.
 
 A follow-up mapped actual vtable globals written by the exact-build
 constructors, rather than reading the adjacent class-name / RTTI data as a
@@ -181,9 +183,9 @@ constructor writes vtable `0x00F76CC4`. Phoenix Fire's name accessor is
 a Frida receiver filter. Both tables reference shared `0x00C0F5A0` and
 `0x00C0F5C0` save/load virtuals.
 
-The current cached Ghidra project does not provide trustworthy C++ types or
-virtual method names. `Wc3DumpFunction.java` can decompile a requested VA, but
-that alone does not assign a semantic role. For the inspected serialization
+The current Ghidra project does not provide trustworthy C++ types or virtual
+method names. Decompilation of a requested VA alone does not assign a semantic
+role. For the inspected serialization
 methods, the conclusion above comes from explicit calls to serializer
 helpers, stream arguments and paired save/load callbacks. No executable
 method in this batch established the remaining gameplay outcomes, so no

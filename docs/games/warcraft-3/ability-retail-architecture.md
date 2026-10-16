@@ -15,7 +15,10 @@ Detailed probe observations are kept in the
 The current shared-helper and recent class-path analysis uses the PE32 x86
 Retail executable with preferred image base `0x00400000` and SHA-256
 `3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`. The
-cached full Ghidra project is `data/wc3-ghidra-full/Wc3Retail1292Full`.
+checked-in exact-build Ghidra project is
+`screenshots/ghidra/WarcraftIII` (binary hash recorded in
+`screenshots/ghidra/binary.sha256`). Its exported function inventory is
+`screenshots/ghidra/functions.csv`.
 Earlier binary inheritance work used a different executable hash. Keep those
 addresses separate; a version label alone does not make VAs, RVAs, or section
 file offsets interchangeable.
@@ -291,36 +294,27 @@ expiry scheduler, and complete virtual-hook meanings for attach/removal.
 
 ## Reproducible inspection
 
-Verify the binary hash before using any address. Reuse the cached project for
-read-only inspection:
+Verify the binary hash before using any address. Reuse the checked-in project
+for read-only inspection. The previously documented `Wc3DumpFunction.java`
+and `Wc3Callers.java` helpers are not present; use the GUI and radare2 for
+function body/reference inspection. The available Ghidra script only exports
+the function inventory:
 
 ```sh
 sha256sum 'data/Warcraft III/Warcraft III.exe'
 /opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
-  "$PWD/data/wc3-ghidra-full" Wc3Retail1292Full \
+  "$PWD/screenshots/ghidra" WarcraftIII \
   -process 'Warcraft III.exe' -noanalysis \
-  -scriptPath tools/ghidra \
-  -postScript Wc3DumpFunction.java \
-  0x004AE8F0 0x004AF590 0x004AF020 0x004AF460 \
-  0x004971C0 0x004AAE20 \
-  0x00498B20 0x0048F150 0x00AF3BA0 0x00B28980 \
-  0x006D61E0 0x0046E0C0 0x0046E630 \
-  0x00C2FA90 0x00C31430 0x00C30BB0 \
-  0x00682180 0x006AEA70 0x006ADA20 0x0068EA00 \
-  0x006D4560 0x006D6570 0x006D8530 0x006A9940 \
-  0x006756D0 0x00676940 0x006CF320 \
-  0x006677C0 0x00668DB0 0x006BD260 0x006CE850 0x006CEF00 \
-  0x006A0630 0x0067B920 0x00C20940 0x00C20950 0x00C20AF0 \
-  0x00C7A3E0 0x00C7A3F0 0x0069E310 \
-  0x00C82310 0x00C828A0 0x00C81A60 0x00C85200
+  -scriptPath "$PWD/screenshots/ghidra" \
+  -postScript ExportFunctionInventory.java /tmp/wc3-functions-check.csv
 ```
 
-Use `Wc3Callers.java` for direct incoming references and caller sites. Confirm
-the decompiler's x86 `thiscall` receiver in `ECX`, stack argument order,
-virtual slot offsets, and branch results in disassembly. Use Frida only when
-static analysis cannot settle a runtime receiver or virtual target. A hook
-should filter the ability order/object, preserve raw return values, and be
-paired with static caller evidence.
+Compare the script output with the checked-in `functions.csv`. Use the Ghidra
+GUI for direct incoming references and decompilation; confirm x86 `thiscall`
+receiver in `ECX`, stack argument order, virtual slot offsets, and branch
+results in disassembly. Use radare2 for reproducible byte/cross-reference
+checks and Frida only when static analysis cannot settle a runtime receiver
+or virtual target.
 
 For the current JASS/Frida process and open questions, see the
 [Retail verification status](ability-verification-review.md) and

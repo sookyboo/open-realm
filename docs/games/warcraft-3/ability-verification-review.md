@@ -4,7 +4,7 @@ This page summarizes exact-build Retail research. Detailed observations,
 replay manifests, raw outputs, and native trace addresses are in the
 [probe evidence index](ability-probes/README.md). The
 [machine-readable function inventory](ability-function-investigation.json)
-tracks 48 function records and 27 verified relationships for the pinned build.
+tracks 83 function records and 304 verified relationships for the pinned build.
 Use the [shared-function workflow](retail-shared-ability-re.md) to extend it.
 
 ## Build and evidence policy
