@@ -9,6 +9,7 @@ current investigation; the overview and current work are in
 | [Targeting probes](targeting.md) | Charm, Purge, and multi-ability JASS probes with replay steps. |
 | [Multi-ability native batch](multi-ability-batch.md) | TFT batch harness, outcomes, and validator/class trace. |
 | [Combat traces](combat.md) | Carrion Swarm, poison attack Frida observations, and attack callback analysis. |
+| [Presentation natives](presentation-natives.md) | Retail JASS effect/animation native registrations, shared creation/request paths, and unresolved renderer behavior. |
 | [Status lifecycle traces](status-lifecycle.md) | Shared attached-instance removal, buff filtering, and the BTLF timed-life polarity boundary. |
 | [Native triage](native-triage.md) | Static class/callback reconnaissance, Phoenix Fire path, and remaining inspection queue. |
 | [Historical implementation notes](historical-implementation.md) | Older Jaina/Archmage implementation work, separate from Retail findings. |

@@ -1821,6 +1821,117 @@
       },
       "record_kind": "function",
       "related_addresses_semantics": "Addresses mentioned in evidence. Verified caller/callee edges are listed separately below."
+    },
+    {
+      "id": "fn_000892b0",
+      "label": "Shared positioned JASS effect-object creation",
+      "category": "presentation_effect",
+      "status": "partially_resolved",
+      "confidence": "high",
+      "addresses": [
+        {
+          "va": "0x004892b0",
+          "rva": "0x000892b0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Registered AddSpecialEffect and reached by AddSpecialEffectLoc and AddSpellEffect paths after model-art resolution. Calls 0x006BBB70 to create an effect object and 0x004E72C0 to register/associate its handle. This confirms common creation/lifetime plumbing for positioned JASS effects; renderer-side ownership and whether ability-authored visuals share this routine remain unverified.",
+      "related_addresses": [
+        {
+          "va": "0x006bbb70",
+          "rva": "0x002bbb70"
+        },
+        {
+          "va": "0x004e72c0",
+          "rva": "0x000e72c0"
+        },
+        {
+          "va": "0x00489320",
+          "rva": "0x00089320"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in evidence; explicit verified edges are listed separately."
+    },
+    {
+      "id": "fn_000aafc0",
+      "label": "Shared JASS unit-animation string request path",
+      "category": "presentation_animation",
+      "status": "partially_resolved",
+      "confidence": "high",
+      "addresses": [
+        {
+          "va": "0x004aafc0",
+          "rva": "0x000aafc0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "SetUnitAnimation, QueueUnitAnimation, and SetUnitAnimationWithRarity wrappers converge here with distinct mode arguments. It resolves the unit/model, processes animation string/property data, then calls 0x00966C10 to apply the request. This confirms API-level sharing; ability-authored animation callers and full renderer/blend semantics remain open.",
+      "related_addresses": [
+        {
+          "va": "0x004aaf70",
+          "rva": "0x000aaf70"
+        },
+        {
+          "va": "0x004a4ae0",
+          "rva": "0x000a4ae0"
+        },
+        {
+          "va": "0x004ab110",
+          "rva": "0x000ab110"
+        },
+        {
+          "va": "0x00966c10",
+          "rva": "0x00566c10"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Unit animation requests"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in evidence; explicit verified edges are listed separately."
+    },
+    {
+      "id": "fn_00566c10",
+      "label": "Unit animation request application and property gate",
+      "category": "presentation_animation",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00966c10",
+          "rva": "0x00566c10",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [
+        "0x30",
+        "0x34"
+      ],
+      "evidence_summary": "Called by the common SetUnitAnimation string request path 0x004AAFC0 after animation string/property data is prepared. Checks model availability and unit animation-property bits before applying request state. Detailed sequence selection, blend timing, and renderer-side effects are not resolved.",
+      "related_addresses": [
+        {
+          "va": "0x00963d20",
+          "rva": "0x00563d20"
+        },
+        {
+          "va": "0x004aafc0",
+          "rva": "0x000aafc0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Unit animation requests"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in evidence; explicit verified edges are listed separately."
     }
   ],
   "record_schema": {
@@ -2634,6 +2745,295 @@
         "document": "docs/games/warcraft-3/ability-probes/targeting.md",
         "section": "Shared unit-owner relationship predicate (Retail 1.29.2)"
       }
+    },
+    {
+      "from": {
+        "va": "0x004898f0",
+        "rva": "0x000898f0"
+      },
+      "to": {
+        "va": "0x004892b0",
+        "rva": "0x000892b0"
+      },
+      "kind": "direct_call",
+      "context": "AddSpecialEffect wrapper tail-calls shared positioned effect creation.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00489910",
+        "rva": "0x00089910"
+      },
+      "to": {
+        "va": "0x004892b0",
+        "rva": "0x000892b0"
+      },
+      "kind": "direct_call",
+      "context": "AddSpecialEffectLoc converts its location and calls shared positioned effect creation.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00489990",
+        "rva": "0x00089990"
+      },
+      "to": {
+        "va": "0x004892b0",
+        "rva": "0x000892b0"
+      },
+      "kind": "direct_call",
+      "context": "AddSpellEffect resolves authored effect art and calls shared positioned effect creation.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00489a90",
+        "rva": "0x00089a90"
+      },
+      "to": {
+        "va": "0x004892b0",
+        "rva": "0x000892b0"
+      },
+      "kind": "direct_call",
+      "context": "AddSpellEffectLoc resolves authored effect art and location, then calls shared positioned effect creation.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00489a30",
+        "rva": "0x00089a30"
+      },
+      "to": {
+        "va": "0x004892b0",
+        "rva": "0x000892b0"
+      },
+      "kind": "direct_call",
+      "context": "AddSpellEffectByIdLoc resolves authored effect art and location, then calls shared positioned effect creation.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00489960",
+        "rva": "0x00089960"
+      },
+      "to": {
+        "va": "0x00489320",
+        "rva": "0x00089320"
+      },
+      "kind": "direct_call",
+      "context": "AddSpecialEffectTarget wrapper converts the widget handle then tail-calls the attached-effect path.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00489b20",
+        "rva": "0x00089b20"
+      },
+      "to": {
+        "va": "0x00489b70",
+        "rva": "0x00089b70"
+      },
+      "kind": "direct_call",
+      "context": "AddSpellEffectTarget resolves the ability effect ID before transferring to the target-attached creation path.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004892b0",
+        "rva": "0x000892b0"
+      },
+      "to": {
+        "va": "0x006bbb70",
+        "rva": "0x002bbb70"
+      },
+      "kind": "direct_call",
+      "context": "Positioned effect helper creates the effect object.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004892b0",
+        "rva": "0x000892b0"
+      },
+      "to": {
+        "va": "0x004e72c0",
+        "rva": "0x000e72c0"
+      },
+      "kind": "direct_call",
+      "context": "Positioned effect helper registers/associates the returned effect handle.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00489320",
+        "rva": "0x00089320"
+      },
+      "to": {
+        "va": "0x006bbc30",
+        "rva": "0x002bbc30"
+      },
+      "kind": "direct_call",
+      "context": "Target-attached effect path creates the widget-attached effect object.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00489320",
+        "rva": "0x00089320"
+      },
+      "to": {
+        "va": "0x004e72c0",
+        "rva": "0x000e72c0"
+      },
+      "kind": "direct_call",
+      "context": "Target-attached effect path registers/associates its effect handle.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004aaf70",
+        "rva": "0x000aaf70"
+      },
+      "to": {
+        "va": "0x004aafc0",
+        "rva": "0x000aafc0"
+      },
+      "kind": "direct_call",
+      "context": "SetUnitAnimation wrapper enters shared animation string request path.",
+      "confidence": "medium",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Unit animation requests"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004a4ae0",
+        "rva": "0x000a4ae0"
+      },
+      "to": {
+        "va": "0x004aafc0",
+        "rva": "0x000aafc0"
+      },
+      "kind": "direct_call",
+      "context": "QueueUnitAnimation enters shared animation request path with queue mode.",
+      "confidence": "medium",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Unit animation requests"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004ab110",
+        "rva": "0x000ab110"
+      },
+      "to": {
+        "va": "0x004aafc0",
+        "rva": "0x000aafc0"
+      },
+      "kind": "direct_call",
+      "context": "SetUnitAnimationWithRarity maps rarity flags then tail-calls shared animation request path.",
+      "confidence": "medium",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Unit animation requests"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004aafc0",
+        "rva": "0x000aafc0"
+      },
+      "to": {
+        "va": "0x00966c10",
+        "rva": "0x00566c10"
+      },
+      "kind": "direct_call",
+      "context": "Common animation string request path delegates prepared request data to unit animation application helper.",
+      "confidence": "medium",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Unit animation requests"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004aaf90",
+        "rva": "0x000aaf90"
+      },
+      "to": {
+        "va": "0x00966f20",
+        "rva": "0x00566f20"
+      },
+      "kind": "direct_call",
+      "context": "SetUnitAnimationByIndex wrapper resolves unit/model and delegates index animation handling.",
+      "confidence": "medium",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Unit animation requests"
+      }
+    },
+    {
+      "from": {
+        "va": "0x004899f0",
+        "rva": "0x000899f0"
+      },
+      "to": {
+        "va": "0x004892b0",
+        "rva": "0x000892b0"
+      },
+      "kind": "direct_call",
+      "context": "AddSpellEffectById resolves authored effect art and directly calls the shared positioned effect creator.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/presentation-natives.md",
+        "section": "Effect creation"
+      }
     }
   ],
   "relationship_kinds": {
@@ -2642,6 +3042,6 @@
     "callback_dispatch": "Call through a callback argument or registered callback path.",
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
   },
-  "entry_count": 51,
-  "verified_relationship_count": 47
+  "entry_count": 54,
+  "verified_relationship_count": 64
 }
