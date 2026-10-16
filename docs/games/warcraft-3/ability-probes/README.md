@@ -24,13 +24,15 @@ The checked-in [Shadow Strike attack-cycle probe](../../../../tools/retail_probe
 is the ready-to-run example for this workflow.
 The [Phoenix Fire radius/cadence probe](../../../../tools/retail_probes/phoenix_fire/manifest.json)
 is prepared as a second example. It compares source-matched damage at 300,
-550, and 650 units, but has not yet been run in Retail. Preparation succeeded;
-the attempted second Retail process returned initialization Error 0 while the
-existing Warcraft process owned the active Wine prefix. The existing process
-was left running. The runner now detects this condition and stops before
-launching. Use a separate configured Wine prefix for an isolated second
-process; the runner cannot inject this prepared map into the existing process.
-Do not treat the manifest as verification evidence.
+550, and 650 units. Its standalone prepared map has not yet completed a Retail
+run. A separate JHCR diagnostic attempt in the existing process was
+inconclusive: the ability level was present, but attack orders were rejected
+and target damage events were not captured. See the [Phoenix Fire native
+trace](native-triage.md#live-probe-attempt-october-16-2026-inconclusive). The
+runner now detects an active process in the selected Wine prefix and stops
+before launching a second instance. It cannot inject this prepared map into
+the existing process; use a separate configured prefix or load the prepared
+map in the existing process when its current scenario permits.
 For live JASS reload experiments without restarting Warcraft, follow the
 [JHCR 1.29 runbook](jhcr.md).
 
