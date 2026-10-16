@@ -193,6 +193,17 @@ registry membership, float meaning, and the precise callback contract are not
 established. These are shared collision/interception-style extension points,
 not proof that a callback applies damage.
 
+Caller argument setup distinguishes the attack route from two other missile
+paths. `0x00B1CCB0` passes `this` plus its two objects, zero as the third
+argument, and `impactRecord.flags & 0x400` as the fourth; the gate rejects
+when that fourth argument is nonzero. Callers `0x006ECE00` and `0x006ED140`
+pass the same third-argument value `1` and their object field `+0x68` as the
+fourth argument, so they can enter the diagnostic/fallback branch when scans
+do not handle the pair. At `0x006ECE00`, the gate result controls a
+`MissDamageReduction` path; at `0x006ED140`, it controls the corresponding
+miss path. These raw argument relationships are established statically;
+the semantic meaning of bit `0x400` and field `+0x68` remains unknown.
+
 RTTI and the exact `CMissileDeathCoil` vtable (`0x00F752A0`) identify a
 concrete client of the second scan: slots `+0x15C` and `+0x168` resolve to
 `0x00B28A00` and `0x00B28B00`. The first callback returns the sentinel
