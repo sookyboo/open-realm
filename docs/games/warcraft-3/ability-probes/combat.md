@@ -22,11 +22,13 @@ infrastructure; the final notification's semantic name remains unresolved.
 Two independently identified buff paths use the wrapper after class-specific
 creation/configuration:
 
-- Poison callback `0x00BDCF70` looks up existing `Bpoi`; on its creation
-  branch it constructs/configures a poison object and attaches it through
-  `0x006D4880`. Its refresh branch invokes the existing object's virtual
-  `+0x388`. This locates poison status installation/refresh but does not
-  identify the attack event producer.
+- Poison application callback `0x00BDCF70` is vtable slot `+0x354` for both
+  `CAbilityPoisonAttack` (vtable `0x00F5DB18`) and `CAbilityVenomSpear`
+  (vtable `0x00F5DE8C`), as identified by exact-build RTTI and vtable entries.
+  It looks up existing `Bpoi`, refreshes it through virtual `+0x388`, or
+  creates/configures and attaches a new status through `0x006D4880`. The
+  callback is now established as shared ability-side poison application; the
+  ordinary weapon-hit dispatcher that invokes slot `+0x354` remains unknown.
 - Pocket Factory missile impact callback `0x00C829F0` creates a `BNfy`
   `CBuffFactory` object after constructing the factory unit, then attaches
   it through the same wrapper. This is a different ability and buff class.
@@ -34,12 +36,14 @@ creation/configuration:
   builds the configured effect context, and looks up `BHca`. It refreshes an
   existing status through virtual `+0x388`, or creates/configures a new
   status and attaches it through `0x006D4880`. The preceding accessor
-  `0x00C5C9B0` returns `CMissileColdArrowSplash`, so the address layout
-  points to splash-missile impact handling. Confirm its vtable slot before
-  treating that class association as final. The separate
-  `CAbilityColdArrows` accessor is `0x00C5CBC0`. In either case, this is
-  effect application after target selection, not evidence of the attack-event
-  producer.
+  `0x00C5C9B0` returns `CMissileColdArrowSplash`; its RTTI-linked vtable is
+  `0x00FA0D70`, where `0x00C5C9D0` is slot `+0x80`. The separate
+  `CAbilityColdArrows` accessor `0x00C5CBC0` is at slot `+0xE4` of ability
+  vtable `0x00FA0E54`. Thus the buff-application callback belongs to the
+  splash-missile class, not the ability class. Static inspection did not find
+  xrefs to either vtable global, so the upstream missile construction/impact
+  caller is still unresolved. Treat this as the class-specific effect endpoint,
+  not proof that it shares Poison's attack-event dispatcher.
 - This effect routine also calls `0x007FC7E0` with the pair at `this+0x2C`,
   after checking the paired fields at `+0x2C/+0x30`. The same helper is used
   by general target validation `0x00682180` to walk its validator registry.
@@ -61,9 +65,347 @@ r2 -q -c 'e scr.color=0; pd 12 @ 0x006d4880; pd 12 @ 0x006f6e80; q' \
   'data/Warcraft III/Warcraft III.exe'
 ```
 
-The exact attack-to-poison/Cold-Arrows producer and argument meanings remain
-the next combat investigation; do not infer them from this shared attachment
-path.
+The poison producer is resolved below. Cold Arrows' attack-event producer and
+the argument meanings remain open; do not infer them from this shared
+attachment path.
+
+## Weapon impact ability dispatch: poison and Venom Spear
+
+The Retail hit-processing path now reaches the poison application callback.
+In `0x00B1CCB0`, the accepted target-hit branch calls `0x0068F950` before its
+ordinary target damage fallback. That helper walks attached instances in
+category IDs `0x1B` through `0x29`, queries each instance's category through
+slot `+0x138`, and invokes slot `+0x154` for matching categories. The poison
+and Venom Spear vtables both return category `0x28` from `+0x138` and resolve
+`+0x154` to `0x00BDD5C0`.
+
+`0x00BDD5C0` obtains the target object, checks it against the ability's stored
+target configuration with `0x00682450`, then invokes the ability's slot
+`+0x354` with the target and damage context. On either poison ability vtable,
+that slot resolves to `0x00BDCF70`, which refreshes or creates `Bpoi` through
+`0x006D4880`. After the callback, `0x00BDD5C0` dispatches the damage payload
+through target slot `+0x120`; for a CUnit target that reaches receiver
+`0x006677C0`. A handled return from `0x0068F950` skips the branch's ordinary
+fallback damage call, avoiding a second application. This establishes the
+Retail poison/Venom Spear impact route. Exact argument field meanings and
+other category IDs remain open.
+
+Cold Arrow is a separate missile-side effect endpoint. Its accessor at
+`0x00C5C9B0` returns `CMissileColdArrowSplash`; the associated vtable begins
+at `0x00FA0D70` and places effect callback `0x00C5C9D0` at `+0x80`. The
+`CAbilityColdArrows` accessor `0x00C5CBC0` belongs to a distinct vtable at
+`0x00FA0E54` (`+0xE4`). The callback rejects target flags, forms the effect
+context, refreshes an existing `BHca` via target slot `+0x388` or creates and
+attaches a new one through `0x006D4880`. This maps the class-specific effect
+endpoint; it does not establish how a Cold Arrow missile is created or how its
+impact callback is dispatched. Ghidra reports no references to either vtable
+global, so static xrefs do not resolve that upstream path.
+
+### Ordinary attack projectile branch handoff (exact-build static pass)
+
+Follow-up inspection of `0x00B1CCB0` confirms that attack types 2, 3, and
+5–8 prepare distinct effect records before entering the shared effect scheduler
+`0x0046EB20`. The preparation helpers write fields at offsets `+0x6C..+0x7C`;
+some capture a target object's point through virtual `+0xB8`, while others
+store explicit coordinates. This is a common scheduling handoff, not evidence
+that the resulting effects share an impact implementation.
+
+The attack routine then calls a type-specific `0x0068F9F0`–`0x0068FD10`
+helper. These helpers walk source-attached instances and query category slot
+`+0x138`, but use impact-related slots `+0x13C`, `+0x140`, `+0x144`, `+0x148`,
+`+0x14C`, or `+0x150`, depending on the helper. They are separate from the
+confirmed direct-hit dispatcher `0x0068F950` (`+0x138` / `+0x154`). Their
+class-specific consumers and semantic relationship to missile impact remain
+unresolved.
+
+The `0x00B1CCB0` switch maps each non-direct attack type to a specific helper
+and callback slot:
+
+| Attack type | Helper | Attached ability slot | Caller RVA in `0x00B1CCB0` |
+|---:|---:|---:|---:|
+| 2 | `0x0068FD10` | `+0x150` | `0x0071D118` |
+| 3 | `0x0068FA90` | `+0x140` | `0x0071D589` |
+| 5 | `0x0068FC70` | `+0x14C` | `0x0071D1FD` |
+| 6 | `0x0068FB30` | `+0x148` | `0x0071D345` |
+| 7 | `0x0068FBD0` | `+0x144` | `0x0071D456` |
+| 8 | `0x0068F9F0` | `+0x13C` | `0x0071D6E3` |
+
+Each helper checks the source ability registry, iterates category values
+`0x1B..0x29`, compares each attached object’s `+0x138` result, then invokes the
+slot shown above. The first nonzero handler result marks the ability path
+handled. If no handler returns nonzero, the attack switch constructs and
+schedules its type-specific effect record. This is a verified source-side
+attack hook protocol; it does not by itself identify the eventual projectile
+impact handler.
+
+RTTI and exact vtable entries identify two concrete clients. The
+`CAbilityPoisonArrows` vtable `0x00F5E574` maps `+0x14C` to `0x00BDE440` and
+`+0x150` to `0x00BDE250`. The primary `CAbilityColdArrows` vtable
+`0x00FA0DFC` maps those same slots to `0x00C5CE10` and `0x00C5CC20`. Each
+callback clears ability flag `+0x20` bit `0x400000` and returns zero when that
+bit was previously clear; otherwise it resolves owner/target context and
+builds a hit record. The Cold Arrows handlers additionally query virtual
+`+0x484` and write the returned value at record `+0x48`, setting record `+0x40`
+to `0x200`. The precise meanings of these fields and how the resulting record
+reaches the missile are still open.
+
+Reproduce the branch mapping and vtable entries against this exact executable
+with radare2:
+
+```sh
+r2 -q -c 'e scr.color=0; pd 110 @ 0x00b1ccb0; pd 55 @ 0x0068f9f0; pd 55 @ 0x0068fa90; pd 55 @ 0x0068fb30; pd 55 @ 0x0068fbd0; pd 55 @ 0x0068fc70; pd 55 @ 0x0068fd10; pxw 0x18 @ 0x00f5e6b0; pxw 0x18 @ 0x00fa0f38; q' \
+  'data/Warcraft III/Warcraft III.exe'
+```
+
+The two vtable dumps begin at `+0x13C`; the `+0x14C` and `+0x150` words
+resolve to the Poison Arrows and Cold Arrows callbacks listed above.
+
+The known Carrion Swarm path provides a comparison point: its missile update
+`0x00C31430` calls `0x00C30BB0`, which prepares damage payload `0x006A9940`
+and dispatches through target virtual `+0x120`. The known Cold Arrow splash
+endpoint is `0x00C5C9D0` on vtable `0x00FA0D70` slot `+0x80`, but its upstream
+producer remains unresolved. Neither endpoint is yet tied by verified call or
+vtable evidence to the type-specific attack helper families above. Therefore
+the generic projectile landing dispatcher and ordinary projectile attack
+convergence remain open.
+
+### Shared missile interaction gate and attached callbacks
+
+`0x006ED680` is a shared two-object gate reached directly by four exact-build
+callers: `0x006ECE00`, `0x006E2EB0`, `0x006ED140`, and the ordinary attack
+effect routine `0x00B1CCB0`. It rejects null objects and a nonzero fourth
+argument. Otherwise it first calls `0x006EEC90`, then `0x006D5ED0`; a nonzero
+result from either returns handled. If neither handles the pair and the third
+argument is nonzero, the routine enters a fallback branch containing the
+Retail `CMissile.cpp` `::Missed` diagnostic and further time/position checks.
+The final position predicate remains unnamed. This gate is therefore a useful
+shared missile interaction/impact waypoint, but not yet the generic damage
+dispatcher.
+
+The two scans dispatch through linked object registries. `0x006EEC90` resolves
+an interaction object and calls `0x006D64D0`, which walks a registry and
+invokes virtual slots `+0x158` and `+0x164`; it retains a selected result and
+returns whether that object's second callback handles the pair. `0x006D5ED0`
+walks a related registry using slots `+0x15C` and `+0x168`. In each scan the
+first callback returns a float used to retain the greatest-valued candidate;
+the selected object's second callback determines the handled result. The
+registry membership, float meaning, and the precise callback contract are not
+established. These are shared collision/interception-style extension points,
+not proof that a callback applies damage.
+
+RTTI and the exact `CMissileDeathCoil` vtable (`0x00F752A0`) identify a
+concrete client of the second scan: slots `+0x15C` and `+0x168` resolve to
+`0x00B28A00` and `0x00B28B00`. The first callback returns the sentinel
+`0xDD` unless missile state/target checks pass; on its accepted route it
+compares the candidate unit's point with missile state, queries the missile's
+damage/category data, and dispatches through unit virtual slots `+0x308` or
+`+0x30C`. The paired callback checks missile flags and target eligibility,
+then copies candidate point data into missile state and changes missile flags;
+some branches also call `0x00B492A0`. This demonstrates that the shared scan
+can dispatch missile-specific target/impact behavior. It does not establish
+that the float score is damage, nor does it prove all classes in the scan use
+the same behavior. The Death Coil callback's full branch semantics remain
+partially unresolved.
+
+For comparison, `CMissileLightningAttack` vtable `0x00F5D1B4` has
+`0x00BDB8E0` at `+0x158`; that callback validates a candidate through
+`0x00BDC070`, sets missile flag `0x400000`, and invokes missile virtual slots
+`+0x480`/`+0x484` before calling `0x006AEB40`. This is a distinct callback
+family for the first scan, not evidence that the Death Coil and Lightning
+callbacks share an implementation. Vtable-derived slot targets are exact;
+their runtime registry participation is not yet confirmed dynamically.
+
+Reproduction: inspect `0x00F752A0` and `0x00F5D1B4` using the RTTI/vtable
+scan described in `screenshots/ghidra/README.md`, then disassemble
+`0x00B28A00`, `0x00B28B00`, and `0x00BDB8E0` in the pinned executable.
+
+Reproduce the callers and direct helper paths against the pinned executable:
+
+```sh
+r2 -q -c 'e scr.color=0; pd 100 @ 0x006ed680; pd 55 @ 0x006eec90; pd 55 @ 0x006d64d0; pd 55 @ 0x006d5ed0; pd 100 @ 0x006ece00; pd 100 @ 0x006e2eb0; pd 100 @ 0x006ed140; q' \
+  'data/Warcraft III/Warcraft III.exe'
+```
+
+### Shared on-hit ability hook families (exact-build static pass)
+
+The exact-build RTTI/vtable scan identifies additional clients of attack
+callback slots. Critical Strike (`CAbilityCriticalStrike`, vtable
+`0x00F6FB34`), Drunken Brawler (`0x00F70048`), and Bash (`0x00F7055C`) share
+identical entries at slots `+0x13C..+0x150`: `+0x144 → 0x00C00450`,
+`+0x148 → 0x00C00460`, `+0x14C → 0x00C00440`, and `+0x150 → 0x00C00430`.
+The first two are 7-byte thunks to `0x00C01610`; the latter two are thunks to
+`0x00C017A0`. Those destination routines both test ability flag `+0x20` bit
+`0x200`, clear stored state at `+0x84`, resolve a target from the callback
+argument, and build a hit/effect record. They use owner/target state and invoke
+virtual methods, so the record's fields and downstream semantics remain
+unresolved. This is strong evidence for shared implementations across three
+distinct attack abilities, but not yet proof of the precise critical, bash, or
+evasion rules.
+
+Damage-bonus abilities expose a second family. Exact vtables map
+`CAbilityDamageBonusBase` (`0x00FBF7BC`) and `CAbilityDamageBonusBaseEx`
+(`0x00FBFBF4`) to callbacks `0x00C9E780` and `0x00C9E810` at `+0x138` and
+`+0x13C`; `CAbilityFireDamageBonus` (`0x00FBFF38`),
+`CAbilitySpellEffectBonus` (`0x00FC026C`), and
+`CAbilityLightningDamageBonus` (`0x00FC0EC4`) override nearby slots with
+class-specific implementations. The four functions `0x00C9E5D0`,
+`0x00C9E6A0`, `0x00C9E720`, and `0x00C9E750` are byte-identical handlers:
+check ability flag `+0x20 & 0x100`, clear it when present, set callback record
+`+0x64 = 1`, and return 1; otherwise return 0. This common record-consumption
+protocol is verified, but the originating event and the record field's meaning
+are not. Extended callbacks such as `0x00C9FBA0`, `0x00CA0AC0`, and
+`0x00CA11C0` use the same flag/record prefix and then continue through
+ability-specific state and virtual calls. Treat them as specialized behavior,
+not as a single shared damage application helper.
+
+The RTTI scan and callback disassembly are reproducible against the pinned
+project with the temporary scripts listed in `screenshots/ghidra/README.md`;
+the vtable words and callback bodies can also be checked with radare2. During
+this pass, Ghidra headless script startup failed because the full filesystem
+prevented OSGi cache initialization, so callback bodies were checked with
+radare2 and the earlier captured RTTI inventory. No runtime Frida capture has
+yet confirmed these callbacks execute in the named gameplay scenarios.
+
+### Shared level-indexed owner-data accessors
+
+Several distinct ability paths share the same low-level readers for owner
+data. Poison/Venom Spear impact handling (`0x00BDCF70`), Cold Arrow attack
+callbacks (`0x00C5CC20`, `0x00C5CE10`), and Phoenix Fire's scheduled candidate
+callback (`0x00C0F1E0`) all use members of the `0x0046Exxx`/`0x0046Fxxx`
+reader family before constructing an effect/status context. The poison and
+Cold Arrow callbacks also use the same `0x0046F3A0` and `0x0046F500` readers
+for a branch-selected field. Phoenix Fire's caller follows the same general
+sequence, including `0x0046EE20` and `0x0046F3A0`. This establishes reuse
+across poison, cold-arrow, and periodic area-effect paths.
+
+The directly inspected functions `0x0046EE20`, `0x0046EED0`, `0x0046EF80`,
+`0x0046F030`, `0x0046F3A0`, and `0x0046F500` read offsets `+0x24`, `+0x28`,
+`+0x2C`, `+0x30`, `+0x08`, and `+0x0C`, respectively, from an indexed `0x70`
+byte record. They derive the data table from the supplied owner/player context,
+validate the requested rank against its configured level count, and return the
+global zero value on invalid context or out-of-range rank. The table can be
+inline or indirectly based on a pointer field, depending on its `+0x1C0`
+control value. `0x0046EA70` is a related two-dimensional accessor: it checks
+both dimensions, indexes the same `0x70` byte record stride and then reads a
+rank-indexed element. The helper code establishes storage mechanics and raw
+field offsets; it does not establish which AbilityData columns those fields
+represent.
+
+Several callback bodies use these readers to build a compact set of values
+passed to a status constructor or callback record. Phoenix Fire's callback
+uses the resulting fields in its periodic effect setup; Poison/Venom Spear
+and Cold Arrow use them in their on-hit paths. This is a high-value shared
+data-access layer, but not itself damage application or target validation.
+Exact retail-to-AbilityData column mappings and per-class interpretation are
+still open. Reproduce the inspected functions with `pd 100 @ <VA>` in radare2
+and compare call sites in `0x00BDCF70`, `0x00C5CC20`, `0x00C5CE10`, and
+`0x00C0F1E0`; the original Ghidra caller captures are under
+`/tmp/wc3-ghidra-inspect/`.
+
+The reader family also appears outside an attack or damage callback. Factory
+construction setup `0x00C82310` calls `0x0046F030`, `0x0046EF80`, and
+`0x0046EED0` using its owner data context, then combines those returned values
+with an authored `DataB` lookup. This confirms the helpers serve general
+player-owned ability data, not a damage-specific table. The data column names
+and gameplay meaning of those construction parameters still require the class
+caller and matching AbilityData row to be traced together.
+
+On a missing cached table, these readers route through `0x006AEFB0`. Its
+static path queries the global cache through `0x006B7DE0` and calls
+`0x006ACE00` to build/cache data on a miss. That extends the shared path from
+field readers into data-table resolution, though the cache key encoding and
+record schema remain unresolved.
+
+### Shared area-query builder and generated predicates
+
+`0x0068EA00` is a shared clause-driven candidate query builder/executor, not a
+projectile impact dispatcher. The pinned project shows 133 direct references
+from 118 functions. Phoenix Fire's periodic acquisition `0x00C0ECD0` uses it
+with callback `0x00C0F1E0`, an owner-centered query, and a radius/configuration
+from its ability object. Carrion Swarm missile update `0x00C31430` uses the
+same routine with callback `0x00C31220` to gather path candidates, then applies
+attack target gates and calls its own damage callback `0x00C30BB0` for selected
+missiles. This is shared candidate enumeration, not shared hit resolution.
+
+The query builder installs reusable generated predicates based on typed
+clauses:
+
+- `0x00696CF0`: candidate's required flags at `+0x34` are all set in unit
+  flags `+0x164`, and forbidden flags at `+0x38` are clear.
+- `0x00696A00`: candidate field `+0x20`, bit 3, is clear.
+- `0x00696D20`: candidate byte `+0x37` is within `0x41..0x5A` and unit flag
+  `+0x164` bit `0x40000000` is clear.
+- `0x00696DD0`: unit flag `+0x164` has bit `0x10000` set and masked bits
+  `0x8000080` are not exactly `0x80`.
+
+These machine-level conditions are confirmed; their numeric flag names remain
+unmapped. In Carrion Swarm, the enumeration callback `0x00C31220` caps
+collected candidates at 64 and uses `0x006ADB90` before appending each one.
+That prefilter is separate from the ability-specific target callback and the
+later missile damage routine.
+
+Additional predicates installed by the same builder confirm its clause-driven
+shape. `0x00696D80` is the inverse of `0x00696DD0`; `0x00696C60` returns
+candidate `+0x454 & 0x40`; `0x00696A20` compares the candidate value to query
+`+0x14`; `0x006967E0` calls candidate virtual `+0xEC` and tests the resulting
+index in query mask `+0x0C`; `0x00696DB0` compares candidate `+0x34` with query
+`+0x2C`; and `0x00696BE0` rejects candidates when `0x006ADB90(candidate,
+query+0x3C, query+0x40, query+0x44)` returns nonzero. `0x00696AB0` looks up a
+candidate field `+0x34` through `0x006993A0`, then compares the result's
+`+0x1C0` with query `+0x30` (or accepts only query value zero when lookup
+fails). These are observed data contracts; the field meanings are not
+established.
+
+After parsing clauses, `0x0068EA00` runs the selected spatial enumerator and
+applies its generated predicates in order to each candidate. Only candidates
+passing all generated predicates reach the caller callback. A zero callback
+result stops further candidate processing. The routine uses separate callback
+lists for candidate filters and geometry/selection work; for example,
+`0x00696370` keeps the closest candidate by comparing a computed distance with
+query state. Do not interpret that nearest-candidate path as the ordinary
+append-all behavior used by Carrion Swarm.
+
+Reproduce the caller and predicate inspection with the temporary Ghidra script
+used for this pass:
+
+```sh
+/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/screenshots/ghidra" WarcraftIII \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath /tmp/wc3-ghidra-inspect \
+  -postScript InspectFunctions.java \
+  0x00C0ECD0 0x00C0F1E0 0x00C31220 0x00C31430 \
+  0x0068EA00 0x00696CF0 0x00696A00 0x00696D20 0x00696DD0
+```
+
+Reproduce the exact-build static inspection with the temporary script used in
+this investigation (not a repository dependency):
+
+```sh
+/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/screenshots/ghidra" WarcraftIII \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath /tmp/wc3-ghidra-inspect \
+  -postScript InspectFunctions.java \
+  0x0046EB20 0x0068F9F0 0x0068FA90 0x0068FB30 0x0068FBD0 \
+  0x0068FC70 0x0068FD10 0x00C31430 0x00C30BB0 0x00C5C9D0
+```
+
+The call-site and vtable evidence can be reproduced with:
+
+```sh
+/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/screenshots/ghidra" WarcraftIII \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath /tmp/wc3-ghidra-inspect \
+  -postScript InspectFunctions.java \
+  0x00B1CCB0 0x0068F950 0x00BDD5B0 0x00BDD5C0 0x00BDCF70 \
+  0x00682450 0x006D4880 0x006677C0
+```
+
+`DumpVtableSlots.java` in the same temporary script directory confirms the
+poison and Venom Spear entries at `+0x138`, `+0x154`, and `+0x354`. Those
+scripts are inspection aids, not checked-in project dependencies.
 
 ## Damage payload and receiver path (Retail 1.29.2)
 
@@ -139,6 +481,39 @@ Reproduce the key area-damage convergence with:
 ```sh
 r2 -q -c 'e scr.color=0; pd 150 @ 0x006eb640; pd 180 @ 0x006ec000; pd 100 @ 0x006ecbf0; pd 120 @ 0x006e9ed0; q' \
   'data/Warcraft III/Warcraft III.exe'
+```
+
+## Shared damage-bonus matrix and attack convergence
+
+Both the CUnit damage receiver `0x006677C0` and ordinary attack calculation
+`0x00B23C30` call `0x0067B920`. The helper lazily loads seven eight-entry
+Misc rows (`DamageBonusSpells`, `Normal`, `Pierce`, `Siege`, `Magic`, `Chaos`,
+and `Hero`) and returns `row[param2 * 8 + param3]`. The exact-build base
+`Units\\MiscGame.txt` labels columns `SMALL, MEDIUM, LARGE, FORT, NORMAL,
+HERO, DIVINE, NONE`; in the weapon calculation, `param2` is the selected
+attack-type row and `param3` is the defender-class column. This confirms a
+shared configured damage-multiplier helper across ordinary attacks and the
+CUnit spell/direct-damage receiver. The receiver-side type derivation and
+whether its event mask selects the spell row or a weapon row remain open.
+
+This identifies shared mitigation configuration, not the poison/on-hit event
+producer. Ethereal handling is a separate adjacent path in
+`0x006677C0`. The helper `0x006A0630`, also called from the receiver, compares
+incoming damage with a unit maximum-value accessor and delegates to
+`0x0067B0A0`; it should not be treated as another generic damage-type
+multiplier.
+
+Reproduce the caller/decompiler evidence and read the base row labels with:
+
+```sh
+/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/screenshots/ghidra" WarcraftIII \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath /tmp/wc3-ghidra-inspect \
+  -postScript InspectFunctions.java 0x0067B920 0x006677C0 0x00B23C30
+build/bin/mpqtool -mpq 'data/Warcraft III/War3.mpq' \
+  cat Units/MiscGame.txt > /tmp/wc3-MiscGame.txt
+rg -n 'DamageBonus|Damage bonus lists' /tmp/wc3-MiscGame.txt
 ```
 
 ## Retail Carrion Swarm target cap, filters, and line width (October 5, 2026)
@@ -375,62 +750,40 @@ rather than assuming another executable has the same layout. The current
 `+0x401200`, and `+0x401400` from file offset. Confirm each derived mapping
 against the section table for the current file.
 
-For a reproducible Ghidra inspection, import the exact executable once into a
-temporary project and ask the checked-in script to print a target function's
-references, instructions, signature, and decompilation. The first full PE
-analysis was CPU intensive (715 seconds reported by Ghidra); keep the project
-and use `-process -noanalysis` for subsequent address inspections instead of
-reimporting or reanalyzing it:
-
-```sh
-mkdir -p /tmp/wc3-ghidra-ability
-/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
-  /tmp/wc3-ghidra-ability Wc3Retail1292 \
-  -import 'data/Warcraft III/Warcraft III.exe' \
-  -scriptPath tools/ghidra \
-  -postScript Wc3DumpFunction.java 0x00B28980
-
-# After that import, rerun the script at another preferred VA:
-/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
-  /tmp/wc3-ghidra-ability Wc3Retail1292 \
-  -process 'Warcraft III.exe' -noanalysis \
-  -scriptPath tools/ghidra \
-  -postScript Wc3DumpFunction.java 0x00C30BB0
-```
-
-`Wc3DumpFunction.java` is an inspection aid, not an automatic class or
-behavior classifier. Follow string/RTTI references and registration paths,
-compare the derived implementation with its base, then inspect callers to
-establish parameter roles and return branches. If a candidate is a virtual
-method, establish the receiver's concrete class before attaching. Ghidra's
-decompiler is a navigation aid: confirm x86 `thiscall` usage, ECX, stack
-arguments, and branch conditions in the disassembly.
-
-For data and RTTI references, use the address inspector against the same
-analyzed project. These addresses were found from the exact build's strings
-with radare2 and then checked in Ghidra:
+For a reproducible Ghidra inspection, reuse the checked-in exact-build project
+and function inventory in `screenshots/ghidra/`. Its project is
+`screenshots/ghidra/WarcraftIII`; its checked-in `functions.csv` confirms
+function boundaries but does not contain decompilation or cross-references.
+The previously referenced `Wc3DumpFunction.java` and
+`Wc3InspectAddresses.java` scripts are not present in this checkout. The
+inventory was exported with `ExportFunctionInventory.java`; do not reimport
+or reanalyze the executable merely to inspect addresses:
 
 ```sh
 /opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
-  /tmp/wc3-ghidra-ability Wc3Retail1292 \
+  "$PWD/screenshots/ghidra" WarcraftIII \
   -process 'Warcraft III.exe' -noanalysis \
-  -scriptPath tools/ghidra \
-  -postScript Wc3InspectAddresses.java \
-  0x011B7F44 0x00F89084 0x0111F518 0x00F890D4
+  -scriptPath "$PWD/screenshots/ghidra" \
+  -postScript ExportFunctionInventory.java /tmp/wc3-functions-check.csv
 ```
 
-It reports the registration descriptor at `0x011B7F44`,
-`CAbilityCarrionSwarm` at `0x00F89084`, its decorated RTTI name at
-`0x0111F518`, and `CMissileCarrionSwarm::DamageTarget` at `0x00F890D4`, plus
-incoming references and their containing functions. The class name is
-referenced from `0x00C2FA40`; RTTI references lead to constructor
-`0x00C2FC20` and cleanup `0x00C2FCC0`; the damage-target name is referenced
-from `0x00C30BB0`. Ghidra shows the startup initializer at `0x00421610`
-writing the `InstanceGenerator<CAbilityCarrionSwarm>` table pointer
-`0x00F887A0` to descriptor `0x011B7F44`; registration function
-`0x00C31370` passes that descriptor under FOURCC `AUcs`. The constructor at
-`0x00C2FC20` writes the separate ability-instance vtable pointer
-`0x00F887B0`. Keep the generator table and object vtable distinct.
+The export script only enumerates functions. Use the Ghidra GUI on this same
+project for decompilation and references; use radare2 for reproducible
+instruction/cross-reference checks until focused Ghidra inspection scripts
+are checked in. Always verify x86 `thiscall` receiver (`ECX`), stack argument
+order, and branch conditions in disassembly.
+
+For data and RTTI references, use the Ghidra GUI or radare2 against the same
+exact-build project/binary. The formerly cited `Wc3InspectAddresses.java`
+helper is absent from this checkout:
+
+```sh
+/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/screenshots/ghidra" WarcraftIII \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath "$PWD/screenshots/ghidra" \
+  -postScript ExportFunctionInventory.java /tmp/wc3-functions-check.csv
+```
 
 The native Carrion Swarm path can be followed farther than the target-hit
 method. Factory `0x00C2F890` creates a `CMissileCarrionSwarm` through
@@ -457,28 +810,206 @@ reproduce the path, run the addresses above in the cached Ghidra project.
 ## Ordinary weapon hit investigation status
 
 The ordinary attack producer has not yet been shown to converge on
-`0x006A9940` / target slot `+0x120`. Further exact-build inspection confirms
-these adjacent dispatch points:
+`0x006A9940` / target slot `+0x120`. Exact-build inspection of attack
+calculation `0x00B23C30` finds calls to target-slot selection `0x00B1EC60`,
+attack-state helpers, and the shared configured damage-bonus lookup
+`0x0067B920`; its body does not call `0x006A9940` or the CUnit receiver
+`0x006677C0`. This is a static negative for this calculation routine, not a
+claim that no later attack-impact routine builds a damage payload. Its direct
+callers include `0x00B1BFD0`, `0x00B1C1E0`, and `0x00B249C0` (the latter calls
+it in two branches). The split remains: attack calculation is confirmed, the
+subsequent ordinary impact producer is not.
+
+The next attack-state stage `0x00B1BFD0` stores a 64-bit score and selected
+target in a shared state record; its default scorer is `0x00B23C30`, with an
+optional per-record callback override. The impact-effect routine is
+`0x00B1CCB0`, reached from attack update callback `0x00B21DD0`. It initializes
+a damage payload with `0x006A9940` before switching on the attack-type field
+at ability object `+0xE0 + slot*4`; the payload's configured damage value is
+read from `+0xEC + slot*4`, with attack/weapon flags and type-specific fields
+also supplied. For attack types 1 and 4, it calls `0x006ED680` (impact gate),
+then source attached-ability dispatcher `0x0068F950`. A handled ability
+callback suppresses the normal damage fallback. If unhandled, the routine
+dispatches the prepared payload through target slot `+0x120` (CUnit target:
+`0x006677C0`); a separate target route may apply when the extra target
+pointer is present. This establishes a normal, direct attack impact path to
+the shared CUnit receiver. Other attack types 2, 3, and 5–8 construct or
+schedule missile/other effect objects, so their eventual impact paths still
+need individual tracing.
+
+The attack update wrapper and type switch can be reproduced with the existing
+Ghidra project:
+
+```sh
+/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/screenshots/ghidra" WarcraftIII \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath /tmp/wc3-ghidra-inspect \
+  -postScript InspectFunctions.java 0x00B1BFD0 0x00B21DD0 0x00B1CCB0
+```
+
+Further exact-build inspection confirms these adjacent dispatch points:
 
 - Attack event `0xD01C1` is dispatched by `0x006EF880` to attached objects
   through virtual slot `+0x364`; it later invokes slot `+0x36C` on the same
   attached object. Carrion Swarm's concrete slot implementation is
   `0x00C2F040`, which calls its missile update `0x00C31430`. This confirms a
   scheduled missile-update route, not ordinary weapon damage.
-- Poison callback `0x00BDCF70` receives a source/target context, reads ability
-  configuration, finds or creates `Bpoi`, and refreshes or attaches the
-  status. No caller edge from ordinary weapon damage calculation to this
-  callback is established yet.
+- Poison callback `0x00BDCF70` is slot `+0x354` on the RTTI-identified
+  `CAbilityPoisonAttack` and `CAbilityVenomSpear` vtables. The ordinary hit
+  route is established: `0x00B1CCB0` calls `0x0068F950`, which dispatches
+  category `0x28` to `0x00BDD5C0`; this invokes ability slot `+0x354`, then
+  sends the damage payload through target slot `+0x120` unless handled.
 - CUnit damage receiver `0x006677C0` walks a linked set of attached objects
   and invokes slots `+0xF8/+0xFC` for objects that pass its predicates before
   applying further damage adjustments. This is a promising on-hit extension
-  point, but the concrete poison and Cold Arrows status vtables have not yet
-  been resolved to these slots.
+  point for recipient-side damage modifiers. Poison Attack/Venom Spear use
+  inherited no-op methods at these slots, so their source-side on-hit path is
+  the separate ability `+0x354` callback dispatched by `0x0068F950`. Known
+  recipient-side implementations include Spirit Link (group 2, sharing path)
+  and Mana Shield (group 5, depletion/absorption path). The registered-group
+  identities and exact phase semantics remain partly unresolved.
+- The receiver's bitset parameter accumulates nonzero `+0xF8` return values.
+  Later it checks matching phase IDs 0 through 8, re-enumerates attached
+  objects, and calls `+0xFC` for objects returning that phase. This is a
+  recipient callback protocol, not proof of the ordinary attack source's
+  impact producer.
+- RTTI confirms `CBuffAuraThorns` vtable `0x00F93DB0` returns group `1` from
+  `+0xF8` (`0x00C46E20`), so the receiver invokes `+0xFC` (`0x00C46E30`)
+  immediately. That callback checks the event-referenced object, calls general
+  validation `0x00682180`, derives an amount from the damage/event context and
+  clamps it against global float `0x0112D810`, then initializes a payload with
+  flag `0x00100000` and dispatches it through the referenced object's `+0x120`.
+  This is a concrete recipient-side
+  damage redispatch path (consistent with Thorns reflection); exact payload
+  flag semantics and amount scaling remain unresolved. It can therefore
+  recurse into the shared damage receiver when the referenced object is a
+  CUnit, unlike Poison/Venom's source-side `+0x354` application callback.
+- RTTI confirms `CBuffFrostArmor` vtable `0x00FA606C` also returns group `1`
+  (`+0xF8 = 0x00C67D50`, `+0xFC = 0x00C67D60`). Its handler proceeds only when
+  the payload's byte at `+0x0C` has bit 0 clear, its field at `+0x14` is
+  `0x10`, the event-referenced object passes virtual `+0x11C`, and the
+  `0x00682180` validation call returns zero. It then uses the referenced
+  object as the buff recipient: the default rawcode helper returns `Bfro`
+  (overridden by the buff object's `+0xE0` value when nonzero), lookup
+  `0x006D6570` refreshes an existing instance through `+0x368`, or a new object
+  is created/configured through `0x00C11C90` / `+0x32C`, applied through
+  `+0x364`, and attached by `0x006D4880`. This verifies a damage-phase
+  recipient callback that applies or refreshes Frost Armor on the event
+  referenced unit; the event-field semantics and exact eligibility meaning
+  remain unresolved.
+- RTTI confirms `CBuffAntiMagicShellTwo` vtable `0x00F46B14` returns group `5`
+  from `+0xF8` (`0x00BABCD0`), with handler `0x00BABCE0` at `+0xFC`. The
+  handler runs when event field `+0x20` is `0` or `4`, provided event field
+  `+0x14` is not `0x04000000` and the owner lacks unit flag
+  `+0x164 & 0x40000000`. It caps event amount at buff float `+0xD4`, subtracts
+  that amount from the buff's `+0xD4` value through its numeric wrapper, then
+  calls `0x0046D630` and removes the attached status through `0x006D8530` when
+  that helper reports its terminal condition. This establishes the Retail Bam2
+  recipient-side damage-consumption path. Exact event field meanings, terminal
+  condition semantics, overflow behavior at this callback boundary, and the
+  relationship to higher-level spell damage processing remain open.
+- `CBuffRegeneration`, `CBuffRegenLife`, and `CBuffRegenMana` vtables
+  `0x00F663AC`, `0x00F66730`, and `0x00F66ABC` share `0x00BEE5C0/0x00BEE5D0`.
+  The phase callback returns 1. The handler removes the attached instance
+  through `0x006D8530` only when buff flags `+0x20 & 0x201` are set and payload
+  fields pass its bit/enum/float checks. Field semantics are unresolved, so
+  this is a callback/removal contract, not a verified regeneration-on-damage
+  behavior.
+- `CBuffDrainBonus`, `CBuffDrainBonusLife`, and `CBuffDrainBonusMana` vtables
+  `0x00F72A28`, `0x00F72D90`, and `0x00F730F8` share
+  `0x00C07630/0x00C07640`; the phase callback returns 5. The handler gates on
+  buff flags `+0x20 & 0x100`, resolves an object from payload
+  `+0x00`, rejects when payload byte `+0x0C & 0x10` or helper `0x00B48580`
+  says so, and computes a clamped numeric update using payload `+0x10`, buff
+  `+0x114`, and helpers `0x0099FFE0`, `0x009A00B0`, `0x00800D80`,
+  `0x006B80E0`, and `0x00C0AF90`. It does not call damage dispatch or removal;
+  a drain-related damage role remains an RTTI-based inference.
+- `0x006B80E0` is a shared bounded numeric-state update used by recipient
+  callbacks. It compares an incoming float against the state object at `this+0x10`;
+  one branch updates `+0x10` from a second input, while the other computes a
+  difference through `0x009A00B0`. Both paths update `this+0x18` relative to
+  the sentinel global `0x0112D88C`. Confirmed callers in this callback set are
+  Anti-Magic Shell Two (`0x00BABCE0`), DrainBonus (`0x00C07640`), Sanctuary
+  (`0x00C701C0`), and base Anti-Magic Shell (`0x00BAB860`). This establishes
+  shared numeric-state behavior; the wrapper's higher-level meaning remains
+  unresolved.
+- `CBuffSleep` vtable `0x00F1D15C` uses `0x00B38A90/0x00B38AA0`; phase callback
+  `+0xF8` returns 1. The handler compares payload float `+0x10` with global
+  `0x0112D88C`, resolves the owner (or fallback owner), and checks attached
+  rawcodes `BUst` and `BUps` through `0x006D6570`. If neither lookup succeeds,
+  it invokes the buff object's virtual `+0x354` with zero and the same global
+  pointer. The callback's event meaning and effect are unresolved. The
+  RTTI-linked `CBuffDarkConversion` vtable shares the phase method but uses a
+  separate `+0xFC` implementation `0x00B39260`, which is a zero-return stub.
+- `CBuffBerserkerRage` vtable `0x00F7C1F4` uses `0x00C17140/0x00C17150`;
+  the phase callback returns 8. The handler reads buff float `+0xF8`, clamps it
+  to the interval bounded by global floats `0x0112D88C` and `0x0112D810`, then
+  adds that value through numeric helper `0x0099FFE0` to incoming payload
+  fields `+0x10` and `+0x18`. The incoming payload is modified in place; exact
+  damage-field names and value interpretation remain unverified.
+- `CBuffAntiMagicShell` vtable `0x00F4679C` uses `0x00BAB850/0x00BAB860`;
+  the phase callback returns 5. The handler resolves payload object `+0x00`,
+  checks owner flag `+0x164 & 0x40000000` clear and payload enum `+0x20 == 4`,
+  then sends buff numeric state `+0xD4` through shared updater `0x006B80E0`.
+  The exact effect of this state write remains unresolved; it is structurally
+  distinct from Bam2's amount-capped depletion callback at `0x00BABCE0`.
+- `CBuffAvatar` vtable `0x00F6EFA8` uses `0x00BFEAE0/0x00BFEAF0`; the phase
+  callback returns 5. The handler resolves the event object, checks owner flag
+  `+0x164 & 0x40000000` clear and payload enum `+0x20 == 4`, then passes buff
+  value `+0xF0` to `0x006B80E0`. Its gameplay role and payload meaning remain
+  unresolved.
+- `CBuffSanctuary` vtable `0x00FAA6C8` uses `0x00C701B0/0x00C701C0`; the phase
+  callback returns 5. The handler resolves payload object `+0x00`, requires
+  owner flag `+0x164 & 0x40000000` clear and payload enum `+0x20 == 4`, then
+  clamps buff value `+0xDC` through `0x006B80E0`. Exact payload semantics and
+  whether this is a healing or damage adjustment remain unresolved.
+- `CBuffMirrorImage` and `CBuffItemIllusion` vtables `0x00F86E90` and
+  `0x00F87204` share `0x00C2C160/0x00C2C1F0`; the phase callback returns 3.
+  The handler reads buff value `+0xE4` and adds it through `0x0099FFE0` to
+  incoming payload fields `+0x10` and `+0x18`. This confirms shared in-place
+  payload modification across both RTTI classes; value semantics remain open.
+- `CBuffIncinerate` vtable `0x00FB86B4` uses `0x00C8EA00/0x00C8EA10`; the
+  phase callback returns 8. Its
+  handler accepts payload enum `+0x14` values `0x10` or `0x20`, resolves the
+  referenced object at payload `+0x00`, and looks up rawcodes `ANic` and
+  `ANia` through `0x006D6570`. Existing candidates must pass `+0x3C` and
+  virtual `+0x268` checks. It then updates a numeric value at payload `+0x10`
+  using buff values `+0xE0/+0xE8` and helpers `0x009A1620`, `0x0099FFE0`, and
+  `0x009A01C0`. The exact payload meaning and gameplay effect remain open.
 - Carrion Swarm impact `0x00C30BB0` does converge on `0x006A9940` and slot
   `+0x120`, but it is an ability-specific projectile path.
 
-Thus, no ordinary-hit shared damage helper is confirmed. Next resolve the
-poison and Cold Arrows vtable implementations at `+0xF8/+0xFC` and the
+Inspect the recipient callbacks and verify their RTTI-linked slots with the
+cached project. `DumpVtableSlots.java` reports `+0xF8/+0xFC` for each vtable:
+
+```sh
+/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/screenshots/ghidra" WarcraftIII \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath /tmp/wc3-ghidra-inspect \
+  -postScript InspectFunctions.java \
+  0x00C46E20 0x00C46E30 0x00C67D50 0x00C67D60 \
+  0x00BABCD0 0x00BABCE0 0x00BEE5C0 0x00BEE5D0 \
+  0x00C07630 0x00C07640 0x00C8EA00 0x00C8EA10 \
+  0x00682180 0x006A9940 \
+  0x006D6570 0x00C11C90 0x006D4880 0x006D8530 0x006677C0
+
+/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/screenshots/ghidra" WarcraftIII \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath /tmp/wc3-ghidra-inspect \
+  -postScript DumpVtableSlots.java \
+  0x00F93DB0:0 0x00FA606C:0 0x00F46B14:0 0x00F663AC:0 \
+  0x00F66730:0 0x00F66ABC:0 0x00F72A28:0 0x00F72D90:0 \
+  0x00F730F8:0 0x00FB86B4:0
+```
+
+Ordinary direct-hit types 1/4 are confirmed to reach the shared receiver when
+source ability dispatch does not handle the event; ordinary projectile attack
+impact remains unresolved. Poison and Cold Arrow `+0xF8/+0xFC` slots have
+already been inspected: Poison/Venom inherit no-op base callbacks, while Cold
+Arrow's splash-missile entries are unrelated missile methods. Next resolve
 concrete `+0x364` callback implementations, then compare their source/target
 and damage call sequences with melee hits and normal ranged projectile
 impacts. A weaponless or paused-unit negative control will help separate

@@ -26,6 +26,32 @@ Thus this is broad validation infrastructure, but the set of callers should
 not all be assumed to represent spell casts. Return values are internal
 rejection results, not a universal acceptance boolean.
 
+The `CMissileLightningAttack` candidate callback `0x00BDB8E0` reaches
+`0x00682180` indirectly through missile-specific predicate `0x00BDC070`.
+Before that call, the predicate checks missile lifetime/state, candidate
+relationship through `0x00682450`, candidate-specific virtual slot `+0x3F4`,
+and another missile virtual check at `+0x3E4`. It then obtains a missile-side
+value through slots `+0x350`/`+0x3F0` and calls `0x00682180` on the candidate
+unit with that value. Thus the general rejection-code validator is reused
+inside a missile candidate gate; it is not the entire projectile eligibility
+decision. Confirmed statically from vtable `0x00F5D1B4` slot `+0x158` and
+disassembly; runtime invocation remains unverified.
+
+The two built-in predicates have more specific static behavior than their
+provisional labels suggest. `0x00682210` returns zero for null candidates or
+when candidate slot `+0xD8` reports nonzero. Otherwise it checks source flag
+`+0x164 & 0x100`, candidate slots `+0x1F0`, `+0x1D8`, `+0x1F8`, `+0x1FC`,
+and `+0x20C`, a source field selected from `+0x264/+0x268`, a candidate
+context at `+0x30`, and the configured `MagicImmunesResistUltimates` value.
+Only one conjunction returns rejection code `0x36`; all other paths return
+zero. `0x006822E0` is a parallel predicate: it returns zero for null
+candidates or nonzero candidate slot `+0xDC`, checks the same source flag and
+candidate slots `+0x1DC`, `+0x1F4`, and `+0x1FC`, then can return code
+`0xBC`. Candidate slot `+0x1FC` gates a context lookup in both routines. The
+slot semantics and user-facing meanings of `0x36`/`0xBC` remain unmapped, so
+retain these as structural contracts rather than naming them as a particular
+immunity, Hero, or target-type rule.
+
 Cold Arrow effect routine `0x00C5C9D0` also directly calls this same accessor
 for its own `this+0x2C/+0x30` pair. This confirms reuse of the linked-pair
 resolver outside the validator walk; the separate call site does not establish
@@ -41,6 +67,50 @@ r2 -q -c 'e scr.color=0; pdf @ 0x00682180; pdf @ 0x007fc7e0; pd 60 @ 0x00682210;
 The common predicates' semantic names, rejection codes, and concrete
 registered-validator implementations remain open. Record a runtime membership
 or behavior claim only after tracing a controlled positive/negative candidate.
+
+### RTTI-resolved `+0x26C` implementations
+
+An exact-build RTTI/vtable scan found concrete `CAbility` implementations for
+the callback slot used by the registry walk. The `CAbility` base vtable
+`0x00E6DF38` points slot `+0x26C` to `0x0046AD80`, which returns zero. Several
+derived classes override it:
+
+- `CAbilityMetaDB` vtable `0x00EAC7D8` -> `0x00729400`, which returns `1`.
+- Morph/form abilities (`Morph`, `Mount`, `RavenForm`, `StoneForm`,
+  `AvengerForm`, `EtherealForm`, `CorporealForm`, `Phoenix`, `BearForm`,
+  `Metamorphosis`, `Burrow`, `Submerge`, `RoboGoblin`, `ChemicalRage`) share
+  `0x00BACF00`. Its observed checks include owner flag `+0x164 & 0x100`, virtual
+  `+0x3F0`, ability fields `+0x3C/+0x20`, and the third argument's virtual
+  `+0x214`; one conjunction returns `0xA3`, otherwise zero.
+- `CAbilityGhost` vtable `0x00F68648` -> `0x00BF2AC0`. It checks a value
+  derived from ability `+0x50` through `0x0046EE20`/`0x009A07B0`, then argument
+  virtual `+0x208`; a passing conjunction returns `0xA7`.
+- `CAbilityLocust` vtable `0x00FA790C` -> `0x00C6ACD0`, which returns `0x36`.
+
+These are verified slot implementations and return contracts, not proof that
+these instances are present in the linked registry during a particular cast.
+The runtime registry's population and the user-facing meanings of `1`, `0x36`,
+`0xA3`, and `0xA7` remain unresolved. This narrows the next dynamic probe:
+capture `0x00682180`'s loop with a controlled target and resolve each entry's
+vtable before assigning registry membership or rejection semantics.
+
+Reproduce the vtable scan and callback bodies against the pinned Ghidra
+project (the scan script is a temporary investigation aid):
+
+```sh
+/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/screenshots/ghidra" WarcraftIII \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath /tmp/wc3-ghidra-inspect \
+  -postScript FindVtablesWithSlot.java
+
+/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/screenshots/ghidra" WarcraftIII \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath /tmp/wc3-ghidra-inspect \
+  -postScript InspectFunctions.java \
+  0x0046AD80 0x00729400 0x00BACF00 0x00BF2AC0 0x00C6ACD0
+```
 
 ## Shared unit-owner relationship predicate (Retail 1.29.2)
 
@@ -68,6 +138,81 @@ Reproduce the inspected call chain and callers with:
 r2 -q -c 'e scr.color=0; pdf @ 0x006967a0; pdf @ 0x00478e00; pdf @ 0x00478da0; pd 32 @ 0x00b1a100; pd 20 @ 0x00c0d2f0; q' \
   'data/Warcraft III/Warcraft III.exe'
 ```
+
+## Attack target-mask and state-gate call paths
+
+The exact-build `CAbilityAttack` target-selection routines `0x00B1EC60` and
+`0x00B1EF60` both expand authored per-slot target masks through
+`0x006AEA70`, then call `0x006ADA20`. Both treat return zero as a candidate
+match and retain nonzero results as rejection codes. `0x006ADA20` rejects
+malformed or empty masks, intersects the expanded mask with normalized
+candidate flags, and delegates owner/type checks to `0x006AD670`. Its numeric
+mask bits and rejection codes remain unmapped to AbilityData fields or
+displayed text.
+
+The lower-level owner/relation helper `0x006AD670` now has a concrete static
+contract. It can accept the same object, compare candidate and source owner
+indices, and query two player-relation bitsets through `0x00478DA0` and
+`0x0047FAA0`. Bits in its first argument selectively turn each failed check
+into acceptance; otherwise it returns distinct nonzero codes (including
+`0x84`/`0x85` for owner/self cases and `0x86`–`0x88` for relation cases).
+`GetPlayerAlliance` registration resolves to native wrapper `0x004944C0`.
+That wrapper indexes a per-player relation row at base offset `+0x38` with a
+16-byte stride per alliance type, then tests the other player's bit. Retail
+`common.j` at `data/maps/War3xLocal/Scripts/common.j` maps type 0 to
+`ALLIANCE_PASSIVE` and type 4 to `ALLIANCE_SHARED_SPELLS`. This identifies the
+fixed table offsets used above:
+`0x00478DA0` reads passive alliance (`+0x38`), while `0x0047FAA0` reads shared
+spells (`+0x78`). Thus `0x006AD670` checks those specific alliance settings in
+its two relation branches; it is not an abstract ally/enemy check. The
+branch conditions are precise: after self/same-owner handling, absence of
+passive alliance returns `0x88` unless policy bit `0x10000` allows it. A set
+shared-spells bit returns `0x86` unless `0x4000` allows it; a clear bit returns
+`0x87` unless `0x8000` allows it. Self and same-owner failures return `0x85`
+and `0x84` unless bits `0x1000` and `0x2000` allow them, respectively. The
+user-facing text for these codes remains unresolved. Reproduce the
+registration wrapper and fixed relation checks with:
+
+```sh
+r2 -q -c 'e scr.color=0; pd 60 @ 0x004944c0; pd 90 @ 0x004a94a0; pd 40 @ 0x00478da0; pd 40 @ 0x0047faa0; pd 80 @ 0x006ad670; q' \
+  'data/Warcraft III/Warcraft III.exe'
+```
+
+The selector contract is now clearer from its callers: each routine examines
+two authored target slots and writes the matching slot index through its
+output pointer; `0xFFFFFFFF` means neither slot was selected. A zero result is
+the validator success code, separate from that output slot. Ordinary attack
+calculation `0x00B23C30` calls `0x00B1EC60`, and attack/order helper paths also
+reach these selectors. Accessors `0x00B20440` and `0x00B20490` wrap the
+respective selector and return the value at that selected slot through
+`0x00B203A0`; if there is no selected slot, they return global game time at
+`0x0112D88C`. The meaning of the selected value and which exact caller contexts
+use each accessor remain unresolved.
+
+The surrounding gate `0x006ADB90` is used by attack candidate filtering and
+Carrion Swarm's candidate collector (`0x00C31220`). It tests candidate state
+and relation context, has a status-specific branch using `0x006D6570`,
+conditionally checks visibility/detection through `0x006D7DD0`, and then
+delegates to `0x006ADA20`. This makes it a shared prefilter with concrete
+attack and missile users; individual flags and return values still need
+controlled behavioral mapping. It is separate from the general spell
+validator `0x00682180` above.
+
+Reproduce the caller bodies and mask helpers in the checked-in Ghidra project
+with the inspection script used for this pass (kept under `/tmp`):
+
+```sh
+/opt/openrealm-tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless \
+  "$PWD/screenshots/ghidra" WarcraftIII \
+  -process 'Warcraft III.exe' -noanalysis \
+  -scriptPath /tmp/wc3-ghidra-inspect \
+  -postScript InspectFunctions.java \
+  0x00B1EC60 0x00B1EF60 0x00B20440 0x00B20490 0x00B203A0 \
+  0x006ADB90 0x006ADA20 0x006AEA70
+```
+
+The reusable machine-readable edges and unresolved meanings are in
+[`ability-function-investigation.json`](../ability-function-investigation.json).
 
 ## Retail Charm target verification (October 4, 2026)
 
