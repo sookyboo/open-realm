@@ -70,16 +70,20 @@ For exact-build `CBuffTimedLife` vtable `0x00EA63AC`, that slot resolves to
 `0x006F2730`. The hook returns immediately unless its argument is the BTLF
 object itself. On self-removal it resolves the owner and dispatches event
 `0xD01A1` to the owner's event interface through `0x006C0010`. If the BTLF
-expiry flag `+0x20 & 0x80` is set, it also calls owner-side helpers and virtual
-slots `+0x360` and `+0x364`; one branch obtains an owner point through
-`0x00693650` and passes it into further object/owner callbacks.
+expiry flag `+0x20 & 0x80` is set, the hook calls the BTLF object's vtable
+slot `+0x360`. The BTLF implementation returns zero there, so generic later
+owner-state and position-query logic is skipped (details below).
 
-This establishes that natural expiry performs owner-side notification and
-state processing in addition to deleting the BTLF instance. The observed hook
-does not directly call a unit-death/removal function, and the meanings of
-event `0xD01A1`, the owner virtual methods, and the two downstream branches
-remain unresolved. Do not treat this as proof that timed-life expiry kills
-every owner unit.
+The expiry branch's virtual calls use the **BTLF object's** vtable (`ESI`),
+not the owner's. For `CBuffTimedLife`, slot `+0x360` resolves to
+`0x006F2680`, which returns zero unconditionally. The hook therefore exits
+before the owner flag checks, position query through `0x00693650`, and the
+later BTLF vtable call at `+0x364` can run. Those later operations are generic removal-hook
+logic for classes whose `+0x360` returns nonzero; they are not part of the
+verified BTLF expiry path. BTLF self-removal does dispatch owner event
+`0xD01A1`, but the event's gameplay meaning remains unresolved. No direct
+unit-death/removal call is established, so this is not evidence that timed-life
+expiry kills or removes its owner.
 
 ## Timed-life callback boundary
 
