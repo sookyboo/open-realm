@@ -8,6 +8,12 @@ current investigation; the overview and current work are in
 
 Start with the [Retail probe runner](../../../../tools/wc3_retail_probe.py)
 and its workflow in [combat.md](combat.md#reproducing-these-retail-probes).
+For a new observable ability question, create a manifest under
+[`tools/retail_probes/`](../../../../tools/retail_probes/) and use the runner's
+`prepare`, `launch`, and `capture` commands. This keeps map edits, control-map
+checks, result freshness, and evidence metadata reproducible. Adapt an existing
+manifest when its map and setup fit; keep a one-off script only when the runner
+cannot express the experiment, and document that limitation.
 For repeated runs, use
 [`tools/wc3_retail_probe_repeat.py`](../../../../tools/wc3_retail_probe_repeat.py):
 it creates an isolated output directory and a unique result file per
