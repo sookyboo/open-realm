@@ -104,6 +104,43 @@ disassembly are only valid for the hash above. The argument semantics and
 ordinary attack caller remain unresolved; next compare an attack/on-hit
 producer against this receiver and a negative control with no hit.
 
+## UnitDamagePoint and direct life/state setters
+
+The same Retail build shows a second JASS entry path into the damage payload
+and CUnit receiver:
+
+- `UnitDamagePoint` wrapper `0x004AEEA0` selects the immediate area processor
+  `0x006EB640` or the timestamp-aware dispatcher `0x006EC000`.
+- `0x006EC000` queues the supplied operation through `0x006ECBF0` when the
+  timestamp is in the future; otherwise it calls `0x006EB640` directly.
+  The queued object is initialized with the same argument set, and replay
+  reaches `0x006EB640`. Scheduler timing and exact argument semantics remain
+  unresolved.
+- `0x006EB640` enumerates area candidates, prepares `WidgetDamageData`, and
+  passes accepted candidates to `0x006E9ED0`. For positive damage, that helper
+  calls the candidate target's `+0x120` virtual method. In the nonpositive
+  branch it calls `+0x128`; it also has an ethereal-heal adjustment path.
+- Positive UnitDamagePoint damage therefore converges with
+  UnitDamageTarget/Carrion Swarm at `+0x120` and, for CUnit, receiver
+  `0x006677C0`.
+
+Other inspected setters do not currently establish that same mitigation
+path. `KillUnit` (`0x004A1CA0`) and `SetWidgetLife` (`0x004ABEC0`) dispatch
+through `+0x124`, which resolves for CUnit to `0x00668CB0`; that method writes
+through unit field `+0x1A0` and calls `0x00800FF0` and `0x006BEE40`.
+`SetUnitState` (`0x004ABBA0`) reaches `0x0069DD90`; state index 0 also uses
+`+0x124`, while index 2 takes another path. The meaning of `+0x1A0` and
+whether these paths cause death/events remain unresolved. Do not treat them
+as equivalent to damage mitigation or as proof of the ordinary weapon-hit
+producer.
+
+Reproduce the key area-damage convergence with:
+
+```sh
+r2 -q -c 'e scr.color=0; pd 150 @ 0x006eb640; pd 180 @ 0x006ec000; pd 100 @ 0x006ecbf0; pd 120 @ 0x006e9ed0; q' \
+  'data/Warcraft III/Warcraft III.exe'
+```
+
 ## Retail Carrion Swarm target cap, filters, and line width (October 5, 2026)
 
 The follow-up used the same Warcraft III 1.29.2 Retail executable (SHA-256
