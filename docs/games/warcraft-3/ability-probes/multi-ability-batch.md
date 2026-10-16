@@ -367,6 +367,39 @@ SHA-256 `f4df0b3182b480b98ecc796566e6272462125eee06cee5d381714f7f1be9fac1`.
 The rerunnable manifest and JASS are in
 [`tools/retail_probes/shadow_strike_movement/`](../../../../tools/retail_probes/shadow_strike_movement/).
 
+#### Shadow Strike poison timing and movement recovery (October 16, 2026)
+
+Two focused Retail 1.29.2.9231 captures measured source/target-matched damage
+events and movement speed every 0.25 seconds for rank-1 `AEsh` and `ACss`.
+Each cast was confirmed by `EVENT_UNIT_SPELL_EFFECT` and produced a 75-damage
+initial event followed by five exact 10-damage events. With a 50 ms JASS timer,
+the `AEsh` pulses occurred 60, 120, 180, 240, and 300 ticks after its effect
+event. `ACss` pulses occurred at 62, 122, 182, 242, and 302 ticks. Both repeat
+every 60 ticks (nominally 3 seconds); their initial phase differs by two ticks.
+No further 10-damage events appeared through 4.5 seconds after the final
+`AEsh` pulse or 2.9 seconds after the final `ACss` pulse.
+
+The concurrent speed samples show `AEsh` back at 400 by age 14.25 seconds,
+before its final pulse at 15.0 seconds. `ACss` was 398.089 at age 15.0 seconds,
+then 400 at 15.25 seconds, after its final pulse at 15.1 seconds. These samples
+put the recovery and final poison tick close together for `ACss`; `AEsh`
+movement recovered earlier. They do not resolve exact continuous expiry
+boundaries. AbilityData's `Dur/HeroDur=15.1` is consistent with the observed
+last-pulse times.
+
+The second-run harness set caster acquisition range to zero, but Warden
+casters still generated variable-amount damage events. The event logger matched source and target
+handle IDs; the pulse count above uses only repeated `10.000` amounts, not
+total event counts. Both runs reproduced the same event ticks. This confirms
+the pulse count and cadence in the tested rank-1 cases, while the remaining
+ordinary attack events are a harness limitation.
+
+Reusable manifest and JASS: [`tools/retail_probes/shadow_strike_poison/`](../../../../tools/retail_probes/shadow_strike_poison/).
+Raw captures: [run 1](../../../../tools/retail_probes/shadow_strike_poison/evidence/retail-1292-run1.txt),
+SHA-256 `3284085dd9ce738eea65af033555eac4b9ddedc97b818fb21602d27c9a6d2260`;
+[run 2](../../../../tools/retail_probes/shadow_strike_poison/evidence/retail-1292-run2.txt),
+SHA-256 `bb3e6b710b8af4ee4d2c6892629041322749fffe083fde00698e3a203107b008`.
+
 Raw event capture: `/tmp/wc3-shadow-events-verify/run/result.txt`, SHA-256
 `88aa2c6b6911224ffe0e3e8ba384bc65dae00d5fc49018cdca477499dd5e5e2b`.
 The source-filtered event rows and long-lived speed samples can be reviewed
