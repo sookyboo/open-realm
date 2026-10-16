@@ -26,6 +26,8 @@ open the supporting documents only when the task needs their evidence.
 - [Focused evidence logs](ability-probes/README.md): replay manifests,
   raw observations, and detailed traces by investigation. Start from the
   verification status page; do not load every probe report by default.
+- [JHCR live reload runbook](ability-probes/jhcr.md): build, instrument, and
+  apply repeatable in-process JASS updates on Retail 1.29 under Wine.
 - [Presentation native trace](ability-probes/presentation-natives.md): Retail
   effect creation and unit animation JASS wrapper paths.
 
