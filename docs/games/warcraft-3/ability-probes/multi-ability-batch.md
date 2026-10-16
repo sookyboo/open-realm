@@ -145,7 +145,7 @@ manually reviewed observations were:
 | Probe | JASS observation | Review |
 |---|---|---|
 | Immolation (`AEim`) | Order accepted. Mana samples fell from 68.802 at 1 s to 44.006 at 5 s; the ground target took damage (life 210 to 38.034) while the air target remained at 413. | Supports mana drain and ground/air filtering for this sampled cast; it does not resolve near-zero-mana shutdown thresholds or exact payment cadence. |
-| Shadow Strike (`AEsh`) | Order accepted. The target registered 10 damage events / 175.893 total damage by 16 s. A moving control was sampled, but the two units' paths diverged and starting coordinates were not logged. | Supports repeated post-cast damage for this target. The movement samples do not establish the slow amount or lifetime; poison-vs-direct damage attribution and expiry boundaries remain open. |
+| Shadow Strike (`AEsh`) | Order accepted. The initial batch recorded repeated target damage, but its moving control did not isolate slow or poison. See the controlled follow-ups below. | Earlier samples are superseded for slow and poison attribution by the source-filtered/stationary follow-ups below. |
 | Earthquake (`AOeq`) | Order accepted. Building life fell from 250 to 0 in five one-second samples; ground unit life stayed 210, and the channel order remained active until Stop. | Supports building damage and no damage to the sampled ground unit in this setup. |
 | Cluster Rockets (`ANcs`) | Order accepted. By 3 s one ground unit had taken 34.579, the building 35, the second ground unit and air unit no damage. | Supports those sampled target outcomes only; the short observation does not establish the full duration, cap, or all target masks. |
 | Carrion Swarm (`ACca`) | `IssuePointOrder` returned false, but later damage events were recorded on some watched units, including a same-owner unit. | Inconclusive: accepted-order status conflicts with observed damage. Use a fresh caster without an inherited `ACca`, log `OrderId("carrionswarm")` and caster state, then repeat before making a behavior claim. |
@@ -275,6 +275,81 @@ capture tool marked the overall file `inconclusive` because it found the
 `AR_CSW_SETUP accepted=0` marker, despite finding `AR_DONE`. Keep the separate
 focused v6/v7 Carrion behavior results as the behavioral evidence; do not use
 this batch to revise their target-filter conclusion.
+
+### Shadow Strike movement-speed follow-up (October 16, 2026)
+
+A focused replay used the same pinned Retail executable and OrcX01 campaign
+map. It removed both movement orders from the Shadow Strike target/control
+pair and logged `GetUnitMoveSpeed` alongside their positions once per second.
+The JASS cast returned true; both units reported speed `270.000` before the
+cast. The target remained at a fixed position. At the first one-second sample
+after the cast, it reported `150.000` while the control remained `270.000`.
+Subsequent target samples rose to `160.084`, `181.851`, `200.536`,
+`216.374`, and `229.601`; the control stayed at `270.000`. This confirms a
+cast-associated movement slow and a changing slow magnitude in this rank-1
+scenario.
+
+That first run's target died before the slow ended, so a second replay raised
+both targets' max/current life to 10,000 and observed for 30 seconds. The
+target remained at a fixed position and alive. Its reported speed rose through
+`160.084`, `181.851`, `200.536`, `216.374`, `229.601`, `240.452`, `249.162`,
+`255.966`, `261.100`, `264.799`, `267.297`, `268.832`, and `269.637`; at the
+15-second sample it was `270.000`, matching the unchanged control. It stayed
+at `270.000` through the 30-second sample. This confirms natural recovery to
+baseline by 15 seconds in this rank-1 scenario. The initial `150.000` may be a
+movement-speed floor, so it does not establish the underlying slow percentage
+or exact internal decay formula.
+
+#### Initial hit and poison pulse capture
+
+A third replay logged each `EVENT_UNIT_DAMAGED` event's source, source owner,
+and amount while the 10,000-life target remained stationary and alive. The
+accepted rank-1 `AEsh` cast produced a `75.000`-damage event at the first
+sample (`AB_SS_EVENT tick=1`); the event source was the caster (`Ewar`, Player
+0). Further caster-sourced events of exactly `10.000` occurred at ticks 7, 13,
+19, 25, and 31. The JASS timer advances every 0.5 seconds, so those five
+equal-damage pulses are spaced by 3 seconds; the last observed pulse falls at
+the end of the authored 15.1-second status window, within the timer's half-
+second sampling phase. Other caster-sourced events had variable amounts,
+consistent with ordinary combat damage; they are not counted as poison pulses.
+This directly confirms the level-1 initial damage and five poison pulses for
+this cast.
+
+The installed TFT `AbilityData` audit independently gives `AEsh` DataA=10,
+DataB=0.5, DataC=0, DataD=3, DataE=75, Cast=3, and Dur/HeroDur=15.1. Its
+tooltip specifies DataE as initial damage and DataA every Cast seconds for
+Dur; the event capture matches those values. Runtime speed starts at the
+150-unit floor and recovers to 270 by the 15-second sample, consistent with
+the authored 0.5 movement reduction decaying over the poison duration. The
+exact internal decay curve is not established. The hero row has DataC=0, so it
+does not author an attack-rate reduction; the attempted cooldown native query
+returned 0 for both units and cannot test attack speed dynamically.
+
+The creep alias `ACss` shares the `CAbilityShadowStrike` class and `BEsh` buff,
+but its authored values differ: DataA=10, DataB=0.9, DataC=0.9, DataE=75,
+Cast=2, Dur/HeroDur=15.1. A separate cast added `ACss` to the test caster and
+used a mechanical `hmtm` target, which is compatible with the alias's authored
+target mask. Retail accepted the order; the target received a caster-sourced
+75 initial hit and five caster-sourced 10-damage pulses at 3-second intervals.
+Its movement speed stayed at the engine floor initially, then recovered to
+270 by the 16-second sample, while the untreated control stayed at 270. This
+confirms the alias's hit, poison, and movement-slow path in this scenario. Its
+DataC=0.9 attack-rate reduction remains dynamically unverified because the
+Retail `BlzGetUnitAttackCooldown` query returned zero for both units; a
+controlled attack-cycle probe is still needed.
+
+Raw event capture: `/tmp/wc3-shadow-events-verify/run/result.txt`, SHA-256
+`88aa2c6b6911224ffe0e3e8ba384bc65dae00d5fc49018cdca477499dd5e5e2b`.
+The source-filtered event rows and long-lived speed samples can be reviewed
+there. The earlier disposable captures remain under
+`/tmp/wc3-shadow-slow-verify/` and `/tmp/wc3-shadow-final-verify/run3/`.
+The `ACss` capture is `/tmp/wc3-shadow-alias-verify/run/result.txt`, SHA-256
+`8022a1449fa57407f4404c8d2ab1fd270c362f458bd3cd433c9bd561f8956882`.
+
+For this probe, attack speed is closed for the Hero ability: `AEsh` authors
+DataC=0, so it has no attack-rate reduction to implement. The creep alias's
+nonzero DataC is a separate behavior and remains open until an attack-cycle
+probe measures `ACss` on a unit actively attacking a controlled target.
 
 The fresh JASS result SHA-256 is
 `fea567f49a0c7aee6866ebc72ae8bfce563da332976d542ce1f3da856b6d4c66`; the

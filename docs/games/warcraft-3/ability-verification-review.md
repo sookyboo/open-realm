@@ -26,7 +26,8 @@ prove gameplay behavior.
 | Purge (`Apg2`) | Probes distinguish tested friendly and hostile movement effects. | Exact slow/recovery timing and aliases. |
 | Carrion Swarm (`ACca`) | Stock TFT probes establish tested ground/air and ally/structure outcomes, a four-target sample cap, 160–240 unit width bracket, and a distal target hit at 600 units. | Data field mapping, full travel/collision rules, cap source, target-order effects, aliases. |
 | Phoenix Fire | Native path reaches scheduled area acquisition, shared target validation, duplicate `Bpxf` filtering, and effect setup. | Interval/radius/Data mapping, damage owner, missile/buff tick and expiry. This is the next static trace. |
-| Earthquake, Immolation, Shadow Strike, Cluster Rockets | The log records bounded sampled outcomes. | Their unsampled branches and authored field meanings; see the native inspection queue. |
+| Shadow Strike (`AEsh` / `ACss`) | Controlled Retail captures verify the 75 initial hit, five source-matched 10-damage pulses 3 seconds apart, and rank-1 movement-slow recovery for both aliases. AbilityData confirms AEsh DataC=0 and ACss DataC=0.9. | Exact movement-decay curve and ACss attack-rate effect; cooldown native returned zero, so an attack-cycle probe is needed. See [Shadow Strike evidence](ability-probes/multi-ability-batch.md#shadow-strike-movement-speed-follow-up-october-16-2026). |
+| Earthquake, Immolation, Cluster Rockets | The log records bounded sampled outcomes. | Their unsampled branches and authored field meanings; see the native inspection queue. |
 
 ## Repeatable workflow
 
