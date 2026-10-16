@@ -6,7 +6,7 @@ PE32 x86, SHA-256
 image base `0x00400000`. Re-derive every address for a different hash.
 
 The [machine-readable inventory](ability-function-investigation.json) is the
-source of record: 49 functions, 39 verified relationships, explicit confidence
+source of record: 54 functions, 65 verified relationships, explicit confidence
 and unresolved semantics. This page gives only the starting points. For context
 and procedures, see [ability research](ability-research.md), [Retail
 architecture](ability-retail-architecture.md), and the [repeatable RE
@@ -26,6 +26,7 @@ workflow](retail-shared-ability-re.md).
 | Poison/on-hit | `0x00BDCF70`, `0x006EF880`, Apoi hooks `+0xF8/+0xFC` | Compare poison classes and recover callback arguments/event producer. |
 | Summons | `0x00687CA0` shared unit construction | Separate summon-specific expiry from generic timed life/removal. |
 | Timed-life/events | `0x006F6820`, `0x006F6BD0`, `0x007FBE90` | Resolve event meanings and expiry-to-removal callers. |
+| Presentation natives | `0x004892B0` effect creation; `0x004AAFC0` animation request; `0x00966C10` unit animation application | Effect natives converge on positioned or target-attached constructors; animation string/rarity/queue natives converge on one request path. Ability-authored visuals still need caller comparison. See [presentation native trace](ability-probes/presentation-natives.md). |
 
 Phoenix Fire's scheduled callback reaches area enumeration, common validation,
 duplicate `Bpxf` lookup, and effect setup. Its damage owner and interval/data
