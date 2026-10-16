@@ -155,6 +155,26 @@ Dur/HeroDur relationship, exact radius field, damage type, and expiry/removal
 behavior. Do not promote the tooltip or the presence of the missile class into
 proof of those details.
 
+#### Live probe attempt (October 16, 2026): inconclusive
+
+The checked-in runner probe has not completed a standalone Retail run because
+the existing Warcraft process owns the active Wine prefix. A separate
+diagnostic update was applied to that process through its existing JHCR chat
+trigger. JHCR returned status `1`, and `GetUnitAbilityLevel` reported Apxf
+level 1 on all three spawned Phoenix units. However, all three `attack` orders
+were rejected, and the final capture contained no target damage-event records.
+Target life also fell substantially without matching records, so the current
+event logger/setup cannot support a gameplay conclusion.
+
+Raw capture:
+`/home/agent/.wine-war3/drive_c/users/agent/Documents/Warcraft III/CustomMapData/phoenix-fire-jhcr-live.txt`,
+SHA-256 `7e492e640112da22a45d47253df9074b7269aec032893233350d785522fdef41`.
+The ad hoc JHCR updates under `/tmp/phoenix-fire-jhcr-update-*.j` are not
+replay inputs. The checked-in probe was corrected to use unpaused stationary
+enemy targets, disable fog, and record all target damage sources. It still
+needs a standalone Retail run before any Phoenix Fire behavior is considered
+verified. The original Warcraft process remains open.
+
 The checked-in exact-build Ghidra project is `screenshots/ghidra/WarcraftIII`;
 its `functions.csv` records function boundaries. `Wc3DumpFunction.java` is not
 present in this checkout, so inspect these functions with the GUI and
