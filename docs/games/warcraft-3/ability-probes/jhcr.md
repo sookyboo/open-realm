@@ -4,6 +4,38 @@ Repeatable workflow for testing JASS updates in a live Warcraft III Retail
 1.29.2.9231 process with [JHCR](https://github.com/lep/jhcr). It was verified
 under Wine; it does not require Docker.
 
+## Prefer JHCR for repeatable code iterations
+
+When a compatible JHCR-instrumented test map is already loaded and the
+experiment can be expressed by reloading its JASS functions, prefer JHCR over
+rebuilding and relaunching Warcraft for each iteration. Keep the normal Retail
+runner workflow for preparing/loading the map and recording evidence; JHCR
+shortens the edit-run loop, but does not replace controls or result capture.
+A newly prepared map cannot be injected into an arbitrary active map.
+
+Make each probe rerunnable:
+
+- Keep its manifest, source script, setup/scenario steps, and expected output
+  together. Reuse the runner's prepared directory, JHCR state, and cookie for
+  one loaded map; do not advance sequence state outside `jhcr-update`.
+- Separate one-time setup from functions called by active timers/events. Prefer
+  reloading a small logger or result formatter. Add a function to
+  `jhcr_reloadable_functions` only after reviewing its runtime role; replacing
+  a live callback has stalled a probe even when JHCR reported success.
+- Record baseline and treatment runs with positive and negative controls.
+  Change one hypothesis at a time, use unique run identifiers in output, and
+  preserve raw results alongside a concise interpretation.
+- For every reload, check status `1`, a newly changed marker, and completion
+  of the expected probe. Then confirm control behavior and that timers/events
+  continue. Status `1` alone only confirms payload application.
+- Use `jhcr-update` for each compiled source revision, then trigger exactly
+  one reload. A second reload without a matching update consumes the next
+  sequence and produces `NO_DATA`.
+
+If the active map or probe lifecycle is incompatible, prepare and load a map
+with the Retail probe runner instead. JHCR is an iteration shortcut when its
+preconditions fit, not a reason to force unrelated scenarios into a live map.
+
 ## Build and instrument the map once
 
 Use the matching 1.29 `common.j` (`common-1.29.2.j`) and keep the JHCR state
