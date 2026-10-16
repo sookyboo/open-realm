@@ -340,6 +340,18 @@ same routine with callback `0x00C31220` to gather path candidates, then applies
 attack target gates and calls its own damage callback `0x00C30BB0` for selected
 missiles. This is shared candidate enumeration, not shared hit resolution.
 
+Another shared client is `0x006EE920`, called by two RTTI-identified ability
+callbacks: Barrage (`CAbilityBarrage` vtable `0x00F5B644`, slot `+0x150`
+target `0x00BD70F0`, callsite `0x00BD71A6`) and Fan of Knives
+(`CAbilityFanOfKnives` vtable `0x00F95DA4`, slot `+0x430` target
+`0x00C4A100`, callsite `0x00C4A1C3`). It runs `0x0068EA00` with ten clauses
+and callback `0x006EEBF0`, gathers a second candidate list through
+`0x00AB2000` / `0x006EEB90`, then applies `0x006ED2D0` to each selected
+candidate. That setup resolves a typed effect object through `0x006EB060`
+and enters `0x006ECE00`. This is verified shared area-target acquisition and
+per-candidate effect setup for two distinct abilities; it does not establish
+their damage semantics or that their target policies are identical.
+
 The query builder installs reusable generated predicates based on typed
 clauses:
 

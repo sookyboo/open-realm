@@ -4066,6 +4066,75 @@
       },
       "record_kind": "function",
       "related_addresses_semantics": "Addresses mentioned in the evidence; direct calls are asserted in verified_relationships."
+    },
+    {
+      "id": "fn_002ee920",
+      "label": "Shared Barrage/Fan of Knives area-target effect setup",
+      "category": "targeting",
+      "status": "partially_resolved",
+      "confidence": "high",
+      "addresses": [
+        {
+          "va": "0x006ee920",
+          "rva": "0x002ee920",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "RTTI identifies two direct callers: CAbilityBarrage vtable 0x00F5B644 slot +0x150 callback 0x00BD70F0 (callsite 0x00BD71A6) and CAbilityFanOfKnives vtable 0x00F95DA4 slot +0x430 callback 0x00C4A100 (callsite 0x00C4A1C3). This routine runs shared area-query builder 0x0068EA00 with ten clauses and callback 0x006EEBF0, gathers a second candidate list via 0x00AB2000 / 0x006EEB90, then loops candidates through 0x006ED2D0. That helper resolves an object via 0x006EB060 and calls 0x006ECE00. This confirms shared area-target acquisition/per-candidate effect setup, not identical target policy or damage semantics.",
+      "related_addresses": [
+        {
+          "va": "0x00F5B644",
+          "rva": "0x00B5B644",
+          "kind": "vtable_va"
+        },
+        {
+          "va": "0x00BD70F0",
+          "rva": "0x008D70F0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00F95DA4",
+          "rva": "0x00B95DA4",
+          "kind": "vtable_va"
+        },
+        {
+          "va": "0x00C4A100",
+          "rva": "0x0084A100",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x0068EA00",
+          "rva": "0x0028EA00",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x006EEBF0",
+          "rva": "0x002EEBF0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00AB2000",
+          "rva": "0x006B2000",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x006EEB90",
+          "rva": "0x002EEB90",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x006ED2D0",
+          "rva": "0x002ED2D0",
+          "kind": "function_va"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared area-query builder and generated predicates"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in this evidence; asserted call and callback edges are in verified_relationships."
     }
   ],
   "record_schema": {
@@ -9456,6 +9525,82 @@
         "document": "docs/games/warcraft-3/ability-probes/combat.md",
         "section": "Shared typed effect-object resolver"
       }
+    },
+    {
+      "from": {
+        "va": "0x00BD70F0",
+        "rva": "0x008D70F0",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x006EE920",
+        "rva": "0x002EE920",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "CAbilityBarrage callback invokes shared candidate acquisition and effect setup at callsite 0x00BD71A6.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared area-query builder and generated predicates"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00C4A100",
+        "rva": "0x0084A100",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x006EE920",
+        "rva": "0x002EE920",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "CAbilityFanOfKnives callback invokes shared candidate acquisition and effect setup at callsite 0x00C4A1C3.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared area-query builder and generated predicates"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006EE920",
+        "rva": "0x002EE920",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x0068EA00",
+        "rva": "0x0028EA00",
+        "kind": "function_va"
+      },
+      "kind": "callback_dispatch",
+      "context": "Shared ability path invokes the clause-driven area query with ten clauses and callback 0x006EEBF0.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared area-query builder and generated predicates"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006EE920",
+        "rva": "0x002EE920",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x006ED2D0",
+        "rva": "0x002ED2D0",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "After candidate acquisition, the routine applies per-candidate effect setup to each selected result.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Shared area-query builder and generated predicates"
+      }
     }
   ],
   "relationship_kinds": {
@@ -9464,6 +9609,6 @@
     "callback_dispatch": "Call through a callback argument or registered callback path.",
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
   },
-  "entry_count": 85,
-  "verified_relationship_count": 308
+  "entry_count": 86,
+  "verified_relationship_count": 312
 }
