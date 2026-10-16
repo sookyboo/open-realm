@@ -369,6 +369,30 @@ Raw result: `/tmp/wc3-shadow-attack-focused/run10/result.txt`, SHA-256
 The probe map and JASS sources remain temporary under
 `/tmp/wc3-shadow-attack-focused/run10/` and were not committed.
 
+#### ACss attack-cycle replay with a live JHCR update
+
+A further Retail 1.29.2.9231 run used the probe runner's `prepare --jhcr`
+path, then loaded that instrumented OrcX01 map. During the run, the runner's
+`jhcr-update` command published sequence 1; the in-map reload trigger reported
+`SS_JHCR_STATUS=1`. The update changed only the logging helper, and its
+`SS_JHCR_SAFE_UPDATE` marker appeared 20 times in the completed result,
+confirming that execution continued through the reloaded code.
+
+The ability observations matched the earlier attack-cycle result: accepted
+`ACss`, spell effect at tick 104, 35-tick baseline intervals in both lanes,
+and control intervals fixed at 35 ticks. Treated-lane intervals stretched to
+60, 55, and 39 ticks after the cast, then returned to 35 ticks. The run
+finished at tick 550 with 14 treated-lane and 16 control-lane hits. This
+independently reproduces the attack-rate reduction while exercising live JHCR
+reload during the probe.
+
+Do not hot-reload an active periodic timer callback as part of this harness:
+an attempted update to `SS_Tick` returned status 1 but stopped its counter at
+tick 418, preventing `SS_DONE`. Updating the non-callback `SS_Log` helper left
+the timer running to completion. Raw result:
+`/tmp/jhcr-shadow-strike-safe/result.txt`, SHA-256
+`b59597dd897a1f49bfb4de76c8b934a1228f1df890dc7e0918f835dd16936b4e`.
+
 `AEsh` is closed for attack speed: its DataC=0, so it authors no attack-rate
 reduction. For the creep alias, the attack-rate reduction is verified above;
 only its exact decay curve remains open.
