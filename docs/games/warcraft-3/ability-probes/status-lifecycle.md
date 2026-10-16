@@ -85,6 +85,30 @@ verified BTLF expiry path. BTLF self-removal does dispatch owner event
 unit-death/removal call is established, so this is not evidence that timed-life
 expiry kills or removes its owner.
 
+## Summoned-unit relation setup lead
+
+Exact-build callbacks `0x00C31B40` (Spirit Wolf) and `0x00C34150`
+(Serpent Ward) call shared helper `0x0068AB70` after successful unit
+construction. At the Spirit Wolf call site, `ECX` is the caster and the stack
+argument is the created unit returned by `0x00CAF240`. The helper obtains owner
+context, passes caster/unit through `0x004BC0F0`, then creates or updates a
+relation object keyed by `0x00080254` through `0x0068A9A0`. It copies paired
+fields from matching attached ability data into relation-object offsets
+`+0x20/+0x24` and `+0x2C/+0x30`; absent matches write `-1` sentinels.
+
+This is a high-priority summon lifecycle lead because it records a relationship
+at creation time and has 29 direct references in full-analysis Ghidra. The
+relation object's gameplay purpose, its removal path, and whether all callers
+supply summoned units remain unresolved. Do not infer timed-life expiry or
+summon cleanup from this setup function alone.
+
+Reproduce the central call chain with radare2:
+
+```sh
+r2 -q -c 'e scr.color=0; pd 90 @ 0x00c31b40; pd 90 @ 0x0068ab70; pd 60 @ 0x0068a9a0; pd 55 @ 0x004bc0f0; q' \
+  'data/Warcraft III/Warcraft III.exe'
+```
+
 ## Timed-life callback boundary
 
 The pinned `CBuffTimedLife` vtable at `0x00EA63AC` maps slot `+0x328` to
