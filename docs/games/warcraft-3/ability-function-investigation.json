@@ -26,7 +26,8 @@
   "sources": [
     "docs/games/warcraft-3/ability-shared-native-functions.md",
     "docs/games/warcraft-3/ability-retail-probe-log.md",
-    "docs/games/warcraft-3/ability-probes/combat.md"
+    "docs/games/warcraft-3/ability-probes/combat.md",
+    "docs/games/warcraft-3/ability-probes/status-lifecycle.md"
   ],
   "functions": [
     {
@@ -565,6 +566,60 @@
       },
       "record_kind": "function",
       "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_0028a9a0",
+      "label": "Shared keyed-association updater",
+      "category": "shared_native",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x0068a9a0",
+          "rva": "0x0028a9a0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [],
+      "evidence_summary": "Full-analysis Ghidra reports 45 direct call references from 43 functions. Decompiler signature: void __thiscall FUN_0068A9A0(int *context, undefined4 key, int *value). It obtains shared context via 0x00477710, allocates a 0x14-byte object with vtable 0x00E78664, and uses 0x004E72C0, 0x004E8180, and reference/class checks while updating an association. 0x0068AB70 calls it with key 0x00080254 after Spirit Wolf and Serpent Ward construction; 0x0068ACD0 calls it with key 0x0008023C and has three direct callers (0x00B19BD0, 0x00B1C4F0, 0x00B24740). This is a shared keyed-association update candidate, not a confirmed summon registry; key and value semantics and cleanup remain unresolved.",
+      "related_addresses": [
+        {
+          "va": "0x00E78664",
+          "rva": "0x00A78664",
+          "kind": "vtable_va"
+        },
+        {
+          "va": "0x0068AB70",
+          "rva": "0x0028AB70",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x0068ACD0",
+          "rva": "0x0028ACD0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00477710",
+          "rva": "0x00077710",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x004E72C0",
+          "rva": "0x000E72C0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x004E8180",
+          "rva": "0x000E8180",
+          "kind": "function_va"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/status-lifecycle.md",
+        "section": "Shared keyed-association updater"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in the evidence; only explicit caller/callee edges in verified_relationships are asserted."
     },
     {
       "id": "fn_0028ea00",
@@ -3972,6 +4027,44 @@
     "verified_relationships": "Explicit caller/callee, virtual-dispatch, or callback edges established by source notes; unlike related_addresses, these are asserted relationships."
   },
   "verified_relationships": [
+    {
+      "from": {
+        "va": "0x0068AB70",
+        "rva": "0x0028AB70",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x0068A9A0",
+        "rva": "0x0028A9A0",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "Post-creation unit relation/update helper calls the shared keyed-association updater with key 0x00080254 after Spirit Wolf and Serpent Ward construction; the association's gameplay meaning remains unresolved.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/status-lifecycle.md",
+        "section": "Shared keyed-association updater"
+      }
+    },
+    {
+      "from": {
+        "va": "0x0068ACD0",
+        "rva": "0x0028ACD0",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x0068A9A0",
+        "rva": "0x0028A9A0",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "Second keyed-association wrapper calls the shared updater with key 0x0008023C; key semantics remain unresolved.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/status-lifecycle.md",
+        "section": "Shared keyed-association updater"
+      }
+    },
     {
       "from": {
         "va": "0x00c31430",
@@ -9279,6 +9372,6 @@
     "callback_dispatch": "Call through a callback argument or registered callback path.",
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
   },
-  "entry_count": 83,
-  "verified_relationship_count": 304
+  "entry_count": 84,
+  "verified_relationship_count": 306
 }
