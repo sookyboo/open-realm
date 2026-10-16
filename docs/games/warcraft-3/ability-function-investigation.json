@@ -1027,7 +1027,7 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "Exact-build disassembly confirms the function rejects null/already-removed instances, sets the removed flag, walks sibling attached objects and calls their vtable slot +0x1A8 with the removed instance, updates the owner's linked-list metadata, invokes the removed object's +0x1A8 hook, and detaches it. It also clears owner cached pointers for selected rawcodes. Verified callers include UnitRemoveAbility (0x004AF590), the shared UnitRemoveBuffs/UnitRemoveBuffsEx loop (0x006D87A0), and Mana Shield depletion (0x00C7A3F0). Full-analysis Ghidra found 221 direct call references from 174 functions. The initiating cause still depends on caller and object class.",
+      "evidence_summary": "Exact-build disassembly confirms the function rejects null/already-removed instances, sets the removed flag, walks sibling attached objects and calls their vtable slot +0x1A8 with the removed instance, updates the owner's linked-list metadata, invokes the removed object's +0x1A8 hook, and detaches it. It also clears owner cached pointers for selected rawcodes. Verified callers include UnitRemoveAbility (0x004AF590), the shared UnitRemoveBuffs/UnitRemoveBuffsEx loop (0x006D87A0), and Mana Shield depletion (0x00C7A3F0). Full-analysis Ghidra found 221 direct call references from 174 functions. The initiating cause still depends on caller and object class. The CBuffTimedLife vtable 0x00EA63AC maps its +0x1A8 removal hook to 0x006F2730. On self-removal that hook dispatches owner event 0xD01A1 through 0x006C0010; when expiry flag +0x20 & 0x80 is set it also runs owner-side checks/virtual calls +0x360/+0x364 and a point-query path through 0x00693650. No direct unit-death/removal call is established; event and callback semantics remain unresolved.",
       "related_addresses": [
         {
           "va": "0x004af590",
@@ -1040,6 +1040,22 @@
         {
           "va": "0x00c7a3f0",
           "rva": "0x0087a3f0"
+        },
+        {
+          "va": "0x006F2730",
+          "rva": "0x002f2730"
+        },
+        {
+          "va": "0x00EA63AC",
+          "rva": "0x00AA63AC"
+        },
+        {
+          "va": "0x006C0010",
+          "rva": "0x002c0010"
+        },
+        {
+          "va": "0x00693650",
+          "rva": "0x00293650"
         }
       ],
       "source": {
