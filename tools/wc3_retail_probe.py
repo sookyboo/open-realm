@@ -11,6 +11,7 @@ gate setup readiness but never decide gameplay pass/fail.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import fcntl
 import hashlib
 import json
@@ -53,6 +54,164 @@ JASS_GLOBAL_TYPES = frozenset((
 
 class ProbeError(RuntimeError):
     """A preparation or capture input failed validation."""
+
+
+def x11_mouse_click(args: argparse.Namespace) -> None:
+    """Send a scaled XTest click and optionally require a local screen change."""
+    try:
+        x11 = ctypes.CDLL("libX11.so.6")
+        xtst = ctypes.CDLL("libXtst.so.6")
+    except OSError as error:
+        raise ProbeError(f"X11 mouse input libraries are unavailable: {error}") from error
+
+    display_name = os.environ.get("DISPLAY")
+    if not display_name:
+        raise ProbeError("DISPLAY is unset; cannot send mouse input to Warcraft")
+    x11.XOpenDisplay.restype = ctypes.c_void_p
+    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    display = x11.XOpenDisplay(display_name.encode())
+    if not display:
+        raise ProbeError(f"cannot connect to X display {display_name!r}; check DISPLAY/XAUTHORITY")
+
+    x11.XDefaultScreen.restype = ctypes.c_int
+    x11.XDefaultScreen.argtypes = [ctypes.c_void_p]
+    x11.XDefaultRootWindow.restype = ctypes.c_ulong
+    x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+    for name in ("XDisplayWidth", "XDisplayHeight"):
+        function = getattr(x11, name)
+        function.restype = ctypes.c_int
+        function.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    x11.XQueryPointer.restype = ctypes.c_int
+    x11.XQueryPointer.argtypes = [
+        ctypes.c_void_p, ctypes.c_ulong,
+        ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_ulong),
+        ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_uint),
+    ]
+    xtst.XTestFakeMotionEvent.restype = ctypes.c_int
+    xtst.XTestFakeMotionEvent.argtypes = [
+        ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_ulong]
+    xtst.XTestFakeButtonEvent.restype = ctypes.c_int
+    xtst.XTestFakeButtonEvent.argtypes = [
+        ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
+
+    screen = x11.XDefaultScreen(display)
+    width = x11.XDisplayWidth(display, screen)
+    height = x11.XDisplayHeight(display, screen)
+    if width < 1 or height < 1:
+        raise ProbeError(f"X display reports invalid dimensions {width}x{height}")
+    if not (0 <= args.x < args.reference_width and 0 <= args.y < args.reference_height):
+        raise ProbeError(
+            f"click ({args.x},{args.y}) is outside reference canvas "
+            f"{args.reference_width}x{args.reference_height}")
+
+    # Map screenshot coordinates to the live display. Preserve the screenshot
+    # aspect ratio by default so a 4:3 game viewport centered in a wider Xvfb
+    # screen keeps its horizontal letterbox offset.
+    if args.mapping == "contain":
+        scale = min(width / args.reference_width, height / args.reference_height)
+        offset_x = (width - args.reference_width * scale) / 2
+        offset_y = (height - args.reference_height * scale) / 2
+        x = round(offset_x + (args.x + 0.5) * scale - 0.5)
+        y = round(offset_y + (args.y + 0.5) * scale - 0.5)
+    else:
+        offset_x = offset_y = 0.0
+        x = round(args.x * (width - 1) / max(1, args.reference_width - 1))
+        y = round(args.y * (height - 1) / max(1, args.reference_height - 1))
+
+    sample_region = None
+    before = None
+    changed_fraction = 0.0
+    if args.expect_change:
+        rx, ry, rw, rh = args.expect_change
+        if rw < 1 or rh < 1 or rx < 0 or ry < 0 or rx + rw > width or ry + rh > height:
+            raise ProbeError(
+                f"expected-change region ({rx},{ry},{rw},{rh}) is outside display {width}x{height}")
+        x11.XGetImage.restype = ctypes.c_void_p
+        x11.XGetImage.argtypes = [
+            ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_int,
+            ctypes.c_uint, ctypes.c_uint, ctypes.c_ulong, ctypes.c_int]
+        x11.XGetPixel.restype = ctypes.c_ulong
+        x11.XGetPixel.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+        x11.XDestroyImage.argtypes = [ctypes.c_void_p]
+
+        def sample_region() -> tuple[int, ...]:
+            image = x11.XGetImage(display, x11.XDefaultRootWindow(display),
+                                  rx, ry, rw, rh, 0xFFFFFFFF, 2)  # ZPixmap
+            if not image:
+                raise ProbeError("XGetImage failed while checking the expected UI response")
+            try:
+                # Bound sampling cost while still covering the entire region.
+                step = max(1, int((rw * rh / 4096) ** 0.5))
+                return tuple(x11.XGetPixel(image, px, py)
+                             for py in range(0, rh, step)
+                             for px in range(0, rw, step))
+            finally:
+                x11.XDestroyImage(image)
+
+    if not xtst.XTestFakeMotionEvent(display, screen, x, y, 0):
+        raise ProbeError("XTest could not move the pointer; is the XTEST extension enabled?")
+    x11.XSync(display, 0)
+    time.sleep(args.settle)
+    # Take the baseline after hover has settled, so only the click response
+    # (not pointer movement or hover highlighting) satisfies --expect-change.
+    if sample_region:
+        before = sample_region()
+
+    button = 1 if args.button == "left" else 3
+    if not xtst.XTestFakeButtonEvent(display, button, 1, 0):
+        raise ProbeError("XTest could not press the mouse button")
+    x11.XSync(display, 0)
+    time.sleep(0.06)
+    if not xtst.XTestFakeButtonEvent(display, button, 0, 0):
+        raise ProbeError("XTest could not release the mouse button")
+    x11.XSync(display, 0)
+
+    root_return = ctypes.c_ulong()
+    child_return = ctypes.c_ulong()
+    root_x, root_y = ctypes.c_int(), ctypes.c_int()
+    win_x, win_y = ctypes.c_int(), ctypes.c_int()
+    mask = ctypes.c_uint()
+    if not x11.XQueryPointer(display, x11.XDefaultRootWindow(display),
+                             ctypes.byref(root_return), ctypes.byref(child_return),
+                             ctypes.byref(root_x), ctypes.byref(root_y),
+                             ctypes.byref(win_x), ctypes.byref(win_y), ctypes.byref(mask)):
+        raise ProbeError("X server could not confirm the resulting pointer position")
+    if (root_x.value, root_y.value) != (x, y):
+        raise ProbeError(
+            f"pointer ended at ({root_x.value},{root_y.value}), expected scaled target ({x},{y})")
+
+    if sample_region and before is not None:
+        deadline = time.monotonic() + args.change_timeout
+        while time.monotonic() < deadline:
+            time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+            after = sample_region()
+            changed_fraction = sum(a != b for a, b in zip(before, after)) / max(1, len(before))
+            if changed_fraction >= args.change_fraction:
+                break
+        else:
+            raise ProbeError(
+                f"click was sent, but expected screen region did not change enough "
+                f"({changed_fraction:.3%} < {args.change_fraction:.3%}); inspect the target, "
+                "display scaling, focus, and expected-change region")
+
+    print(json.dumps({
+        "display": display_name,
+        "display_size": [width, height],
+        "reference_size": [args.reference_width, args.reference_height],
+        "reference_point": [args.x, args.y],
+        "mapping": args.mapping,
+        "viewport_offset": [round(offset_x, 2), round(offset_y, 2)],
+        "sent_point": [x, y],
+        "button": args.button,
+        "pointer_confirmed": True,
+        "screen_change_required": bool(args.expect_change),
+        "screen_change_fraction": changed_fraction if args.expect_change else None,
+    }))
+    x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+    x11.XCloseDisplay(display)
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -836,6 +995,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     capture_parser.add_argument("--timeout", type=float, default=180.0)
     capture_parser.add_argument("--poll-interval", type=float, default=1.0)
     capture_parser.set_defaults(func=capture)
+    click_parser = commands.add_parser(
+        "click", help="send a resolution-scaled X11 click and optionally verify a screen change")
+    click_parser.add_argument("x", type=int, help="X coordinate on the reference canvas")
+    click_parser.add_argument("y", type=int, help="Y coordinate on the reference canvas")
+    click_parser.add_argument("--reference-width", type=int, default=640,
+                              help="reference canvas width (default: 640)")
+    click_parser.add_argument("--reference-height", type=int, default=480,
+                              help="reference canvas height (default: 480)")
+    click_parser.add_argument("--mapping", choices=("contain", "stretch"), default="contain",
+                              help="preserve aspect ratio/center letterboxing, or stretch coordinates")
+    click_parser.add_argument("--button", choices=("left", "right"), default="left")
+    click_parser.add_argument("--settle", type=float, default=0.2,
+                              help="seconds between pointer motion and click")
+    click_parser.add_argument("--expect-change", nargs=4, type=int, metavar=("X", "Y", "W", "H"),
+                              help="require this display-pixel region to change after the click")
+    click_parser.add_argument("--change-timeout", type=float, default=5.0)
+    click_parser.add_argument("--change-fraction", type=float, default=0.02,
+                              help="minimum changed sample fraction (default: 0.02)")
+    click_parser.set_defaults(func=x11_mouse_click)
     launch_parser = commands.add_parser(
         "launch", help="launch the control or prepared map with the documented Wine arguments")
     launch_parser.add_argument("probe_dir", type=Path, help="directory created by prepare")
@@ -863,6 +1041,16 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "timeout", 1.0) <= 0 or getattr(args, "poll_interval", 0.1) <= 0:
         print("error: timeout and poll-interval must be positive", file=sys.stderr)
         return 2
+    if getattr(args, "command", None) == "click":
+        if args.reference_width < 1 or args.reference_height < 1:
+            print("error: reference dimensions must be positive", file=sys.stderr)
+            return 2
+        if args.settle < 0 or args.change_timeout <= 0:
+            print("error: settle must be non-negative and change-timeout positive", file=sys.stderr)
+            return 2
+        if not 0 < args.change_fraction <= 1:
+            print("error: change-fraction must be in (0, 1]", file=sys.stderr)
+            return 2
     try:
         args.func(args)
     except (OSError, ProbeError, json.JSONDecodeError) as error:

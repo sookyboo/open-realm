@@ -22,6 +22,12 @@ a scenario has a separately documented automation procedure.
 
 The checked-in [Shadow Strike attack-cycle probe](../../../../tools/retail_probes/shadow_strike_attack_cycle/manifest.json)
 is the ready-to-run example for this workflow.
+For a new ability question, start from the [general-purpose rerunnable JASS
+scaffold](../../../../tools/retail_probes/template/) and follow its
+[JHCR reuse and runner robustness guidelines](jhcr.md). Keep one-time setup,
+per-run reset, event registration, controls, output, and completion detection
+separate so a run can repeat without restarting Warcraft or registering
+duplicate handlers.
 The [Phoenix Fire radius probe](../../../../tools/retail_probes/phoenix_fire/manifest.json)
 uses a position-locked target at 650, 550, then 300 units. A live JHCR run in
 the already-running OrcX01 map found damage at 550 and 300, but none at 650;
@@ -35,6 +41,10 @@ through its existing JHCR state.
 For live JASS reload experiments without restarting Warcraft, follow the
 [JHCR 1.29 runbook](jhcr.md), which includes when to prefer JHCR and how to
 keep reloadable probes rerunnable and safe around active callbacks.
+For scripted UI transitions under Wine/X11, the runner's `click` command
+scales reference-image coordinates to the live display and can require a
+screen-region change before continuing; see the mouse-input section in the
+[JHCR runbook](jhcr.md).
 
 | Report | Contains |
 |---|---|

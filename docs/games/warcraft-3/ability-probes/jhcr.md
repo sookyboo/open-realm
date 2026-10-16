@@ -32,6 +32,39 @@ Make each probe rerunnable:
   one reload. A second reload without a matching update consumes the next
   sequence and produces `NO_DATA`.
 
+Use the [general-purpose probe scaffold](../../../../tools/retail_probes/template/)
+for new tests. It separates one-time trigger registration from per-run setup,
+provides unique run IDs, a damage-event logger, position locking, source-handle
+matching, a positive-control hook, and explicit start/done markers. Adapt the
+observable and controls to the hypothesis; do not treat a generic scaffold as
+proof that a scenario is isolated.
+
+### Lessons from live probes
+
+- A JHCR status of `1` means the payload loaded. Require the current run's
+  start and done markers, expected event markers, and passing controls before
+  calling an experiment complete. Preserve failed-run output too; setup/order
+  failures are evidence about the harness, not the ability.
+- `SetUnitMoveSpeed(unit, 0)` did not keep a campaign target stationary. Lock
+  test coordinates periodically with `SetUnitX`/`SetUnitY`, and log sampled
+  coordinates so movement cannot silently change the tested distance.
+- JASS `unit == unit` returned false for two references to the same observed
+  handle in a live damage probe. For source identity, record and compare
+  `GetHandleId` values; also log type IDs and coordinates to catch stale or
+  misconfigured references.
+- Isolate the signal from ambient gameplay. Filter damage by the registered
+  target and source handle, run a deliberate positive-control hit through the
+  same event path, then reset measured counters/target life before the treatment.
+  Include a no-effect or untreated control where the question permits one.
+- Make actions observable. Log whether orders were accepted, ability level,
+  run ID, target/source IDs, tested coordinates or distance, timestamps, and
+  final counts. A missing event without setup evidence is inconclusive.
+- If a runner failure is repeatable, fix the runner before spending more
+  Retail runs. Prefer preflight checks, freshness validation, process/prefix
+  detection, and actionable errors that prevent a bad run or capture its cause.
+  Record a one-off environment limitation in the run notes; do not turn a
+  recurring runner defect into a manual checklist item.
+
 If the active map or probe lifecycle is incompatible, prepare and load a map
 with the Retail probe runner instead. JHCR is an iteration shortcut when its
 preconditions fit, not a reason to force unrelated scenarios into a live map.
@@ -164,6 +197,48 @@ WINEPREFIX="$WINEPREFIX" wine reg add \
   'HKCU\Software\Blizzard Entertainment\Warcraft III' \
   /v 'Allow Local Files' /t REG_DWORD /d 1 /f
 ```
+
+### Resolution and mouse input
+
+Keep the Wine game resolution and Xvfb screen size aligned. For a 640×480
+probe run, set the Retail 1.29 values before starting Warcraft:
+
+```sh
+WINEPREFIX="$WINEPREFIX" wine reg add \
+  'HKCU\Software\Blizzard Entertainment\Warcraft III\Video' \
+  /v reswidth /t REG_DWORD /d 640 /f
+WINEPREFIX="$WINEPREFIX" wine reg add \
+  'HKCU\Software\Blizzard Entertainment\Warcraft III\Video' \
+  /v resheight /t REG_DWORD /d 480 /f
+WINEPREFIX="$WINEPREFIX" wine reg query \
+  'HKCU\Software\Blizzard Entertainment\Warcraft III\Video'
+```
+
+Start or configure Xvfb at the same dimensions. Registry changes do not resize
+an already-running game, and the active X server may not support in-place
+resizing; restart both before relying on screen coordinates. Record the display
+used by the run (`DISPLAY` and `XAUTHORITY`).
+
+The Retail runner can send a left click from a reference screenshot and map it
+to the actual X display. By default it preserves the reference aspect ratio
+and centers it, accounting for a 4:3 game viewport in a wider display:
+
+```sh
+python3 tools/wc3_retail_probe.py click 320 429 \
+  --reference-width 640 --reference-height 480 \
+  --expect-change 120 390 400 80
+```
+
+`--expect-change X Y W H` is an optional region in actual display pixels. Use
+`--mapping stretch` only when the game really stretches its viewport. The
+command samples it after pointer hover has settled, sends the click, and waits
+for at least 2% of sampled pixels to change. This detects many missed menu
+clicks and stale coordinate mappings; choose a region that changes because of
+the intended UI action and avoid animated scenery. Without this option, the
+runner confirms the pointer reached the scaled location and that XTest sent
+the press/release, but cannot establish that Warcraft handled the click. It
+uses the X11/XTest libraries directly and needs a valid `DISPLAY`/
+`XAUTHORITY`.
 
 ## Diagnose a `NO_DATA` result
 
