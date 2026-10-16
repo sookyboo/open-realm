@@ -217,7 +217,18 @@ WINEPREFIX="$WINEPREFIX" wine reg query \
 Start or configure Xvfb at the same dimensions. Registry changes do not resize
 an already-running game, and the active X server may not support in-place
 resizing; restart both before relying on screen coordinates. Record the display
-used by the run (`DISPLAY` and `XAUTHORITY`).
+used by the run (`DISPLAY` and `XAUTHORITY`). The `launch` command now checks
+that it can connect to X before starting Warcraft and records the display size.
+If the current shell does not inherit the Xvfb environment, pass it explicitly:
+
+```sh
+python3 tools/wc3_retail_probe.py launch /tmp/probe-run --control \
+  --wine-prefix "$WINEPREFIX" --display :104 \
+  --xauthority /path/from/Xvfb/-auth
+```
+
+The repeated-run tool accepts the same `--display` and `--xauthority` options
+and forwards them to each launch.
 
 The Retail runner can send a left click from a reference screenshot and map it
 to the actual X display. By default it preserves the reference aspect ratio
@@ -232,7 +243,9 @@ python3 tools/wc3_retail_probe.py click 320 429 \
 `--expect-change X Y W H` is an optional region in actual display pixels. Use
 `--mapping stretch` only when the game really stretches its viewport. The
 command samples it after pointer hover has settled, sends the click, and waits
-for at least 2% of sampled pixels to change. This detects many missed menu
+up to 2.5 seconds for at least 5% of sampled pixels to change. This filters
+small, slow scene-animation changes that can occur without a handled click.
+It detects many missed menu
 clicks and stale coordinate mappings; choose a region that changes because of
 the intended UI action and avoid animated scenery. Without this option, the
 runner confirms the pointer reached the scaled location and that XTest sent

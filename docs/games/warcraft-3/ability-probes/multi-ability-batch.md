@@ -333,10 +333,10 @@ target mask. Retail accepted the order; the target received a caster-sourced
 75 initial hit and five caster-sourced 10-damage pulses at 3-second intervals.
 Its movement speed stayed at the engine floor initially, then recovered to
 270 by the 16-second sample, while the untreated control stayed at 270. This
-confirms the alias's hit, poison, and movement-slow path in this scenario. Its
-DataC=0.9 attack-rate reduction remains dynamically unverified because the
-Retail `BlzGetUnitAttackCooldown` query returned zero for both units; a
-controlled attack-cycle probe is still needed.
+confirms the alias's hit, poison, and movement-slow path in this scenario. At
+the time, its DataC=0.9 attack-rate reduction remained dynamically unverified
+because the Retail `BlzGetUnitAttackCooldown` query returned zero for both
+units. The focused attack-cycle result below supersedes that open item.
 
 Raw event capture: `/tmp/wc3-shadow-events-verify/run/result.txt`, SHA-256
 `88aa2c6b6911224ffe0e3e8ba384bc65dae00d5fc49018cdca477499dd5e5e2b`.
@@ -397,6 +397,29 @@ it still does not identify the engine's continuous decay formula.
 Raw replay: [jhcr-restart-run.txt](../../../../tools/retail_probes/shadow_strike_attack_cycle/evidence/jhcr-restart-run.txt), SHA-256
 `a7769eab80b092252c06df4ad368409598e881d38e8556dbf259ac7ef5a5f04e`.
 
+#### ACss focused decay-curve run (October 16, 2026)
+
+A dedicated 50 ms JASS probe replaced the Mortar Team with a Footman, whose
+Retail `UnitWeapons.slk` authored cooldown is 1.35 seconds. The earlier attempt
+to use `BlzSetUnitAttackCooldown` was ineffective in this 1.29.2 setup: the
+getter returned zero, and Mortar Teams kept their authored 3.5-second cycle.
+The revised probe allowed eight baseline intervals before casting, then ran
+for 60 seconds with a same-unit untreated control. Both orders were accepted;
+the spell-effect event confirmed the cast at tick 259.
+
+Baseline and control intervals stayed at 27 ticks (1.35 seconds). The treated
+lane's first post-cast hit arrived 68 ticks (3.4 seconds) after the spell-effect
+event; its interval crossing the cast boundary was 73 ticks. Subsequent
+intervals were 53, 39, 34, 31, and 29 ticks, returning to 27 ticks by the next
+hit. This confirms a substantial attack-cycle delay that decays over successive
+attacks during stock rank-1 `ACss`. It does not establish the internal formula
+or a continuously sampled attack-speed percentage.
+
+Raw result: [retail-1292-run1.txt](../../../../tools/retail_probes/shadow_strike_decay/evidence/retail-1292-run1.txt),
+SHA-256 `66eee38fef96a6705cf0dad298202d31401b364baffcfa739f1f798199014b4b`.
+The rerunnable setup is in
+[`tools/retail_probes/shadow_strike_decay/`](../../../../tools/retail_probes/shadow_strike_decay/).
+
 Do not hot-reload an active periodic timer callback as part of this harness:
 an attempted update to `SS_Tick` returned status 1 but stopped its counter at
 tick 418, preventing `SS_DONE`. Updating the non-callback `SS_Log` helper left
@@ -405,8 +428,9 @@ the timer running to completion. Raw result:
 `b59597dd897a1f49bfb4de76c8b934a1228f1df890dc7e0918f835dd16936b4e`.
 
 `AEsh` is closed for attack speed: its DataC=0, so it authors no attack-rate
-reduction. For the creep alias, the attack-rate reduction is verified above;
-only its exact decay curve remains open.
+reduction. For the creep alias, attack-rate reduction and discrete recovery
+over successive attacks are verified above; only the internal decay formula
+remains open.
 
 The fresh JASS result SHA-256 is
 `fea567f49a0c7aee6866ebc72ae8bfce563da332976d542ce1f3da856b6d4c66`; the

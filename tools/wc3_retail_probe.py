@@ -88,6 +88,47 @@ def active_retail_x_environment() -> tuple[str | None, str | None]:
     return None, None
 
 
+def validate_x_display(display_name: str, xauthority: str | None = None) -> tuple[int, int]:
+    """Confirm X connectivity before starting a long-lived Retail process."""
+    try:
+        x11 = ctypes.CDLL("libX11.so.6")
+    except OSError as error:
+        raise ProbeError(f"X11 client library is unavailable: {error}") from error
+    x11.XOpenDisplay.restype = ctypes.c_void_p
+    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    x11.XDefaultScreen.restype = ctypes.c_int
+    x11.XDefaultScreen.argtypes = [ctypes.c_void_p]
+    x11.XDisplayWidth.restype = ctypes.c_int
+    x11.XDisplayWidth.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    x11.XDisplayHeight.restype = ctypes.c_int
+    x11.XDisplayHeight.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+
+    old_display = os.environ.get("DISPLAY")
+    old_authority = os.environ.get("XAUTHORITY")
+    os.environ["DISPLAY"] = display_name
+    if xauthority:
+        os.environ["XAUTHORITY"] = xauthority
+    try:
+        display = x11.XOpenDisplay(display_name.encode())
+        if not display:
+            raise ProbeError(
+                f"cannot connect to X display {display_name!r}; verify Xvfb and XAUTHORITY")
+        screen = x11.XDefaultScreen(display)
+        size = (x11.XDisplayWidth(display, screen), x11.XDisplayHeight(display, screen))
+        x11.XCloseDisplay(display)
+        return size
+    finally:
+        if old_display is None:
+            os.environ.pop("DISPLAY", None)
+        else:
+            os.environ["DISPLAY"] = old_display
+        if old_authority is None:
+            os.environ.pop("XAUTHORITY", None)
+        else:
+            os.environ["XAUTHORITY"] = old_authority
+
+
 def x11_mouse_click(args: argparse.Namespace) -> None:
     """Send a scaled XTest click and optionally require a local screen change."""
     try:
@@ -864,6 +905,14 @@ def launch(args: argparse.Namespace) -> None:
             "an arbitrary active map. To continue without closing Warcraft, the active map "
             "must already be JHCR-instrumented with this probe's matching state/cookie; "
             "otherwise load the prepared map in a later session or use a separate configured Wine prefix.")
+    display_name = args.display or environment.get("DISPLAY")
+    xauthority = args.xauthority or environment.get("XAUTHORITY")
+    if not display_name:
+        raise ProbeError("Retail launch requires DISPLAY; pass --display or export DISPLAY before launch")
+    if xauthority:
+        environment["XAUTHORITY"] = xauthority
+    display_size = validate_x_display(display_name, xauthority)
+    environment["DISPLAY"] = display_name
     converted = run([args.winepath, "-w", str(map_path)], env=environment)
     windows_map_path = converted.stdout.decode("utf-8", errors="replace").strip()
     if not windows_map_path:
@@ -892,6 +941,9 @@ def launch(args: argparse.Namespace) -> None:
         "windows_map_path": windows_map_path,
         "command": command,
         "wine_prefix": environment.get("WINEPREFIX"),
+        "display": display_name,
+        "xauthority": xauthority,
+        "display_size": list(display_size),
         "log": str(log_path),
         "manual_map_confirmation_required": True,
     }
@@ -1054,9 +1106,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                               help="seconds between pointer motion and click")
     click_parser.add_argument("--expect-change", nargs=4, type=int, metavar=("X", "Y", "W", "H"),
                               help="require this display-pixel region to change after the click")
-    click_parser.add_argument("--change-timeout", type=float, default=5.0)
-    click_parser.add_argument("--change-fraction", type=float, default=0.02,
-                              help="minimum changed sample fraction (default: 0.02)")
+    click_parser.add_argument("--change-timeout", type=float, default=2.5)
+    click_parser.add_argument("--change-fraction", type=float, default=0.05,
+                              help="minimum changed sample fraction (default: 0.05)")
     click_parser.set_defaults(func=x11_mouse_click)
     launch_parser = commands.add_parser(
         "launch", help="launch the control or prepared map with the documented Wine arguments")
@@ -1069,6 +1121,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     launch_parser.add_argument("--winepath", default="winepath", help="Wine path converter")
     launch_parser.add_argument("--wine-prefix", type=Path,
                                help="optional WINEPREFIX used for winepath and Retail")
+    launch_parser.add_argument("--display", help="X display (defaults to DISPLAY)")
+    launch_parser.add_argument("--xauthority", help="Xauthority file (defaults to XAUTHORITY)")
     launch_parser.set_defaults(func=launch)
     update_parser = commands.add_parser(
         "jhcr-update", help="publish one JHCR update using the isolated state created by prepare")
