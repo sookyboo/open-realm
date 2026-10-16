@@ -142,6 +142,68 @@ class ScriptEditTest(unittest.TestCase):
             PROBE.validate_result_filename(script, Path("/tmp/other.txt"))
 
 
+class JhcrUpdateTest(unittest.TestCase):
+    def test_update_uses_isolated_state_and_requires_a_new_sequence_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            probe_dir = root / "probe"
+            probe_dir.mkdir()
+            preload = root / "CustomMapData"
+            preload.mkdir()
+            executable = root / "jhcr"
+            executable.write_text("tool")
+            state = probe_dir / "jhcr" / "state.bin"
+            state.parent.mkdir()
+            state.write_text("state")
+            script = root / "war3map.j"
+            script.write_text("function Updated takes nothing returns nothing\nendfunction\n")
+            (probe_dir / "probe.json").write_text(json.dumps({
+                "id": "test", "jhcr": {"executable": str(executable), "state": str(state),
+                                          "preload_path": str(preload)},
+            }))
+
+            sequence = 1
+
+            def fake_run(command, **_kwargs):
+                nonlocal sequence
+                self.assertIn(str(state), command)
+                self.assertIn("--preload-path", command)
+                sequence += 1
+                (preload / f"JHCR-cookie-{sequence}.txt").write_text(f"payload-{sequence}")
+                return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+            args = SimpleNamespace(probe_dir=probe_dir, script=script, preload_path=None)
+            with mock.patch.object(PROBE, "run", side_effect=fake_run):
+                PROBE.jhcr_update(args)
+                PROBE.jhcr_update(args)
+            reports = list((probe_dir / "jhcr-updates").glob("*.json"))
+            self.assertEqual(len(reports), 2)
+            self.assertEqual({json.loads(path.read_text())["sequence_file"] for path in reports},
+                             {str(preload / "JHCR-cookie-2.txt"),
+                              str(preload / "JHCR-cookie-3.txt")})
+
+    def test_update_fails_when_jhcr_does_not_create_a_fresh_payload(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            probe_dir = root / "probe"
+            probe_dir.mkdir()
+            preload = root / "CustomMapData"
+            preload.mkdir()
+            executable = root / "jhcr"
+            executable.touch()
+            state = root / "state"
+            state.touch()
+            script = root / "war3map.j"
+            script.touch()
+            (probe_dir / "probe.json").write_text(json.dumps({
+                "id": "test", "jhcr": {"executable": str(executable), "state": str(state),
+                                          "preload_path": str(preload)},
+            }))
+            args = SimpleNamespace(probe_dir=probe_dir, script=script, preload_path=None)
+            with mock.patch.object(PROBE, "run", return_value=SimpleNamespace(
+                    returncode=0, stdout=b"", stderr=b"")):
+                with self.assertRaisesRegex(PROBE.ProbeError, "expected one new"):
+                    PROBE.jhcr_update(args)
 class CaptureTest(unittest.TestCase):
     def write_probe(self, directory: Path, result: Path, prepared_at_ns: int,
                     baseline: dict[str, object]) -> None:
