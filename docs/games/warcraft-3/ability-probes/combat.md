@@ -454,6 +454,44 @@ inspection has not yet settled those contracts, so the existing JASS results
 remain useful for the observed cap, target classes, and width bracket. To
 reproduce the path, run the addresses above in the cached Ghidra project.
 
+## Ordinary weapon hit investigation status
+
+The ordinary attack producer has not yet been shown to converge on
+`0x006A9940` / target slot `+0x120`. Further exact-build inspection confirms
+these adjacent dispatch points:
+
+- Attack event `0xD01C1` is dispatched by `0x006EF880` to attached objects
+  through virtual slot `+0x364`; it later invokes slot `+0x36C` on the same
+  attached object. Carrion Swarm's concrete slot implementation is
+  `0x00C2F040`, which calls its missile update `0x00C31430`. This confirms a
+  scheduled missile-update route, not ordinary weapon damage.
+- Poison callback `0x00BDCF70` receives a source/target context, reads ability
+  configuration, finds or creates `Bpoi`, and refreshes or attaches the
+  status. No caller edge from ordinary weapon damage calculation to this
+  callback is established yet.
+- CUnit damage receiver `0x006677C0` walks a linked set of attached objects
+  and invokes slots `+0xF8/+0xFC` for objects that pass its predicates before
+  applying further damage adjustments. This is a promising on-hit extension
+  point, but the concrete poison and Cold Arrows status vtables have not yet
+  been resolved to these slots.
+- Carrion Swarm impact `0x00C30BB0` does converge on `0x006A9940` and slot
+  `+0x120`, but it is an ability-specific projectile path.
+
+Thus, no ordinary-hit shared damage helper is confirmed. Next resolve the
+poison and Cold Arrows vtable implementations at `+0xF8/+0xFC` and the
+concrete `+0x364` callback implementations, then compare their source/target
+and damage call sequences with melee hits and normal ranged projectile
+impacts. A weaponless or paused-unit negative control will help separate
+attack scheduling from hit resolution. Do not equate event `0xD01C1`, the
+poison callback, or Carrion Swarm impact with the ordinary hit dispatcher.
+
+Reproduce the current event bridge and callback sites with:
+
+```sh
+r2 -q -c 'e scr.color=0; pd 70 @ 0x006ef880; pd 175 @ 0x00bdcf70; pd 64 @ 0x00c30bb0; q' \
+  'data/Warcraft III/Warcraft III.exe'
+```
+
 The shared `CAbilitySimpleSpell` validation function for this exact build is
 VA `0x00B28980`, RVA `0x00728980`. `tools/frida/wc3_carrion_swarm_order_trace.js`
 hooks that function read-only, filters the first stack argument to

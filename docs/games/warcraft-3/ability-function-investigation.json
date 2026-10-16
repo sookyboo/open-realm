@@ -1285,7 +1285,7 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "The method reads configured values from its instance and incoming context, branches to a Bpsi stack-poison object path when mode bits are set, and otherwise looks up an existing Bpoi on its third parameter. It refreshes that object through virtual +0x388, or creates/configures a Bpoi object through 0x00BE1A00, initializes it through +0x380, and attaches it with 0x006D4880. This gives a concrete shared poison status creation/refresh path. The event producer and exact parameter contract are not yet established, so this alone does not prove the ordinary attack-hit dispatcher.",
+      "evidence_summary": "The method reads configured values from its instance and incoming context, branches to a Bpsi stack-poison object path when mode bits are set, and otherwise looks up an existing Bpoi on its third parameter. It refreshes that object through virtual +0x388, or creates/configures a Bpoi object through 0x00BE1A00, initializes it through +0x380, and attaches it with 0x006D4880. This gives a concrete shared poison status creation/refresh path. This callback is used as an on-hit status consumer, but its exact vtable slot and the ordinary weapon-hit event producer remain unestablished.",
       "related_addresses": [
         {
           "va": "0x00be1a00",
@@ -1615,7 +1615,7 @@
         "0x120",
         "0x128"
       ],
-      "evidence_summary": "The CUnit constructor installs vtable 0x00E9C504. Its +0x120 method returns early when unit flag +0x164 has bit 0x100; checks MagicImmunesResistDamage and payload-class predicates; dispatches attached-object callbacks through slots +0xF8, +0xFC, and +0x100; reads configured DamageBonusSpells/Normal/Pierce/Siege/Magic/Chaos/Hero values through 0x0067B920; and applies configured ethereal adjustments. In its first attached-object pass, it invokes +0xFC only when that object's +0xF8 returns 1; other nonzero return values are collected for later callback phases. It calls 0x006A0630, computes an adjusted amount, then invokes its own +0x128 method (0x00668DB0) with the negative amount and returns the resulting value through an output pointer. The independently inspected UnitDamageTarget and Carrion Swarm call sites both dispatch through +0x120, establishing shared unit-specific mitigation/value-change infrastructure for those paths. Which attached-object groups correspond to ordinary attack-hit processing remains unresolved.",
+      "evidence_summary": "The CUnit constructor installs vtable 0x00E9C504. Its +0x120 method returns early when unit flag +0x164 has bit 0x100; checks MagicImmunesResistDamage and payload-class predicates; dispatches attached-object callbacks through slots +0xF8, +0xFC, and +0x100; reads configured DamageBonusSpells/Normal/Pierce/Siege/Magic/Chaos/Hero values through 0x0067B920; and applies configured ethereal adjustments. It walks attached objects through +0xF8/+0xFC, invoking +0xFC when +0xF8 returns 1; other nonzero return values are collected for later callback phases. It calls 0x006A0630, computes an adjusted amount, then invokes its own +0x128 method (0x00668DB0) with the negative amount and returns the resulting value through an output pointer. The independently inspected UnitDamageTarget and Carrion Swarm call sites both dispatch through +0x120, establishing shared unit-specific mitigation/value-change infrastructure for those paths. Which attached-object groups correspond to ordinary attack-hit processing remains unresolved.",
       "related_addresses": [
         {
           "va": "0x0067b920",
@@ -1979,6 +1979,41 @@
       },
       "record_kind": "function",
       "related_addresses_semantics": "Addresses mentioned in the source evidence; verified edges are listed separately."
+    },
+    {
+      "id": "fn_002ef880",
+      "label": "Attached-object combat event bridge",
+      "category": "event_dispatch",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006ef880",
+          "rva": "0x002ef880",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [
+        "0x364",
+        "0x36c"
+      ],
+      "evidence_summary": "For event data codes 0xD01E2 and 0xD01C1, this bridge calls owner virtual +0x364 with event code 0xD01C1 and event/context arguments, then calls owner virtual +0x36C with the callback result. Carrion Swarm concrete +0x364 target is 0x00C2F040, which calls missile update 0x00C31430. This verifies a missile update route, not ordinary weapon-hit damage; other class slot targets remain unresolved.",
+      "related_addresses": [
+        {
+          "va": "0x00c2f040",
+          "rva": "0x0082f040"
+        },
+        {
+          "va": "0x00c31430",
+          "rva": "0x00831430"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Ordinary weapon hit investigation status"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Exact-build direct and virtual-dispatch evidence; ordinary weapon damage convergence remains unresolved."
     }
   ],
   "record_schema": {
@@ -3217,6 +3252,40 @@
         "document": "docs/games/warcraft-3/ability-probes/combat.md",
         "section": "UnitDamagePoint and direct life/state setters"
       }
+    },
+    {
+      "from": {
+        "va": "0x006ef880",
+        "rva": "0x002ef880"
+      },
+      "to": {
+        "va": "0x00c2f040",
+        "rva": "0x0082f040"
+      },
+      "kind": "virtual_dispatch",
+      "context": "For event value 0xD01C1, the event bridge calls the owner vtable slot +0x364; Carrion Swarm concrete slot target is 0x00C2F040.",
+      "confidence": "medium",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Ordinary weapon hit investigation status"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c2f040",
+        "rva": "0x0082f040"
+      },
+      "to": {
+        "va": "0x00c31430",
+        "rva": "0x00831430"
+      },
+      "kind": "direct_call",
+      "context": "Carrion Swarm event callback routes this event to its missile update routine.",
+      "confidence": "medium",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Ordinary weapon hit investigation status"
+      }
     }
   ],
   "relationship_kinds": {
@@ -3225,6 +3294,6 @@
     "callback_dispatch": "Call through a callback argument or registered callback path.",
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
   },
-  "entry_count": 55,
-  "verified_relationship_count": 72
+  "entry_count": 56,
+  "verified_relationship_count": 74
 }
