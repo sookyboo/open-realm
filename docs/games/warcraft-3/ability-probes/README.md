@@ -29,6 +29,10 @@ The [Shadow Strike movement probe](../../../../tools/retail_probes/shadow_strike
 compares `AEsh`, `ACss`, and a control at 0.25-second intervals with a fast
 target; its run and sampled recovery thresholds are documented in
 [the Shadow Strike evidence report](multi-ability-batch.md#shadow-strike-movement-speed-curve-october-16-2026).
+The [Shadow Strike poison probe](../../../../tools/retail_probes/shadow_strike_poison/manifest.json)
+records source/target-matched damage events plus movement samples; two runs
+confirm five 10-damage pulses at 3-second intervals for each alias. See its
+[pulse/recovery findings](multi-ability-batch.md#shadow-strike-poison-timing-and-movement-recovery-october-16-2026).
 For a new ability question, start from the [general-purpose rerunnable JASS
 scaffold](../../../../tools/retail_probes/template/) and follow its
 [JHCR reuse and runner robustness guidelines](jhcr.md). Keep one-time setup,
