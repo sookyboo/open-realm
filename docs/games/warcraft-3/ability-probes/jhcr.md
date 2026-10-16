@@ -54,12 +54,29 @@ python3 tools/wc3_retail_probe.py jhcr-update /tmp/probe-run /path/to/war3map.j
 
 The command locks that probe's JHCR state during updates and requires exactly
 one new or changed, nonempty `JHCR-<cookie>-<sequence>.txt` in `CustomMapData`.
+Before invoking JHCR, it compares candidate function bodies with the
+uninstrumented source saved during preparation. Only changed names listed in
+the manifest's optional `jhcr_reloadable_functions` array are allowed. Unlisted
+changes stop before JHCR runs, protecting active timer/event callbacks from
+accidental replacement. The Shadow Strike probe allows `SS_Log` and blocks
+`SS_Tick`. The comparison ignores formatting and `//` comments. This source
+guard cannot prove an allowed function safe; add names only after assessing
+their runtime role. Update JSON records changed names and
+`reload_guard: passed`. Older prepared directories without a baseline need to
+be prepared again with the current runner.
+
 It writes a JSON record under `jhcr-updates/`. Trigger the map's reload action
 (for example `-jhcr`) to consume the sequence. Keep using the same probe
 directory for this loaded map; a new directory creates a new cookie and needs
 its prepared map loaded. Pass `--preload-path` to `jhcr-update` if it was not
 recorded at preparation. Avoid updating the same state concurrently outside
 this command because JHCR advances the sequence as it writes the payload.
+
+JHCR status `1` confirms payload application, not continued probe correctness.
+In a live Shadow Strike run, changing active periodic callback `SS_Tick`
+returned status `1` but stalled the timer. Updating only the logger `SS_Log`
+allowed the probe to finish. Keep active callbacks out of the allowlist unless
+there is a specific need and you verify the probe continues afterward.
 
 Add a test trigger to the map before packing. Have it call
 `ExecuteFunc("JHCR_Init_parse")` (in initialized output this may be
