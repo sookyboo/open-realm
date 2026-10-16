@@ -30,6 +30,37 @@ map. `Blizzard.j` and `war3map.j` must be the extracted files for that map;
 pass every required JASS source to `init`, with `common.j` first and the map
 script last. Repack/reload only when changing this instrumented script.
 
+### Optional probe-runner integration
+
+The Retail probe runner can initialize JHCR while it prepares an edited map.
+Use the built JHCR program, matching 1.29 `common.j`, and that map's extracted
+`Blizzard.j`:
+
+```sh
+python3 tools/wc3_retail_probe.py prepare MANIFEST.json /tmp/probe-run \
+  --jhcr "$JHCR" --common-j /path/to/common-1.29.2.j \
+  --blizzard-j /path/to/Blizzard.j \
+  --jhcr-preload-path "$CUSTOM_MAP_DATA"
+```
+
+Preparation creates a per-probe `jhcr/state.bin`, instruments the edited
+script, repacks the map, and verifies the embedded script. Load that prepared
+map once. For each code change, compile the complete updated map script and
+run:
+
+```sh
+python3 tools/wc3_retail_probe.py jhcr-update /tmp/probe-run /path/to/war3map.j
+```
+
+The command locks that probe's JHCR state during updates and requires exactly
+one new or changed, nonempty `JHCR-<cookie>-<sequence>.txt` in `CustomMapData`.
+It writes a JSON record under `jhcr-updates/`. Trigger the map's reload action
+(for example `-jhcr`) to consume the sequence. Keep using the same probe
+directory for this loaded map; a new directory creates a new cookie and needs
+its prepared map loaded. Pass `--preload-path` to `jhcr-update` if it was not
+recorded at preparation. Avoid updating the same state concurrently outside
+this command because JHCR advances the sequence as it writes the payload.
+
 Add a test trigger to the map before packing. Have it call
 `ExecuteFunc("JHCR_Init_parse")` (in initialized output this may be
 `JHCR_Wrap_ExecuteFunc(...)`), then display

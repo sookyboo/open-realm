@@ -11,6 +11,7 @@ gate setup readiness but never decide gameplay pass/fail.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -315,6 +316,8 @@ def prepare(args: argparse.Namespace) -> None:
     smpq = shutil.which(args.smpq)
     if not smpq:
         raise ProbeError(f"smpq not found on PATH: {args.smpq}")
+    if (args.common_j or args.blizzard_j or args.jhcr_preload_path) and not args.jhcr:
+        raise ProbeError("--common-j, --blizzard-j, and --jhcr-preload-path require --jhcr")
 
     output_dir = args.output_dir.expanduser().resolve()
     if output_dir.exists() and any(output_dir.iterdir()):
@@ -341,6 +344,7 @@ def prepare(args: argparse.Namespace) -> None:
     manifest_bytes = manifest_path.read_bytes()
     manifest_copy.write_bytes(manifest_bytes)
 
+    jhcr_config: dict[str, Any] | None = None
     try:
         map_bytes = mpq_bytes(args.mpqtool, archive, "cat", str(manifest["source"]["member"]))
         map_path.write_bytes(map_bytes)
@@ -359,6 +363,29 @@ def prepare(args: argparse.Namespace) -> None:
         result_names = validate_result_filename(edited_text, result_file)
         edited_bytes = edited_text.encode("utf-8", errors="surrogateescape")
         script_path.write_bytes(edited_bytes)
+        if args.jhcr:
+            if not args.common_j or not args.blizzard_j:
+                raise ProbeError("--jhcr requires both --common-j and --blizzard-j")
+            jhcr_path = args.jhcr.expanduser().resolve()
+            common_j = args.common_j.expanduser().resolve()
+            blizzard_j = args.blizzard_j.expanduser().resolve()
+            for required in (jhcr_path, common_j, blizzard_j):
+                if not required.is_file():
+                    raise ProbeError(f"JHCR input not found: {required}")
+            jhcr_dir = output_dir / "jhcr"
+            jhcr_dir.mkdir(exist_ok=True)
+            state_path = jhcr_dir / "state.bin"
+            initialized_script = jhcr_dir / "war3map.j"
+            run([str(jhcr_path), "init", str(common_j), str(blizzard_j), str(script_path),
+                 "--jasshelper", "--state", str(state_path), "--out", str(initialized_script)])
+            if not initialized_script.is_file() or initialized_script.stat().st_size == 0:
+                raise ProbeError("JHCR init succeeded without producing a non-empty instrumented script")
+            shutil.copyfile(initialized_script, script_path)
+            edited_bytes = script_path.read_bytes()
+            jhcr_config = {"executable": str(jhcr_path), "common_j": str(common_j),
+                           "blizzard_j": str(blizzard_j), "state": str(state_path),
+                           "preload_path": str(args.jhcr_preload_path.expanduser().resolve())
+                           if args.jhcr_preload_path else None}
         shutil.copyfile(map_path, output_map)
         run([smpq, "-a", "-f", str(output_map), str(script_path.name)], cwd=stage_dir)
 
@@ -414,6 +441,7 @@ def prepare(args: argparse.Namespace) -> None:
         "capture_contract": manifest.get("capture_contract", {}),
         "metadata": manifest.get("metadata", {}),
         "notes": manifest.get("notes", ""),
+        "jhcr": jhcr_config,
     }
     (output_dir / "probe.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     print(f"Prepared map: {output_map}")
@@ -428,6 +456,65 @@ def prepare(args: argparse.Namespace) -> None:
     else:
         print(f"After the Retail run, capture the fresh result with: "
           f"python3 {Path(__file__).resolve()} capture {output_dir}")
+    if jhcr_config:
+        print(f"JHCR initialized with isolated state: {jhcr_config['state']}")
+        print("After editing/compiling the updated JASS source, publish it with: "
+              f"python3 {Path(__file__).resolve()} jhcr-update {output_dir} /path/to/war3map.j")
+
+
+def jhcr_update(args: argparse.Namespace) -> None:
+    output_dir = args.probe_dir.expanduser().resolve()
+    record_path = output_dir / "probe.json"
+    if not record_path.is_file():
+        raise ProbeError(f"prepared probe record not found: {record_path}")
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    config = record.get("jhcr")
+    if not isinstance(config, dict):
+        raise ProbeError("probe was not prepared with --jhcr")
+    executable = Path(config["executable"])
+    state_path = Path(config["state"])
+    source = args.script.expanduser().resolve()
+    preload_path = (args.preload_path.expanduser().resolve() if args.preload_path else
+                    Path(config["preload_path"]) if config.get("preload_path") else None)
+    if not executable.is_file() or not source.is_file():
+        raise ProbeError("JHCR executable and update script must both exist")
+    if not state_path.is_file():
+        raise ProbeError(f"JHCR state file is missing: {state_path}; prepare the map again with --jhcr")
+    if preload_path is None or not preload_path.is_dir():
+        raise ProbeError("provide an existing --preload-path (the active Warcraft CustomMapData directory)")
+    lock_path = state_path.with_suffix(".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with lock_path.open("a+b") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            before = {path.name: (path.stat().st_mtime_ns, path.stat().st_size,
+                                  sha256_file(path))
+                      for path in preload_path.glob("JHCR-*.txt") if path.is_file()}
+            run([str(executable), "update", str(source), "--preload-path", str(preload_path),
+                 "--jasshelper", "--state", str(state_path)])
+            created = sorted((path for path in preload_path.glob("JHCR-*.txt")
+                              if path.is_file() and path.stat().st_size
+                              and (path.name not in before
+                                   or before[path.name] != (path.stat().st_mtime_ns,
+                                                           path.stat().st_size,
+                                                           sha256_file(path)))),
+                             key=lambda path: path.stat().st_mtime_ns)
+            if len(created) != 1:
+                raise ProbeError(f"expected one new non-empty JHCR sequence file, found {len(created)}; "
+                                 "state was advanced, inspect JHCR output and use the reported sequence")
+            generated = created[0]
+            report = {"probe_id": record["id"], "created_at": datetime.now(timezone.utc).isoformat(),
+                      "script": str(source), "script_sha256": sha256_file(source),
+                      "sequence_file": str(generated), "sequence_sha256": sha256_file(generated),
+                      "sequence_size": generated.stat().st_size}
+            updates = output_dir / "jhcr-updates"
+            updates.mkdir(exist_ok=True)
+            report_path = updates / (generated.stem + ".json")
+            report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    except OSError as error:
+        raise ProbeError(f"JHCR update failed: {error}") from error
+    print(f"Created {generated} ({generated.stat().st_size} bytes)")
+    print(f"Update record: {report_path}")
 
 
 def launch(args: argparse.Namespace) -> None:
@@ -639,6 +726,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     prepare_parser.add_argument("output_dir", type=Path, help="new or empty output directory")
     prepare_parser.add_argument("--mpqtool", type=Path, default=ROOT / "build/bin/mpqtool")
     prepare_parser.add_argument("--smpq", default="smpq", help="StormLib smpq executable")
+    prepare_parser.add_argument("--jhcr", type=Path,
+                                help="optional built JHCR executable; instruments the prepared map")
+    prepare_parser.add_argument("--common-j", type=Path, help="matching Retail common.j")
+    prepare_parser.add_argument("--blizzard-j", type=Path, help="map's Blizzard.j")
+    prepare_parser.add_argument("--jhcr-preload-path", type=Path,
+                                help="active Warcraft CustomMapData directory for later updates")
     prepare_parser.set_defaults(func=prepare)
 
     capture_parser = commands.add_parser("capture", help="wait for and save a fresh PreloadGen result")
@@ -658,6 +751,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     launch_parser.add_argument("--wine-prefix", type=Path,
                                help="optional WINEPREFIX used for winepath and Retail")
     launch_parser.set_defaults(func=launch)
+    update_parser = commands.add_parser(
+        "jhcr-update", help="publish one JHCR update using the isolated state created by prepare")
+    update_parser.add_argument("probe_dir", type=Path, help="directory created by prepare --jhcr")
+    update_parser.add_argument("script", type=Path, help="updated compiled war3map.j")
+    update_parser.add_argument("--preload-path", type=Path,
+                               help="override the CustomMapData directory recorded at prepare time")
+    update_parser.set_defaults(func=jhcr_update)
     return parser.parse_args(argv)
 
 
