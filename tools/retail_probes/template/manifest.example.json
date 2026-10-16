@@ -1,0 +1,27 @@
+{
+  "id": "replace-with-short-question-id",
+  "source": {
+    "archive": "../../../data/Warcraft III/War3xLocal.mpq",
+    "member": "Maps/FrozenThrone/Campaign/OrcX01.w3x"
+  },
+  "script_member": "war3map.j",
+  "retail_executable": "../../../data/Warcraft III/Warcraft III.exe",
+  "metadata": {
+    "mode": "TFT",
+    "retail_build": "1.29.2.9231",
+    "ability_rawcodes": ["REPLACE"],
+    "question": "State one observable behavior and the controlled comparison"
+  },
+  "jhcr_reloadable_functions": ["GP_Log"],
+  "output_name": "Ability-Probe-Replace.w3x",
+  "result_file": "/path/to/CustomMapData/ability-probe-replace.txt",
+  "edits": [
+    {"block": "globals", "anchor": "endglobals", "where": "before", "file": "globals.j"},
+    {"function": "Trig_Intro_Skipped_Actions", "anchor": "function Trig_Intro_Skipped_Actions takes nothing returns nothing", "where": "before", "file": "helpers.j"},
+    {"function": "Trig_Intro_Skipped_Actions", "anchor": "call ConditionalTriggerExecute( gg_trg_Gameplay )", "where": "after", "text": "call GP_Init()"}
+  ],
+  "capture_contract": {
+    "required_markers": ["GP", "START", "SETUP", "CONTROL_BEGIN", "MEASURE_BEGIN", "DONE"],
+    "inconclusive_markers": ["SETUP_FAIL"]
+  }
+}

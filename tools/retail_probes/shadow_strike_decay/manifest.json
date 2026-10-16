@@ -1,0 +1,27 @@
+{
+  "id": "shadow-strike-acss-decay-curve",
+  "source": {
+    "archive": "../../../data/Warcraft III/War3xLocal.mpq",
+    "member": "Maps/FrozenThrone/Campaign/OrcX01.w3x"
+  },
+  "script_member": "war3map.j",
+  "retail_executable": "../../../data/Warcraft III/Warcraft III.exe",
+  "metadata": {
+    "mode": "TFT",
+    "retail_build": "1.29.2.9231",
+    "ability_rawcodes": ["ACss"],
+    "question": "Measure ACss attack-cycle intervals during and after its rank-1 attack-rate slow against an untreated control using Retail's authored Footman weapon cooldown"
+  },
+  "jhcr_reloadable_functions": ["SD_Log"],
+  "output_name": "OrcX01-ShadowStrike-DecayCurve.w3x",
+  "result_file": "/home/agent/.wine-war3/drive_c/users/agent/Documents/Warcraft III/CustomMapData/shadow-strike-decay-curve-2.txt",
+  "edits": [
+    {"block": "globals", "anchor": "endglobals", "where": "before", "file": "globals.j"},
+    {"function": "main", "anchor": "function main takes nothing returns nothing", "where": "before", "file": "helpers.j"},
+    {"function": "main", "anchor": "call RunInitializationTriggers(  )", "where": "after", "text": "call SD_Init()"}
+  ],
+  "capture_contract": {
+    "required_markers": ["SD_META", "SD_SETUP", "SD_BASELINE", "SD_CAST_EFFECT", "SD_DONE"],
+    "inconclusive_markers": ["SD_SETUP_FAIL"]
+  }
+}

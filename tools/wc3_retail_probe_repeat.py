@@ -42,6 +42,8 @@ def main() -> int:
     parser.add_argument("--wine", default="wine")
     parser.add_argument("--winepath", default="winepath")
     parser.add_argument("--wine-prefix", type=Path)
+    parser.add_argument("--display", help="X display forwarded to Retail launches")
+    parser.add_argument("--xauthority", help="Xauthority file forwarded to Retail launches")
     parser.add_argument("--timeout", type=float, default=240.0)
     args = parser.parse_args()
     if args.runs < 1:
@@ -102,11 +104,15 @@ def main() -> int:
             probe_dir = run_dir / "probe"
             run([sys.executable, str(PROBE_TOOL), "launch", str(probe_dir), "--control",
                  "--wine", args.wine, "--winepath", args.winepath,
-                 *( ["--wine-prefix", str(args.wine_prefix)] if args.wine_prefix else [])])
+                 *( ["--wine-prefix", str(args.wine_prefix)] if args.wine_prefix else []),
+                 *( ["--display", args.display] if args.display else []),
+                 *( ["--xauthority", args.xauthority] if args.xauthority else [])])
             confirm(f"{run_id}: confirm the untouched control reached its expected screen and exit Retail")
             run([sys.executable, str(PROBE_TOOL), "launch", str(probe_dir), "--control-confirmed",
                  "--wine", args.wine, "--winepath", args.winepath,
-                 *( ["--wine-prefix", str(args.wine_prefix)] if args.wine_prefix else [])])
+                 *( ["--wine-prefix", str(args.wine_prefix)] if args.wine_prefix else []),
+                 *( ["--display", args.display] if args.display else []),
+                 *( ["--xauthority", args.xauthority] if args.xauthority else [])])
             confirm(f"{run_id}: complete the documented prepared-map interaction and allow the probe to finish")
             run([sys.executable, str(PROBE_TOOL), "capture", str(probe_dir),
                  "--timeout", str(args.timeout)])

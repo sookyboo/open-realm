@@ -22,6 +22,9 @@ a scenario has a separately documented automation procedure.
 
 The checked-in [Shadow Strike attack-cycle probe](../../../../tools/retail_probes/shadow_strike_attack_cycle/manifest.json)
 is the ready-to-run example for this workflow.
+The dedicated [ACss decay-curve probe](../../../../tools/retail_probes/shadow_strike_decay/manifest.json)
+has a 50 ms sampler, long baseline and post-cast phases, and a raw 1.29.2
+capture; use it when investigating attack-cycle slowdown or adapting that setup.
 For a new ability question, start from the [general-purpose rerunnable JASS
 scaffold](../../../../tools/retail_probes/template/) and follow its
 [JHCR reuse and runner robustness guidelines](jhcr.md). Keep one-time setup,
