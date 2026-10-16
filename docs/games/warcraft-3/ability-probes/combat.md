@@ -632,6 +632,31 @@ gameplay screenshot for the six-phase lane probe is
 
 ### Reproducing these Retail probes
 
+Use [`tools/wc3_retail_probe.py`](../../../../tools/wc3_retail_probe.py) for
+single runs. For repeated measurements, use
+[`tools/wc3_retail_probe_repeat.py`](../../../../tools/wc3_retail_probe_repeat.py):
+
+```sh
+python3 tools/wc3_retail_probe_repeat.py MANIFEST OUTPUT_DIR --runs 3 \
+  --wine-prefix "$WINEPREFIX"
+```
+
+For the checked-in ACss dual-lane probe, use:
+
+```sh
+python3 tools/wc3_retail_probe_repeat.py \
+  tools/retail_probes/shadow_strike_attack_cycle/manifest.json \
+  /tmp/wc3-shadow-strike-repeats --runs 3 --wine-prefix "$WINEPREFIX"
+```
+
+The repeat runner creates an isolated run directory and a distinct result
+filename per iteration, then pauses for visual confirmation and scenario
+interaction before it captures output. This avoids stale `PreloadGen` results
+and preserves each iteration for comparison. It does not hot reload JASS into
+a running Retail process; each iteration still requires launching its
+prepared map. The operator must exit Retail after control confirmation, then
+finish the probe's documented UI sequence.
+
 The exact Carrion Swarm v6/v7 manifests are not checked in, so those runs cannot
 be replayed byte-for-byte from this checkout. For a new probe, create a
 scenario-specific manifest and JASS fragments under a new
