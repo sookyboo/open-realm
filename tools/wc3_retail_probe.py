@@ -56,6 +56,38 @@ class ProbeError(RuntimeError):
     """A preparation or capture input failed validation."""
 
 
+def active_retail_x_environment() -> tuple[str | None, str | None]:
+    """Return DISPLAY/XAUTHORITY from a unique running Warcraft process."""
+    game_names = {"warcraft iii.exe", "war3.exe", "frozen throne.exe"}
+    matches: set[tuple[str | None, str | None]] = set()
+    try:
+        entries = list(Path("/proc").iterdir())
+    except OSError:
+        return None, None
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            parts = [part.decode(errors="replace") for part in
+                     (entry / "cmdline").read_bytes().split(b"\0") if part]
+            if not parts or Path(parts[0].replace("\\", "/")).name.casefold() not in game_names:
+                continue
+            environment = {}
+            for item in (entry / "environ").read_bytes().split(b"\0"):
+                if b"=" in item:
+                    key, value = item.split(b"=", 1)
+                    environment[key.decode(errors="replace")] = value.decode(errors="replace")
+            if environment.get("DISPLAY"):
+                matches.add((environment.get("DISPLAY"), environment.get("XAUTHORITY")))
+        except OSError:
+            continue
+    if len(matches) == 1:
+        return next(iter(matches))
+    if len(matches) > 1:
+        raise ProbeError("multiple Warcraft processes use different X displays; pass --display and --xauthority")
+    return None, None
+
+
 def x11_mouse_click(args: argparse.Namespace) -> None:
     """Send a scaled XTest click and optionally require a local screen change."""
     try:
@@ -64,9 +96,19 @@ def x11_mouse_click(args: argparse.Namespace) -> None:
     except OSError as error:
         raise ProbeError(f"X11 mouse input libraries are unavailable: {error}") from error
 
-    display_name = os.environ.get("DISPLAY")
+    display_name = args.display or os.environ.get("DISPLAY")
+    xauthority = args.xauthority or os.environ.get("XAUTHORITY")
     if not display_name:
-        raise ProbeError("DISPLAY is unset; cannot send mouse input to Warcraft")
+        detected_display, detected_authority = active_retail_x_environment()
+        display_name = detected_display
+        if not xauthority:
+            xauthority = detected_authority
+    if not display_name:
+        raise ProbeError(
+            "DISPLAY is unset and could not be read from a running Warcraft process; "
+            "pass --display or set DISPLAY")
+    if xauthority:
+        os.environ["XAUTHORITY"] = xauthority
     x11.XOpenDisplay.restype = ctypes.c_void_p
     x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
     display = x11.XOpenDisplay(display_name.encode())
@@ -1005,6 +1047,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                               help="reference canvas height (default: 480)")
     click_parser.add_argument("--mapping", choices=("contain", "stretch"), default="contain",
                               help="preserve aspect ratio/center letterboxing, or stretch coordinates")
+    click_parser.add_argument("--display", help="X display; otherwise use DISPLAY or detect Warcraft's")
+    click_parser.add_argument("--xauthority", help="Xauthority file; otherwise use XAUTHORITY or detect Warcraft's")
     click_parser.add_argument("--button", choices=("left", "right"), default="left")
     click_parser.add_argument("--settle", type=float, default=0.2,
                               help="seconds between pointer motion and click")

@@ -386,6 +386,17 @@ finished at tick 550 with 14 treated-lane and 16 control-lane hits. This
 independently reproduces the attack-rate reduction while exercising live JHCR
 reload during the probe.
 
+A mission-restart replay in the same Warcraft process produced the same
+pattern: cast effect at tick 105, 35-tick baseline/control intervals, then
+treated intervals of 59, 56, and 39 ticks before returning to 35. The run
+completed at tick 550 with 14 treated and 16 control hits. The one-tick
+differences from the earlier 60/55/39 sample are consistent with the 0.1-second
+event sampling phase. This repeat confirms the discrete attack-cycle response;
+it still does not identify the engine's continuous decay formula.
+
+Raw replay: [jhcr-restart-run.txt](../../../../tools/retail_probes/shadow_strike_attack_cycle/evidence/jhcr-restart-run.txt), SHA-256
+`a7769eab80b092252c06df4ad368409598e881d38e8556dbf259ac7ef5a5f04e`.
+
 Do not hot-reload an active periodic timer callback as part of this harness:
 an attempted update to `SS_Tick` returned status 1 but stopped its counter at
 tick 418, preventing `SS_DONE`. Updating the non-callback `SS_Log` helper left

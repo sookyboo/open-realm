@@ -237,8 +237,9 @@ clicks and stale coordinate mappings; choose a region that changes because of
 the intended UI action and avoid animated scenery. Without this option, the
 runner confirms the pointer reached the scaled location and that XTest sent
 the press/release, but cannot establish that Warcraft handled the click. It
-uses the X11/XTest libraries directly and needs a valid `DISPLAY`/
-`XAUTHORITY`.
+uses the X11/XTest libraries directly. It reads `DISPLAY`/`XAUTHORITY` from the
+environment, and if those are unset it detects them from a unique running
+Warcraft process. Use `--display` and `--xauthority` to override detection.
 
 ## Diagnose a `NO_DATA` result
 
