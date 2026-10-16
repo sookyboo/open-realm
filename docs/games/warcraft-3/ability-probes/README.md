@@ -25,6 +25,10 @@ is the ready-to-run example for this workflow.
 The dedicated [ACss decay-curve probe](../../../../tools/retail_probes/shadow_strike_decay/manifest.json)
 has a 50 ms sampler, long baseline and post-cast phases, and a raw 1.29.2
 capture; use it when investigating attack-cycle slowdown or adapting that setup.
+The [Shadow Strike movement probe](../../../../tools/retail_probes/shadow_strike_movement/manifest.json)
+compares `AEsh`, `ACss`, and a control at 0.25-second intervals with a fast
+target; its run and sampled recovery thresholds are documented in
+[the Shadow Strike evidence report](multi-ability-batch.md#shadow-strike-movement-speed-curve-october-16-2026).
 For a new ability question, start from the [general-purpose rerunnable JASS
 scaffold](../../../../tools/retail_probes/template/) and follow its
 [JHCR reuse and runner robustness guidelines](jhcr.md). Keep one-time setup,
