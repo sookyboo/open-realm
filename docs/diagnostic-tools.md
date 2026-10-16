@@ -32,7 +32,12 @@ launch to target the prepared map and accepts only fresh output. Optional
 capture markers classify failed setup as `inconclusive`; a ready capture still
 needs human review and is not an automatic behavior pass. If a run deviates
 from its expected screen or output, re-read the verification procedure before
-changing launch or probe setup. See [Retail Warcraft III camera tracing](games/warcraft-3/retail-camera-tracing.md#ability-probe-preparation-and-result-capture)
+changing launch or probe setup. For repeated measurements, use
+`python3 tools/wc3_retail_probe_repeat.py MANIFEST OUTPUT_DIR --runs N`,
+documented in
+[Retail ability probe reproduction](games/warcraft-3/ability-probes/combat.md#reproducing-these-retail-probes);
+each iteration retains its own manifest, launch record, and capture. See
+[Retail Warcraft III camera tracing](games/warcraft-3/retail-camera-tracing.md#ability-probe-preparation-and-result-capture)
 for the manifest format and workflow.
 
 Use `make audit-wc3-hero-saveload` to walk the player Hero on every campaign
