@@ -34,7 +34,8 @@ before launching a second instance. It cannot inject this prepared map into
 the existing process; use a separate configured prefix or load the prepared
 map in the existing process when its current scenario permits.
 For live JASS reload experiments without restarting Warcraft, follow the
-[JHCR 1.29 runbook](jhcr.md).
+[JHCR 1.29 runbook](jhcr.md), which includes when to prefer JHCR and how to
+keep reloadable probes rerunnable and safe around active callbacks.
 
 | Report | Contains |
 |---|---|
