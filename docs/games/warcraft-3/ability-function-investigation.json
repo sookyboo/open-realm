@@ -1778,6 +1778,49 @@
       },
       "record_kind": "function",
       "related_addresses_semantics": "Addresses mentioned in the source evidence; not a verified caller/callee edge list."
+    },
+    {
+      "id": "fn_002967a0",
+      "label": "Unit-owner relationship predicate (polarity unresolved)",
+      "category": "targeting",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x006967a0",
+          "rva": "0x002967a0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [
+        "0x160",
+        "0xec"
+      ],
+      "evidence_summary": "Given a context in ECX and a unit argument, reads the context player index at +0x160 and calls 0x00478E00. That helper obtains the argument unit's owner/player index through virtual +0xEC and delegates to 0x00478DA0, which checks player-index bounds and tests the corresponding relation bit. The result is normalized to zero/one. CAbilityAttack method 0x00B1A100 and routine 0x00C0D2F0 are verified callers. The relation bit's direction and ally/enemy meaning are unresolved.",
+      "related_addresses": [
+        {
+          "va": "0x00478e00",
+          "rva": "0x00078e00"
+        },
+        {
+          "va": "0x00478da0",
+          "rva": "0x00078da0"
+        },
+        {
+          "va": "0x00b1a100",
+          "rva": "0x0071a100"
+        },
+        {
+          "va": "0x00c0d2f0",
+          "rva": "0x0080d2f0"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/targeting.md",
+        "section": "Shared unit-owner relationship predicate (Retail 1.29.2)"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in evidence. Verified caller/callee edges are listed separately below."
     }
   ],
   "record_schema": {
@@ -2523,6 +2566,74 @@
         "document": "docs/games/warcraft-3/ability-retail-probe-log.md",
         "section": "Phoenix Fire native path: periodic acquisition and target gates"
       }
+    },
+    {
+      "from": {
+        "va": "0x006967a0",
+        "rva": "0x002967a0"
+      },
+      "to": {
+        "va": "0x00478e00",
+        "rva": "0x00078e00"
+      },
+      "kind": "direct_call",
+      "context": "Owner relation predicate delegates player/unit comparison to helper.",
+      "confidence": "medium",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/targeting.md",
+        "section": "Shared unit-owner relationship predicate (Retail 1.29.2)"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00478e00",
+        "rva": "0x00078e00"
+      },
+      "to": {
+        "va": "0x00478da0",
+        "rva": "0x00078da0"
+      },
+      "kind": "direct_call",
+      "context": "Helper resolves unit owner/player index via virtual +0xEC, then tests relation mask.",
+      "confidence": "medium",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/targeting.md",
+        "section": "Shared unit-owner relationship predicate (Retail 1.29.2)"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00b1a100",
+        "rva": "0x0071a100"
+      },
+      "to": {
+        "va": "0x006967a0",
+        "rva": "0x002967a0"
+      },
+      "kind": "direct_call",
+      "context": "CAbilityAttack method calls relation predicate at 0x00B1A157 while filtering a unit target.",
+      "confidence": "medium",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/targeting.md",
+        "section": "Shared unit-owner relationship predicate (Retail 1.29.2)"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c0d2f0",
+        "rva": "0x0080d2f0"
+      },
+      "to": {
+        "va": "0x006967a0",
+        "rva": "0x002967a0"
+      },
+      "kind": "direct_call",
+      "context": "Routine calls relation predicate at 0x00C0D2FD before selecting a result-table entry.",
+      "confidence": "medium",
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/targeting.md",
+        "section": "Shared unit-owner relationship predicate (Retail 1.29.2)"
+      }
     }
   ],
   "relationship_kinds": {
@@ -2531,6 +2642,6 @@
     "callback_dispatch": "Call through a callback argument or registered callback path.",
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
   },
-  "entry_count": 50,
-  "verified_relationship_count": 43
+  "entry_count": 51,
+  "verified_relationship_count": 47
 }

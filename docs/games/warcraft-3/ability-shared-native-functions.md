@@ -16,7 +16,7 @@ workflow](retail-shared-ability-re.md).
 
 | Investigation | Useful starting points | Main unresolved question |
 |---|---|---|
-| Target validation | `0x00682180`, `0x00682210`, `0x006822E0`, pair accessor `0x007FC7E0` | Two shared gates then registered-validator vtable calls at +0x26C. The pair accessor is also called by Cold Arrow effect routine `0x00C5C9D0`; this confirms low-level reuse only. See [target validator disassembly](ability-probes/targeting.md#target-validator-static-disassembly-retail-1292). |
+| Target validation | `0x00682180`, `0x00682210`, `0x006822E0`, `0x007FC7E0`; owner relation `0x006967A0` | Validator registry plus a reusable player-relation bit test called by `CAbilityAttack` and another callback. Relation polarity is unresolved. See [targeting evidence](ability-probes/targeting.md#target-validator-static-disassembly-retail-1292) and [owner relation evidence](ability-probes/targeting.md#shared-unit-owner-relationship-predicate-retail-1292). |
 | Area target selection | `0x0068EA00`, `0x00699FD0` | Determine each ability's selection policy and field mapping. |
 | Ability instances | `0x00AF3BA0` factory, `0x006D4560` attach, `0x006D6570` lookup | Poison (`Bpoi`) and Cold Arrow (`BHca`) both use this lookup before refresh-or-create; trace their still-unknown event producers. |
 | Rank/availability | Shared rank hooks; enable/disable transitions | Identify remaining instance gates and permanence effects. |
