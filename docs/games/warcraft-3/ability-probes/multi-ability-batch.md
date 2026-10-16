@@ -346,34 +346,32 @@ there. The earlier disposable captures remain under
 The `ACss` capture is `/tmp/wc3-shadow-alias-verify/run/result.txt`, SHA-256
 `8022a1449fa57407f4404c8d2ab1fd270c362f458bd3cd433c9bd561f8956882`.
 
-#### ACss attack-cycle follow-up (October 16, 2026)
+#### ACss attack-cycle verification (October 16, 2026)
 
-A fresh JASS run on Retail 1.29.2.9231 compared two Mortar Teams attacking
-paused, high-health targets. It left `ACss` data unchanged, sampled damage
-events every 0.1 seconds, and attempted to set both attack cooldowns to 0.6
-seconds. The map and result are temporary artifacts under
-`/tmp/wc3-shadow-attack-focused/run7/`; the Retail executable hash matches the
-captures above.
+A JASS run on Retail 1.29.2.9231 compared two Mortar Teams attacking paused,
+high-health targets. The caster applied stock `ACss` to lane A only; both
+attackers remained stationary at the 150-unit movement floor. Damage events
+were sampled every 0.1 seconds. The cast order returned true, and
+`EVENT_UNIT_SPELL_EFFECT` confirmed the cast at tick 105.
 
-The treated lane recorded hits at ticks 16, 51, 86, and 158: the two baseline
-intervals were 3.5 seconds, and the next interval was 7.2 seconds. The cast
-order returned false, but `EVENT_UNIT_SPELL_EFFECT` confirmed `ACss` at tick
-91. Thus the longer interval is consistent with attack slowing, but only one
-interval followed the cast. The untreated lane recorded only one hit, so it
-provides no usable comparison; the cooldown override also did not produce the
-requested 0.6-second baseline. Do not treat this run as verification of
-attack-rate behavior.
+Both lanes had 3.5-second attack intervals before the cast (ticks 14–49–84).
+The untreated control stayed at 3.5 seconds throughout. The treated lane's
+intervals lengthened to 5.9 seconds (84–143), then 5.6 seconds (143–199), then
+3.9 seconds (199–238), and recovered to 3.5 seconds by the next interval
+(238–273). Both lanes continued to produce hits through the 55-second run;
+position and life samples show neither attacker moved or died. This controlled
+difference verifies that stock `ACss` reduces attack rate and that its effect
+decays in this rank-1 scenario. The samples do not establish an exact internal
+decay formula or percentage curve.
 
-Raw result: `/tmp/wc3-shadow-attack-focused/run7/result.txt`, SHA-256
-`fb736b7bcf05ca7aa075c3d1d763e1b44fef522c599145c4c43a69e11d88961a`.
-The observed interval is a useful lead for a follow-up with a reliably firing
-control lane and several post-cast hits. The map script and manifest were
-temporary and are not committed.
+Raw result: `/tmp/wc3-shadow-attack-focused/run10/result.txt`, SHA-256
+`cd0ed078eefa659bb01737b75df7c659e862fe8cedc46cb8e5d88d2f828b206a`.
+The probe map and JASS sources remain temporary under
+`/tmp/wc3-shadow-attack-focused/run10/` and were not committed.
 
 `AEsh` is closed for attack speed: its DataC=0, so it authors no attack-rate
-reduction. The creep alias's nonzero DataC is a separate behavior and remains
-open pending a controlled attack-cycle capture with multiple post-cast hits
-and a working untreated lane.
+reduction. For the creep alias, the attack-rate reduction is verified above;
+only its exact decay curve remains open.
 
 The fresh JASS result SHA-256 is
 `fea567f49a0c7aee6866ebc72ae8bfce563da332976d542ce1f3da856b6d4c66`; the
