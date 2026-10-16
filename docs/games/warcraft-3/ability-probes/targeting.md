@@ -42,6 +42,33 @@ The common predicates' semantic names, rejection codes, and concrete
 registered-validator implementations remain open. Record a runtime membership
 or behavior claim only after tracing a controlled positive/negative candidate.
 
+## Shared unit-owner relationship predicate (Retail 1.29.2)
+
+`0x006967A0` is a reusable Boolean gate with a relationship-specific call
+chain. It reads a player index from its `this+0x160` context and takes a unit
+as its stack argument. It passes those values to `0x00478E00`, which resolves
+the argument unit's owner through virtual `+0xEC` and delegates to
+`0x00478DA0`. That function validates the player indices, retrieves the
+player record, and tests a bit in its relation mask. The helper normalizes
+the result to zero/one. The bit's direction and exact ally/enemy meaning are
+not established; keep the label neutral until checked against a controlled
+Retail/JASS result.
+
+Two inspected callers use the same helper: `CAbilityAttack` vtable method
+`0x00B1A100` calls it at `0x00B1A157` while filtering a unit target, and
+`0x00C0D2F0` calls it at `0x00C0D2FD` before selecting a result-table entry.
+An x86 direct-call byte scan found 62 candidate sites in the pinned image;
+these two call instructions were checked in context. This is shared owner
+relationship infrastructure, not proof that all callers implement the same
+target rules.
+
+Reproduce the inspected call chain and callers with:
+
+```sh
+r2 -q -c 'e scr.color=0; pdf @ 0x006967a0; pdf @ 0x00478e00; pdf @ 0x00478da0; pd 32 @ 0x00b1a100; pd 20 @ 0x00c0d2f0; q' \
+  'data/Warcraft III/Warcraft III.exe'
+```
+
 ## Retail Charm target verification (October 4, 2026)
 
 Retail behavior for Charm (`ANch`) was checked with a temporary JASS probe in
