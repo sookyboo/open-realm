@@ -33,6 +33,9 @@ The [Shadow Strike poison probe](../../../../tools/retail_probes/shadow_strike_p
 records source/target-matched damage events plus movement samples; two runs
 confirm five 10-damage pulses at 3-second intervals for each alias. See its
 [pulse/recovery findings](multi-ability-batch.md#shadow-strike-poison-timing-and-movement-recovery-october-16-2026).
+The [synchronized `ACss` recovery probe](../../../../tools/retail_probes/shadow_strike_acss_expiry/manifest.json)
+measures poison events, movement speed, and attack intervals in the same run;
+it places their sampled recovery endpoints within four 50 ms ticks.
 For a new ability question, start from the [general-purpose rerunnable JASS
 scaffold](../../../../tools/retail_probes/template/) and follow its
 [JHCR reuse and runner robustness guidelines](jhcr.md). Keep one-time setup,

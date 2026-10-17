@@ -400,6 +400,38 @@ SHA-256 `3284085dd9ce738eea65af033555eac4b9ddedc97b818fb21602d27c9a6d2260`;
 [run 2](../../../../tools/retail_probes/shadow_strike_poison/evidence/retail-1292-run2.txt),
 SHA-256 `bb3e6b710b8af4ee4d2c6892629041322749fffe083fde00698e3a203107b008`.
 
+#### ACss poison, movement, and attack-cycle recovery in one run (October 17, 2026)
+
+A synchronized Retail 1.29.2.9231 probe compared two Mortar Teams (`hmtm`)
+attacking paused, high-health Footmen. Both began at 400 movement speed and
+were position-locked; rank-1 `ACss` was cast only on the treated lane after
+three measured 70-tick (3.5-second) baseline attack intervals. The untreated
+control remained at 70-tick intervals throughout. The order was accepted at
+tick 300 and `EVENT_UNIT_SPELL_EFFECT` confirmed the cast at tick 311.
+
+The treated lane received the 75-damage initial event at age 5 ticks, then five
+10-damage poison events at ages 65, 125, 185, 245, and 305 ticks. The final
+poison event therefore occurred 15.25 seconds after the effect callback. Its
+attack intervals after the cast were 149, 86, and 73 ticks, ending at ages
+147, 233, and 306. The next full interval was the 70-tick baseline; subsequent
+intervals also remained at 70. Movement speed was 398.089 at age 304 ticks and
+400 at the age-309 sample (15.45 seconds).
+
+In this run, the poison endpoint, attack interval returning to baseline, and
+movement recovery were within four 50 ms ticks of each other. This supports a
+shared approximate recovery window for stock rank-1 `ACss`, while the sampled
+movement state and completed attack intervals do not establish an exact
+continuous expiry instant.
+
+The first harness attempt used `hfoo` treated/control attackers; treated
+baseline hits never occurred, so that run was inconclusive. The corrected
+`hmtm` setup follows the established attack-cycle probe. An intermediate run
+also mislabeled the pre-slow speed sample as recovery; the final harness
+requires observing a slow before recording recovery. Both attempts are
+preserved with the probe. See [`tools/retail_probes/shadow_strike_acss_expiry/`](../../../../tools/retail_probes/shadow_strike_acss_expiry/).
+Verified raw capture: [Run 3](../../../../tools/retail_probes/shadow_strike_acss_expiry/evidence/retail-1292-run3.txt),
+SHA-256 `d076ab15f6da3017c46c4aec8d3156f69391f9b112c414442f29ffe277cc1079`.
+
 Raw event capture: `/tmp/wc3-shadow-events-verify/run/result.txt`, SHA-256
 `88aa2c6b6911224ffe0e3e8ba384bc65dae00d5fc49018cdca477499dd5e5e2b`.
 The source-filtered event rows and long-lived speed samples can be reviewed
