@@ -561,3 +561,48 @@ Raw evidence: [run 1](../../../../tools/retail_probes/purge_timing/evidence/reta
 [run 3 with the updated logger marker](../../../../tools/retail_probes/purge_timing/evidence/retail-1292-jhcr-confirmed-run3.txt),
 [JHCR sequence 1](../../../../tools/retail_probes/purge_timing/evidence/jhcr-update-seq1.json),
 and [sequence 2](../../../../tools/retail_probes/purge_timing/evidence/jhcr-update-seq2.json).
+
+### Retail Purge 150-speed floor at a 400-speed baseline (October 17, 2026)
+
+The follow-up probe in
+[`tools/retail_probes/purge_speed_floor/`](../../../../tools/retail_probes/purge_speed_floor/)
+used the same stock TFT `Apg2` map on Retail 1.29.2.9231. It set both hostile
+Footmen to 400 movement speed, position-locked them every 50 ms, and sampled
+effective speed every 50 ms. `PG_CONFIG` and setup output confirmed both units
+at 400. A matching hostile control stayed at 400 for all 440 samples.
+
+Three runs completed in the same Warcraft process. Each recorded 39 baseline
+samples, an accepted Purge order, the matching spell-effect event at tick 46,
+440 samples, and `PG_DONE accepted=1 effect=1`; none reported `PG_SETUP_FAIL`.
+Run 3 followed one JHCR update and includes `PG_JHCR_STATUS=1` plus the unique
+`PG_LOG_REV3` marker. Its map was loaded through the Custom Game UI after
+returning to the menu, preserving the same Retail process. Runs 1 and 2 also
+contain `PG_LOG_REV2`, inherited from the copied starting script; that marker
+does not indicate a JHCR update. The reusable checked-in source has since been
+cleaned of it.
+
+All three 400-speed runs produced the same transitions:
+
+| First sampled target speed | Time after spell-effect event | Notes |
+|---:|---:|---|
+| 0 | 0.05 s | The target remained at 0 through 3.00 s. |
+| 150 | 3.05 s | First nonzero speed; same absolute value as the prior 300-speed runs. |
+| 160 | 6.05 s | 40% of the 400 baseline. |
+| 240 | 9.05 s | 60% of baseline. |
+| 320 | 12.05 s | 80% of baseline. |
+| 400 | 15.05 s | Full baseline; the 15.00 s sample remained at 320. |
+
+The 300- and 400-speed tests both first recover at 150, supporting a 150-speed
+floor that masks the slower underlying value. The later 400-speed steps follow
+40%, 60%, 80%, and 100% of baseline. This separates the observed floor
+behavior from a direct 50% result at the first post-immobilize sample. It does
+not establish whether the floor is the generic Retail movement clamp or a
+Purge-specific minimum. The immobilize boundary is bracketed at 3.00–3.05 s;
+full recovery is bracketed at 15.00–15.05 s. Sub-50 ms behavior, allied
+dispel, and creep/item aliases remain open.
+
+Raw captures and per-run JSON summaries are in the probe's `evidence/`
+directory. The normal runner `capture` command requires its own launch record;
+these runs were loaded through the in-process Custom Game UI, so the raw
+PreloadGen result was copied before each rerun. The probe README documents that
+path and the JHCR update step.

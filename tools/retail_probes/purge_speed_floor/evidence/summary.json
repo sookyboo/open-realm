@@ -1,0 +1,135 @@
+{
+  "metadata": {
+    "probe_id": "purge-hostile-speed-floor-50ms",
+    "retail_build": "1.29.2.9231",
+    "retail_executable_sha256": "3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed",
+    "prepared_map_sha256": "75978fd4456a6584e6864c64271d6f42ac102da680b2d1b10cf9a668407fed03",
+    "loaded_in_existing_process_pid": 44300,
+    "display": ":105",
+    "wine_prefix": "/home/agent/.wine-war3",
+    "map_load_method": "Single Player > Custom Game > Probe > OrcX01-Purge-Speed-Floor; skip the opening cinematic",
+    "result_capture_note": "The runner capture subcommand requires a runner-created launch.json. This map was loaded through the UI in the already-active Retail process to avoid a second Wine launch, so raw PreloadGen outputs were copied directly before each rerun.",
+    "baseline_marker_note": "Runs 1 and 2 contain PG_LOG_REV2 because it was accidentally present in the initial prepared logger copied from the prior timing probe. It is not evidence of JHCR. The checked-in source has been cleaned; run 3 has the distinct PG_LOG_REV3 marker and status 1."
+  },
+  "runs": [
+    {
+      "run": 1,
+      "samples": 440,
+      "transitions": [
+        [
+          1,
+          0.0
+        ],
+        [
+          61,
+          150.0
+        ],
+        [
+          121,
+          160.0
+        ],
+        [
+          181,
+          240.0
+        ],
+        [
+          241,
+          320.0
+        ],
+        [
+          301,
+          400.0
+        ]
+      ],
+      "jhcr": false
+    },
+    {
+      "run": 2,
+      "samples": 440,
+      "transitions": [
+        [
+          1,
+          0.0
+        ],
+        [
+          61,
+          150.0
+        ],
+        [
+          121,
+          160.0
+        ],
+        [
+          181,
+          240.0
+        ],
+        [
+          241,
+          320.0
+        ],
+        [
+          301,
+          400.0
+        ]
+      ],
+      "jhcr": false
+    },
+    {
+      "run": 3,
+      "samples": 440,
+      "transitions": [
+        [
+          1,
+          0.0
+        ],
+        [
+          61,
+          150.0
+        ],
+        [
+          121,
+          160.0
+        ],
+        [
+          181,
+          240.0
+        ],
+        [
+          241,
+          320.0
+        ],
+        [
+          301,
+          400.0
+        ]
+      ],
+      "jhcr": true
+    }
+  ],
+  "interpretation": {
+    "immobilize_bracket_seconds": [
+      3.0,
+      3.05
+    ],
+    "full_recovery_bracket_seconds": [
+      15.0,
+      15.05
+    ],
+    "controls_passed": true,
+    "conclusion": "The first nonzero Purge speed is 150 at both 300 and 400 baseline speed, consistent with a 150-speed floor. The generic engine clamp versus a Purge-specific minimum remains unresolved.",
+    "generic_engine_clamp_vs_ability_minimum": "unresolved",
+    "first_nonzero_speed_observed": 150,
+    "hypothesized_speed_floor": 150
+  },
+  "ability_data": {
+    "rawcode": "Apg2",
+    "DataA": 5,
+    "DataD": 3,
+    "Dur": 15
+  },
+  "sampling": {
+    "timer_interval_seconds": 0.05,
+    "sample_every_ticks": 1,
+    "sample_count_per_run": 440
+  }
+}

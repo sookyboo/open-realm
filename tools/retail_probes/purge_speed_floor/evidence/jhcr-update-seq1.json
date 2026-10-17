@@ -1,0 +1,13 @@
+{
+  "probe_id": "purge-hostile-speed-floor-50ms",
+  "created_at": "2026-10-17T11:09:04.825056+00:00",
+  "script": "/tmp/wc3-purge-speed-floor/update-jhcr-run3.j",
+  "script_sha256": "874f1f8848018c23fae7c23b447e6b5238429e0eff03d5de68afb161e137a7b5",
+  "changed_functions": [
+    "pg_log"
+  ],
+  "reload_guard": "passed",
+  "sequence_file": "/home/agent/.wine-war3/drive_c/users/agent/Documents/Warcraft III/CustomMapData/JHCR-351973276-1.txt",
+  "sequence_sha256": "d994f7ac692402386d29c1e3bc628bba52ef920dc5a56275976d1204d0b4f571",
+  "sequence_size": 761
+}

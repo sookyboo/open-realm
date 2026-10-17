@@ -42,6 +42,11 @@ Retail runs, including two in-process JHCR updates, reproduce the 3-second
 immobilize and 15-second recovery curve; its
 JHCR update procedure and exact transition observations are in the
 [targeting evidence report](targeting.md#retail-purge-hostile-immobilize-and-recovery-timing-october-17-2026).
+The follow-up [Purge speed-floor probe](../../../../tools/retail_probes/purge_speed_floor/manifest.json)
+samples every 50 ms at a 400-speed baseline. Three Retail runs reproduce a
+fixed 150-speed first-recovery value and the 15-second return to baseline,
+including a same-process JHCR update; see its
+[evidence report](targeting.md#retail-purge-150-speed-floor-at-a-400-speed-baseline-october-17-2026).
 For a new ability question, start from the [general-purpose rerunnable JASS
 scaffold](../../../../tools/retail_probes/template/) and follow its
 [JHCR reuse and runner robustness guidelines](jhcr.md). Keep one-time setup,
