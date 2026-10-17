@@ -318,7 +318,13 @@ def _get_device(remote: str) -> Any:
     # Remote Wine frida-server; do not spawn or launch processes.
     if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", remote):
         raise SessionError("invalid Frida server endpoint")
-    return frida.get_device_manager().add_remote_device(remote)
+    get_manager = getattr(frida, "get_device_manager", None)
+    if not callable(get_manager):
+        raise SessionError(
+            "the selected Python cannot import the Frida client API (the tools/frida "
+            "directory may be shadowing an uninstalled client); rerun this command "
+            "with the matching Frida Python environment")
+    return get_manager().add_remote_device(remote)
 
 
 def _capture_case(script_session: Any, *, plan_dir: Path, plan: dict[str, Any],

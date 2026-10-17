@@ -39,6 +39,36 @@ python3 -m unittest discover -s tests -p 'test_wc3_ability_re.py'
 
 By default the tool expects `build/bin/ability_audit` and the user's
 `data/Warcraft III` directory. Override with `--audit` and `--data-dir`.
+For this repository, `data/Warcraft III/` is the standard local location for
+the installed Retail data: `Warcraft III.exe`, `War3.mpq`, `War3x.mpq`, and
+their locale archives. Keep these local/proprietary files out of commits. Run
+Retail with that directory as its working directory so the executable resolves
+its archives; a Wine prefix is for the user's registry, Documents, and other
+writable state, not a second copy of the game data.
+
+Use this location map for repeatable runs:
+
+| Input or output | Standard location |
+|---|---|
+| Retail executable and archives | `data/Warcraft III/` |
+| Ghidra projects | `build-re/ghidra-projects/` |
+| Ghidra user settings and temporary files | `build-re/ghidra-user/` and `build-re/ghidra-tmp/` |
+| Ability lookup, exports, graphs, assets, traces, scenarios, sessions, reports | `build-re/ability-re/<rawcode>-<run-id>/` (or a named child directory) |
+| Compiled tools and ordinary build products | `build/` |
+| Wine registry, user profile, and writable game state | The selected `$WINEPREFIX`; do not copy the game installation there |
+| JASS result files and prepared maps needed by Retail | Under the active Wine profile's `Documents/Warcraft III/CustomMapData/` and `Maps/Probe/` |
+
+Resolve the Wine profile from the environment or the active launch record; do
+not copy machine-specific absolute paths into checked-in scenario specs. For
+example, set `WINEPREFIX` for commands that launch Retail and use
+`winepath -u 'C:\\users\\<user>\\Documents\\Warcraft III\\CustomMapData'`
+to obtain the host path for a case manifest. Store the generated manifest,
+map-preparation record, launch record, Frida plan, and captured outputs under
+the corresponding `build-re/ability-re/` run directory. Use a new run ID and
+output directory for each immutable capture. Temporary files should also live
+under `build-re/`, not scattered `/tmp` locations, unless a tool requires a
+specific external writable directory.
+
 For native address work, pass `--executable 'data/Warcraft III/Warcraft III.exe'`;
 the command refuses a hash different from the pinned inventory. An omitted
 executable is **not** considered checked. A valid inventory or class table
@@ -477,13 +507,13 @@ Its original documented command works with the generated `agent.js` too.
 ```sh
 python3 tools/wc3_ability_re.py ability-trace-run \
   --plan build-re/ability-re/Apxf-trace-plan-01 \
-  --probe-dir /tmp/wc3-probes/phoenix-prepared \
-  --seconds 60 --output /tmp/wc3-probes/phoenix-frida-01.jsonl
+  --probe-dir build-re/ability-re/Apxf-prepared-probe-01 \
+  --seconds 60 --output build-re/ability-re/Apxf-frida-01.jsonl
 
 python3 tools/wc3_ability_re.py ability-trace-review \
   --plan build-re/ability-re/Apxf-trace-plan-01 \
-  --trace /tmp/wc3-probes/phoenix-frida-01.jsonl \
-  --output /tmp/wc3-probes/phoenix-trace-review.json
+  --trace build-re/ability-re/Apxf-frida-01.jsonl \
+  --output build-re/ability-re/Apxf-frida-review-01.json
 ```
 
 The controller validates the live Retail process and prepared-map SHA,
@@ -557,7 +587,9 @@ result using that distinct filename, including both exact strings
 `SESSION_START run_id=phoenix-300` and
 `SESSION_DONE run_id=phoenix-300` (substitute the case's run ID). Emit
 `SESSION_DONE` only after all timed callbacks and observations are complete;
-mark rejected setup/casts as `inconclusive_markers`. A case result without the
+mark setup failures as inconclusive. For an order case, put `accepted=false`
+in `required_markers` only when that case is an explicitly expected rejection;
+otherwise put it in `inconclusive_markers`. A case result without the
 proper unique start/done pair, fresh modification timestamp and required
 markers cannot pass the capture-readiness gate. The Patch 8 runner **does not
 automatically generate JASS scenarios or click through map UI**. Trigger the
@@ -567,15 +599,15 @@ ability scenario construction and input control.
 ```sh
 python3 tools/wc3_ability_re.py ability-session-create \
   --plan build-re/ability-re/Apxf-trace-plan-01 \
-  --probe-dir /tmp/wc3-probes/phoenix-prepared \
-  --cases /tmp/phoenix-cases.json \
-  --output /tmp/phoenix-session-01
+  --probe-dir build-re/ability-re/Apxf-prepared-probe-01 \
+  --cases build-re/ability-re/Apxf-lab-01/lab-session-cases.json \
+  --output build-re/ability-re/Apxf-session-01
 
 python3 tools/wc3_ability_re.py ability-session-check \
-  --session /tmp/phoenix-session-01
+  --session build-re/ability-re/Apxf-session-01
 
 python3 tools/wc3_ability_re.py ability-session-run \
-  --session /tmp/phoenix-session-01 --remote 127.0.0.1:27043
+  --session build-re/ability-re/Apxf-session-01 --remote 127.0.0.1:27043
 ```
 
 The session attaches **once**, then loads a fresh *initially disarmed* copy of
@@ -706,13 +738,13 @@ records. The Frida plan's `--seconds` limit must cover the longest scenario
 ```sh
 python3 tools/wc3_ability_re.py ability-session-create \
   --plan build-re/ability-re/Apxf-trace-plan-01 \
-  --probe-dir /tmp/wc3-probes/phoenix-prepared \
+  --probe-dir build-re/ability-re/Apxf-prepared-probe-01 \
   --cases build-re/ability-re/Apxf-lab-01/lab-session-cases.json \
-  --output /tmp/phoenix-session-01
+  --output build-re/ability-re/Apxf-session-01
 python3 tools/wc3_ability_re.py ability-session-check \
-  --session /tmp/phoenix-session-01
+  --session build-re/ability-re/Apxf-session-01
 python3 tools/wc3_ability_re.py ability-session-run \
-  --session /tmp/phoenix-session-01
+  --session build-re/ability-re/Apxf-session-01
 ```
 
 When the session runner announces that `phoenix-300` is armed, type
@@ -734,6 +766,14 @@ existing strict file-freshness and completion-marker checks.
   against `targets[0]`; other targets are controls/candidates.
 - `point`, `area`: issue an explicitly named `IssuePointOrder` at `point.x/y`.
 - `immediate`: issue `IssueImmediateOrder` with the provided order string.
+
+Ordered cases may set `expected_order_accepted` to `false` for an intentionally
+rejected-order control. The generated session manifest then requires
+`accepted=false` and treats `accepted=true` as inconclusive. The default is
+`true`. This controls capture classification only; it does not make the
+expected order result true or provide evidence that the ability behaved
+correctly. This field is invalid for `passive` scenarios, where
+`accepted=true` only records successful setup.
 
 Use `learn_mode: "hero_skill"` with `hero_level` for learned Hero spells;
 otherwise the default `unit_add` uses `UnitAddAbility` and, for higher ranks,
@@ -820,7 +860,7 @@ end life. The other supported metrics are `mana_change`, `speed_change`,
 python3 tools/wc3_ability_re.py ability-analyze \
   --offline build-re/ability-re/Apxf-offline/offline \
   --lab build-re/ability-re/Apxf-lab-01 \
-  --session /tmp/phoenix-session-01 \
+  --session build-re/ability-re/Apxf-session-01 \
   --comparisons /path/to/phoenix-comparisons.json \
   --output build-re/ability-re/Apxf-differential-01
 ```

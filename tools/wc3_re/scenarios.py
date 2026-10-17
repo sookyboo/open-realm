@@ -111,7 +111,8 @@ def validate(source: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(case, dict):
             raise ScenarioError(f"{where} must be an object")
         allowed = {"run_id", "kind", "caster", "targets", "ability_level", "learn_mode", "hero_level",
-                   "order", "point", "duration_seconds", "sample_interval_seconds", "buff_ids", "timeout_seconds"}
+                   "order", "expected_order_accepted", "point", "duration_seconds",
+                   "sample_interval_seconds", "buff_ids", "timeout_seconds"}
         if set(case) - allowed:
             raise ScenarioError(f"{where}: unsupported keys " + ", ".join(sorted(set(case) - allowed)))
         run_id = case.get("run_id")
@@ -129,9 +130,14 @@ def validate(source: dict[str, Any]) -> dict[str, Any]:
         if kind in ("target", "projectile", "buff") and not targets:
             raise ScenarioError(f"{where}: targeted scenario requires a target")
         order = case.get("order")
+        expected_order_accepted = case.get("expected_order_accepted", True)
+        if not isinstance(expected_order_accepted, bool):
+            raise ScenarioError(f"{where}.expected_order_accepted must be a boolean")
         if kind == "passive":
             if order is not None:
                 raise ScenarioError(f"{where}: passive scenarios must not issue an order")
+            if "expected_order_accepted" in case:
+                raise ScenarioError(f"{where}: expected_order_accepted only applies to ordered scenarios")
         elif not isinstance(order, str) or not re.fullmatch(r"[a-z][a-z0-9]{0,31}", order):
             raise ScenarioError(f"{where}: explicit lower-case order is required; cannot infer from rawcode")
         point = None
@@ -171,7 +177,8 @@ def validate(source: dict[str, Any]) -> dict[str, Any]:
                            f"{where}.timeout_seconds", 1, 360)
         normalized.append({"run_id": run_id, "kind": kind, "caster": caster, "targets": targets,
                            "ability_level": level, "learn_mode": learn_mode, "hero_level": hero_level,
-                           "order": order, "point": point, "duration_seconds": duration,
+                           "order": order, "expected_order_accepted": expected_order_accepted,
+                           "point": point, "duration_seconds": duration,
                            "sample_interval_seconds": interval, "ticks": ticks,
                            "buff_ids": buffs, "timeout_seconds": timeout,
                            "result_file": str(dest_path / (run_id + ".txt")),
@@ -403,12 +410,16 @@ def _render_fragments(plan: dict[str, Any]) -> tuple[str, str]:
 
 def build(source: dict[str, Any]) -> dict[str, Any]:
     plan = validate(source)
-    case_manifest = {"cases": [{"run_id": row["run_id"], "result_file": row["result_file"],
-                                "timeout_seconds": row["timeout_seconds"],
-                                "required_markers": ["setup_failed=false", "accepted=true"],
-                                "inconclusive_markers": ["setup_failed=true", "accepted=false", "buffer_overflow=true"],
-                                "chat_command": row["chat_command"]}
-                               for row in plan["cases"]]}
+    case_manifest = {"cases": []}
+    for row in plan["cases"]:
+        acceptance = "accepted=" + ("true" if row["expected_order_accepted"] else "false")
+        opposite = "accepted=" + ("false" if row["expected_order_accepted"] else "true")
+        case_manifest["cases"].append({
+            "run_id": row["run_id"], "result_file": row["result_file"],
+            "timeout_seconds": row["timeout_seconds"],
+            "required_markers": ["setup_failed=false", acceptance],
+            "inconclusive_markers": ["setup_failed=true", opposite, "buffer_overflow=true"],
+            "chat_command": row["chat_command"]})
     # Patch 8 rejects unknown case properties on write because it normalizes
     # its own manifests; chat_command goes into a separate operator guide.
     session_cases = {"cases": [{k: v for k, v in case.items() if k != "chat_command"}

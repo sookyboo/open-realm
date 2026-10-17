@@ -243,6 +243,11 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(session.select_frida_process(FakeDevice(7, {}), 7)[1],
                          "matching_host_and_frida_pid")
 
+    def test_live_attach_reports_missing_frida_api_clearly(self):
+        with mock.patch.dict(sys.modules, {"frida": SimpleNamespace()}):
+            with self.assertRaisesRegex(session.SessionError, "matching Frida Python environment"):
+                session._get_device("127.0.0.1:27043")
+
     def test_host_process_requires_exact_map_and_wine_prefix(self):
         proc = self.root / "proc"
         for pid, suffix in (("100", "Z:\\probe.w3x"),
