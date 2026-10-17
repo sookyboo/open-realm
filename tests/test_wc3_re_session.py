@@ -228,6 +228,11 @@ class SessionTests(unittest.TestCase):
         for run in ("case-1", "case-2"):
             self.assertTrue((self.output / run / "trace.jsonl").is_file())
             self.assertTrue((self.output / run / "result.txt").is_file())
+            report = json.loads((self.output / run / "review.json").read_text())
+            self.assertEqual(report["native_function_calls_by_run_id"], {
+                "0x0080d820": [{"thread_id": 1, "invocation_id": 1,
+                                  "return_value_raw": "0x0", "return_address_rva": None}]
+            })
         with mock.patch.object(session, "_host_process", return_value=9876), self.assertRaisesRegex(
                 session.SessionError, "already has a run summary"):
             session.run(self.output, device=fake, poll_seconds=0.01)

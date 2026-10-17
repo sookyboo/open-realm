@@ -69,6 +69,16 @@ output directory for each immutable capture. Temporary files should also live
 under `build-re/`, not scattered `/tmp` locations, unless a tool requires a
 specific external writable directory.
 
+For live Retail experiments, use **640×480 for both the X11/Xvfb screen and
+the Warcraft III game resolution**. Set the Retail `Video\reswidth` and
+`Video\resheight` values to 640 and 480 in the selected Wine prefix before
+launching, and start Xvfb with a 640×480 screen. Keep the same `DISPLAY` and
+`XAUTHORITY` in the Wine, Frida-server, and input-tool environment. Do not rely
+on a centered 640×480 game viewport inside a larger X screen: UI coordinates
+and scripted input can then target the wrong location. Verify the Retail
+window geometry before using mouse coordinates. The [JHCR runbook](ability-probes/jhcr.md#resolution-and-mouse-input)
+has the registry commands and display checks.
+
 For native address work, pass `--executable 'data/Warcraft III/Warcraft III.exe'`;
 the command refuses a hash different from the pinned inventory. An omitted
 executable is **not** considered checked. A valid inventory or class table
@@ -770,6 +780,13 @@ case insert the fragments using the documented copied-map workflow, or bring
 in the newer runner. The hook **must** execute after the map restores gameplay
 and cinematic restrictions. Confirm an untouched control map before relying
 on an instrumented one. Never modify the stock MPQ/map in place.
+
+Generated scenarios default to a 60-second session timeout so there is time
+for manual activation after Frida arms; the measured scenario duration can be
+longer and increases that timeout accordingly. Set `timeout_seconds` explicitly
+when a case needs a different bound. Each case review stores native calls for
+that run ID as a per-case RVAs-to-return-records map, matching the differential
+analyzer's validation contract.
 
 Create and check the Patch 8 session using the same trace plan and prepared-map
 records. The Frida plan's `--seconds` limit must cover the longest scenario

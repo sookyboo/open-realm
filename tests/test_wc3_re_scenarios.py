@@ -46,6 +46,7 @@ class ScenarioTests(unittest.TestCase):
         self.assertIn('RE_Target[0] = CreateUnit(Player(12)', report["functions"])
         cases = report["session_cases"]["cases"]
         self.assertEqual([c["run_id"] for c in cases], ["phoenix-300", "phoenix-650"])
+        self.assertEqual([c["timeout_seconds"] for c in cases], [60, 60])
         self.assertEqual([Path(c["result_file"]).name for c in cases], ["phoenix-300.txt", "phoenix-650.txt"])
         self.assertEqual(session._validate_cases(report["session_cases"], max_seconds=60), cases)
         self.assertNotIn("chat_command", cases[0])
