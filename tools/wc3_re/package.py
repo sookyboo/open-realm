@@ -146,6 +146,7 @@ def build_package(lookup: dict[str, Any], *, graph: dict[str, Any] | None = None
         "memory_access_candidates": graph.get("memory_access_candidates", {}) if graph else {},
         "branch_candidates": graph.get("branch_candidates", {}) if graph else {},
         "unbound_vtables": graph.get("unbound_vtable_candidates", []) if graph else [],
+        "vtable_method_candidates": graph.get("vtable_method_candidates", {}) if graph else {},
         "presentation": {},
     }
     questions: list[dict[str, Any]] = []

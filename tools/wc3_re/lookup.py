@@ -23,7 +23,13 @@ CLASS_REFERENCE = ROOT / "games/warcraft-3/tft-ability-classes.txt"
 DEFAULT_AUDIT = ROOT / "build/bin/ability_audit"
 DEFAULT_DATA = ROOT / "data/Warcraft III"
 RAWCODE_RE = re.compile(r"[A-Za-z0-9]{4}\Z")
-CLASS_RE = re.compile(r'^\{\s*"([^"]{4})",\s*"([^"]+)"\s*\}\s*,?\s*/\*\s*parent="([^"]*)"')
+CLASS_RE = re.compile(
+    r'^\{\s*"([^"]{4})",\s*"([^"]+)"\s*\}\s*,?\s*/\*\s*parent="([^"]*)"'
+    r'(?:\s+call=([0-9A-Fa-f]{8})\s+create=([0-9A-Fa-f]{8})'
+    r'\s+destroy=([0-9A-Fa-f]{8})\s+pool=([0-9A-Fa-f]{8})'
+    r'\s+rtti=([0-9A-Fa-f]{8})\s+desc_va=([0-9A-Fa-f]{8})'
+    r'\s+table=([0-9A-Fa-f]{8})\s+init=([0-9A-Fa-f]{8}))?')
+CLASS_SHA_RE = re.compile(r"^\s*\*\s*SHA-256:\s*([0-9a-f]{64})", re.IGNORECASE | re.MULTILINE)
 
 
 class LookupError(RuntimeError):
@@ -56,19 +62,32 @@ def load_inventory_identity(path: Path = INVENTORY) -> dict[str, Any]:
     return dict(data["executable"])
 
 
-def class_reference(path: Path = CLASS_REFERENCE) -> dict[str, dict[str, str]]:
+def class_reference(path: Path = CLASS_REFERENCE) -> dict[str, dict[str, Any]]:
     try:
         content = path.read_text(encoding="utf-8")
     except OSError as error:
         raise LookupError(f"cannot read class reference {path}: {error}") from error
-    classes: dict[str, dict[str, str]] = {}
+    classes: dict[str, dict[str, Any]] = {}
+    source_sha_match = CLASS_SHA_RE.search(content)
+    source_sha256 = source_sha_match.group(1).lower() if source_sha_match else None
     for line in content.splitlines():
         match = CLASS_RE.match(line)
         if match:
-            code, name, parent = match.groups()
+            code, name, parent, *offsets = match.groups()
             if code in classes:
                 raise LookupError(f"duplicate implementation code in class reference: {code}")
-            classes[code] = {"name": name, "parent_code": parent}
+            row: dict[str, Any] = {"name": name, "parent_code": parent}
+            if offsets[0] is not None:
+                keys = ("registration_call_file_offset", "factory_file_offset",
+                        "destroy_file_offset", "pool_cleanup_file_offset",
+                        "rtti_file_offset", "descriptor_va", "vtable_file_offset",
+                        "initializer_file_offset")
+                row["registration"] = {
+                    "binary_sha256": source_sha256,
+                    "offsets_are": "file_offsets_except_descriptor_va",
+                    **{key: f"0x{value.lower()}" for key, value in zip(keys, offsets)},
+                }
+            classes[code] = row
     if not classes:
         raise LookupError(f"no class rows found in {path}")
     return classes
@@ -203,6 +222,7 @@ def resolve(rawcode: str, editions: list[str], *, audit: Path = DEFAULT_AUDIT,
                 "implementation_code": code,
                 "class": entry["name"] if entry else None,
                 "parent_code": entry["parent_code"] if entry else None,
+                "registration": entry.get("registration") if entry else None,
                 "source": str(classes_path),
                 "status": "offline_reference_hint" if entry else "unresolved",
                 "note": "Not verified factory registration or a runtime vtable.",

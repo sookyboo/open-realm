@@ -1,5 +1,5 @@
 /* Warcraft III TFT 1.29.2.9231: extracted static class registrations.
- * SHA-256: a1950f17905b9cd7d5461d45e6723af36dda5304e12dba27a1fea85593b15f3f
+ * SHA-256: 3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed
  * Image base: 0x00400000; register: file 0x003F5760, VA 0x007F6360.
  * 1076 entries; IDs are case sensitive; offsets below are hexadecimal FILE offsets.
  * These are registered type IDs, including internal base types, not all AbilityData.slk aliases.

@@ -271,9 +271,27 @@ provided explicitly. When the lookup provides a class hint, the tool searches
 *curated inventory function labels only* for matching whole class-name or
 rawcode tokens, selects their **typed function entry addresses**, and labels
 them `curated_label_match_only`. These are merely candidate entry points; a
-class name from `tft-ability-classes.txt` is not proof of factory registration.
-Unknown/missing seeds fail closed. Use `--no-auto-seeds` with `--seed-rva` for
-precisely scoped graph reviews.
+class name from `tft-ability-classes.txt` alone is not proof of a factory or
+runtime receiver. With an exact-build lookup and matching executable, the
+graph can also use the extracted registration's factory, destroy and pool
+callback file offsets. It translates offsets through the PE section table,
+requires a unique matching Ghidra function body, and records each as a
+`high_static_registration_candidate`; runtime dispatch remains unproven.
+Exact-build references from Ghidra to class/RTTI strings are separately labelled
+medium-confidence candidates. A stale class table, ambiguous function mapping,
+or unsupported build contributes no registration seeds. Unknown/missing seeds
+fail closed. Use `--no-auto-seeds` with `--seed-rva` for precisely scoped graph
+reviews.
+
+When a validated detail export contains a candidate vtable and a selected
+exact-build registration callback has a Ghidra data reference to that table,
+the graph keeps its function-entry slots in `vtable_method_candidates` with
+table RVA, slot offset, source export and an explicit candidate confidence.
+These methods are surfaced in the review report and considered by bounded
+trace-plan prioritization when they are graph nodes. They are not call edges,
+do not expand traversal, and do not establish dynamic receiver identity or
+runtime dispatch. Use them to choose targeted detail exports or bounded hooks
+for a hypothesis-driven experiment.
 
 The output is a **new** directory; existing output is never overwritten:
 

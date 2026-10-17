@@ -99,6 +99,121 @@ class GraphTests(unittest.TestCase):
         seeds = graph._candidate_seeds(curated, "ANfa", "CAbilityColdArrows", payload)
         self.assertEqual([seed["rva"] for seed in seeds], ["0x0085ce10"])
 
+    def test_class_string_references_discover_without_curated_function_entries(self):
+        refs = {
+            "Apxf": ("CAbilityPhoenixFire", 0x01110001),
+            "AOsw": ("CAbilityWard", 0x01110002),
+            "ANfl": ("CAbilityForkedLightning", 0x01110003),
+        }
+        for rawcode, (class_name, target) in refs.items():
+            with self.subTest(rawcode=rawcode):
+                functions = {"0x00000100": {}, "0x00000200": {}}
+                rows = [
+                    ({"function_rva": "0x00000100", "site_rva": "0x00000108",
+                      "target_va": f"0x{target:08x}"}, 1),
+                    ({"function_rva": "0x00000200", "site_rva": "0x00000208",
+                      "target_va": "0x01119999"}, 2),
+                ]
+                result = graph._class_string_reference_seeds(
+                    class_name, {target: "rtti_name"}, rows, functions, self.scan)
+                self.assertEqual([row["rva"] for row in result], ["0x00000100"])
+                reason = result[0]["basis"][0]
+                self.assertEqual(reason["evidence_classification"],
+                                 "verified_static_reference_candidate")
+                self.assertEqual(reason["receiver_identity"],
+                                 "not established by a string reference")
+
+    def test_multiple_class_string_references_are_retained_as_candidates(self):
+        target = 0x01112345
+        functions = {"0x00000100": {}, "0x00000200": {}}
+        rows = [({"function_rva": addr, "site_rva": addr,
+                  "target_va": f"0x{target:08x}"}, index)
+                for index, addr in enumerate(functions, 1)]
+        result = graph._class_string_reference_seeds(
+            "CAbilityForkedLightning", {target: "rtti_name"}, rows, functions, self.scan)
+        self.assertEqual([row["rva"] for row in result], sorted(functions))
+        self.assertTrue(all(row["basis"][0]["confidence"] == "medium_static_candidate"
+                            for row in result))
+
+    def test_unresolved_class_string_reference_produces_no_seed(self):
+        self.assertEqual(graph._class_string_reference_seeds(
+            "CAbilityForkedLightning", {}, [], {}, self.scan), [])
+
+    def test_class_string_search_rejects_mismatched_executable(self):
+        executable = self.root / "wrong.exe"
+        executable.write_bytes(b"wrong build")
+        with self.assertRaisesRegex(graph.GraphError, "SHA-256 mismatch"):
+            graph._class_string_target_vas(executable, "CAbilityForkedLightning", SHA)
+
+    def test_registration_offsets_require_matching_build_and_translate_file_offsets(self):
+        # A minimal PE with a raw-backed .text section whose RVA differs from its file offset.
+        image = bytearray(0x500)
+        image[0x3c:0x40] = (0x80).to_bytes(4, "little")
+        image[0x86:0x88] = (1).to_bytes(2, "little")
+        image[0x94:0x96] = (0xe0).to_bytes(2, "little")
+        image[0x80:0x84] = b"PE\0\0"
+        image[0x80 + 24 + 28:0x80 + 24 + 32] = (0x400000).to_bytes(4, "little")
+        sh = 0x80 + 24 + 0xe0
+        image[sh + 8:sh + 24] = (0x200).to_bytes(4, "little") + (0x1000).to_bytes(4, "little") + (0x200).to_bytes(4, "little") + (0x200).to_bytes(4, "little")
+        executable = self.root / "fixture.exe"
+        executable.write_bytes(image)
+        digest = graph.hashlib.sha256(image).hexdigest()
+        self.assertEqual(graph._file_offset_to_rva(executable, "0x00000220", digest), "0x00001020")
+        self.assertEqual(graph._registration_seeds(executable,
+            {"binary_sha256": "0" * 64}, "CAbilityForkedLightning", "ANfl", "ANfl",
+            digest, {}, []), [])
+
+    def test_registration_callback_requires_unique_containing_function(self):
+        executable = self.root / "fixture.exe"
+        executable.write_bytes(b"not a PE")
+        # A stale registration must be discarded before parsing or trusting offsets.
+        self.assertEqual(graph._registration_seeds(executable,
+            {"binary_sha256": "0" * 64, "factory_file_offset": "0x20"},
+            "CAbilityForkedLightning", "ANfl", "ANfl", SHA, {}, []), [])
+
+    def test_class_linked_vtable_slots_are_candidates_not_graph_edges(self):
+        # A class registration factory's exact static table reference scopes
+        # slot candidates but must not imply runtime dispatch.
+        factory, method = "0x00001000", "0x00002000"
+        self._make(functions=[factory, method], datarefs=[{
+            "function_rva": factory, "site_rva": "0x00001008",
+            "target_va": "0x00403000", "target_rva": "0x00003000",
+            "reference_type": "DATA"}])
+        table_dir = self.root / "detail-vtable"
+        write_export(table_dir, "detail", functions=[fn(factory)], vtables=[{
+            "seed_rva": "0x00003000", "status": "pointer_table_candidate_only",
+            "slots": [{"offset": "0x00000004", "target_rva": method,
+                       "function_entry_confirmed": True}]}])
+        out = graph.build_graph(rawcode="Apxf", scan=self.scan, inventory=INVENTORY,
+                                lookup=self.lookup, detail=[table_dir], seed_rvas=[factory],
+                                auto_seeds=False, max_depth=0, max_nodes=10)
+        self.assertEqual([node["rva"] for node in out["nodes"]], [factory, method])
+        self.assertEqual(out["nodes"][1]["depth"], 1)
+        self.assertIn(method, out["vtable_method_candidates"])
+        self.assertEqual(out["vtable_method_candidates"][method][0]["slot_offset"],
+                         "0x00000004")
+        self.assertEqual(out["vtable_method_candidates"][method][0]["confidence"],
+                         "candidate_vtable_method")
+
+    @unittest.skipUnless((ROOT / "data/Warcraft III/Warcraft III.exe").is_file(),
+                         "local pinned Retail executable unavailable")
+    def test_pinned_registration_callbacks_normalize_from_file_offsets(self):
+        executable = ROOT / "data/Warcraft III/Warcraft III.exe"
+        registration = {
+            "binary_sha256": SHA,
+            "factory_file_offset": "0x00877840",
+            "destroy_file_offset": "0x008778b0",
+            "pool_cleanup_file_offset": "0x008778e0",
+        }
+        functions = {"0x00878440": {}, "0x008784b0": {}, "0x008784e0": {}}
+        rows = graph._registration_seeds(executable, registration,
+            "CAbilityForkedLightning", "ANfl", "ANfl", SHA, functions, [])
+        self.assertEqual([row["rva"] for row in rows], sorted(functions))
+        self.assertEqual([row["basis"][0]["registration_role"] for row in rows],
+                         ["factory", "destroy", "pool_cleanup"])
+        self.assertTrue(all(row["basis"][0]["receiver_identity"].endswith(
+            "runtime receiver not established") for row in rows))
+
     def test_auto_seed_normalizes_code_address_to_unique_containing_function(self):
         inventory = self.root / "inventory-containing.json"
         curated = json.loads(INVENTORY.read_text())

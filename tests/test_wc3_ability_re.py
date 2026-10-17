@@ -42,6 +42,13 @@ class ClassReferenceTests(unittest.TestCase):
         self.assertEqual(classes["Apxf"]["name"], "CAbilityPhoenixFire")
         self.assertNotIn("AOsw", classes)  # alias is resolved via authored `code`, not guessed
 
+    def test_tft_class_rows_preserve_source_identity_and_callback_registration(self):
+        classes = lookup.class_reference()
+        self.assertEqual(classes["ANfl"]["registration"]["binary_sha256"],
+                         lookup.load_inventory_identity()["sha256"])
+        self.assertEqual(classes["ANfl"]["registration"]["factory_file_offset"], "0x00877840")
+        self.assertEqual(classes["AOwd"]["registration"]["destroy_file_offset"], "0x00833d40")
+
     def test_rawcode_is_case_sensitive_and_safe(self):
         self.assertEqual(lookup.check_rawcode("Apxf"), "Apxf")
         for invalid in ("Apx", "Apxff", "ab-c", "\\x00ABC", "\u00e9bcD"):
