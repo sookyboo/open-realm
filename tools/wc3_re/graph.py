@@ -9,14 +9,16 @@ facts.  This module performs no executable analysis or live instrumentation.
 from __future__ import annotations
 
 from collections import defaultdict, deque
+import hashlib
 import json
 from pathlib import Path
 import re
+import struct
 from typing import Any
 
 from wc3_re.ghidra import rva as parse_rva, validate_export
 from wc3_re.inventory import validate_inventory
-from wc3_re.lookup import LookupError, check_rawcode
+from wc3_re.lookup import DEFAULT_DATA, LookupError, check_rawcode
 
 MAX_NODES = 500
 MAX_EDGES = 5000
@@ -122,6 +124,186 @@ def _candidate_seeds(inventory: dict[str, Any], rawcode: str, class_hint: str | 
     return result
 
 
+def _class_string_target_vas(executable: Path, class_name: str, expected_sha: str) -> dict[int, str]:
+    """Find class-name and MSVC RTTI strings in the identity-checked binary."""
+    if not executable.is_file():
+        return {}
+    digest = hashlib.sha256(executable.read_bytes()).hexdigest()
+    if digest.lower() != expected_sha.lower():
+        raise GraphError(f"class-string executable SHA-256 mismatch: {digest} != {expected_sha}")
+    data = executable.read_bytes()
+    try:
+        pe = struct.unpack_from("<I", data, 0x3c)[0]
+        sections = struct.unpack_from("<H", data, pe + 6)[0]
+        optional = struct.unpack_from("<H", data, pe + 20)[0]
+        image_base = struct.unpack_from("<I", data, pe + 24 + 28)[0]
+        section_start = pe + 24 + optional
+        targets: dict[int, str] = {}
+        strings = ((b".?AV" + class_name.encode("ascii") + b"@@\0", "rtti_name"),
+                   (class_name.encode("ascii") + b"\0", "class_name"))
+        for needle, kind in strings:
+            start = 0
+            found_offsets = []
+            while True:
+                offset = data.find(needle, start)
+                if offset < 0:
+                    break
+                found_offsets.append(offset)
+                start = offset + 1
+            for offset in found_offsets:
+                for index in range(sections):
+                    section = section_start + index * 40
+                    virtual_size, virtual_address, raw_size, raw_offset = struct.unpack_from("<IIII", data, section + 8)
+                    if raw_offset <= offset < raw_offset + raw_size:
+                        va = image_base + virtual_address + offset - raw_offset
+                        targets[va] = kind
+                        break
+        return targets
+    except (IndexError, struct.error, UnicodeEncodeError) as error:
+        raise GraphError(f"cannot map class-name strings in {executable}: malformed PE image") from error
+
+
+def _class_string_reference_seeds(class_name: str, target_vas: dict[int, str],
+                                   dataref_rows: list[tuple[dict[str, Any], int]],
+                                   functions: dict[str, dict[str, Any]], scan: Path) -> list[dict[str, Any]]:
+    """Use only Ghidra's exact-build data references to the class's actual strings."""
+    suggestions: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row, number in dataref_rows:
+        target = row.get("target_va")
+        if not isinstance(target, str):
+            continue
+        try:
+            kind = target_vas.get(int(target, 16))
+        except ValueError:
+            continue
+        if kind is None:
+            continue
+        function = _hex(row.get("function_rva"), "dataref.function_rva")
+        if function not in functions:
+            raise GraphError(f"class-string reference function {function} is absent from scan")
+        suggestions[function].append({
+            "basis": "ghidra_data_reference_to_exact_build_class_string",
+            "class_name_hint": class_name,
+            "string_kind": kind,
+            "target_va": f"0x{int(target, 16):08x}",
+            "site_rva": _hex(row.get("site_rva"), "dataref.site_rva"),
+            "source": f"{scan}/datarefs.jsonl:{number}",
+            "evidence_classification": "verified_static_reference_candidate",
+            "confidence": "medium_static_candidate",
+            "receiver_identity": "not established by a string reference",
+            "why_selected": "Ghidra records this function referencing the exact-build class/RTTI name string.",
+        })
+    return [{"rva": rva, "basis": rows} for rva, rows in sorted(suggestions.items())]
+
+
+def _file_offset_to_rva(executable: Path, file_offset: str, expected_sha: str) -> str:
+    """Translate a registered callback file offset using the matching PE layout."""
+    if not executable.is_file():
+        raise GraphError(f"registration executable not found: {executable}")
+    data = executable.read_bytes()
+    actual = hashlib.sha256(data).hexdigest()
+    if actual.lower() != expected_sha.lower():
+        raise GraphError(f"registration executable SHA-256 mismatch: {actual} != {expected_sha}")
+    try:
+        if not isinstance(file_offset, str) or not re.fullmatch(r"0x[0-9a-fA-F]{1,8}", file_offset):
+            raise ValueError("not a hexadecimal file offset")
+        offset = int(file_offset, 16)
+        pe = struct.unpack_from("<I", data, 0x3c)[0]
+        section_count = struct.unpack_from("<H", data, pe + 6)[0]
+        optional_size = struct.unpack_from("<H", data, pe + 20)[0]
+        image_base = struct.unpack_from("<I", data, pe + 24 + 28)[0]
+        sections_start = pe + 24 + optional_size
+        matches = []
+        for index in range(section_count):
+            section = sections_start + index * 40
+            virtual_size, virtual_address, raw_size, raw_offset = struct.unpack_from("<IIII", data, section + 8)
+            if raw_offset <= offset < raw_offset + raw_size:
+                matches.append(virtual_address + offset - raw_offset)
+        if len(matches) != 1:
+            raise GraphError(f"registration file offset {file_offset} maps to {len(matches)} PE sections")
+        return f"0x{matches[0]:08x}"
+    except (IndexError, struct.error, ValueError) as error:
+        raise GraphError(f"cannot map registration file offset {file_offset}: malformed PE image") from error
+
+
+def _registration_seeds(executable: Path, registration: Any, class_name: str,
+                        rawcode: str, implementation_code: str, expected_sha: str,
+                        functions: dict[str, dict[str, Any]], function_ranges: list[tuple[int, int, str]]) -> list[dict[str, Any]]:
+    """Suggest registered class callbacks only for exact-build registration metadata."""
+    if not isinstance(registration, dict):
+        return []
+    if str(registration.get("binary_sha256", "")).lower() != expected_sha.lower():
+        return []
+    roles = (("factory_file_offset", "factory"), ("destroy_file_offset", "destroy"),
+             ("pool_cleanup_file_offset", "pool_cleanup"))
+    candidates: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for key, role in roles:
+        source_offset = registration.get(key)
+        if not isinstance(source_offset, str):
+            continue
+        rva = _file_offset_to_rva(executable, source_offset, expected_sha)
+        address = parse_rva(rva)
+        if rva not in functions:
+            containing = {entry for low, high, entry in function_ranges if low <= address <= high}
+            if len(containing) != 1:
+                # The function boundary is ambiguous or absent, so no seed is safe.
+                continue
+            normalized = next(iter(containing))
+        else:
+            normalized = rva
+        candidates[normalized].append({
+            "basis": "exact_build_static_class_registration_callback",
+            "registration_role": role,
+            "rawcode": rawcode,
+            "implementation_code": implementation_code,
+            "class_name_hint": class_name,
+            "source_file_offset": source_offset,
+            "translated_rva": rva,
+            "address_normalization": ({"source_rva": rva, "function_entry_rva": normalized,
+                                       "basis": "unique_ghidra_function_body_containment"}
+                                      if normalized != rva else None),
+            "binary_sha256": expected_sha,
+            "evidence_classification": "verified_executable_registration_and_callback_reference",
+            "confidence": "high_static_registration_candidate",
+            "receiver_identity": "registered class relationship; runtime receiver not established",
+            "why_selected": f"Exact-build registration metadata identifies this {role} callback for the implementation code.",
+        })
+    return [{"rva": rva, "basis": rows} for rva, rows in sorted(candidates.items())]
+
+
+def _node_relevance(addr: str, depth: int, incoming_count: int,
+                    seed_origins: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    reasons = []
+    seed_basis = [basis for row in seed_origins.get(addr, [])
+                  for basis in (row.get("basis", []) if isinstance(row.get("basis"), list)
+                                else [row.get("basis")])]
+    roles = sorted({role for row in seed_origins.get(addr, [])
+                    for role in (row.get("callback_role"), row.get("registration_role")) if role})
+    if roles:
+        reasons.append("selected_from_exact_build_registered_class_callback")
+    if "exact_build_static_class_registration_callback" in seed_basis:
+        classification, priority = "registered_class_callback_candidate", "high"
+        reasons.append("exact_build_registration_callback_reference")
+    elif "ghidra_data_reference_to_exact_build_class_string" in seed_basis:
+        classification, priority = "class_name_reference_candidate", "high"
+        reasons.append("direct_ghidra_reference_to_exact_build_class_or_rtti_string")
+    elif incoming_count >= 5:
+        classification, priority = "shared_engine_helper_candidate", "low"
+        reasons.append("many_static_callers_in_scanned_binary")
+    elif roles:
+        classification, priority = "registered_class_callback_candidate", "high"
+    elif depth <= 2 and incoming_count <= 4:
+        classification, priority = "near_seed_static_candidate", "high"
+        reasons.append("shallow_direct_call_distance_from_seed")
+    elif depth <= 4:
+        classification, priority = "reachable_static_candidate", "medium"
+    else:
+        classification, priority = "deep_reachable_static_candidate", "low"
+    return {"classification": classification, "detail_export_priority": priority,
+            "callback_roles": roles, "reasons": reasons,
+            "runtime_reachability_proven": False}
+
+
 def build_graph(*, rawcode: str, scan: Path, inventory: Path,
                 detail: list[Path] | None = None, lookup: Path | None = None,
                 lookup_data: dict[str, Any] | None = None,
@@ -141,6 +323,7 @@ def build_graph(*, rawcode: str, scan: Path, inventory: Path,
     sha = inv["executable"]["sha256"]
     validate_export(scan, sha, "scan")
     details = detail or []
+    vtable_function_candidates: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for directory in details:
         validate_export(directory, sha, "detail")
     hint, lookup_evidence, lookup_doc = _class_from_lookup(lookup, rawcode, sha, lookup_data)
@@ -229,6 +412,7 @@ def build_graph(*, rawcode: str, scan: Path, inventory: Path,
                                                 "target_rva": target, "source": fn["source"]})
 
     datarefs: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    dataref_rows: list[tuple[dict[str, Any], int]] = []
     for row, number in _rows(scan, "datarefs"):
         function_rva = _hex(row.get("function_rva"), "dataref.function_rva")
         if function_rva not in functions:
@@ -239,6 +423,7 @@ def build_graph(*, rawcode: str, scan: Path, inventory: Path,
             "reference_type": row.get("reference_type"),
             "source": f"{scan}/datarefs.jsonl:{number}",
             "interpretation": "static_data_reference_not_proven_field_or_art"})
+        dataref_rows.append((row, number))
 
     for index, rel in enumerate(inv["verified_relationships"]):
         source = _hex(rel["from"]["rva"], "relationship.from")
@@ -275,6 +460,30 @@ def build_graph(*, rawcode: str, scan: Path, inventory: Path,
                                       "scan_function_entry_rva": containing[0],
                                       "basis": "unique_ghidra_function_body_containment"}}
             seed_origins[suggestion["rva"]].append(suggestion)
+        if hint and lookup_doc:
+            implementation_code = rawcode
+            registration = None
+            for edition in lookup_doc.get("editions", {}).values():
+                ability = edition.get("ability", {}) if isinstance(edition, dict) else {}
+                if ability.get("id") == rawcode:
+                    implementation_code = ability.get("code") or rawcode
+                    class_reference = edition.get("retail_class_reference", {})
+                    if isinstance(class_reference, dict) and class_reference.get("class") == hint:
+                        registration = class_reference.get("registration")
+                    break
+            source = lookup_doc.get("source", {})
+            data_dir_value = source.get("data_dir") if isinstance(source, dict) else None
+            data_dir = Path(data_dir_value) if isinstance(data_dir_value, str) else DEFAULT_DATA
+            executable = data_dir / "Warcraft III.exe"
+            if executable.is_file():
+                for suggestion in _registration_seeds(executable, registration, hint, rawcode,
+                                                      implementation_code, sha, functions,
+                                                      function_ranges):
+                    seed_origins[suggestion["rva"]].extend(suggestion["basis"])
+                target_vas = _class_string_target_vas(executable, hint, sha)
+                for suggestion in _class_string_reference_seeds(hint, target_vas, dataref_rows,
+                                                                  functions, scan):
+                    seed_origins[suggestion["rva"]].append(suggestion)
     if not seed_origins:
         raise GraphError("no seeds: provide --seed-rva or a matching curated class label and --lookup")
     if len(seed_origins) > max_nodes:
@@ -383,11 +592,47 @@ def build_graph(*, rawcode: str, scan: Path, inventory: Path,
                                               "source": f"{directory}/pcode.jsonl:{number}",
                                               "reason": "unresolved_indirect_dispatch"})
         for row, number in _rows(directory, "vtables"):
+            table_rva = _hex(row.get("seed_rva"), "vtable.seed_rva")
+            # A table is eligible for class-scoped *suggestions* only if a
+            # seeded class registration callback contains a static reference
+            # to the table's VA. This still does not prove runtime dispatch.
+            table_va = parse_rva(table_rva) + image_base
+            linked = any(
+                ref.get("target_va") == f"0x{table_va:08x}"
+                for seed in seed_origins
+                for ref in datarefs.get(seed, [])
+            )
+            for slot in row.get("slots", []):
+                target = slot.get("target_rva")
+                if not linked or not slot.get("function_entry_confirmed") or not isinstance(target, str):
+                    continue
+                entry = _hex(target, "vtable.slot.target_rva")
+                if entry not in functions:
+                    continue
+                vtable_function_candidates[entry].append({
+                    "basis": "class_registration_callback_static_vtable_reference",
+                    "table_rva": table_rva,
+                    "slot_offset": slot.get("offset"),
+                    "source": f"{directory}/vtables.jsonl:{number}",
+                    "confidence": "candidate_vtable_method",
+                    "receiver_identity": "class-linked static table reference; runtime dispatch not established",
+                    "why_selected": "A registered factory callback references this pointer table, whose slot names this Ghidra function entry.",
+                })
+                if entry not in depth:
+                    # Keep class-linked method suggestions selectable for
+                    # targeted exports/traces, but isolated from call traversal.
+                    if entry not in functions:
+                        raise GraphError(f"vtable method {entry} is absent from Ghidra scan")
+                    if len(depth) >= max_nodes:
+                        raise GraphError("class-linked vtable candidates exceed graph node budget")
+                    depth[entry] = max_depth + 1
             vtables.append({"source": f"{directory}/vtables.jsonl:{number}",
                             "seed_rva": row.get("seed_rva"),
                             "status": "pointer_table_candidate_only",
+                            "class_linked_static_reference": linked,
                             "slots": row.get("slots", []),
-                            "note": "Unbound pointer table; no receiver or class implied."})
+                            "note": ("Factory callback references this table; slots remain static method candidates, not runtime dispatch proof."
+                                     if linked else "Unbound pointer table; no receiver or class implied.")})
 
     nodes = []
     gaps = []
@@ -395,6 +640,7 @@ def build_graph(*, rawcode: str, scan: Path, inventory: Path,
         fn = functions[addr]
         details_available = addr in code and code[addr]["status"] == "complete"
         node = {**fn, "depth": depth[addr], "seed_reasons": seed_origins.get(addr, []),
+                "vtable_method_candidates": vtable_function_candidates.get(addr, []),
                 "inventory_records": inv_entry_by_rva.get(addr, []),
                 "incoming_static_function_count": len(indegree.get(addr, set())),
                 "incoming_research_relationship_count": len(research_incoming.get(addr, set())),
@@ -403,7 +649,9 @@ def build_graph(*, rawcode: str, scan: Path, inventory: Path,
                 "unresolved_calls": unresolved_calls.get(addr, []) + indirect_pcode.get(addr, []),
                 "data_reference_count": len(datarefs.get(addr, [])),
                 "untyped_memory_access_count": len(pcode_store.get(addr, [])),
-                "uninterpreted_branch_count": len(pcode_branches.get(addr, []))}
+                "uninterpreted_branch_count": len(pcode_branches.get(addr, [])),
+                "relevance": _node_relevance(addr, depth[addr],
+                                              len(indegree.get(addr, set())), seed_origins)}
         nodes.append(node)
         if not details_available:
             gaps.append({"kind": "decompilation_missing_or_failed", "rva": addr})
@@ -418,6 +666,10 @@ def build_graph(*, rawcode: str, scan: Path, inventory: Path,
                      "count": sum(item["kind"] in EXPLICIT_UNRESOLVED for item in edges)})
     if any(omitted.values()):
         gaps.append({"kind": "bounded_traversal", "reasons": omitted})
+    if any(depth.get(entry, 0) > max_depth for entry in vtable_function_candidates):
+        gaps.append({"kind": "isolated_vtable_method_candidates",
+                     "count": sum(1 for entry in vtable_function_candidates if depth.get(entry, 0) > max_depth),
+                     "reason": "class-linked static slot suggestions are retained without call-graph traversal"})
     return {
         "schema_version": 1, "rawcode": rawcode, "status": "static_candidate_graph",
         "executable_sha256": sha, "class_reference_hint": hint,
@@ -431,6 +683,7 @@ def build_graph(*, rawcode: str, scan: Path, inventory: Path,
         "memory_access_candidates": dict(pcode_store),
         "branch_candidates": dict(pcode_branches),
         "unbound_vtable_candidates": vtables,
+        "vtable_method_candidates": {addr: rows for addr, rows in vtable_function_candidates.items()},
         "gaps": gaps, "omitted": omitted,
         "unresolved_relationship_targets": unresolved_relationship_targets,
         "claims": {"runtime_reachability_proven": False, "semantic_state_fields_proven": False,
@@ -467,6 +720,22 @@ def write_graph(graph: dict[str, Any], directory: Path) -> None:
         name = str(node.get("name") or "(unnamed)").replace("|", "\\|")
         lines.append(f"| `{node['rva']}` | {node['depth']} | {name} | "
                      f"{node['incoming_static_function_count']} | {node['decompile_status']} |")
+    focus = [node for node in graph["nodes"]
+             if node.get("relevance", {}).get("detail_export_priority") == "high"]
+    detached_methods = graph.get("vtable_method_candidates", {})
+    lines += ["", "## High-priority static candidates", "",
+              "These rankings prioritize review/export effort from registration and call-graph structure; they do not establish runtime execution. Class-linked vtable methods remain separate candidates below and are never followed as call edges.", "",
+              "| RVA | Role | Classification | Basis |", "|---|---|---|---|"]
+    for node in focus:
+        roles = ", ".join(node.get("relevance", {}).get("callback_roles", [])) or "near callback"
+        reasons = ", ".join(node.get("relevance", {}).get("reasons", [])) or "static structure"
+        lines.append(f"| `{node['rva']}` | {roles} | {node['relevance']['classification']} | {reasons} |")
+    lines += ["", "## Class-linked vtable method candidates", "",
+              "A factory callback's static reference to a pointer table associates the table with the registered class. These slots are useful detail-export candidates; runtime dispatch and receiver identity remain unproven.", "",
+              "| Method RVA | Table RVA | Slot offset | Confidence |", "|---|---|---|---|"]
+    for method, evidence_rows in sorted(detached_methods.items()):
+        for item in evidence_rows:
+            lines.append(f"| `{method}` | `{item['table_rva']}` | `{item['slot_offset']}` | `{item['confidence']}` |")
     lines += ["", "## Unresolved questions", ""]
     for gap in graph["gaps"]:
         lines.append(f"- `{gap['kind']}`: `{gap.get('rva', 'graph')}` "

@@ -139,8 +139,8 @@ from the September 2002 demo include both expansion content and later patches.
 
 | Property | Full executable |
 |---|---|
-| Size | 14,854,632 bytes |
-| SHA-256 | `a1950f17905b9cd7d5461d45e6723af36dda5304e12dba27a1fea85593b15f3f` |
+| Size | 14,854,632 bytes (same installed file) |
+| SHA-256 | `3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed` |
 | Format / preferred image base | x86 PE32 / `0x00400000` |
 | Unique `.?AVCAbility...@@` RTTI names | 493 |
 | Demo RTTI names retained | All 197 |

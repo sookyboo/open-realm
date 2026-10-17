@@ -16,6 +16,8 @@ import sys
 
 SHA256 = "286823c37a1083e91f07d040e46a9df7af4c4952e01fcbba460589bd4e297654"
 TFT_SHA256 = "a1950f17905b9cd7d5461d45e6723af36dda5304e12dba27a1fea85593b15f3f"
+TFT_PINNED_RETAIL_SHA256 = "3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed"
+TFT_SHA256S = frozenset((TFT_SHA256, TFT_PINNED_RETAIL_SHA256))
 TFT_REGISTER = 0x3F5760  # File offset; VA 0x007F6360 in TFT 1.29.2.9231.
 TFT_ROOT_CALL = 0x3F49A9  # Unpooled +aga root; computed IDs and no pool RTTI, like the demo roots.
 IMAGE_BASE = 0x6F000000
@@ -179,9 +181,10 @@ def extract_tft(data):
 # Select only verified layouts; unknown binaries must never produce plausible partial output.
 def extract(data):
     digest = hashlib.sha256(data).hexdigest()
-    readers = {SHA256: extract_demo, TFT_SHA256: extract_tft}
+    readers = {SHA256: extract_demo, **{item: extract_tft for item in TFT_SHA256S}}
     if digest not in readers:
-        raise ValueError(f"unsupported DLL SHA-256 {digest}; expected demo {SHA256} or TFT {TFT_SHA256}")
+        supported_tft = ", ".join(sorted(TFT_SHA256S))
+        raise ValueError(f"unsupported DLL SHA-256 {digest}; expected demo {SHA256} or TFT {supported_tft}")
     return readers[digest](data)
 
 
@@ -198,11 +201,11 @@ def extract_helpers(data, rows):
 
 
 # Keep the mapping readable like s_skills.c, with enough evidence to inspect each row.
-def render(rows, all_classes=False, helpers=()):
+def render(rows, all_classes=False, helpers=(), source_sha256=None):
     tft = any(row.desc for row in rows)
     rows = [row for row in rows if all_classes or row.name.startswith("CAbility")]
     title = "Warcraft III TFT 1.29.2.9231" if tft else "Warcraft III demo Game.dll"
-    digest = TFT_SHA256 if tft else SHA256
+    digest = (source_sha256 or TFT_SHA256) if tft else SHA256
     base, reg, va = (0x400000, TFT_REGISTER, 0x7F6360) if tft else (IMAGE_BASE, REGISTER, IMAGE_BASE + REGISTER)
     source = '"data/Warcraft III/Warcraft III.exe"' if tft else "data/warcraft3demo/game.dll"
     lines = [
@@ -248,7 +251,8 @@ def main():
         data = args.dll.read_bytes()
         rows = extract(data)
         helpers = extract_helpers(data, rows) if args.all_classes else []
-        output = render(rows, args.all_classes, helpers)
+        output = render(rows, args.all_classes, helpers,
+                        source_sha256=hashlib.sha256(data).hexdigest())
         args.output.write_text(output, encoding="utf-8")
     except (OSError, ValueError, struct.error) as exc:
         print(f"extract_wc3_ability_classes: {exc}", file=sys.stderr)

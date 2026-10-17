@@ -5,6 +5,7 @@ redistributable fixture suite; never substitutes guessed data for that binary.
 """
 
 from pathlib import Path
+import hashlib
 import re
 import subprocess
 import sys
@@ -70,6 +71,7 @@ class TFTClassesTest(unittest.TestCase):
     def setUpClass(cls):
         cls.exe = ROOT / "data/Warcraft III/Warcraft III.exe"
         cls.data = cls.exe.read_bytes()
+        cls.sha256 = hashlib.sha256(cls.data).hexdigest()
         cls.rows = extractor.extract(cls.data)
         cls.helpers = extractor.extract_helpers(cls.data, cls.rows)
 
@@ -81,8 +83,10 @@ class TFTClassesTest(unittest.TestCase):
             extractor.RTTIEntry("CAbilityMetaDB", 0xCFF2B8, 0x11006B8),
         ]
         self.assertEqual(self.helpers, expected)
-        full = extractor.render(self.rows, all_classes=True, helpers=self.helpers)
-        filtered = extractor.render(self.rows, helpers=self.helpers)
+        full = extractor.render(self.rows, all_classes=True, helpers=self.helpers,
+                                source_sha256=self.sha256)
+        filtered = extractor.render(self.rows, helpers=self.helpers,
+                                    source_sha256=self.sha256)
         exposed = {name.decode() for name in re.findall(rb"\.\?AV(CAbility\w*)@@\x00", self.data)}
         dumped = set(re.findall(r'^\{ (?:"[^"]+"|NULL), "(CAbility[^"]*)"', full, re.M))
         self.assertEqual(dumped, exposed)
@@ -121,14 +125,17 @@ class TFTClassesTest(unittest.TestCase):
 
     def test_cli_and_saved_reference(self):
         saved = ROOT / "games/warcraft-3/tft-ability-classes.txt"
-        self.assertEqual(saved.read_text(), extractor.render(self.rows, all_classes=True, helpers=self.helpers))
+        self.assertEqual(saved.read_text(), extractor.render(self.rows, all_classes=True, helpers=self.helpers,
+                                                             source_sha256=self.sha256))
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "classes.txt"
             cmd = [sys.executable, str(ROOT / "tools/extract_wc3_ability_classes.py"), str(self.exe), "-o", str(out)]
             for opts in ([], ["--all-classes"]):
                 result = subprocess.run(cmd + opts, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(out.read_text(), extractor.render(self.rows, all_classes=bool(opts), helpers=self.helpers))
+                self.assertEqual(out.read_text(), extractor.render(
+                    self.rows, all_classes=bool(opts), helpers=self.helpers,
+                    source_sha256=self.sha256))
 
 
 if __name__ == "__main__":

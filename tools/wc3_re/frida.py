@@ -124,11 +124,14 @@ def plan(graph: dict[str, Any], *, rawcode: str | None = None,
             reasons.append("unbound_relationship_source")
         if rva in requested:
             reasons.append("explicit_graph_function_selection")
+        if node.get("vtable_method_candidates"):
+            reasons.append("class_linked_vtable_method_candidate")
         if not reasons:
             reasons.append("static_dependency_survey")
         # Select explicit requests, seeds, ambiguity owners, then shallow nodes.
         rank = (0 if rva in requested else 1 if rva in seeds else
-                2 if node["unresolved_calls"] or rva in virtual_sources else 3,
+                2 if node["unresolved_calls"] or rva in virtual_sources else
+                3 if node.get("vtable_method_candidates") else 4,
                 node["depth"], rva)
         priority.append((rank, rva, reasons))
     priority.sort()
