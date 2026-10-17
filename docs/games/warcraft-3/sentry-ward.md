@@ -236,6 +236,51 @@ ward behavior. Probe maps, captures, and traces are under
 `/tmp/wc3-serpentward-rank-compare-v2/run2/` and
 `/tmp/wc3-serpentward-rank-compare-v3/run/`.
 
+### TFT Serpent Ward static native cast and summon path
+
+The existing analyzed Ghidra project for Retail 1.29.2.9231 was reused; no
+binary import or full reanalysis was performed. The saved scan and targeted
+detail exports are under the ignored `build-re/ability-re/ghidra/` workspace.
+The `CAbilityWard` name accessor at VA `0x00C340D0` returns that class name;
+the order getter at `0x00C340F0` returns order ID `0xD0218` (`ward`). Its
+validator at `0x00C34110` calls shared SimpleSpell validation (`0x00B28980`).
+Only when that result is zero does it call `0x007F6A00`; a nonzero fallback
+result becomes `0x41`, while zero remains zero. This matches the existing live
+accepted/rejected point traces. The exact map predicate behind the fallback
+remains unknown.
+
+The cast callback at `0x00C34150` checks a class virtual result, obtains values
+through slots `+0x434` and `+0x43C`, then uses the authored `BuildingAngle`
+field to calculate candidate placements. For each candidate it calls shared
+unit construction `0x00687CA0`. After a non-null result it calls
+`0x00CAF230`, dispatches slot `+0x438` with the new unit and angle, and calls
+`0x0068AB70`. The constructor helper performs placement normalization and unit
+construction through `0x00685B20`; the post-creation helper records a keyed
+owner/unit association, though the association's complete gameplay and cleanup
+semantics remain unresolved.
+
+A Ghidra pointer-table candidate at VA `0x00F8ABB8` contains function entries
+for the three callback slots: `+0x434` -> `0x00C342E0`, `+0x438` ->
+`0x00C34300`, and `+0x43C` -> `0x00C343B0`. This is static slot evidence;
+the exporter labels the table a candidate and does not claim a runtime
+receiver. `0x00C342E0` obtains a value from the owning-unit context. `0x00C343B0`
+reads a rank-indexed value through the ability data object at `this+0x50`; its
+field meaning is not yet identified. The `+0x438` path calls
+`0x00C352E0`, which looks up buff FOURCC `BOwd`, configures the buff instance,
+and attaches it through `0x006D4880`. This connects the authored Ward buff to
+post-creation setup in static code, without establishing the buff's later
+visual, attack, or cleanup behavior.
+
+The authored rank rows and prior Retail observations agree on `osp1`, `osp2`,
+and `osp3`; ranks 1, 2, and 3 have each been observed creating their matching
+unit at an accepted point. The callback's rank-indexed data read has not yet
+been traced far enough to prove which exact AbilityData column supplies the
+constructor's unit-type argument. The current static path also does not show
+the cast-start resource/cooldown transition or an explicit timed-life call.
+The existing 40-second Dur/HeroDur data plus a rank-1 sample at 3 and 45
+seconds support expiry, but exact expiry time, ranks 2/3 expiry, death,
+interruption, caster removal, ability removal, and cleanup remain unknown.
+
 ### Serpent Ward rank 3 summon identity (TFT)
 
 Retail rank 3 was tested on October 4, 2026, with the same TFT OrcX01 source

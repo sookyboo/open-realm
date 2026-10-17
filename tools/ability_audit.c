@@ -257,13 +257,15 @@ static void add_archive_cb(const char *path, void *ud) {
 
 /* War3x.mpq and Frozen Throne overlays replace ROC AbilityData rows; they must not load under -roc. */
 static bool is_tft_archive(cstring_t path) {
-    cstring_t p;
-    if (strstr(path, "Frozen")) return true;
-    for (p = path; p[0] && p[1] && p[2] && p[3] && p[4]; p++)
-        if ((p[0] == 'W' || p[0] == 'w') && (p[1] == 'a' || p[1] == 'A') && (p[2] == 'r' || p[2] == 'R') &&
-            p[3] == '3' && (p[4] == 'x' || p[4] == 'X'))
-            return true;
-    return false;
+    cstring_t base = path;
+    cstring_t slash = strrchr(path, '/');
+    cstring_t back = strrchr(path, '\\');
+    if (slash && slash + 1 > base) base = slash + 1;
+    if (back && back + 1 > base) base = back + 1;
+    return !strcasecmp(base, "War3x.mpq") || !strcasecmp(base, "War3xLocal.mpq") ||
+           !strcasecmp(base, "Frozen.mpq") || !strcasecmp(base, "FrozenLocal.mpq") ||
+           !strcasecmp(base, "FrozenThrone.mpq") || !strcasecmp(base, "FrozenThroneLocal.mpq") ||
+           !strcasecmp(base, "Frozen Throne.mpq") || !strcasecmp(base, "Frozen Throne Local.mpq");
 }
 
 static void load_classes(void) {

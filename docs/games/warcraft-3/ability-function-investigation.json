@@ -3435,8 +3435,8 @@
       "related_addresses_semantics": "Ordinary attack switch that selects these helpers and runs the fallback effect setup."
     },
     {
-      "id": "fn_0079e250_0079e440_arrow_attack_hooks",
-      "label": "Poison Arrows and Cold Arrows attack-type hook implementations",
+      "id": "fn_0079e250_0079e440_poison_arrow_attack_hooks",
+      "label": "CAbilityPoisonArrows attack-type hook implementations",
       "category": "damage",
       "status": "partially_resolved",
       "confidence": "high",
@@ -3452,23 +3452,8 @@
           "kind": "function_va"
         },
         {
-          "va": "0x00c5cc20",
-          "rva": "0x0085cc20",
-          "kind": "function_va"
-        },
-        {
-          "va": "0x00c5ce10",
-          "rva": "0x0085ce10",
-          "kind": "function_va"
-        },
-        {
           "va": "0x00f5e574",
           "rva": "0x00b5e574",
-          "kind": "vtable_va"
-        },
-        {
-          "va": "0x00fa0dfc",
-          "rva": "0x00ba0dfc",
           "kind": "vtable_va"
         }
       ],
@@ -3480,7 +3465,7 @@
         "0x40",
         "0x48"
       ],
-      "evidence_summary": "RTTI-linked CAbilityPoisonArrows vtable 0x00F5E574 resolves +0x14C -> 0x00BDE440 and +0x150 -> 0x00BDE250. Primary CAbilityColdArrows vtable 0x00FA0DFC resolves the same slots to 0x00C5CE10 and 0x00C5CC20. Thus both classes participate in ordinary attack-type 5 (+0x14C) and type 2 (+0x150) hooks. The handlers clear ability flag +0x20 bit 0x400000 and return zero if it was clear; otherwise they resolve owner/target context and build per-hit records. Cold Arrows also calls its owner virtual +0x484, writes the result at record +0x48, and sets record +0x40 to 0x200. Exact record fields and the subsequent missile-impact path remain unresolved.",
+      "evidence_summary": "RTTI-linked CAbilityPoisonArrows vtable 0x00F5E574 resolves +0x14C -> 0x00BDE440 and +0x150 -> 0x00BDE250. These handlers clear ability flag +0x20 bit 0x400000 and return zero if it was clear; otherwise they resolve owner/target context and build per-hit records. Exact record fields and the subsequent missile-impact path remain unresolved.",
       "related_addresses": [
         {
           "va": "0x0068fc70",
@@ -3502,6 +3487,32 @@
           "rva": "0x002d6570",
           "kind": "function_va"
         }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/ability-probes/combat.md",
+        "section": "Ordinary attack projectile branch handoff (exact-build static pass)"
+      },
+      "record_kind": "function_group",
+      "related_addresses_semantics": "Type-specific dispatchers and owner/target helper path referenced by the class callbacks."
+    },
+    {
+      "id": "fn_0085cc20_0085ce10_cold_arrow_attack_hooks",
+      "label": "CAbilityColdArrows attack-type hook implementations",
+      "category": "damage",
+      "status": "partially_resolved",
+      "confidence": "high",
+      "addresses": [
+        { "va": "0x00c5cc20", "rva": "0x0085cc20", "kind": "function_va" },
+        { "va": "0x00c5ce10", "rva": "0x0085ce10", "kind": "function_va" },
+        { "va": "0x00fa0dfc", "rva": "0x00ba0dfc", "kind": "vtable_va" }
+      ],
+      "object_offsets": ["0x138", "0x14C", "0x150", "0x20", "0x40", "0x48"],
+      "evidence_summary": "RTTI-linked CAbilityColdArrows vtable 0x00FA0DFC resolves +0x14C -> 0x00C5CE10 and +0x150 -> 0x00C5CC20. The handlers clear ability flag +0x20 bit 0x400000 and return zero if it was clear; otherwise they resolve owner/target context and build per-hit records. The +0x14C path also calls owner virtual +0x484, writes the result at record +0x48, and sets record +0x40 to 0x200. Exact record fields and the subsequent missile-impact path remain unresolved.",
+      "related_addresses": [
+        { "va": "0x0068fc70", "rva": "0x0028fc70", "kind": "function_va" },
+        { "va": "0x0068fd10", "rva": "0x0028fd10", "kind": "function_va" },
+        { "va": "0x00691f40", "rva": "0x00291f40", "kind": "function_va" },
+        { "va": "0x006d6570", "rva": "0x002d6570", "kind": "function_va" }
       ],
       "source": {
         "document": "docs/games/warcraft-3/ability-probes/combat.md",
@@ -4135,6 +4146,39 @@
       },
       "record_kind": "function",
       "related_addresses_semantics": "Addresses mentioned in this evidence; asserted call and callback edges are in verified_relationships."
+    },
+    {
+      "id": "fn_008340d0_008352e0_ward_cast_path",
+      "label": "CAbilityWard order validation, summon, and attached Ward buff path",
+      "category": "summon",
+      "status": "partially_resolved",
+      "confidence": "high",
+      "addresses": [
+        { "va": "0x00c340d0", "rva": "0x008340d0", "kind": "function_va" },
+        { "va": "0x00c340f0", "rva": "0x008340f0", "kind": "function_va" },
+        { "va": "0x00c34110", "rva": "0x00834110", "kind": "function_va" },
+        { "va": "0x00c34150", "rva": "0x00834150", "kind": "function_va" },
+        { "va": "0x00c342e0", "rva": "0x008342e0", "kind": "function_va" },
+        { "va": "0x00c34300", "rva": "0x00834300", "kind": "function_va" },
+        { "va": "0x00c343b0", "rva": "0x008343b0", "kind": "function_va" },
+        { "va": "0x00c352e0", "rva": "0x008352e0", "kind": "function_va" }
+      ],
+      "object_offsets": ["0x30", "0x50", "0x434", "0x438", "0x43c"],
+      "evidence_summary": "The exact-build CAbilityWard name accessor 0x00C340D0 returns that class string, and order getter 0x00C340F0 returns 0xD0218. Validator 0x00C34110 calls shared SimpleSpell validation 0x00B28980; only a zero result continues to position helper 0x007F6A00, whose nonzero result maps to 0x41. Cast callback 0x00C34150 checks a virtual result, obtains values through slots +0x434/+0x43c, iterates placement angles, calls unit constructor 0x00687CA0, then invokes 0x00CAF230, virtual +0x438, and 0x0068AB70 for successful creations. The candidate table at 0x00F8ABB8 maps +0x434/+0x438/+0x43c to 0x00C342E0/0x00C34300/0x00C343B0. +0x438's method constructs/configures the authored BOwd buff via 0x00C352E0 and attaches it through 0x006D4880. Vtable binding remains a static candidate; dynamic dispatch, exact ownership semantics, mana/cooldown transitions, and ward expiry/removal callbacks are not established by this path.",
+      "related_addresses": [
+        { "va": "0x00f8abb8", "rva": "0x00b8abb8", "kind": "vtable_va" },
+        { "va": "0x00687ca0", "rva": "0x00287ca0", "kind": "function_va" },
+        { "va": "0x00caf230", "rva": "0x008af230", "kind": "function_va" },
+        { "va": "0x0068ab70", "rva": "0x0028ab70", "kind": "function_va" },
+        { "va": "0x006d4880", "rva": "0x002d4880", "kind": "function_va" },
+        { "va": "0x0046fb50", "rva": "0x0006fb50", "kind": "function_va" }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/sentry-ward.md",
+        "section": "TFT Serpent Ward static native cast and summon path"
+      },
+      "record_kind": "function_group",
+      "related_addresses_semantics": "Calls and candidate virtual-slot relationships described in the source evidence; the possible vtable association is not runtime dispatch proof."
     }
   ],
   "record_schema": {
@@ -9610,6 +9654,6 @@
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge.",
     "call": "Call asserted by the source notes; dispatch modality is not yet classified as direct, virtual, or callback. Do not promote it to a direct call without evidence."
   },
-  "entry_count": 86,
+  "entry_count": 88,
   "verified_relationship_count": 312
 }

@@ -57,9 +57,9 @@ def _load_inventory(path: Path) -> dict[str, Any]:
 
 
 def _class_from_lookup(path: Path | None, rawcode: str, sha: str,
-                       payload: dict[str, Any] | None = None) -> tuple[str | None, dict[str, Any] | None]:
+                       payload: dict[str, Any] | None = None) -> tuple[str | None, dict[str, Any] | None, dict[str, Any] | None]:
     if path is None and payload is None:
-        return None, None
+        return None, None, None
     if payload is None:
         try:
             doc = json.loads(path.read_text(encoding="utf-8"))
@@ -87,14 +87,27 @@ def _class_from_lookup(path: Path | None, rawcode: str, sha: str,
     if len(classes) > 1:
         raise GraphError("lookup.json contains conflicting class hints; use explicit seeds")
     return next(iter(classes), None), {"file": str(path) if path else None,
-                                     "identity": "authored_data_only"}
+                                     "identity": "authored_data_only"}, doc
 
 
-def _candidate_seeds(inventory: dict[str, Any], rawcode: str, class_hint: str | None) -> list[dict[str, Any]]:
+def _candidate_seeds(inventory: dict[str, Any], rawcode: str, class_hint: str | None,
+                     lookup_doc: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     result = []
-    patterns = [re.compile(r"(?<![A-Za-z0-9_])" + re.escape(rawcode) + r"(?![A-Za-z0-9_])")]
+    terms = {rawcode}
     if class_hint:
-        patterns.append(re.compile(r"(?<![A-Za-z0-9_])" + re.escape(class_hint) + r"(?![A-Za-z0-9_])"))
+        terms.add(class_hint)
+        simple = class_hint.removeprefix("CAbility")
+        terms.add(re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", simple))
+    if lookup_doc:
+        for edition in lookup_doc.get("editions", {}).values():
+            ability = edition.get("ability", {}) if isinstance(edition, dict) else {}
+            code = ability.get("code")
+            if isinstance(code, str):
+                terms.add(code)
+            aliases = edition.get("aliases", []) if isinstance(edition, dict) else []
+            terms.update(alias for alias in aliases if isinstance(alias, str))
+    patterns = [re.compile(r"(?<![A-Za-z0-9_])" + re.escape(term) + r"(?![A-Za-z0-9_])", re.IGNORECASE)
+                for term in terms if term]
     for entry in inventory["functions"]:
         # Only the curated label is eligible for auto-seeding. Context/related
         # addresses merely mention code and must not seed arbitrary functions.
@@ -130,7 +143,7 @@ def build_graph(*, rawcode: str, scan: Path, inventory: Path,
     details = detail or []
     for directory in details:
         validate_export(directory, sha, "detail")
-    hint, lookup_evidence = _class_from_lookup(lookup, rawcode, sha, lookup_data)
+    hint, lookup_evidence, lookup_doc = _class_from_lookup(lookup, rawcode, sha, lookup_data)
 
     functions: dict[str, dict[str, Any]] = {}
     for f, number in _rows(scan, "functions"):
@@ -141,6 +154,20 @@ def build_graph(*, rawcode: str, scan: Path, inventory: Path,
                             "signature": f.get("signature"), "namespace": f.get("namespace"),
                             "thunk_target_rva": f.get("thunk_target_rva"),
                             "source": f"{scan}/functions.jsonl:{number}"}
+    function_ranges = []
+    image_base = parse_rva("0x00400000")
+    scan_function_rows = {}
+    for function, number in _rows(scan, "functions"):
+        scan_function_rows[_hex(function.get("entry_rva"), "function.entry_rva")] = function
+    for entry, row in functions.items():
+        try:
+            function = scan_function_rows[entry]
+            entry_va = parse_rva(entry) + image_base
+            low_va = parse_rva(function.get("body_min_va") or function.get("entry_va") or f"0x{entry_va:08x}")
+            high_va = parse_rva(function.get("body_max_va") or function.get("entry_va") or f"0x{entry_va:08x}")
+            function_ranges.append((low_va - image_base, high_va - image_base, entry))
+        except (OSError, ValueError, StopIteration):
+            continue
 
     # Keep each independent research statement, even if it repeats an edge.
     inv_entry_by_rva: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -234,7 +261,19 @@ def build_graph(*, rawcode: str, scan: Path, inventory: Path,
         seed_origins[_hex(seed, "--seed-rva")].append({"basis": "explicit_user_seed",
                                                          "confidence": "caller_supplied_not_verified"})
     if auto_seeds:
-        for suggestion in _candidate_seeds(inv, rawcode, hint):
+        for suggestion in _candidate_seeds(inv, rawcode, hint, lookup_doc):
+            original = suggestion["rva"]
+            if original not in functions:
+                value = parse_rva(original)
+                containing = sorted((entry for low, high, entry in function_ranges
+                                     if low <= value <= high),
+                                    key=lambda entry: parse_rva(entry))
+                if len(containing) == 1:
+                    suggestion = {**suggestion, "rva": containing[0],
+                                  "address_normalization": {
+                                      "inventory_rva": original,
+                                      "scan_function_entry_rva": containing[0],
+                                      "basis": "unique_ghidra_function_body_containment"}}
             seed_origins[suggestion["rva"]].append(suggestion)
     if not seed_origins:
         raise GraphError("no seeds: provide --seed-rva or a matching curated class label and --lookup")

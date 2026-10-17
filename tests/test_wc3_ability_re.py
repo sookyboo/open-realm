@@ -95,6 +95,30 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(result["archives"],
                          ["War3Local.mpq", "Deprecated.mpq", "War3.mpq"])
 
+    def test_tft_archive_classification_uses_supported_filename_only(self):
+        cases = {
+            "data/Warcraft III/War3.mpq": False,
+            "data/Warcraft III/War3Local.mpq": False,
+            "data/Warcraft III/War3x.mpq": True,
+            "data/Warcraft III/War3xLocal.mpq": True,
+            "data/Warcraft III/Frozen Throne.mpq": True,
+            "data/Warcraft III/FROZEN THRONE LOCAL.MPQ": True,
+            "/tmp/war3x-backup/War3.mpq": False,
+            "/tmp/Frozen-work/Deprecated.mpq": False,
+            "CustomWar3x.mpq": False,
+        }
+        for path, expected in cases.items():
+            with self.subTest(path=path):
+                self.assertEqual(lookup._is_tft_archive(path), expected)
+
+    def test_roc_archive_provenance_ignores_parent_directory_substrings(self):
+        row = fake_row(edition="ROC")
+        row["archives"] = ["/tmp/war3x-backup/War3.mpq",
+                            "/tmp/Frozen-work/Deprecated.mpq",
+                            "/tmp/War3xLocal.mpq"]
+        result = self.call(row, edition="roc")
+        self.assertEqual(result["archives"], row["archives"][:2])
+
     def test_rank_localized_strings_split_quoted_audit_csv_without_mutating_source(self):
         row = fake_row()
         source = 'Summons a ward, now","Summons rank two","Summons rank three'

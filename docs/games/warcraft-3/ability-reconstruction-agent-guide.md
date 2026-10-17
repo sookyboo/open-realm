@@ -115,6 +115,15 @@ python3 tools/wc3_ability_re.py ghidra-check \
 Use `lookup` plus the curated function inventory to identify seed functions.
 Trace the registration/factory and relevant vtable/receiver manually where
 possible; the saved class table is a **hint**, not a verified factory binding.
+The graph's automatic seed suggestions match the authored rawcode,
+implementation code, aliases and readable class name against curated function
+labels. They remain candidate seeds: review their labels and RVAs, especially
+when an inventory entry groups multiple ability classes, before interpreting
+the graph as an ability-specific path.
+When a curated code address lies inside exactly one analyzed Ghidra function
+body, the graph normalizes it to that function's entry RVA and records both
+addresses and the containment basis. Ambiguous or uncontained addresses are
+not normalized or treated as confirmed functions.
 Request `detail` exports only for specific missing functions (the following
 Phoenix Fire RVAs are *known candidate waypoints*, not a complete ability):
 

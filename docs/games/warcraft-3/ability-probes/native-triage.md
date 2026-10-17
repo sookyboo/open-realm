@@ -155,6 +155,16 @@ Dur/HeroDur relationship, exact radius field, damage type, and expiry/removal
 behavior. Do not promote the tooltip or the presence of the missile class into
 proof of those details.
 
+Static presentation extraction now decodes the Phoenix missile model's EVTS
+nodes. The authored `SNDXMPXL` node has a key at 5000 ms and resolves through
+`AnimLookups.slk` to `PhoenixMissileLaunch`; `SNDXMZGH` has a key at 0 ms and
+resolves to `ZigguratMissileHit`. Both aliases resolve to authored sound rows
+and file candidates. The missile model's `Birth` sequence begins at 5000 ms,
+but the data does not prove the model is created for every Phoenix Fire event,
+that these keys are played, or that either sound is the impact/damage callback.
+The static snapshot is retained under the ignored `build-re/ability-re/`
+workspace; no model or sound asset is copied into the repository.
+
 #### Live JHCR radius probe (October 16, 2026)
 
 A focused update ran inside the existing JHCR-instrumented OrcX01 Retail map,
@@ -278,7 +288,7 @@ where the native behavior callback has not been recovered.
 
 | Candidate | Confirmed from installed data / exact-build binary | Still open |
 |---|---|---|
-| Serpent Ward (`AOsw` / `AOwd`) | The three ranks select UnitIDs `osp1`, `osp2`, `osp3`; each has 40-second Dur/HeroDur, cost 30, range 500, and buff `BOwd`. The resolved rank tooltips name each corresponding UnitData row for hit points and attack damage. Exact-build audit class is `CAbilityWard`, parent `AAsm`; exact-executable string accessor `0x00C340D0` returns `CAbilityWard`. | Constructor/vtable and cast callback not recovered in this pass. Thus the actual UnitID read, summon ownership, expiry timer and cleanup path remain open; the tooltip proves authored row references, not runtime consumption. |
+| Serpent Ward (`AOsw` / `AOwd`) | The three ranks select UnitIDs `osp1`, `osp2`, `osp3`; each has 40-second Dur/HeroDur, cost 30, range 500, and buff `BOwd`. The exact-build name accessor, `ward` order getter, validator and summon callback are now detailed in [the static native cast path](../sentry-ward.md#tft-serpent-ward-static-native-cast-and-summon-path). The callback constructs each unit and statically dispatches post-creation setup; the `+0x438` candidate slot looks up and attaches `BOwd`. Existing Retail rank observations confirm all three summon identities. | The precise AbilityData column supplying the constructed UnitID, dynamic receiver binding, cast-start mana/cooldown flow, exact placement rejection predicate, timed expiry path, and death/removal cleanup remain open. The vtable record remains a static pointer-table candidate, not dynamic dispatch proof. |
 | Faerie Fire (`Afae`) | AbilityData gives cost 45, range 700, DataA=4 armor reduction, Dur=90/HeroDur=60, and buff `Bfae`; its tooltip states armor reduction and vision. `ACff` shares class and BuffID but has distinct authored duration/cooldown. Exact-build audit class is `CAbilityFaerieFire`, parent `AAat`; accessor `0x00C3CC30` returns the class string. | Reveal source ownership, refresh behavior, hero-duration selection, and expiry/removal are not yet tied to native callbacks. |
 | Frost Arrows (`ANfa` / `AHca`) | All three rank rows specify bonus damage 5/10/15, attack slow 30/50/70%, movement slow 30/50/70%, 5-second normal / 1.5-second Hero duration, cost 10, and `BHca`/`Bcsd`. Tooltip resolves those exact rank fields. Exact-build audit resolves implementation code `AHca` to `CAbilityColdArrows` (parent `AHRa`); accessor `0x00C5CBC0` returns the class string. | Attack-event qualification, mana payment, autocast target gates, damage application, stack/doT state (`Bcsd`), refresh rules, and inverse expiry callback remain open. `AHca` and `ANfa` are distinct raw rows even though they share the implementation code; compare the alias-specific values before claiming parity. |
 | Engineering Upgrade (`ANeg`) | Three ranks author movement bonus 10/20/30%, attack bonus 2/4/6, and DataC–F dependent ability codes (`ANsy`/`ANcs`/`ANrg`/`ANde`, then `ANs1`/`ANc1`/`ANg1`/`ANd1`). Tooltip confirms movement and attack bonuses. Exact-build audit class is `CAbilityEngineeringUpgrade`, parent `APas`; accessor `0x00C812B0` returns the class string. | Whether the class actively replaces abilities/recomputes existing Tinker state or relies on other stat/dependency mechanisms is not proven. Constructor, vtable, rank-up callback and recipient stat path remain to be mapped. |

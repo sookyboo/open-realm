@@ -317,6 +317,12 @@ and needs no Ghidra, Wine, Frida or Retail executable. It respects the lookup's
 edition-specific archive list, searches those archives only, and records the
 archive satisfying each resolved path; it does not accidentally take a TFT model
 from a global all-edition asset search during a ROC investigation.
+ROC filtering classifies supported expansion archive basenames (`War3x*.mpq`
+and known Frozen Throne archive names), never arbitrary parent-directory text.
+SLK overlay resolution follows the existing tool loader: it selects the first
+matching whole table in archive priority order. It does not merge missing rows
+from lower-priority copies of an SLK, and `table_archive` records that selected
+file's source.
 
 The enhanced audit reads `*AbilityFunc.txt` keys separately from localized
 `*AbilityStrings.txt`, exposes BuffID and EfctID presentation rows from
@@ -329,6 +335,9 @@ Missing or unsupported authoring fields remain `null` rather than being
 filled with likely paths. The bounded `mdxtool --info-json` command returns
 sequence names/intervals, texture paths and replaceable IDs, chunk presence,
 and supported `EVTS` keyframe events (including SND/SPN/SPL/FPT/UBR names).
+EVTS event nodes are size-prefixed; the decoder validates that prefix and the
+full node/keytrack bounds before emitting events. A malformed or unsupported
+track leaves the event payload undecoded instead of guessing its layout.
 Unsupported/corrupt event payloads are **not guessed**; the exporter marks
 them undecoded.
 

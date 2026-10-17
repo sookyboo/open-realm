@@ -89,6 +89,48 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(result["class_reference_hint"], "CAbilityPhoenixFire")
         self.assertFalse(result["class_reference_is_native_verified"])
 
+    def test_auto_seeds_match_authored_implementation_code_and_readable_class_name(self):
+        curated = {"functions": [{"id": "cold-arrows", "label": "Cold Arrows attack hooks",
+                                  "record_kind": "function_group", "addresses": [
+                                      {"kind": "function_va", "rva": "0x0085ce10"},
+                                      {"kind": "vtable_va", "rva": "0x00fa0dfc"}]}]}
+        payload = {"editions": {"tft": {"ability": {"code": "AHca"},
+                                         "aliases": ["ANfa", "ACcw"]}}}
+        seeds = graph._candidate_seeds(curated, "ANfa", "CAbilityColdArrows", payload)
+        self.assertEqual([seed["rva"] for seed in seeds], ["0x0085ce10"])
+
+    def test_auto_seed_normalizes_code_address_to_unique_containing_function(self):
+        inventory = self.root / "inventory-containing.json"
+        curated = json.loads(INVENTORY.read_text())
+        curated["functions"] = [{"id": "forked", "label": "CAbilityForkedLightning constructor",
+                                 "record_kind": "function_group", "status": "partially_resolved",
+                                 "confidence": "high", "source": {"document": "fixture"},
+                                 "addresses": [{"kind": "function_va", "rva": "0x00000108",
+                                               "va": "0x00400108"}],
+                                 "object_offsets": [], "evidence_summary": "fixture",
+                                 "related_addresses": [], "related_addresses_semantics": "fixture"}]
+        curated["verified_relationships"] = []
+        curated["entry_count"] = 1
+        curated["relationship_count"] = 0
+        curated["verified_relationship_count"] = 0
+        inventory.write_text(json.dumps(curated))
+        self._make(functions=["0x00000100"])
+        # Adjust scan metadata to model an instruction address inside the function.
+        rows = [json.loads(line) for line in (self.scan / "functions.jsonl").read_text().splitlines()]
+        rows[0]["body_min_va"] = "0x00400100"
+        rows[0]["body_max_va"] = "0x00400120"
+        (self.scan / "functions.jsonl").write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+        # Reuse a valid lookup identity but with a matching class hint.
+        payload = lookup()
+        payload["editions"]["tft"]["retail_class_reference"] = {
+            "status": "offline_reference_hint", "class": "CAbilityForkedLightning"}
+        result = graph.build_graph(rawcode="Apxf", scan=self.scan, inventory=inventory,
+                                   lookup_data=payload, max_depth=0, max_nodes=10)
+        seed = result["seeds"][0]
+        self.assertEqual(seed["rva"], "0x00000100")
+        self.assertEqual(seed["basis"][0]["address_normalization"]["inventory_rva"],
+                         "0x00000108")
+
     def test_research_direct_and_callback_links_are_traversable_not_live(self):
         self._make()
         result = self._graph()

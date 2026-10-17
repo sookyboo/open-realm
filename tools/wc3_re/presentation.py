@@ -197,11 +197,10 @@ def _field(row: dict[str, str], name: str) -> str:
 
 
 def _lookup_row(rows: list[dict[str, str]], name: str) -> dict[str, str] | None:
-    for row in rows:
-        if any(k.casefold() in ("id", "name", "soundname", "") and v.casefold() == name.casefold()
-               for k, v in row.items()):
-            return row
-    return None
+    lookup_columns = {"id", "name", "soundname", "animsoundevent", ""}
+    return next((row for row in rows if any(
+        k.casefold() in lookup_columns and v.casefold() == name.casefold()
+        for k, v in row.items())), None)
 
 
 def resolve_model_events(resolver: ArchiveResolver, models: dict[str, dict[str, Any]],
