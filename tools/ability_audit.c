@@ -124,10 +124,20 @@ static cstring_t const ability_string_files[] = {
     NULL
 };
 
+/* AbilityFunc is separate from localized strings. Keep the decoded source
+ * keys, not an inferred runtime effect/animation event. */
+static cstring_t const ability_function_files[] = {
+    "Units\\HumanAbilityFunc.txt", "Units\\OrcAbilityFunc.txt",
+    "Units\\UndeadAbilityFunc.txt", "Units\\NightElfAbilityFunc.txt",
+    "Units\\NeutralAbilityFunc.txt", "Units\\CommonAbilityFunc.txt",
+    "Units\\ItemAbilityFunc.txt", "Units\\CampaignAbilityFunc.txt", NULL
+};
+
 typedef struct {
     uint32_t id, code;
     cstring_t comments, sort, race, buffArt, buffTip, buffUberTip;
     cstring_t targetArt, specialArt, effectArt, missileArt;
+    cstring_t effectSound, effectSoundLooped;
 } AbilityBuffData_t;
 
 static slkField_t const ability_buff_schema[] = {
@@ -143,6 +153,8 @@ static slkField_t const ability_buff_schema[] = {
     { "SpecialArt",  offsetof(AbilityBuffData_t, specialArt),  STB_SLK_STR    },
     { "EffectArt",   offsetof(AbilityBuffData_t, effectArt),   STB_SLK_STR    },
     { "Missileart",  offsetof(AbilityBuffData_t, missileArt),  STB_SLK_STR    },
+    { "Effectsound", offsetof(AbilityBuffData_t, effectSound), STB_SLK_STR    },
+    { "Effectsoundlooped", offsetof(AbilityBuffData_t, effectSoundLooped), STB_SLK_STR },
     { NULL, 0, 0 }
 };
 
@@ -628,11 +640,266 @@ fail:
     Tool_CloseArchives(archives, 8); return 1;
 }
 
+/* Machine-readable, single-ability export for tools/wc3_ability_re.py.
+ * Use the loaded SLK/DDX rows rather than reverse-parsing the human report.
+ * A class from tft-ability-classes.txt is a *reference lead*, not runtime proof.
+ */
+static void json_string(cstring_t text) {
+    putchar('"');
+    if (text) {
+        for (unsigned char const *p = (unsigned char const *)text; *p; p++) {
+            unsigned char c = *p;
+            if (c == '"' || c == '\\') { putchar('\\'); putchar(c); }
+            else if (c == '\n') fputs("\\n", stdout);
+            else if (c == '\r') fputs("\\r", stdout);
+            else if (c == '\t') fputs("\\t", stdout);
+            else if (c < 0x20 || c >= 0x80) printf("\\u%04x", c);
+            else putchar(c);
+        }
+    }
+    putchar('"');
+}
+
+static void json_fourcc(uint32_t code) {
+    char text[5] = {0};
+    if (!code) { fputs("null", stdout); return; }
+    memcpy(text, &code, 4);
+    json_string(text);
+}
+
+static void json_key_string(cstring_t name, cstring_t value) {
+    json_string(name);
+    putchar(':');
+    if (value) json_string(value);
+    else fputs("null", stdout);
+}
+
+static void json_key_fourcc(cstring_t name, uint32_t value) {
+    json_string(name);
+    putchar(':');
+    json_fourcc(value);
+}
+
+static void json_buff_ids(cstring_t list) {
+    bool first = true;
+    putchar('[');
+    while (list && *list) {
+        char token[5] = {0};
+        uint32_t n = 0;
+        while (*list && *list != ',') {
+            if (n < 4) token[n++] = *list;
+            list++;
+        }
+        if (*list == ',') list++;
+        if (n != 4) continue;
+        if (!first) putchar(',');
+        json_string(token);
+        first = false;
+    }
+    putchar(']');
+}
+
+static void json_level(AbilityData_t const *row, uint32_t rank) {
+    printf("{\"level\":%u,", rank + 1);
+    json_key_string("target_mask", row->targs[rank]);
+    printf(",\"cost\":%.9g,\"cooldown\":%.9g,\"range\":%.9g,"
+           "\"duration\":%.9g,\"hero_duration\":%.9g,\"area\":%.9g,\"cast\":%.9g,",
+           row->cost[rank], row->cool[rank], row->range[rank],
+           row->dur[rank], row->heroDur[rank], row->area[rank], row->cast[rank]);
+    fputs("\"data\":{", stdout);
+    FOR_LOOP(slot, 9) {
+        char key[2] = {(char)('A' + slot), '\0'};
+        if (slot) putchar(',');
+        json_string(key);
+        if (data_slot_is_code(row->dataId[rank][slot], row->data[rank][slot])) {
+            fputs(":{\"type\":\"rawcode\",\"value\":", stdout);
+            json_fourcc(row->dataId[rank][slot]);
+        } else {
+            printf(":{\"type\":\"number\",\"value\":%.9g", row->data[rank][slot]);
+        }
+        putchar('}');
+    }
+    fputs("},", stdout);
+    json_key_fourcc("unit_id", row->unitID[rank]);
+    fputs(",\"buff_ids\":", stdout);
+    json_buff_ids(row->buffID[rank]);
+    putchar(',');
+    json_key_string("effect_id", row->efctID[rank]);
+    putchar('}');
+}
+
+static void json_raw_row(AbilityData_t const *row, AbilityData_t const *rows, uint32_t count,
+                         AbilityBuffData_t const *buffs, uint32_t buff_count,
+                         stbIniCache_t const *ini, stbIniCache_t const *func_ini) {
+    char id[5] = {0};
+    classRow_t const *cls;
+    memcpy(id, &row->id, 4);
+    cls = find_class(row->code ? row->code : row->id);
+    fputs("\"ability\":{", stdout);
+    json_key_fourcc("id", row->id);
+    putchar(','); json_key_fourcc("code", row->code);
+    putchar(','); json_key_fourcc("uber_alias", row->uberAlias);
+    putchar(','); json_key_string("comments", row->comments);
+    putchar(','); json_key_string("race", row->race);
+    printf(",\"levels\":%d,\"hero\":%s,\"item\":%s,\"version\":%d,",
+           row->levels, row->hero ? "true" : "false", row->item ? "true" : "false", row->version);
+    json_key_string("class_hint", cls ? cls->cls : NULL);
+    putchar(','); json_key_string("parent_hint", cls ? cls->parent : NULL);
+    fputs("},\"ranks\":[", stdout);
+    FOR_LOOP(rank, MIN(row->levels > 0 ? row->levels : 1, 4)) {
+        if (rank) putchar(',');
+        json_level(row, rank);
+    }
+    fputs("],\"strings\":{", stdout);
+    static cstring_t const keys[] = {"Name", "Ubertip", "Untip", "Unubertip", "Hotkey"};
+    FOR_LOOP(i, 5) {
+        if (i) putchar(',');
+        cstring_t value = Stb_IniCacheFind(ini, id, keys[i]);
+        json_key_string(keys[i], value ? strip_quotes(value) : NULL);
+    }
+    fputs("},\"presentation\":{", stdout);
+    static cstring_t const func_keys[] = {
+        "Art", "CasterArt", "Casterattach", "Casterattachcount", "TargetArt",
+        "Targetattach", "Targetattachcount", "SpecialArt", "Specialattach",
+        "EffectArt", "AreaEffectArt", "Missileart", "MissileArt",
+        "Missilespeed", "Missilearc", "MissileHoming", "Animnames",
+        "Effectsound", "Effectsoundlooped"
+    };
+    FOR_LOOP(i, sizeof(func_keys) / sizeof(func_keys[0])) {
+        if (i) putchar(',');
+        cstring_t value = Stb_IniCacheFind(func_ini, id, func_keys[i]);
+        json_key_string(func_keys[i], value ? strip_quotes(value) : NULL);
+    }
+    fputs("},\"aliases\":[", stdout);
+    bool first = true;
+    FOR_LOOP(i, count) {
+        AbilityData_t const *alias = rows + i;
+        if (!alias->id || alias->id == row->id) continue;
+        if (alias->code != row->code && alias->code != row->id) continue;
+        if (!first) putchar(',');
+        json_fourcc(alias->id);
+        first = false;
+    }
+    fputs("],\"buffs\":[", stdout);
+    first = true;
+    /* Deduplicate across authored ranks. The same buff may occur on many ranks. */
+    uint32_t seen[16] = {0};
+    uint32_t seen_count = 0;
+    FOR_LOOP(rank, MIN(row->levels > 0 ? row->levels : 1, 4)) {
+        cstring_t list = row->buffID[rank];
+        while (list && *list) {
+            char token[5] = {0};
+            uint32_t n = 0, code;
+            while (*list && *list != ',') {
+                if (n < 4) token[n++] = *list;
+                list++;
+            }
+            if (*list == ',') list++;
+            if (n != 4) continue;
+            code = RK(token);
+            bool duplicate = false;
+            FOR_LOOP(i, seen_count) if (seen[i] == code) duplicate = true;
+            if (duplicate) continue;
+            if (seen_count < 16) seen[seen_count++] = code;
+            AbilityBuffData_t const *buff = find_buff(buffs, buff_count, code);
+            if (!first) putchar(',');
+            first = false;
+            fputs("{", stdout);
+            json_key_string("id", token);
+            putchar(','); json_key_string("comments", buff ? buff->comments : NULL);
+            putchar(','); json_key_string("buff_art", buff ? buff->buffArt : NULL);
+            putchar(','); json_key_string("target_art", buff ? buff->targetArt : NULL);
+            putchar(','); json_key_string("special_art", buff ? buff->specialArt : NULL);
+            putchar(','); json_key_string("effect_art", buff ? buff->effectArt : NULL);
+            putchar(','); json_key_string("missile_art", buff ? buff->missileArt : NULL);
+            putchar(','); json_key_string("effect_sound", buff ? buff->effectSound : NULL);
+            putchar(','); json_key_string("effect_sound_looped", buff ? buff->effectSoundLooped : NULL);
+            putchar('}');
+        }
+    }
+    putchar(']');
+    fputs(",\"effects\":[", stdout);
+    first = true;
+    uint32_t effect_seen[16] = {0}, effect_count = 0;
+    FOR_LOOP(rank, MIN(row->levels > 0 ? row->levels : 1, 4)) {
+        cstring_t list = row->efctID[rank];
+        while (list && *list) {
+            char token[5] = {0};
+            uint32_t n = 0;
+            while (*list && *list != ',') {
+                if (n < 4) token[n++] = *list;
+                list++;
+            }
+            if (*list == ',') list++;
+            if (n != 4) continue;
+            uint32_t code = RK(token);
+            bool duplicate = false;
+            FOR_LOOP(i, effect_count) if (effect_seen[i] == code) duplicate = true;
+            if (duplicate) continue;
+            if (effect_count < 16) effect_seen[effect_count++] = code;
+            AbilityBuffData_t const *effect = find_buff(buffs, buff_count, code);
+            if (!first) putchar(',');
+            first = false;
+            fputs("{", stdout);
+            json_key_string("id", token);
+            putchar(','); json_key_string("buff_art", effect ? effect->buffArt : NULL);
+            putchar(','); json_key_string("target_art", effect ? effect->targetArt : NULL);
+            putchar(','); json_key_string("special_art", effect ? effect->specialArt : NULL);
+            putchar(','); json_key_string("effect_art", effect ? effect->effectArt : NULL);
+            putchar(','); json_key_string("missile_art", effect ? effect->missileArt : NULL);
+            putchar(','); json_key_string("effect_sound", effect ? effect->effectSound : NULL);
+            putchar(','); json_key_string("effect_sound_looped", effect ? effect->effectSoundLooped : NULL);
+            putchar('}');
+        }
+    }
+    putchar(']');
+}
+
+static int dump_raw_json(uint32_t raw, bool tft, cstring_t edition) {
+    handle_t archives[8] = {0};
+    AbilityData_t *rows = NULL;
+    AbilityBuffData_t *buffs = NULL;
+    stbIniCache_t ini = {0}, func_ini = {0};
+    uint32_t n = open_archive_set(archives, tft);
+    if (!n) { fprintf(stderr, "%s: no archives\n", edition); return 1; }
+    Tool_SetSheetHost(archives, n);
+    uint32_t count = Stb_SlkLoad("Units\\AbilityData.slk", ability_schema,
+                                 (void **)&rows, sizeof(AbilityData_t));
+    if (!count || !rows) { Tool_CloseArchives(archives, 8); fprintf(stderr, "AbilityData missing\n"); return 1; }
+    uint32_t buff_count = Stb_SlkLoad("Units\\AbilityBuffData.slk", ability_buff_schema,
+                                      (void **)&buffs, sizeof(AbilityBuffData_t));
+    Stb_IniCacheLoadFiles(&ini, ability_string_files);
+    Stb_IniCacheLoadFiles(&func_ini, ability_function_files);
+    AbilityData_t const *hit = NULL;
+    FOR_LOOP(i, count) if (rows[i].id == raw) { hit = rows + i; break; }
+    fputs("{\"schema_version\":1,\"edition\":", stdout);
+    json_string(edition);
+    fputs(",\"rawcode\":", stdout);
+    json_fourcc(raw);
+    fputs(",\"archives\":[", stdout);
+    bool first = true;
+    /* Preserve source MPQ discovery order for auditing and reproducibility. */
+    FOR_LOOP(i, archive_n) {
+        if (!first) putchar(',');
+        json_string(archive_paths[i]);
+        first = false;
+    }
+    printf("],\"found\":%s", hit ? "true" : "false");
+    if (hit) { putchar(','); json_raw_row(hit, rows, count, buffs, buff_count, &ini, &func_ini); }
+    fputs("}\n", stdout);
+    Stb_IniCacheFree(&func_ini);
+    Stb_IniCacheFree(&ini);
+    if (buffs) FS_SLKFreeRows(ability_buff_schema, buffs, buff_count, sizeof(AbilityBuffData_t));
+    FS_SLKFreeRows(ability_schema, rows, count, sizeof(AbilityData_t));
+    Tool_CloseArchives(archives, 8);
+    return hit ? 0 : 1;
+}
+
 int main(int argc, char **argv) {
     handle_t archives[8] = {0};
     size_t archive_count = 0;
     cstring_t data_dir = NULL;
-    bool tft = false, roc_only = false, dump_all = false, have_mpq = false;
+    bool tft = false, roc_only = false, dump_all = false, have_mpq = false, json_output = false;
     uint32_t raw = 0, resolve_raw = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -645,6 +912,8 @@ int main(int argc, char **argv) {
             tft = true;
         } else if (!strcmp(argv[i], "-roc")) {
             roc_only = true;
+        } else if (!strcmp(argv[i], "-json")) {
+            json_output = true;
         } else if (!strcmp(argv[i], "-all")) {
             dump_all = true;
         } else if (!strcmp(argv[i], "-raw") && i + 1 < argc && strlen(argv[i + 1]) == 4) {
@@ -653,19 +922,24 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-resolve-tooltip") && i + 1 < argc && strlen(argv[i + 1]) == 4) {
             cstring_t id = argv[++i]; resolve_raw = RK(id);
         } else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
-            fprintf(stderr, "Usage: %s [-data <dir>] [-mpq <file>] [-tft] [-roc] [-all] [-raw <id>] [-resolve-tooltip <id>]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-data <dir>] [-mpq <file>] [-tft] [-roc] [-all] [-json -raw <id>] [-resolve-tooltip <id>]\n", argv[0]);
             fprintf(stderr, "  -data <dir>  Data directory containing MPQ archives\n");
             fprintf(stderr, "  -mpq <file>  Open a specific MPQ archive\n");
             fprintf(stderr, "  -tft         TFT overlay (War3.mpq + War3x.mpq)\n");
             fprintf(stderr, "  -roc         ROC archives only (no War3x overlay)\n");
             fprintf(stderr, "  -all         Dump all abilities, not just missing ones\n");
             fprintf(stderr, "  -raw <id>    Agent brief: row, strings, buffs, aliases, class\n");
+            fprintf(stderr, "  -json        Structured single-ability output; requires -raw and one edition\n");
             fprintf(stderr, "               Without -roc/-tft, -raw prints ROC then TFT.\n");
             fprintf(stderr, "  -resolve-tooltip <id> Resolve known <code,field> tooltip placeholders by rank.\n");
             return 0;
         }
     }
 
+    if (json_output && (!raw || tft == roc_only || resolve_raw)) {
+        fprintf(stderr, "-json requires -raw and exactly one edition: -roc or -tft, without -resolve-tooltip\n");
+        return 2;
+    }
     if (data_dir) Tool_ForEachArchive(data_dir, add_archive_cb, NULL);
     if (!archive_n) {
         fprintf(stderr, "No archives found. Use -data <dir> or -mpq <file>.\n");
@@ -676,6 +950,8 @@ int main(int argc, char **argv) {
     if (resolve_raw) return resolve_tooltip(resolve_raw, !roc_only, roc_only ? "ROC" : (tft ? "TFT" : "TFT"));
 
     if (raw) {
+        if (json_output) return dump_raw_json(raw, tft || (have_mpq && !roc_only),
+                                              tft ? "TFT" : (roc_only ? "ROC" : "MPQ"));
         int missing = 0;
         if (have_mpq && !data_dir) return dump_raw(raw, true, "mpq");
         if (roc_only) return dump_raw(raw, false, "ROC");

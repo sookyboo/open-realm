@@ -26,6 +26,7 @@ static char const *g_requested_animation = NULL;
 static bool g_use_model_camera = false;
 static bool g_use_front_ortho = false;
 static bool g_info_only = false;
+static bool g_info_json = false;
 static bool g_dump_all = false;
 static bool g_run_once = false;
 /* Deterministic golden-image output: when g_output_path is set, mdxtool renders
@@ -121,7 +122,7 @@ static void FreeTexturePreviewCache(void) {
 static void usage(void) {
     fprintf(stderr,
         "Usage:\n"
-    "  mdxtool -mpq <archive.mpq> -model <file.mdx> [--anim <sequence>] [--use-model-camera] [--front-ortho] [--info] [--dump-all] [--once] [-o <out.png> [--frame <ms>] [--seed <n>]]\n"
+    "  mdxtool -mpq <archive.mpq> -model <file.mdx> [--anim <sequence>] [--use-model-camera] [--front-ortho] [--info|--info-json] [--dump-all] [--once] [-o <out.png> [--frame <ms>] [--seed <n>]]\n"
         "\n"
         "Examples:\n"
     "  mdxtool -mpq War3x.mpq -model UI\\\\Glues\\\\MainMenu\\\\MainMenu3D_exp\\\\MainMenu3D_exp.mdx --use-model-camera -o out.png\n"
@@ -133,6 +134,7 @@ static void usage(void) {
     "\n"
     "Notes:\n"
     "  --info prints model metadata and exits without creating a window.\n"
+    "  --info-json exports bounded structured model metadata without a renderer.\n"
     /* Escape the literal percent so fprintf does not consume a missing argument. */
     "  --info --dump-all samples bone translations at 2%% intervals; --anim filters the sequence.\n"
     "  --front-ortho uses a front-facing orthographic preview camera for flat UI models.\n"
@@ -581,6 +583,214 @@ static void dump_node_motion(uint8_t *data, uint32_t size, mdxModel_t const *mod
         R_ReleaseModelNode(&node);
         off += len + 8;
     }
+}
+
+/* JSON metadata shares the same MPQ and MDX chunk reader as --info.
+ * It is deliberately read-only, headless and restricted to bounded chunks.
+ * EVTS records are parsed conservatively; their runtime dispatch semantics
+ * and SND/SPN/SPL/FPT/UBR lookup rows remain separate evidence. */
+static void MdxJsonString(char const *data, size_t length) {
+    putchar('"');
+    for (size_t i = 0; i < length && data[i]; i++) {
+        unsigned char c = (unsigned char)data[i];
+        if (c == '"' || c == '\\') { putchar('\\'); putchar(c); }
+        else if (c == '\n') fputs("\\n", stdout);
+        else if (c == '\r') fputs("\\r", stdout);
+        else if (c == '\t') fputs("\\t", stdout);
+        else if (c < 32) printf("\\u%04x", (unsigned)c);
+        else putchar(c);
+    }
+    putchar('"');
+}
+
+static uint32_t MdxReadU32(uint8_t const *ptr) {
+    uint32_t value;
+    memcpy(&value, ptr, sizeof(value));
+    return value;
+}
+
+/* EVTS contains consecutive node headers and KEVT records. Decode only the
+ * standard MDX 800 node/keytrack shapes; never interpret an unknown tag as a
+ * valid child event. Everything is bounds-checked before emitting JSON. */
+typedef struct {
+    char name[81];
+    uint32_t node_id, num_keys, global_seq;
+    uint8_t const *keys;
+} mdxJsonEvent_t;
+
+static bool MdxJsonNextEvent(uint8_t const *chunk, uint32_t length,
+                             uint32_t *cursor, mdxJsonEvent_t *out) {
+    uint32_t p = *cursor;
+    if (length - p < 92) return false;
+    memcpy(out->name, chunk + p, 80);
+    out->name[80] = 0;
+    out->node_id = MdxReadU32(chunk + p + 80);
+    p += 92;
+    while (length - p >= 4) {
+        uint32_t tag = MdxReadU32(chunk + p);
+        p += 4;
+        if (tag == MAKEFOURCC('K','E','V','T')) {
+            if (length - p < 8) return false;
+            out->num_keys = MdxReadU32(chunk + p);
+            out->global_seq = MdxReadU32(chunk + p + 4);
+            p += 8;
+            if (out->num_keys > 4096 || out->num_keys > (length - p) / 4) return false;
+            out->keys = chunk + p;
+            *cursor = p + out->num_keys * 4;
+            return true;
+        }
+        uint32_t components;
+        if (tag == MAKEFOURCC('K','G','T','R') || tag == MAKEFOURCC('K','G','S','C')) components = 3;
+        else if (tag == MAKEFOURCC('K','G','R','T')) components = 4;
+        else return false;
+        if (length - p < 12) return false;
+        uint32_t count = MdxReadU32(chunk + p);
+        uint32_t interp = MdxReadU32(chunk + p + 4);
+        p += 12;
+        if (count > 4096 || interp > 3) return false;
+        uint32_t stride = 4 + components * 4 * (interp >= 2 ? 3 : 1);
+        if (count > (length - p) / stride) return false;
+        p += count * stride;
+    }
+    return false;
+}
+
+static bool MdxJsonEventsValid(uint8_t const *data, uint32_t size) {
+    uint32_t offset = 4;
+    while (offset < size) {
+        uint32_t tag = MdxReadU32(data + offset), len = MdxReadU32(data + offset + 4);
+        if (tag == MAKEFOURCC('E','V','T','S')) {
+            uint8_t const *chunk = data + offset + 8;
+            uint32_t cursor = 0;
+            while (cursor < len) {
+                mdxJsonEvent_t event;
+                if (!MdxJsonNextEvent(chunk, len, &cursor, &event)) return false;
+            }
+        }
+        offset += 8 + len;
+    }
+    return true;
+}
+
+static void MdxJsonWriteEvents(uint8_t const *data, uint32_t size) {
+    bool first = true;
+    uint32_t offset = 4;
+    while (offset < size) {
+        uint32_t tag = MdxReadU32(data + offset), len = MdxReadU32(data + offset + 4);
+        if (tag == MAKEFOURCC('E','V','T','S')) {
+            uint8_t const *chunk = data + offset + 8;
+            uint32_t cursor = 0;
+            while (cursor < len) {
+                mdxJsonEvent_t event;
+                if (!MdxJsonNextEvent(chunk, len, &cursor, &event)) return;
+                if (!first) putchar(',');
+                first = false;
+                fputs("{\"name\":", stdout);
+                MdxJsonString(event.name, 80);
+                printf(",\"node_id\":%u,\"global_seq\":%u,\"keys_ms\":[",
+                       (unsigned)event.node_id, (unsigned)event.global_seq);
+                for (uint32_t i = 0; i < event.num_keys; i++) {
+                    if (i) putchar(',');
+                    printf("%u", (unsigned)MdxReadU32(event.keys + i * 4));
+                }
+                fputs("]}", stdout);
+            }
+        }
+        offset += 8 + len;
+    }
+}
+
+static bool DumpModelInfoJsonNoWindow(cstring_t modelPath) {
+    handle_t file = FS_OpenFile(modelPath);
+    if (!file) { fprintf(stderr, "mdxtool: missing model %s\n", modelPath); return false; }
+    uint32_t size = SFileGetFileSize(file, NULL);
+    if (size < 4 || size > 64u * 1024u * 1024u) {
+        FS_CloseFile(file);
+        fprintf(stderr, "mdxtool: invalid model size %u\n", (unsigned)size);
+        return false;
+    }
+    uint8_t *data = MemAlloc(size);
+    if (!data) { FS_CloseFile(file); return false; }
+    bool success = SFileReadFile(file, data, size, NULL, NULL) != 0;
+    FS_CloseFile(file);
+    if (!success || MdxReadU32(data) != MAKEFOURCC('M','D','L','X')) {
+        fprintf(stderr, "mdxtool: invalid MDLX model %s\n", modelPath);
+        MemFree(data); return false;
+    }
+    /* Check all chunk bounds first so we never emit a partial success record. */
+    uint32_t offset = 4;
+    while (offset < size) {
+        if (size - offset < 8) { success = false; break; }
+        uint32_t chunk_size = MdxReadU32(data + offset + 4);
+        offset += 8;
+        if (chunk_size > size - offset) { success = false; break; }
+        offset += chunk_size;
+    }
+    if (!success) {
+        fprintf(stderr, "mdxtool: corrupt MDLX chunk bounds in %s\n", modelPath);
+        MemFree(data); return false;
+    }
+    fputs("{\"schema_version\":1,\"path\":", stdout);
+    MdxJsonString(modelPath, strlen(modelPath));
+    printf(",\"byte_size\":%u,\"sequences\":[", (unsigned)size);
+    bool first = true;
+    offset = 4;
+    while (offset < size) {
+        uint32_t tag = MdxReadU32(data + offset);
+        uint32_t len = MdxReadU32(data + offset + 4);
+        uint8_t *chunk = data + offset + 8;
+        if (tag == MAKEFOURCC('S','E','Q','S') && len % sizeof(mdxSequence_t) == 0) {
+            uint32_t count = len / sizeof(mdxSequence_t);
+            for (uint32_t i = 0; i < count; i++) {
+                mdxSequence_t const *seq = (mdxSequence_t const *)(chunk + i * sizeof(mdxSequence_t));
+                if (!first) putchar(',');
+                first = false;
+                fputs("{\"name\":", stdout);
+                MdxJsonString(seq->name, sizeof(seq->name));
+                printf(",\"start_ms\":%u,\"end_ms\":%u,\"flags\":%u}",
+                       (unsigned)seq->interval[0], (unsigned)seq->interval[1],
+                       (unsigned)seq->flags);
+            }
+        }
+        offset += 8 + len;
+    }
+    fputs("],\"textures\":[", stdout);
+    first = true;
+    offset = 4;
+    while (offset < size) {
+        uint32_t tag = MdxReadU32(data + offset);
+        uint32_t len = MdxReadU32(data + offset + 4);
+        uint8_t *chunk = data + offset + 8;
+        if (tag == MAKEFOURCC('T','E','X','S') && len % MDX_TEXTURE_RECORD_SIZE == 0) {
+            for (uint32_t i = 0; i < len; i += MDX_TEXTURE_RECORD_SIZE) {
+                if (!first) putchar(',');
+                first = false;
+                printf("{\"replaceable_id\":%u,\"path\":", (unsigned)MdxReadU32(chunk + i));
+                MdxJsonString((char const *)(chunk + i + 4), MDX_TEXTURE_PATH_LENGTH);
+                putchar('}');
+            }
+        }
+        offset += 8 + len;
+    }
+    fputs("],\"chunks\":{", stdout);
+    first = true;
+    offset = 4;
+    while (offset < size) {
+        uint32_t tag = MdxReadU32(data + offset);
+        uint32_t len = MdxReadU32(data + offset + 4);
+        char id[5] = {(char)tag,(char)(tag >> 8),(char)(tag >> 16),(char)(tag >> 24),0};
+        if (!first) putchar(',');
+        first = false;
+        MdxJsonString(id, 4);
+        printf(":%u", (unsigned)len);
+        offset += 8 + len;
+    }
+    bool events_valid = MdxJsonEventsValid(data, size);
+    printf("},\"event_objects_decoded\":%s,\"events\":[", events_valid ? "true" : "false");
+    if (events_valid) MdxJsonWriteEvents(data, size);
+    fputs("],\"runtime_animation_selection_verified\":false}\n", stdout);
+    MemFree(data);
+    return true;
 }
 
 static bool DumpModelInfoNoWindow(cstring_t modelPath) {
@@ -1354,6 +1564,8 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "--background")) {
             if (++i >= argc) { usage(); return 1; }
             g_background_path = argv[i];
+        } else if (!strcmp(argv[i], "--info-json")) {
+            g_info_json = true;
         } else if (!strcmp(argv[i], "--info") || !strcmp(argv[i], "-info")) {
             g_info_only = true;
         } else if (!strcmp(argv[i], "--dump-all") || !strcmp(argv[i], "-dump-all")) {
@@ -1423,10 +1635,10 @@ int main(int argc, char **argv) {
     }
     Tool_SetSheetHost(archives, sizeof(archives) / sizeof(archives[0]));
 
-    if (g_info_only) {
+    if (g_info_only || g_info_json) {
         ri.MemAlloc = MemAlloc;
         ri.MemFree = MemFree;
-        bool ok = DumpModelInfoNoWindow(modelPath);
+        bool ok = g_info_json ? DumpModelInfoJsonNoWindow(modelPath) : DumpModelInfoNoWindow(modelPath);
         Viewer_CloseArchives(archives, sizeof(archives) / sizeof(archives[0]));
         return ok ? 0 : 1;
     }

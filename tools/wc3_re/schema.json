@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openrealm.local/schemas/wc3-retail-ability-inventory-v1.json",
+  "title": "Warcraft III Retail ability investigation inventory",
+  "type": "object",
+  "required": ["schema_version", "executable", "functions", "verified_relationships", "relationship_kinds"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "executable": {
+      "type": "object",
+      "required": ["sha256", "architecture", "module", "preferred_image_base"],
+      "properties": {
+        "sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "preferred_image_base": {"$ref": "#/$defs/hex"},
+        "module": {"type": "string", "minLength": 1},
+        "architecture": {"type": "string", "minLength": 1}
+      }
+    },
+    "functions": {"type": "array", "items": {"$ref": "#/$defs/function"}},
+    "verified_relationships": {"type": "array", "items": {"$ref": "#/$defs/relationship"}},
+    "relationship_kinds": {"type": "object"},
+    "entry_count": {"type": "integer", "minimum": 0},
+    "verified_relationship_count": {"type": "integer", "minimum": 0}
+  },
+  "$defs": {
+    "hex": {"type": "string", "pattern": "^0x[0-9a-fA-F]{1,8}$"},
+    "address": {
+      "type": "object",
+      "properties": {
+        "kind": {"enum": ["function_va", "vtable_va", "vtable", "global_va", "untyped_va", "constant"]},
+        "va": {"$ref": "#/$defs/hex"},
+        "rva": {"$ref": "#/$defs/hex"},
+        "value": {"$ref": "#/$defs/hex"}
+      },
+      "oneOf": [
+        {"required": ["va", "rva"], "not": {"required": ["value"]}},
+        {"required": ["kind", "value"], "properties": {"kind": {"const": "constant"}}, "not": {"anyOf": [{"required": ["va"]}, {"required": ["rva"]}]}}
+      ]
+    },
+    "source": {
+      "type": "object", "required": ["document"],
+      "properties": {"document": {"type": "string", "minLength": 1}}
+    },
+    "function": {
+      "type": "object",
+      "required": ["id", "label", "status", "confidence", "record_kind", "addresses", "related_addresses", "source"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
+        "status": {"enum": ["observed", "partially_resolved", "candidate"]},
+        "confidence": {"enum": ["low", "medium", "high"]},
+        "record_kind": {"enum": ["function", "function_group", "vtable_record"]},
+        "addresses": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/address"}},
+        "related_addresses": {"type": "array", "items": {"$ref": "#/$defs/address"}},
+        "source": {"$ref": "#/$defs/source"}
+      }
+    },
+    "relationship": {
+      "type": "object",
+      "required": ["from", "to", "kind", "context", "confidence", "source"],
+      "properties": {
+        "from": {"$ref": "#/$defs/address"},
+        "to": {"$ref": "#/$defs/address"},
+        "kind": {"enum": ["direct_call", "virtual_dispatch", "callback_dispatch", "related_call_path", "call"]},
+        "context": {"type": "string", "minLength": 1},
+        "confidence": {"enum": ["low", "medium", "high"]},
+        "source": {"$ref": "#/$defs/source"}
+      }
+    }
+  }
+}

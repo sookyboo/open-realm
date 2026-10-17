@@ -552,3 +552,18 @@ Browser engine build/run steps and current limitations are recorded in
 [Browser platform](docs/platform/browser.md). The foundation smoke test is not
 the Warcraft III runtime. Keep browser adapters outside the universal client
 and game simulation modules.
+
+## Warcraft III Ability RE Harness — End-to-end Readiness
+
+For the pinned Retail 1.29.2 ability reconstruction tools, see
+[Ability reconstruction harness](docs/games/warcraft-3/ability-reconstruction-harness.md#patch-12-end-to-end-harness-readiness-and-smoke-procedure).
+`python3 tools/wc3_ability_re.py ability-smoke --output <new-dir>` is a
+**synthetic-only** offline integration test for `Apxf`/`AOsw`, not a Retail
+behavior check. `ability-readiness --reconstruction <directory>` validates
+saved provenance and, when supplied, Frida-plan, session and spec consistency
+without attaching/launching. Never promote function-entry traces, synthetic
+fixture C, authored MDX paths or JASS capture markers into exact gameplay or
+animation claims. Preserve unverified code/visual/audio/lifecycle questions;
+request focused live probes only for semantic uncertainties static evidence
+cannot settle. Keep all proprietary executables, MPQs and model assets outside
+Git fixtures.
