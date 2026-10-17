@@ -21,6 +21,17 @@ reverse-engineering artifacts, Ghidra projects, temporary caches, and reports.
 It is ignored by Git. Keep compiled game/tool outputs under `build/`; do not
 mix RE evidence with build products.
 
+Use `data/Warcraft III/` as the single repository-relative location for the
+local Retail executable and archives. Run Retail from that directory so it can
+find its MPQs; use `$WINEPREFIX` only for the Wine profile and writable game
+state. Keep projects in `build-re/ghidra-projects/`, Ghidra settings/temp files
+in `build-re/ghidra-user/` and `build-re/ghidra-tmp/`, and all run inputs and
+outputs together in `build-re/ability-re/<rawcode>-<run-id>/`. Prepared maps
+and JASS result files also need copies in the active Wine profile's standard
+`Documents/Warcraft III/Maps/Probe/` and `CustomMapData/` directories; record
+their hashes and host paths in the run manifest rather than relying on an
+implicit location. See the [technical reference's location map](ability-reconstruction-harness.md#local-setup-and-discovery).
+
 ## Non-negotiable evidence and efficiency rules
 
 1. **Static first.** Reuse validated inventories, ability data, saved Ghidra

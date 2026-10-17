@@ -81,6 +81,27 @@ class ScenarioTests(unittest.TestCase):
         self.assertLess(js.index("function RE_Tick"), js.index("function RE_Start_0"))
         self.assertLess(js.index("function RE_Chat"), js.index("function RE_Init"))
 
+    def test_expected_rejected_order_is_a_required_outcome(self):
+        source = specification()
+        source["rawcode"] = "AOsw"
+        source["cases"] = [{"run_id": "ward-rejected", "kind": "point", "order": "ward",
+                            "expected_order_accepted": False, "caster": unit(),
+                            "point": {"x": 100, "y": 200}}]
+        report = scenarios.build(source)
+        case = report["session_cases"]["cases"][0]
+        self.assertEqual(case["required_markers"], ["setup_failed=false", "accepted=false"])
+        self.assertEqual(case["inconclusive_markers"], ["setup_failed=true", "accepted=true", "buffer_overflow=true"])
+
+    def test_expected_order_acceptance_is_boolean_and_not_for_passives(self):
+        source = specification()
+        source["cases"][0]["expected_order_accepted"] = "false"
+        with self.assertRaisesRegex(scenarios.ScenarioError, "must be a boolean"):
+            scenarios.build(source)
+        source = specification()
+        source["cases"][0]["expected_order_accepted"] = False
+        with self.assertRaisesRegex(scenarios.ScenarioError, "only applies to ordered"):
+            scenarios.build(source)
+
     def test_invalid_rawcode_and_duplicate_case_ids(self):
         sample = specification()
         sample["rawcode"] = "Apxf\" + BAD()"
