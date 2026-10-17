@@ -16,6 +16,11 @@ contains patch-by-patch history, CLI schemas, and the detailed Retail runbook.
 The executable and proprietary Warcraft data belong in the user's local
 installation, not in the repository or a patch.
 
+Use `build-re/` as the standard workspace for all generated ability
+reverse-engineering artifacts, Ghidra projects, temporary caches, and reports.
+It is ignored by Git. Keep compiled game/tool outputs under `build/`; do not
+mix RE evidence with build products.
+
 ## Non-negotiable evidence and efficiency rules
 
 1. **Static first.** Reuse validated inventories, ability data, saved Ghidra
@@ -57,7 +62,7 @@ From the repository root:
 python3 -m unittest discover -s tests -p 'test_wc3_re_*.py'
 python3 tools/wc3_re/inventory.py
 python3 tools/wc3_ability_re.py ability-smoke \
-  --output build/ability-re/smoke-<unique-run-id>
+  --output build-re/ability-re/smoke-<unique-run-id>
 make ability_audit mpqtool mdxtool
 python3 tools/wc3_ability_re.py doctor \
   --executable 'data/Warcraft III/Warcraft III.exe'
@@ -78,7 +83,7 @@ those keys must not be conflated.
 ```sh
 python3 tools/wc3_ability_re.py lookup Apxf --edition tft --format json \
   --executable 'data/Warcraft III/Warcraft III.exe' \
-  --output build/ability-re/Apxf-lookup-01.json
+  --output build-re/ability-re/Apxf-lookup-01.json
 ```
 
 Examine every applicable rank and alias, including cost, targets, range,
@@ -94,17 +99,17 @@ for each ability. If no saved project exists, do the one-time import/scan:
 ```sh
 python3 tools/wc3_ability_re.py ghidra-export \
   --headless /path/to/ghidra/support/analyzeHeadless \
-  --project-dir build/ghidra-projects --project-name WC3Retail1292 \
+  --project-dir build-re/ghidra-projects --project-name WC3Retail1292 \
   --executable 'data/Warcraft III/Warcraft III.exe' \
   --import-first --mode scan \
-  --output build/ability-re/ghidra/scan-01
+  --output build-re/ability-re/ghidra/scan-01
 ```
 
 Omit `--import-first` when using an existing analyzed project. Check the scan:
 
 ```sh
 python3 tools/wc3_ability_re.py ghidra-check \
-  build/ability-re/ghidra/scan-01 --mode scan
+  build-re/ability-re/ghidra/scan-01 --mode scan
 ```
 
 Use `lookup` plus the curated function inventory to identify seed functions.
@@ -116,11 +121,11 @@ Phoenix Fire RVAs are *known candidate waypoints*, not a complete ability):
 ```sh
 python3 tools/wc3_ability_re.py ghidra-export \
   --headless /path/to/ghidra/support/analyzeHeadless \
-  --project-dir build/ghidra-projects --project-name WC3Retail1292 \
+  --project-dir build-re/ghidra-projects --project-name WC3Retail1292 \
   --executable 'data/Warcraft III/Warcraft III.exe' \
   --mode detail \
   --rva 0x0080d820 --rva 0x0080ecd0 --rva 0x0080f1e0 \
-  --output build/ability-re/ghidra/Apxf-detail-01
+  --output build-re/ability-re/ghidra/Apxf-detail-01
 ```
 
 Record failures and unresolved dispatch instead of silently choosing a
@@ -133,15 +138,15 @@ caller disassembly before naming state fields or return-value meanings.
 ```sh
 python3 tools/wc3_ability_re.py reconstruct Apxf --edition tft \
   --executable 'data/Warcraft III/Warcraft III.exe' \
-  --ghidra-scan build/ability-re/ghidra/scan-01 \
-  --ghidra-detail build/ability-re/ghidra/Apxf-detail-01 \
-  --output-dir build/ability-re/Apxf-static-01
+  --ghidra-scan build-re/ability-re/ghidra/scan-01 \
+  --ghidra-detail build-re/ability-re/ghidra/Apxf-detail-01 \
+  --output-dir build-re/ability-re/Apxf-static-01
 
 python3 tools/wc3_ability_re.py ability-readiness \
-  --reconstruction build/ability-re/Apxf-static-01 \
+  --reconstruction build-re/ability-re/Apxf-static-01 \
   --check-tools --executable 'data/Warcraft III/Warcraft III.exe' \
   --ghidra-headless /path/to/ghidra/support/analyzeHeadless \
-  --output build/ability-re/Apxf-readiness-01.json
+  --output build-re/ability-re/Apxf-readiness-01.json
 ```
 
 Read, at minimum:
@@ -175,8 +180,8 @@ observation establishes them.
 
 ```sh
 python3 tools/wc3_ability_re.py ability-analyze \
-  --offline build/ability-re/Apxf-static-01/offline \
-  --output build/ability-re/Apxf-static-questions-01
+  --offline build-re/ability-re/Apxf-static-01/offline \
+  --output build-re/ability-re/Apxf-static-questions-01
 ```
 
 Classify each question: (a) code/data can settle it, (b) native receiver or
@@ -200,10 +205,10 @@ and [probe preparation runbook](retail-camera-tracing.md).
 
    ```sh
    python3 tools/wc3_ability_re.py ability-trace Apxf \
-     --graph build/ability-re/Apxf-static-01/graph \
+     --graph build-re/ability-re/Apxf-static-01/graph \
      --capture-id phoenix-acquisition-01 --max-hooks 12 \
      --max-events 600 --seconds 60 \
-     --output build/ability-re/Apxf-trace-plan-01
+     --output build-re/ability-re/Apxf-trace-plan-01
    ```
 
    Inspect `trace-plan.json` and `agent.js` before attaching. Register values
@@ -216,7 +221,7 @@ and [probe preparation runbook](retail-camera-tracing.md).
    ```sh
    python3 tools/wc3_ability_re.py ability-scenarios Apxf \
      --spec /path/to/reviewed-phoenix-lab.json \
-     --output build/ability-re/Apxf-lab-01
+     --output build-re/ability-re/Apxf-lab-01
    ```
 
    This generates `lab-globals.j`, `lab-functions.j`, `lab-plan.json`,
@@ -230,16 +235,16 @@ and [probe preparation runbook](retail-camera-tracing.md).
 
    ```sh
    python3 tools/wc3_ability_re.py ability-session-create \
-     --plan build/ability-re/Apxf-trace-plan-01 \
+     --plan build-re/ability-re/Apxf-trace-plan-01 \
      --probe-dir /path/to/verified-prepared-probe \
-     --cases build/ability-re/Apxf-lab-01/lab-session-cases.json \
-     --output build/ability-re/Apxf-session-01
+     --cases build-re/ability-re/Apxf-lab-01/lab-session-cases.json \
+     --output build-re/ability-re/Apxf-session-01
 
    python3 tools/wc3_ability_re.py ability-session-check \
-     --session build/ability-re/Apxf-session-01
+     --session build-re/ability-re/Apxf-session-01
 
    python3 tools/wc3_ability_re.py ability-session-run \
-     --session build/ability-re/Apxf-session-01 \
+     --session build-re/ability-re/Apxf-session-01 \
      --remote 127.0.0.1:27043
    ```
 
@@ -254,11 +259,11 @@ and [probe preparation runbook](retail-camera-tracing.md).
 
    ```sh
    python3 tools/wc3_ability_re.py ability-analyze \
-     --offline build/ability-re/Apxf-static-01/offline \
-     --lab build/ability-re/Apxf-lab-01 \
-     --session build/ability-re/Apxf-session-01 \
+     --offline build-re/ability-re/Apxf-static-01/offline \
+     --lab build-re/ability-re/Apxf-lab-01 \
+     --session build-re/ability-re/Apxf-session-01 \
      --comparisons /path/to/reviewed-comparisons.json \
-     --output build/ability-re/Apxf-analysis-01
+     --output build-re/ability-re/Apxf-analysis-01
    ```
 
    Missing or incompatible comparisons are not negative observations. Capture
@@ -272,15 +277,15 @@ Generate the draft from *immutable* reconstruction inputs:
 
 ```sh
 python3 tools/wc3_ability_re.py ability-spec \
-  --reconstruction build/ability-re/Apxf-static-01 \
-  --output build/ability-re/Apxf-spec-01
+  --reconstruction build-re/ability-re/Apxf-static-01 \
+  --output build-re/ability-re/Apxf-spec-01
 
 # Only when an independently reviewed, evidence-linked contract exists:
 python3 tools/wc3_ability_re.py ability-spec \
-  --reconstruction build/ability-re/Apxf-static-01 \
-  --analysis build/ability-re/Apxf-analysis-01 \
+  --reconstruction build-re/ability-re/Apxf-static-01 \
+  --analysis build-re/ability-re/Apxf-analysis-01 \
   --review /path/to/reviewed-Apxf-contract.json \
-  --output build/ability-re/Apxf-spec-reviewed-01
+  --output build-re/ability-re/Apxf-spec-reviewed-01
 ```
 
 The reviewed contract schema and evidence-reference rules are in

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import csv
+import io
 from pathlib import Path
 import re
 import subprocess
@@ -89,8 +91,15 @@ def _check_ability_payload(doc: Any, rawcode: str, edition: str) -> dict[str, An
         raise LookupError("ability_audit returned unsupported JSON schema")
     if doc.get("rawcode") != rawcode or doc.get("edition") != edition.upper():
         raise LookupError(f"ability_audit output identity mismatch for {rawcode}/{edition}")
-    if not isinstance(doc.get("found"), bool) or not isinstance(doc.get("archives"), list):
+    if (not isinstance(doc.get("found"), bool) or not isinstance(doc.get("archives"), list)
+            or any(not isinstance(path, str) for path in doc["archives"])):
         raise LookupError("ability_audit returned incomplete found/archives fields")
+    # ability_audit's data reader selects the requested edition correctly, but
+    # its `archives` JSON field reports all discovered archives. Do not let the
+    # presentation stage consume TFT overlays during a ROC lookup.
+    if edition == "roc":
+        doc["archives"] = [path for path in doc["archives"]
+                           if not _is_tft_archive(path)]
     if doc["found"]:
         ability = doc.get("ability")
         if not isinstance(ability, dict) or ability.get("id") != rawcode:
@@ -100,9 +109,44 @@ def _check_ability_payload(doc: Any, rawcode: str, edition: str) -> dict[str, An
                 check_rawcode(ability[code])
         if not isinstance(doc.get("ranks"), list) or not doc["ranks"]:
             raise LookupError("ability_audit returned no level data")
+        if type(ability.get("levels")) is not int or ability["levels"] < 0:
+            raise LookupError("ability_audit returned invalid authored level count")
         if not isinstance(doc.get("aliases"), list) or not isinstance(doc.get("buffs"), list):
             raise LookupError("ability_audit returned incomplete alias/buff data")
+        strings = doc.get("strings")
+        if strings is not None:
+            if not isinstance(strings, dict) or any(
+                    value is not None and not isinstance(value, str) for value in strings.values()):
+                raise LookupError("ability_audit returned malformed localized string data")
+            count = min(max(1, int(ability.get("levels", 1))), 4)
+            by_rank = []
+            for level in range(1, count + 1):
+                values: dict[str, str | None] = {}
+                for key, raw in strings.items():
+                    values[key] = _rank_string(raw, level - 1, count) if raw is not None else None
+                by_rank.append({"level": level, "values": values})
+            doc["strings_by_rank"] = by_rank
     return doc
+
+
+def _is_tft_archive(path: str) -> bool:
+    folded = path.casefold()
+    return "frozen" in folded or "war3x" in folded
+
+
+def _rank_string(value: str, index: int, expected: int) -> str | None:
+    """Split ability-audit's quote-stripped rank CSV without losing raw source."""
+    # IniCache returns one quoted CSV list for localized rank strings; the C
+    # JSON exporter strips only the outer quotes. Restore those for csv.reader.
+    if '\",\"' not in value:
+        return value if index == 0 else None
+    try:
+        parsed = next(csv.reader(io.StringIO('"' + value + '"'), strict=True))
+    except (csv.Error, StopIteration) as error:
+        raise LookupError(f"ability_audit returned malformed rank string data: {error}") from error
+    if len(parsed) != expected:
+        raise LookupError(f"ability_audit returned {len(parsed)} localized strings for {expected} ability ranks")
+    return parsed[index]
 
 
 def audit_one(rawcode: str, edition: str, *, audit: Path, data_dir: Path) -> dict[str, Any]:

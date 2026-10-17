@@ -76,9 +76,10 @@ class ArchiveResolver:
         self.models: dict[str, dict[str, Any]] = {}
 
     def read(self, path: str) -> tuple[bytes | None, str | None]:
-        # Archive iteration follows the audit's listed order, reversed for
-        # overlay preference; source is recorded, never silently substituted.
-        for archive in reversed(self.archives):
+        # ability_audit preserves the engine collector's first-wins ordering:
+        # localized/expansion overlays precede the base archive. Keep that
+        # order so an authored override is not shadowed by a lower-priority row.
+        for archive in self.archives:
             key = (str(archive), path.casefold())
             if key not in self.contents:
                 self.contents[key] = _capture([str(self.mpqtool), "-mpq", str(archive),
@@ -181,6 +182,18 @@ EVENT_TABLES = {
     "UBR": ("Splats\\UberSplatData.slk", None),
     "SND": ("UI\\SoundInfo\\AnimLookups.slk", "SoundLabel"),
 }
+UNIT_UI_TABLE = "Units\\UnitUI.slk"
+
+
+def _unit_ui_row(rows: list[dict[str, str]], unit_id: str) -> dict[str, str] | None:
+    """Find the authored UnitUI display row for an AbilityData UnitID."""
+    return next((row for row in rows if any(
+        key.casefold() == "unituiid" and value.casefold() == unit_id.casefold()
+        for key, value in row.items())), None)
+
+
+def _field(row: dict[str, str], name: str) -> str:
+    return next((value for key, value in row.items() if key.casefold() == name.casefold()), "")
 
 
 def _lookup_row(rows: list[dict[str, str]], name: str) -> dict[str, str] | None:
@@ -277,6 +290,8 @@ def build_presentation(lookup: dict[str, Any], *, mpqtool: Path,
         if not isinstance(archives, list) or any(not isinstance(a, str) for a in archives):
             raise PresentationError("invalid archive list")
         resolver = ArchiveResolver(archives, mpqtool, mdxtool)
+        unit_ui_rows: list[dict[str, str]] | None = None
+        unit_ui_archive: str | None = None
         references: list[dict[str, Any]] = []
         models: dict[str, dict[str, Any]] = {}
         sounds: dict[str, dict[str, Any]] = {}
@@ -327,11 +342,42 @@ def build_presentation(lookup: dict[str, Any], *, mpqtool: Path,
         # UnitUI/EfctID or custom object is not present in the audit output.
         rank_links = []
         for rank in doc.get("ranks", []):
-            rank_links.append({"level": rank.get("level"), "unit_id": rank.get("unit_id"),
-                               "buff_ids": rank.get("buff_ids", []),
-                               "effect_id": rank.get("effect_id")})
-            if rank.get("unit_id"):
-                gaps.append(f"UnitID {rank['unit_id']} needs separate UnitUI model resolution.")
+            rank_link = {"level": rank.get("level"), "unit_id": rank.get("unit_id"),
+                         "buff_ids": rank.get("buff_ids", []),
+                         "effect_id": rank.get("effect_id")}
+            unit_id = rank.get("unit_id")
+            if unit_id:
+                unit_link: dict[str, Any] = {"unit_id": unit_id, "status": "not_inspected"}
+                if inspect_assets:
+                    if unit_ui_rows is None:
+                        raw, unit_ui_archive = resolver.read(UNIT_UI_TABLE)
+                        unit_ui_rows = parse_sylk(raw) if raw is not None else []
+                    unit_row = _unit_ui_row(unit_ui_rows, unit_id)
+                    if unit_row is None:
+                        unit_link["status"] = "unit_ui_row_not_found"
+                        gaps.append(f"UnitID {unit_id} has no UnitUI row in selected archives.")
+                    else:
+                        unit_link.update({"status": "authored_unit_ui_row",
+                                          "table": UNIT_UI_TABLE,
+                                          "table_archive": unit_ui_archive,
+                                          "fields": unit_row})
+                        file_name = _field(unit_row, "file")
+                        if file_name and file_name != "-":
+                            kind, unit_model = classify_art(file_name, "TargetArt")
+                            unit_link["model"] = unit_model
+                            unit_link["model_kind"] = kind
+                            if kind == "model":
+                                key = unit_model.casefold()
+                                if key not in models:
+                                    if len(models) < max_models:
+                                        models[key] = resolver.inspect_model(unit_model)
+                                    else:
+                                        gaps.append("Model inspection limit reached; UnitUI model metadata omitted.")
+                                unit_link["model_status"] = models.get(key, {}).get("status", "inspection_limit")
+                        else:
+                            unit_link["model_status"] = "no_authored_model_path"
+                rank_link["unit_ui"] = unit_link
+            rank_links.append(rank_link)
             if rank.get("effect_id"):
                 linked = [effect for effect in doc.get("effects", [])
                           if isinstance(effect, dict) and effect.get("id") == rank["effect_id"]]

@@ -10,7 +10,7 @@ Ghidra, Wine or Retail execution.
 python3 tools/wc3_re/inventory.py
 python3 tools/wc3_re/inventory.py --format json
 python3 tools/wc3_re/inventory.py \
-  --normalized-output build/ability-re/normalized-inventory.json
+  --normalized-output build-re/ability-re/normalized-inventory.json
 python3 -m unittest discover -s tests -p 'test_wc3_re_inventory.py'
 ```
 
