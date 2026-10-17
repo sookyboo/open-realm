@@ -609,9 +609,8 @@ static uint32_t MdxReadU32(uint8_t const *ptr) {
     return value;
 }
 
-/* EVTS contains consecutive node headers and KEVT records. Decode only the
- * standard MDX 800 node/keytrack shapes; never interpret an unknown tag as a
- * valid child event. Everything is bounds-checked before emitting JSON. */
+/* EVTS records use the same size-prefixed node shape consumed by ReadNode.
+ * Decode only standard node/keytrack shapes; unknown tracks fail closed. */
 typedef struct {
     char name[81];
     uint32_t node_id, num_keys, global_seq;
@@ -621,11 +620,13 @@ typedef struct {
 static bool MdxJsonNextEvent(uint8_t const *chunk, uint32_t length,
                              uint32_t *cursor, mdxJsonEvent_t *out) {
     uint32_t p = *cursor;
-    if (length - p < 92) return false;
-    memcpy(out->name, chunk + p, 80);
+    if (length - p < 96) return false;
+    uint32_t node_size = MdxReadU32(chunk + p);
+    if (node_size < 96 || node_size > length - p) return false;
+    memcpy(out->name, chunk + p + 4, 80);
     out->name[80] = 0;
-    out->node_id = MdxReadU32(chunk + p + 80);
-    p += 92;
+    out->node_id = MdxReadU32(chunk + p + 84);
+    p += node_size;
     while (length - p >= 4) {
         uint32_t tag = MdxReadU32(chunk + p);
         p += 4;

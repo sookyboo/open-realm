@@ -36,6 +36,24 @@ def lookup() -> dict:
 
 
 class PresentationTest(unittest.TestCase):
+    def test_unitui_overlay_selects_whole_high_priority_file_with_source(self):
+        """SLK loading is archive-file fallback, not row-wise table merging."""
+        resolver = p.ArchiveResolver(["War3x.mpq", "War3.mpq"],
+                                    Path("mpqtool"), Path("mdxtool"))
+        calls = []
+        overlay = b'C;X1;Y1;K"unitUIID"\nC;X3;Y1;K"file"\nC;X1;Y2;K"other"\n'
+        base = b'C;X1;Y1;K"unitUIID"\nC;X3;Y1;K"file"\nC;X1;Y2;K"osp1"\nC;X3;K"Units\\Orc\\SerpentWard\\SerpentWard.mdx"\n'
+        def run(args, **kwargs):
+            archive = Path(args[args.index("-mpq") + 1]).name
+            calls.append(archive)
+            payload = overlay if archive == "War3x.mpq" else base
+            return subprocess.CompletedProcess(args, 0, payload, b"")
+        with mock.patch.object(p.subprocess, "run", side_effect=run):
+            contents, source = resolver.read(p.UNIT_UI_TABLE)
+        self.assertEqual(source, "War3x.mpq")
+        self.assertEqual(p._unit_ui_row(p.parse_sylk(contents), "osp1"), None)
+        self.assertEqual(calls, ["War3x.mpq"])
+
     def test_path_normalization_and_icon_classification(self):
         self.assertEqual(p.classify_art("Abilities/Fire.mdl", "TargetArt"),
                          ("model", "Abilities\\Fire.mdx"))
@@ -179,6 +197,10 @@ class PresentationTest(unittest.TestCase):
         self.assertEqual(refs[0]["child_model"], child)
         self.assertEqual(refs[1]["sound_alias"], "FireBoom")
         self.assertFalse(report["runtime_effect_timing_verified"])
+
+    def test_sound_event_lookup_uses_anim_sound_event_column(self):
+        rows = [{"AnimSoundEvent": "MPXL", "SoundLabel": "PhoenixMissile"}]
+        self.assertEqual(p._lookup_row(rows, "mpxl"), rows[0])
 
     def test_missing_models_and_corrupt_event_metadata_handled(self):
         item = lookup()

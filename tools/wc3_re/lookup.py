@@ -130,8 +130,14 @@ def _check_ability_payload(doc: Any, rawcode: str, edition: str) -> dict[str, An
 
 
 def _is_tft_archive(path: str) -> bool:
-    folded = path.casefold()
-    return "frozen" in folded or "war3x" in folded
+    """Classify known TFT archive *filenames*, never their parent directories."""
+    name = Path(path.replace("\\", "/")).name.casefold()
+    return name in {
+        "war3x.mpq", "war3xlocal.mpq",
+        "frozen.mpq", "frozenlocal.mpq",
+        "frozenthrone.mpq", "frozenthronelocal.mpq",
+        "frozen throne.mpq", "frozen throne local.mpq",
+    }
 
 
 def _rank_string(value: str, index: int, expected: int) -> str | None:
