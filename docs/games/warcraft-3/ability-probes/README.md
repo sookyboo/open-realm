@@ -36,6 +36,12 @@ confirm five 10-damage pulses at 3-second intervals for each alias. See its
 The [synchronized `ACss` recovery probe](../../../../tools/retail_probes/shadow_strike_acss_expiry/manifest.json)
 measures poison events, movement speed, and attack intervals in the same run;
 it places their sampled recovery endpoints within four 50 ms ticks.
+The [Purge timing probe](../../../../tools/retail_probes/purge_timing/manifest.json)
+uses a 100 ms speed sampler and position-locked hostile/control targets. Three
+Retail runs, including two in-process JHCR updates, reproduce the 3-second
+immobilize and 15-second recovery curve; its
+JHCR update procedure and exact transition observations are in the
+[targeting evidence report](targeting.md#retail-purge-hostile-immobilize-and-recovery-timing-october-17-2026).
 For a new ability question, start from the [general-purpose rerunnable JASS
 scaffold](../../../../tools/retail_probes/template/) and follow its
 [JHCR reuse and runner robustness guidelines](jhcr.md). Keep one-time setup,

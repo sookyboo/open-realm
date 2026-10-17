@@ -1,0 +1,13 @@
+{
+  "probe_id": "purge-hostile-slow-recovery-timing",
+  "created_at": "2026-10-17T10:14:46.553969+00:00",
+  "script": "/tmp/wc3-purge-timing-confirmed/update-run3.j",
+  "script_sha256": "0c923f584ddb7201eed5550fab14e24bedc8760feefbeb9ec4bf405b19be5a65",
+  "changed_functions": [
+    "pg_log"
+  ],
+  "reload_guard": "passed",
+  "sequence_file": "/home/agent/.wine-war3/drive_c/users/agent/Documents/Warcraft III/CustomMapData/JHCR-2229975328-2.txt",
+  "sequence_sha256": "6da0b87b9964c10e9f71bbd6fb2fd7012b353a4a52ed8b7ba60ee6d1a75000a5",
+  "sequence_size": 776
+}

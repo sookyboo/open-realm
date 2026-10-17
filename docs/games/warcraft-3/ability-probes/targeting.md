@@ -515,3 +515,49 @@ capture; the ownership and movement values above are the behavioral evidence.
 Those Charm and Purge replays used temporary maps and scripts under
 `/tmp/wc3-retail-tft-rechecks`; they did not modify repository or retail map
 assets.
+
+### Retail Purge hostile immobilize and recovery timing (October 17, 2026)
+
+The rerunnable probe in
+[`tools/retail_probes/purge_timing/`](../../../../tools/retail_probes/purge_timing/)
+measured stock TFT `Apg2` on Retail 1.29.2.9231 (executable SHA-256
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`). The
+matching AbilityData row is `DataA=5`, `DataD=3`, `Dur=15`. The experiment
+created a Player 0 Blood Mage with `Apg2`, a hostile Player 12 Footman target,
+and an untreated hostile Footman control. Both units were set to 300 movement
+speed and position-locked every 50 ms; JASS sampled effective speed every 100
+ms. The harness starts after `Trig_Intro_Skipped_Actions` executes the Gameplay
+trigger, avoiding casts during the opening cinematic.
+
+Three runs completed in the same Retail process. Each had 19 baseline samples
+at 300 speed, an accepted Purge order, a matching `EVENT_UNIT_SPELL_EFFECT` at
+tick 46, 220 total samples, and a `PG_DONE accepted=1 effect=1` marker. The
+untreated control stayed at 300 throughout. Runs 2 and 3 followed JHCR updates
+and both report `PG_JHCR_STATUS=1`. Run 2 did not emit its expected
+`PG_REVISION=2` marker. Run 3 changed only passive `PG_Log`; it emitted
+`PG_LOG_REV2`, confirming the updated logger ran while the probe completed.
+The JHCR sequences and reload-guard records are retained beside the raw
+captures.
+
+| First sampled target speed | Time after spell-effect event | Observation |
+|---:|---:|---|
+| 0 | 0.1 s | Immobilized; speed was still 300 at the event-tick sample. |
+| 150 | 3.1 s | First nonzero sample; the 3.0 s sample remained 0. |
+| 180 | 9.1 s | Recovery step. |
+| 240 | 12.1 s | Recovery step. |
+| 300 | 15.1 s | Full baseline speed; the 15.0 s sample remained 240 (about 12.0 s after speed first rose above zero). |
+
+These observations bracket immobilization at 3.0–3.1 seconds after the effect
+and full recovery at 15.0–15.1 seconds. The measured curve is consistent with
+the authored 3-second immobilize and 15-second recovery. It does not establish
+sub-100 ms boundaries. The initial 150 speed should not be read as proof that
+`DataA=5` means a 50% slow: this experiment does not distinguish the authored
+factor from a minimum movement-speed clamp. Repeat with a faster unit to
+separate those effects. Allied dispel behavior and creep/item aliases also
+remain untested.
+
+Raw evidence: [run 1](../../../../tools/retail_probes/purge_timing/evidence/retail-1292-jhcr-confirmed-run1.txt),
+[run 2](../../../../tools/retail_probes/purge_timing/evidence/retail-1292-jhcr-confirmed-run2.txt),
+[run 3 with the updated logger marker](../../../../tools/retail_probes/purge_timing/evidence/retail-1292-jhcr-confirmed-run3.txt),
+[JHCR sequence 1](../../../../tools/retail_probes/purge_timing/evidence/jhcr-update-seq1.json),
+and [sequence 2](../../../../tools/retail_probes/purge_timing/evidence/jhcr-update-seq2.json).

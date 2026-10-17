@@ -23,7 +23,7 @@ prove gameplay behavior.
 | Area | Established | Still open |
 |---|---|---|
 | Charm (`ANch`) | Probes establish tested stock target exclusions and a creep-level boundary. | Alias-specific limits/resource accounting; one custom level-3 result is anomalous. |
-| Purge (`Apg2`) | Probes distinguish tested friendly and hostile movement effects. | Exact slow/recovery timing and aliases. |
+| Purge (`Apg2`) | Three Retail 1.29.2 runs measured hostile immobilize and sampled speed recovery against a 300-speed control; two same-process JHCR reruns matched through recovery. | Sub-100 ms boundaries, DataA’s effective factor vs. movement-speed floor, allied dispel behavior, and aliases. See [Purge timing evidence](ability-probes/targeting.md#retail-purge-hostile-immobilize-and-recovery-timing-october-17-2026). |
 | Carrion Swarm (`ACca`) | Stock TFT probes establish tested ground/air and ally/structure outcomes, a four-target sample cap, 160–240 unit width bracket, and a distal target hit at 600 units. | Data field mapping, full travel/collision rules, cap source, target-order effects, aliases. |
 | Phoenix Fire (`Apxf`) | Live JHCR probe verifies target damage at 550 and 300 units and none at 650, consistent with AbilityData `Area=600`. | Exact 600-unit edge, damage composition/cadence, missile-versus-buff tick owner, and expiry/removal remain open. See [Phoenix Fire evidence](ability-probes/native-triage.md#live-jhcr-radius-probe-october-16-2026). |
 | Shadow Strike (`AEsh` / `ACss`) | Retail captures verify initial damage and five 10-damage pulses for both aliases. A synchronized `ACss` run puts final poison tick, first full baseline attack interval, and sampled movement recovery within four 50 ms ticks. Separate captures verify both movement curves and decaying attack-cycle delay. AbilityData confirms `AEsh` DataC=0 and `ACss` DataC=0.9. | Exact continuous expiry/decay boundaries and behavior between samples. See [synchronized `ACss` recovery](ability-probes/multi-ability-batch.md#acss-poison-movement-and-attack-cycle-recovery-in-one-run-october-17-2026), [pulse timing](ability-probes/multi-ability-batch.md#shadow-strike-poison-timing-and-movement-recovery-october-16-2026), and [movement curves](ability-probes/multi-ability-batch.md#shadow-strike-movement-speed-curve-october-16-2026). |
@@ -50,6 +50,7 @@ prove gameplay behavior.
 
 - [Charm probe](ability-probes/targeting.md#retail-charm-target-verification-october-4-2026)
 - [Purge probe](ability-probes/targeting.md#retail-purge-friendly-and-hostile-target-verification-october-4-2026)
+- [Purge hostile timing](ability-probes/targeting.md#retail-purge-hostile-immobilize-and-recovery-timing-october-17-2026)
 - [Multi-ability batch](ability-probes/multi-ability-batch.md#tft-multi-ability-retail-batch-with-frida-october-4-2026)
 - [Carrion Swarm probe and trace](ability-probes/combat.md#retail-carrion-swarm-target-cap-filters-and-line-width-october-5-2026)
 - [Phoenix Fire native path](ability-probes/native-triage.md#phoenix-fire-native-path-periodic-acquisition-and-target-gates)

@@ -1,0 +1,67 @@
+{
+  "probe_id": "purge-hostile-slow-recovery-timing",
+  "run": 3,
+  "build": "Warcraft III Retail 1.29.2.9231",
+  "executable_sha256": "3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed",
+  "raw_file": "retail-1292-jhcr-confirmed-run3.txt",
+  "raw_sha256": "50556ce1b20c8608ceaeaae45539d2fe092862231da38ebf8172140fa655cf33",
+  "capture_gate": "ready_for_review",
+  "setup_fail": false,
+  "baseline_samples": 19,
+  "sample_count": 220,
+  "sample_interval_seconds": 0.1,
+  "spell_effect_tick": 46,
+  "cast_order_accepted": true,
+  "spell_effect_seen": true,
+  "done": true,
+  "speed_transitions": [
+    {
+      "first_sample_tick": 2,
+      "effect_age_seconds": -2.2,
+      "target_speed": 300.0,
+      "control_speed": 300.0
+    },
+    {
+      "first_sample_tick": 48,
+      "effect_age_seconds": 0.1,
+      "target_speed": 0.0,
+      "control_speed": 300.0
+    },
+    {
+      "first_sample_tick": 108,
+      "effect_age_seconds": 3.1,
+      "target_speed": 150.0,
+      "control_speed": 300.0
+    },
+    {
+      "first_sample_tick": 228,
+      "effect_age_seconds": 9.1,
+      "target_speed": 180.0,
+      "control_speed": 300.0
+    },
+    {
+      "first_sample_tick": 288,
+      "effect_age_seconds": 12.1,
+      "target_speed": 240.0,
+      "control_speed": 300.0
+    },
+    {
+      "first_sample_tick": 348,
+      "effect_age_seconds": 15.1,
+      "target_speed": 300.0,
+      "control_speed": 300.0
+    }
+  ],
+  "jhcr": {
+    "same_warcraft_process": true,
+    "runtime_status": 1,
+    "changed_functions": [
+      "pg_log"
+    ],
+    "reload_guard": "passed",
+    "sequence_file": "JHCR-2229975328-2.txt",
+    "sequence_sha256": "6da0b87b9964c10e9f71bbd6fb2fd7012b353a4a52ed8b7ba60ee6d1a75000a5",
+    "replacement_marker": "PG_LOG_REV2",
+    "replacement_marker_observed": true
+  }
+}
