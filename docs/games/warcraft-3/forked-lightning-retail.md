@@ -124,8 +124,19 @@ by archived runtime tracing):
    record fields at `+0x20` through `+0x34`, and calls VA `0x00703150` (RVA
    `0x00303150`). The latter initializes generic action-list state and calls
    VA `0x00977880` (RVA `0x00577880`) to append/populate an action record.
-   These are direct static calls, but the string key and action record's
-   gameplay meaning are not yet mapped to a damage operation.
+   These are direct static calls. The record is now identified as a
+   `CVLightning` presentation object, not evidence of a gameplay damage action.
+   `0x00577880` allocates an `0x8c`-byte record (the allocator metadata at
+   `DAT_00E68B80` is unnamed here) and initializes it via `0x00577610`. The
+   record writer receives its container as its `this` argument. Separately,
+   the shared context returned by `0x00307650` has a `+0x34` list that is read
+   by `0x002FE390`; that routine calls `0x00578630`, whose loop checks an
+   active-entry word and calls `0x00577FC0` to generate lightning geometry and
+   submit it through renderer helpers. The element type and record layout are
+   consistent with this renderer path, but the available decompilation does
+   not prove that the writer's container argument is exactly the context's
+   `+0x34` list. Treat this as the leading presentation-consumer candidate,
+   not a fully proven storage edge. It does not identify a damage action.
 5. `0x008781D0` stores the returned handle in `this+0x78`, invokes vtable
    `+0x9C` when the handle is not `-1`, schedules event `0xD01D3` through
    `0x003FBE90`, calls `0x002BFFB0`, then invokes vtable `+0x84`. The same
@@ -141,9 +152,76 @@ The relevant vtable values are exported in
 worker, method and event-handler decompilations are in
 `build-re/ability-re/ghidra/ANfl-dispatch-damage-followup-17/`. Calls to
 `0x002A9940` (damage-payload initializer) and `0x002677C0` (shared CUnit
-damage receiver) were not found on this resolved path. The method currently
-reaches a generic action/event record, whose interpretation and later callback
-are not established.
+damage receiver) were not found on this resolved path. The record consumer is
+resolved for the visual branch, but the ability-specific gameplay-damage path
+remains unlocated.
+
+### Configured record layout and consumer
+
+Targeted exports are in
+`build-re/ability-re/ghidra/ANfl-action-consumer-followup-19/`,
+`ANfl-action-consumer-followup-20/`,
+`ANfl-action-lifecycle-followup-21/`,
+`ANfl-lightning-render-consumer-22/`, and
+`ANfl-lightning-manager-followup-23/`. They use the pinned executable and
+cached Ghidra project; no full analysis was run.
+
+`0x00577880` is a record/list writer, not an action interpreter. It updates the
+container at its first argument, allocating a record of size `0x8c` when
+needed. Its constructor `0x00577610` zeroes fields and sets defaults. The
+adjacent pointer-vector resize helper `0x00577EC0` uses the allocator type
+label `PAVCLightning`; the allocator metadata passed for the individual
+`0x8c`-byte records is not independently named. The following field
+assignments and consumers are directly visible:
+
+| Offset | Stored value or observed use | Evidence and interpretation |
+|---|---|---|
+| `+0x00..+0x08` | First 12-byte endpoint copied from argument 2 | `0x00577880`; its identity is inherited from upstream context and is not named by the record writer. |
+| `+0x0C..+0x14` | Second 12-byte endpoint copied from argument 3 | Same evidence; exact source/target identity is not assigned here. |
+| `+0x18`, `+0x1C` | Scalar arguments 4 and 5 | Copied directly. `+0x1C` is used by `0x00577FC0` to expand geometry on both sides of each segment; a visual width-like interpretation is supported. |
+| `+0x20` | Constant `0x16` | Set by `0x00577880`; no semantic enum name is established. |
+| `+0x24` | Local flag value | Written from configuration/local state; exact meaning unresolved. |
+| `+0x28`, `+0x2C` | Local/configuration values | `+0x2C` receives a queried value from the reference at `+0x80`; meanings unresolved. |
+| `+0x30..+0x34` | Configuration pair; high word includes constant `3` | Written by the builder; representation unresolved. |
+| `+0x38..+0x44` | Arguments 6 through 9 | Four words copied. Renderer uses byte `+0x3B` in color setup and reads the word at `+0x38` as render state; other meanings unresolved. |
+| `+0x48` | Set to `1` | Initialization/validity-like value; semantic label unresolved. |
+| `+0x4C` | Read as a loop bound by `0x00577FC0` | Count-like use over point data is proven; exact units unresolved. |
+| `+0x50` | Read as point/path-data pointer | The renderer reads points through this pointer; ownership/allocation is outside this trace. |
+| `+0x5C` | Read as generated geometry buffer | Geometry is written here and submitted to renderer helper `0x007D0E90`. |
+| `+0x74`, `+0x7C` | Renderer state values | Read by `0x00577FC0`; exact semantics unresolved. |
+| `+0x80` | Reference-counted object from argument 10 | Previous reference released; new reference stored and queried through `0x00972730`. Exact class/meaning unresolved. |
+| `+0x84` | Optional callback pointer | `0x00577FC0` invokes it with stored endpoint values before rebuilding geometry; callback identity/registration unresolved. |
+
+The established construction path and separate consumer candidate are:
+
+```text
+0x008781D0
+  → 0x0006E210 / 0x0006E3E0 (endpoint/context setup)
+  → 0x00303220 → 0x002FC9D0 → 0x00303150 → 0x00577880
+  → container argument (identity not fully resolved)
+
+shared context +0x34 list
+  → 0x002FE390 → 0x00578630 (active-entry iteration)
+  → 0x00577FC0 (lightning geometry and renderer submission)
+```
+
+Builder calls and renderer-loop calls are direct within their respective
+paths. `0x00303150` initializes the shared context's `+0x34` list and then
+calls `0x00577880`, but the call's first argument is not proven to alias that
+list by the available ABI/data-flow export. The `PAVCLightning` vector label,
+record size/layout and `0x00577FC0` field accesses make a renderer consumer
+the strongest explanation, while the exact list-identity edge remains a
+candidate. `0x00578630` checks a parallel active word before calling the
+renderer. `0x00577FC0` optionally calls the record callback, builds segment
+geometry from point data and the width-like field, then invokes renderer
+helpers. None of these functions applies unit damage.
+
+Missile event `0xD01D3` retains a statically established cleanup path:
+`0x00878390` invokes missile callbacks, releases the handle at `this+0x78`
+through `0x003051A0`, and clears that field. The handle lifetime is associated
+with the missile, but the event's gameplay meaning is unproven. The renderer
+record's removal/active-flag writer is not yet uniquely connected to this
+missile callback or to the ANfl record's container argument.
 
 ## Damage path
 
@@ -156,12 +234,12 @@ are contaminated by target movement, attacks, regeneration, and other map
 activity.
 
 The worker's virtual call is no longer unresolved: it reaches the missile
-method described above. However, that method currently leads only to a
-data-driven action/event record and a scheduled callback. Neither the
-ability-specific path nor the exported generic action builder has yet been
-followed to the shared damage payload initializer `0x006A9940` or CUnit
-receiver `0x006677C0`. Consequently, the archived health delta cannot yet be
-causally connected to the generic damage receiver. DataA's native lookup,
+method described above. The generic record branch now resolves to lightning
+presentation. Neither the ability-specific path nor the separate gameplay
+callback has yet been followed to the shared damage payload initializer
+`0x006A9940` or CUnit receiver `0x006677C0`. Consequently, the archived
+health delta cannot yet be causally connected to the generic damage receiver.
+DataA's native lookup,
 attack/damage type, mitigation path, immunity behavior, per-target calculation,
 and exact damage commit callback remain unresolved. The shared damage receiver
 contract is documented in [combat evidence](ability-probes/combat.md#damage-payload-and-receiver-path-retail-1292),

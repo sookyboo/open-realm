@@ -4250,7 +4250,7 @@
         "0x78",
         "0xA4"
       ],
-      "evidence_summary": "For Retail 1.29.2.9231 SHA-256 3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed, the registered ANfl factory at RVA 0x00878440 allocates a CAbilityForkedLightning object and installs vtable VA 0x00FAF280. That table maps +0x310 to order getter 0x00C78080 (0xD026B) and +0x42C to 0x00C78090, which calls 0x00C78A50. The latter performs repeated 0x0068EA00 spatial queries through candidate callback 0x00C78FC0, applies callback validation and deduplication, stops collection at a rank-indexed count, sorts the collected subset with 0x00C78F60, then calls 0x00C788F0 for each retained candidate. The worker resolves the MNfl class object and calls vtable slot +0xA4 at RVA 0x008781D0. The MNfl class reference identifies CMissileForkedLightning; its factory RVA 0x008790C0 installs vtable VA 0x00FAF6BC and the executable slot value at +0xA4 is VA 0x00C781D0. This is a verified static receiver/vtable relationship, not a runtime-observed dispatch. The method creates a generic configured action/event handle through RVA 0x0006E210 or 0x0006E3E0, then schedules event 0xD01D3; the configured action consumer has not been followed to a damage operation. No edge to shared damage initializer RVA 0x002A9940 or CUnit receiver RVA 0x002677C0 is established. Exact filter meanings, query geometry, rank-row field mapping, action/event meaning, damage commit, and runtime receiver identity remain unresolved. Archived Frida observed 0x00878080/0x00878090/0x00878A50; archived JASS observed three targets each losing about 85 health in one sample, not causal damage attribution.",
+      "evidence_summary": "For Retail 1.29.2.9231 SHA-256 3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed, the registered ANfl factory at RVA 0x00878440 allocates a CAbilityForkedLightning object and installs vtable VA 0x00FAF280. That table maps +0x310 to order getter 0x00C78080 (0xD026B) and +0x42C to 0x00C78090, which calls 0x00C78A50. The latter performs repeated 0x0068EA00 spatial queries through candidate callback 0x00C78FC0, applies callback validation and deduplication, stops collection at a rank-indexed count, sorts the collected subset with 0x00C78F60, then calls 0x00C788F0 for each retained candidate. The worker resolves the MNfl class object and calls vtable slot +0xA4 at RVA 0x008781D0. The MNfl class reference identifies CMissileForkedLightning; its factory RVA 0x008790C0 installs vtable VA 0x00FAF6BC and the executable slot value at +0xA4 is VA 0x00C781D0. This is a verified static receiver/vtable relationship, not a runtime-observed dispatch. The method creates a generic configured action/event handle through RVA 0x0006E210 or 0x0006E3E0, then schedules event 0xD01D3. Its configured record is a CVLightning-compatible presentation object; the shared-context renderer loop is the leading consumer candidate, but identity of the writer container and context +0x34 list is not established. This is not evidence of a damage action. No edge to shared damage initializer RVA 0x002A9940 or CUnit receiver RVA 0x002677C0 is established. Exact filter meanings, query geometry, rank-row field mapping, the separate gameplay damage callback, damage commit, and runtime receiver identity remain unresolved. Archived Frida observed 0x00878080/0x00878090/0x00878A50; archived JASS observed three targets each losing about 85 health in one sample, not causal damage attribution.",
       "related_addresses": [
         {
           "va": "0x0068EA00",
@@ -9994,6 +9994,38 @@
       "context": "The handler invokes slot +0x5C; the CMissileForkedLightning table at VA 0x00FAF6BC maps that slot to VA 0x007F2180 / RVA 0x003F2180.",
       "confidence": "high",
       "source": { "document": "docs/games/warcraft-3/forked-lightning-retail.md", "section": "Per-target dispatch and action/event path" }
+    },
+    {
+      "from": { "va": "0x00977880", "rva": "0x00577880", "kind": "function_va" },
+      "to": { "va": "0x00977610", "rva": "0x00577610", "kind": "function_va" },
+      "kind": "direct_call",
+      "context": "The record population routine allocates an 0x8c-byte record and calls this initializer; the adjacent pointer-vector resize helper uses the PAVCLightning type label.",
+      "confidence": "high",
+      "source": { "document": "docs/games/warcraft-3/forked-lightning-retail.md", "section": "Configured record layout and consumer" }
+    },
+    {
+      "from": { "va": "0x006FE390", "rva": "0x002FE390", "kind": "function_va" },
+      "to": { "va": "0x00978630", "rva": "0x00578630", "kind": "function_va" },
+      "kind": "direct_call",
+      "context": "The shared visual-manager path initializes/accesses context field +0x34 and invokes its active-entry renderer loop; identity with the writer container is not established.",
+      "confidence": "high",
+      "source": { "document": "docs/games/warcraft-3/forked-lightning-retail.md", "section": "Configured record layout and consumer" }
+    },
+    {
+      "from": { "va": "0x00978630", "rva": "0x00578630", "kind": "function_va" },
+      "to": { "va": "0x00977FC0", "rva": "0x00577FC0", "kind": "function_va" },
+      "kind": "direct_call",
+      "context": "The loop calls the lightning geometry/render submission routine for entries whose parallel active flag is set.",
+      "confidence": "high",
+      "source": { "document": "docs/games/warcraft-3/forked-lightning-retail.md", "section": "Configured record layout and consumer" }
+    },
+    {
+      "from": { "va": "0x00977880", "rva": "0x00577880", "kind": "function_va" },
+      "to": { "va": "0x00978630", "rva": "0x00578630", "kind": "function_va" },
+      "kind": "related_call_path",
+      "context": "The writer populates a container whose pointer-vector type/layout is consistent with the shared context +0x34 lightning list consumed by the manager. The exact container identity is not resolved by the current argument data flow; this is a candidate shared-storage path, not a direct call.",
+      "confidence": "medium",
+      "source": { "document": "docs/games/warcraft-3/forked-lightning-retail.md", "section": "Configured record layout and consumer" }
     }
   ],
   "relationship_kinds": {
@@ -10004,5 +10036,5 @@
     "call": "Call asserted by the source notes; dispatch modality is not yet classified as direct, virtual, or callback. Do not promote it to a direct call without evidence."
   },
   "entry_count": 89,
-  "verified_relationship_count": 329
+  "verified_relationship_count": 333
 }
