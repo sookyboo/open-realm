@@ -66,6 +66,21 @@ class TracePlanTests(unittest.TestCase):
         with self.assertRaisesRegex(frida.TraceError, "analyzed graph"):
             frida.plan(sample_graph(), include_rvas=["0x00282180"])
 
+    def test_return_address_filter_is_limited_to_selected_hook_and_generated_agent(self):
+        result = frida.plan(sample_graph(), max_hooks=1, include_rvas=[A],
+                            include_return_addresses={A: ["0x0080e123"]})
+        self.assertEqual(result["selected_hooks"][0]["return_addresses"], ["0x0080e123"])
+        agent = frida._agent_source(result)
+        self.assertIn('"return_addresses": ["0x0080e123"]', agent)
+        self.assertIn("return_addresses: hook.return_addresses", agent)
+        self.assertIn("returnAddresses.indexOf(returnRva) !== -1", agent)
+        with self.assertRaisesRegex(frida.TraceError, "not selected"):
+            frida.plan(sample_graph(), max_hooks=1, include_rvas=[A],
+                       include_return_addresses={B: ["0x0080e123"]})
+        with self.assertRaisesRegex(frida.TraceError, "eight-digit"):
+            frida.plan(sample_graph(), include_rvas=[A],
+                       include_return_addresses={A: ["0x123"]})
+
     def test_invalid_inputs_fail_closed(self):
         for name, value in (("max_hooks", 0), ("max_hooks", 65), ("max_events", 0),
                             ("per_hook_events", 1201), ("seconds", 301),
@@ -151,9 +166,12 @@ class TracePlanTests(unittest.TestCase):
             {"type": "send", "payload": {"source": "wc3_ability_re_frida", "kind": "start",
                                          "capture_id": "test-1", "rawcode": "Apxf"}},
             {"type": "send", "payload": {"source": "wc3_ability_re_frida", "kind": "enter",
-                                         "function_rva": A, "capture_id": "test-1", "rawcode": "Apxf"}},
+                                         "function_rva": A, "capture_id": "test-1", "rawcode": "Apxf",
+                                         "run_id": "case-1", "thread_id": 7, "invocation_id": 1}},
             {"source": "wc3_ability_re_frida", "kind": "leave",
-             "function_rva": A, "capture_id": "test-1", "rawcode": "Apxf"},
+             "function_rva": A, "capture_id": "test-1", "rawcode": "Apxf",
+             "run_id": "case-1", "thread_id": 7, "invocation_id": 1,
+             "return_value_raw": "0x41"},
             {"event": "trace-metadata", "retail_sha256": SHA,
              "agent_sha256": __import__("hashlib").sha256((plan_dir / "agent.js").read_bytes()).hexdigest(),
              "agent_required_retail_sha256": SHA},
@@ -164,6 +182,7 @@ class TracePlanTests(unittest.TestCase):
         path.write_text("\n".join(json.dumps(item) for item in events) + "\n")
         report = frida.summarize_trace(plan_dir, path)
         self.assertEqual(report["function_entry_counts"][A], {"enter": 1, "leave": 1})
+        self.assertEqual(report["function_calls_by_run_id"]["case-1"][A][0]["return_value_raw"], "0x41")
         self.assertEqual(report["status"], "bounded_native_trace")
         self.assertIn("gameplay_effects", report["not_verified"])
         self.assertTrue(report["controller_identity_checked"])
@@ -178,6 +197,24 @@ class TracePlanTests(unittest.TestCase):
                                     "rawcode": "Apxf"}) + "\n")
         result = frida.summarize_trace(plan_dir, path)
         self.assertEqual(result["status"], "inconclusive_trace_setup")
+
+    def test_unpaired_function_entry_marks_trace_partial(self):
+        plan_dir = self.root / "plan"
+        frida.write_trace(frida.plan(sample_graph(), capture_id="pairing"), plan_dir)
+        agent_sha = __import__("hashlib").sha256((plan_dir / "agent.js").read_bytes()).hexdigest()
+        records = [
+            {"event": "trace-metadata", "retail_sha256": SHA, "agent_sha256": agent_sha,
+             "agent_required_retail_sha256": SHA},
+            {"source": "wc3_ability_re_frida", "kind": "start", "capture_id": "pairing", "rawcode": "Apxf"},
+            {"source": "wc3_ability_re_frida", "kind": "enter", "capture_id": "pairing", "rawcode": "Apxf",
+             "run_id": "case-1", "function_rva": A, "thread_id": 1, "invocation_id": 1},
+            {"event": "trace-end", "errors": []},
+        ]
+        path = self.root / "unpaired.jsonl"
+        path.write_text("\n".join(json.dumps(item) for item in records) + "\n")
+        result = frida.summarize_trace(plan_dir, path)
+        self.assertEqual(result["status"], "partial_native_trace")
+        self.assertEqual(len(result["unpaired_function_calls"]), 1)
         self.assertTrue(result["truncated"])
 
     def test_mismatched_controller_identity_is_rejected(self):
@@ -216,6 +253,22 @@ class TracePlanTests(unittest.TestCase):
                              ["selected_hooks"]), 2)
         self.assertEqual(cli.main(["ability-trace", "AOsw", "--graph", str(source),
                                    "--output", str(self.root / "bad")]), 1)
+
+    def test_cli_accepts_bounded_return_address_filter(self):
+        obj = sample_graph()
+        obj.update(decompiled={}, data_references={}, memory_access_candidates={},
+                   branch_candidates={}, gaps=[], omitted={})
+        for node in obj["nodes"]:
+            node.update(incoming_static_function_count=0, decompile_status="not_exported")
+        source = self.root / "graph-filtered"
+        write_graph(obj, source)
+        output = self.root / "filtered"
+        self.assertEqual(cli.main(["ability-trace", "Apxf", "--graph", str(source),
+                                   "--max-hooks", "1", "--include-rva", A,
+                                   "--include-return-address", A + "=0x0080e123",
+                                   "--output", str(output)]), 0)
+        plan = json.loads((output / "trace-plan.json").read_text())
+        self.assertEqual(plan["selected_hooks"][0]["return_addresses"], ["0x0080e123"])
 
 
 if __name__ == "__main__":

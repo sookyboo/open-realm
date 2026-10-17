@@ -488,6 +488,17 @@ functions, candidate vtables, and unresolved callsite RVAs are preserved for
 review; **the generator never hooks an arbitrary indirect call instruction**
 or assumes that a raw ECX register is a confirmed `this` pointer.
 
+For a selected function that is called frequently by unrelated engine paths,
+`--include-return-address FUNCTION_RVA=RETURN_RVA` filters its events to the
+listed in-module callers before they consume the event budget. For example,
+Serpent Ward's position fallback can be limited to calls returning into its
+validator with `--include-return-address 0x003f6a00=0x00834133`. Choose these
+return addresses from a matching-build trace and corroborate the corresponding
+caller in static disassembly. The filter narrows observation; it does not
+prove that caller arguments, receiver identity, or gameplay meaning are known.
+The normalized hook plan and agent retain the filter, and unmatched calls do
+not count toward per-hook or total event limits.
+
 Each entry/exit event records the function RVA, invocation ID, thread/depth,
 raw `ECX`/`EDX`/`ESP`/`EIP`, caller *return-address* RVA where inside the
 Retail module, and raw return value. Use `--stack-words N` (0–8) to read raw
@@ -595,6 +606,17 @@ markers cannot pass the capture-readiness gate. The Patch 8 runner **does not
 automatically generate JASS scenarios or click through map UI**. Trigger the
 prepared scenario at the announced run ID; Patch 9 will automate generic
 ability scenario construction and input control.
+
+Patch 9 manifests declare `acceptance_semantics` and
+`expected_order_accepted`. For active abilities, the JASS `accepted` marker is
+the return value of its `Issue*Order` call; it is separate from native
+validation return codes, spell/effect events, and observed spawned units. An
+intentionally rejected order is a successful negative-control capture when
+the expected `accepted=false` marker, setup/completion markers, fresh result,
+and required native evidence are all present. A cast intended to succeed but
+rejected is an expectation mismatch. `UNIT_COUNT` and `UNIT` rows provide
+independent, bounded JASS observations; do not infer summon creation from the
+order return alone.
 
 ```sh
 python3 tools/wc3_ability_re.py ability-session-create \

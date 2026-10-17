@@ -233,6 +233,10 @@ and [probe preparation runbook](retail-camera-tracing.md).
 
    Inspect `trace-plan.json` and `agent.js` before attaching. Register values
    are raw values, not named arguments; indirect calls remain unbound.
+   If a candidate helper is high-frequency, filter it to a reviewed in-module
+   return address with `--include-return-address FUNCTION_RVA=RETURN_RVA`;
+   verify that caller against the matching-build disassembly. A hook-limit event
+   means its unfiltered stream was truncated, even if other functions completed.
 
 2. Define scenarios in JSON with validated unit rawcodes, owner, coordinates,
    ability level, appropriate **edition-matched order string**, duration and
@@ -272,6 +276,11 @@ and [probe preparation runbook](retail-camera-tracing.md).
    Check fresh `SESSION_START`, `SESSION_DONE`, accepted/setup markers, all
    expected samples and capture bounds; allow delayed callbacks to finish
    before `SESSION_DONE`. The controller does not type chat or control UI.
+   Declare expected rejections in the lab manifest. `accepted=false` can be a
+   valid negative-control result only when it was expected; it records the
+   `Issue*Order` return, not native validation, spell-effect dispatch, or
+   spawned-unit creation. Check the independent unit observations and native
+   return codes for those separate claims.
    JHCR must not change live timer/event callback bodies: only reviewed
    allowlisted passive loggers may be hot-reloaded.
 

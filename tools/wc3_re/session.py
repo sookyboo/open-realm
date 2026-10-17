@@ -26,7 +26,8 @@ class SessionError(TraceError):
 
 _SAFE = re.compile(r"[A-Za-z0-9_.-]{1,80}\Z")
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
-_STAGES = {"ready_for_review", "inconclusive", "timeout", "error"}
+_STAGES = {"ready_for_review", "failed", "inconclusive", "timeout", "error"}
+_PRELOAD = re.compile(r'Preload\s*\(\s*"((?:\\.|[^"\\])*)"\s*\)')
 
 
 def digest(path: Path) -> str:
@@ -138,9 +139,33 @@ def _validate_cases(raw: dict[str, Any], *, max_seconds: int) -> list[dict[str, 
         if any(not isinstance(v, list) or any(not isinstance(x, str) or not x for x in v)
                for v in (required, inconclusive)):
             raise SessionError(f"case {run_id}: invalid marker arrays")
+        acceptance_semantics = case.get("acceptance_semantics")
+        expected_acceptance = case.get("expected_order_accepted")
+        if acceptance_semantics is not None and acceptance_semantics not in ("issue_order_return", "passive_setup"):
+            raise SessionError(f"case {run_id}: invalid acceptance_semantics")
+        if acceptance_semantics == "issue_order_return" and "expected_order_accepted" not in case:
+            raise SessionError(f"case {run_id}: order-return semantics requires expected_order_accepted")
+        if "expected_order_accepted" in case:
+            if acceptance_semantics != "issue_order_return" or not isinstance(expected_acceptance, bool):
+                raise SessionError(f"case {run_id}: expected_order_accepted requires issue_order_return semantics and a boolean")
+            expected_marker = f"accepted={'true' if expected_acceptance else 'false'}"
+            opposite_marker = f"accepted={'false' if expected_acceptance else 'true'}"
+            if expected_marker not in required or opposite_marker not in inconclusive:
+                raise SessionError(f"case {run_id}: acceptance markers disagree with expected_order_accepted")
+        if acceptance_semantics == "passive_setup" and expected_acceptance is not None:
+            raise SessionError(f"case {run_id}: passive setup cannot declare an order result")
+        required_functions = case.get("required_function_rvas", [])
+        if (not isinstance(required_functions, list) or
+                any(not isinstance(rva, str) or not re.fullmatch(r"0x[0-9a-fA-F]{8}", rva)
+                    for rva in required_functions) or
+                len(set(rva.lower() for rva in required_functions)) != len(required_functions)):
+            raise SessionError(f"case {run_id}: required_function_rvas must be unique eight-digit RVAs")
         result.append({"run_id": run_id, "result_file": str(file_path),
                        "timeout_seconds": timeout,
-                       "required_markers": required, "inconclusive_markers": inconclusive})
+                       "required_markers": required, "inconclusive_markers": inconclusive,
+                       **({"acceptance_semantics": acceptance_semantics} if acceptance_semantics else {}),
+                       **({"expected_order_accepted": expected_acceptance} if expected_acceptance is not None else {}),
+                       **({"required_function_rvas": required_functions} if required_functions else {})})
     return result
 
 
@@ -153,6 +178,11 @@ def create(*, plan_dir: Path, probe_dir: Path, cases_file: Path, output_dir: Pat
     launch = load_json(probe_dir / "launch.json")
     _launch_ready(probe, launch, plan)
     cases = _validate_cases(load_json(cases_file), max_seconds=plan["limits"]["seconds"])
+    selected_rvas = {row["rva"].lower() for row in plan["selected_hooks"]}
+    for case in cases:
+        missing = sorted(set(rva.lower() for rva in case.get("required_function_rvas", [])) - selected_rvas)
+        if missing:
+            raise SessionError(f"{case['run_id']}: required function RVAs are absent from trace plan: " + ", ".join(missing))
     # Preserve originals without turning session creation into a process launch.
     payload = {"schema_version": 1, "kind": "retail_ability_live_session",
                "rawcode": plan["rawcode"], "executable_sha256": plan["executable_sha256"],
@@ -191,6 +221,10 @@ def inspect_session(directory: Path) -> tuple[dict[str, Any], dict[str, Any], di
         raise SessionError("session provenance differs from live probe/plan")
     if _validate_cases({"cases": saved["cases"]}, max_seconds=plan["limits"]["seconds"]) != saved["cases"]:
         raise SessionError("invalid session case serialization")
+    selected_rvas = {row["rva"].lower() for row in plan["selected_hooks"]}
+    if any(set(rva.lower() for rva in case.get("required_function_rvas", [])) - selected_rvas
+           for case in saved["cases"]):
+        raise SessionError("session requires function RVAs absent from its immutable trace plan")
     return saved, plan, launch
 
 
@@ -301,13 +335,47 @@ def _fresh_capture(path: Path, baseline: tuple[int, str] | None,
         return None, None
     raw = path.read_bytes()
     text = raw.decode("utf-8", errors="replace")
+    messages = [re.sub(r'\\(["\\])', r'\1', item) for item in _PRELOAD.findall(text)]
     run_id = case["run_id"]
-    for marker in (f"SESSION_START run_id={run_id}", f"SESSION_DONE run_id={run_id}"):
-        if not re.search(re.escape(marker) + r"(?![A-Za-z0-9_.-])", text):
-            return None, None
-    missing = [marker for marker in case["required_markers"] if marker not in text]
-    bad = [marker for marker in case["inconclusive_markers"] if marker in text]
-    return ("inconclusive" if missing or bad else "ready_for_review"), raw
+    start_marker, done_marker = f"SESSION_START run_id={run_id}", f"SESSION_DONE run_id={run_id}"
+    starts = [i for i, item in enumerate(messages) if item.startswith("SESSION_START ")]
+    dones = [i for i, item in enumerate(messages) if item.startswith("SESSION_DONE ")]
+    if not dones:
+        # PreloadGen output may still be in progress; keep polling for completion.
+        return None, None
+    if not starts:
+        return "inconclusive", raw
+    if (starts != [messages.index(start_marker)] if start_marker in messages else True) or \
+            (dones != [messages.index(done_marker)] if done_marker in messages else True):
+        return "inconclusive", raw
+    if messages.index(start_marker) >= messages.index(done_marker):
+        return "inconclusive", raw
+    if any(item not in (start_marker, done_marker) and
+           (item.startswith("SESSION_START ") or item.startswith("SESSION_DONE ")) for item in messages):
+        return "inconclusive", raw
+    segment = messages[messages.index(start_marker) + 1:messages.index(done_marker)]
+    if segment.count("setup_failed=false") != 1 or "setup_failed=true" in segment:
+        return "inconclusive", raw
+    acceptance = [item for item in segment if item in ("accepted=true", "accepted=false")]
+    if len(acceptance) != 1:
+        return "inconclusive", raw
+    if "buffer_overflow=true" in segment or "observation_truncated=true" in segment:
+        return "inconclusive", raw
+    if case.get("acceptance_semantics") == "issue_order_return" and "expected_order_accepted" in case:
+        observed = acceptance[0] == "accepted=true"
+        if observed != case["expected_order_accepted"]:
+            return "failed", raw
+    for marker in case["required_markers"]:
+        if marker not in segment:
+            return "inconclusive", raw
+    if any(marker in segment for marker in case["inconclusive_markers"]):
+        return "inconclusive", raw
+    if acceptance[0] == "accepted=false" and "expected_order_accepted" not in case:
+        # Legacy manifests did not declare whether rejection was expected.
+        return "inconclusive", raw
+    if case.get("acceptance_semantics") == "passive_setup" and acceptance[0] != "accepted=true":
+        return "inconclusive", raw
+    return "ready_for_review", raw
 
 
 def _get_device(remote: str) -> Any:
@@ -418,11 +486,32 @@ def _capture_case(script_session: Any, *, plan_dir: Path, plan: dict[str, Any],
         status = "error"
     if status == "ready_for_review" and review["status"] != "bounded_native_trace":
         status = "inconclusive"
+    function_calls = review.get("function_calls_by_run_id", {}).get(run_id, {})
+    missing_functions = [rva.lower() for rva in case.get("required_function_rvas", [])
+                         if not function_calls.get(rva.lower())]
+    if status == "ready_for_review" and missing_functions:
+        status = "inconclusive"
+    messages = [re.sub(r'\\(["\\])', r'\1', item) for item in _PRELOAD.findall(
+        raw.decode("utf-8", errors="replace") if raw is not None else "")]
+    accepted_values = [item for item in messages if item in ("accepted=true", "accepted=false")]
+    observed_order_accepted = (accepted_values[0] == "accepted=true" if len(accepted_values) == 1 else None)
+    outcome = ("expected_order_mismatch" if status == "failed" else
+               "expected_order_outcome_observed" if status == "ready_for_review" and
+               "expected_order_accepted" in case else
+               "capture_ready" if status == "ready_for_review" else "incomplete")
     report = {"schema_version": 1, "run_id": run_id, "status": status,
               "jass_result_fresh": raw is not None,
               "jass_result_status": jass_status,
               "native_trace_status": review["status"], "native_counts_by_run_id": review["event_counts_by_run_id"],
-              "host_errors": errors, "note": "Accepted JASS markers plus bounded native calls are not gameplay parity proof"}
+              "native_function_calls_by_run_id": review.get("function_calls_by_run_id", {}),
+              "missing_required_function_rvas": missing_functions,
+              "acceptance_semantics": case.get("acceptance_semantics"),
+              "expected_order_accepted": case.get("expected_order_accepted"),
+              "observed_order_accepted": observed_order_accepted,
+              "case_outcome": outcome,
+              "trace_sha256": digest(trace_path),
+              "jass_result_sha256": hashlib.sha256(raw).hexdigest() if raw is not None else None,
+              "host_errors": errors, "note": "Capture readiness is not gameplay parity proof"}
     save_json(outdir / "review.json", report)
     return report
 
@@ -460,16 +549,16 @@ def run(directory: Path, *, remote: str = "127.0.0.1:27043", poll_seconds: float
                                                          "probe_sha256": saved["probe_sha256"],
                                                          "launch_sha256": saved["launch_sha256"]}))
                 print(f"  {case['run_id']}: {summaries[-1]['status']}", flush=True)
-                if summaries[-1]["status"] in ("error", "timeout", "inconclusive"):
+                if summaries[-1]["status"] in ("error", "timeout", "inconclusive", "failed"):
                     break  # no false successful run progression
         finally:
             attached.detach()
     result = {"schema_version": 1, "rawcode": saved["rawcode"], "host_pid": host_pid,
               "frida_pid": target_pid, "process_identity_mapping": mapping,
               "session_cases_completed": len(summaries),
-              "cases": summaries, "status": "ready_for_review" if
-              len(summaries) == len(saved["cases"]) and
-              all(row["status"] == "ready_for_review" for row in summaries) else "inconclusive",
+              "cases": summaries, "status": ("failed" if any(row["status"] == "failed" for row in summaries) else
+              "ready_for_review" if len(summaries) == len(saved["cases"]) and
+              all(row["status"] == "ready_for_review" for row in summaries) else "inconclusive"),
               "note": "Capture readiness is not semantic correctness"}
     save_json(directory / "run-summary.json", result)
     return result

@@ -270,10 +270,18 @@ def graph_options(parser: argparse.ArgumentParser) -> None:
 
 def command_ability_trace(args: argparse.Namespace) -> int:
     graph = read_graph(args.graph)
+    return_address_filters: dict[str, list[str]] = {}
+    for item in args.include_return_address:
+        if not isinstance(item, str) or item.count("=") != 1:
+            raise TraceError("--include-return-address must be FUNCTION_RVA=RETURN_RVA")
+        function_rva, return_rva = item.split("=", 1)
+        return_address_filters.setdefault(function_rva, []).append(return_rva)
     plan = make_trace_plan(graph, rawcode=args.rawcode, max_hooks=args.max_hooks,
                            max_events=args.max_events, per_hook_events=args.per_hook_events,
                            seconds=args.seconds, stack_words=args.stack_words,
-                           include_rvas=args.include_rva, capture_id=args.capture_id)
+                           include_rvas=args.include_rva,
+                           include_return_addresses=return_address_filters,
+                           capture_id=args.capture_id)
     if args.executable:
         check_executable(args.executable, {"sha256": plan["executable_sha256"]})
     write_trace(plan, args.output)
@@ -466,6 +474,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="optional raw x86 stack words, NOT inferred arguments")
     trace.add_argument("--include-rva", action="append", default=[],
                        help="select an existing graph function entry (repeatable)")
+    trace.add_argument("--include-return-address", action="append", default=[],
+                       help="for selected hook, emit calls returning to FUNCTION_RVA=RETURN_RVA (repeatable)")
     trace.add_argument("--capture-id", default="offline-plan")
     trace.set_defaults(run=command_ability_trace)
     trace_run = commands.add_parser("ability-trace-run", help="attach with an installed Retail trace controller")

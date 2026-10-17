@@ -90,7 +90,8 @@ class ScenarioTests(unittest.TestCase):
         report = scenarios.build(source)
         case = report["session_cases"]["cases"][0]
         self.assertEqual(case["required_markers"], ["setup_failed=false", "accepted=false"])
-        self.assertEqual(case["inconclusive_markers"], ["setup_failed=true", "accepted=true", "buffer_overflow=true"])
+        self.assertEqual(case["inconclusive_markers"], ["setup_failed=true", "accepted=true",
+                                                         "buffer_overflow=true", "observation_truncated=true"])
 
     def test_expected_order_acceptance_is_boolean_and_not_for_passives(self):
         source = specification()
@@ -100,6 +101,45 @@ class ScenarioTests(unittest.TestCase):
         source = specification()
         source["cases"][0]["expected_order_accepted"] = False
         with self.assertRaisesRegex(scenarios.ScenarioError, "only applies to ordered"):
+            scenarios.build(source)
+
+    def test_watched_units_are_bounded_observed_and_cleaned_between_cases(self):
+        source = specification()
+        source["rawcode"] = "AOsw"
+        source["cases"] = [
+            {"run_id": "ward-good", "kind": "point", "order": "ward",
+             "expected_order_accepted": True, "caster": unit(unit_id="Oshd"),
+             "learn_mode": "hero_skill", "hero_level": 2, "point": {"x": 300, "y": 200},
+             "unit_observation": {"unit_ids": ["osp1"], "x": 300, "y": 200,
+                                  "radius": 512, "cleanup_before_next": True},
+             "required_function_rvas": ["0x00834110"]},
+            {"run_id": "ward-bad", "kind": "point", "order": "ward",
+             "expected_order_accepted": False, "caster": unit(unit_id="Oshd"),
+             "learn_mode": "hero_skill", "hero_level": 2, "point": {"x": -500, "y": 200},
+             "unit_observation": {"unit_ids": ["osp1"], "x": -500, "y": 200,
+                                  "radius": 512, "cleanup_before_next": True}},
+        ]
+        result = scenarios.build(source)
+        j = result["functions"]
+        self.assertIn("UNIT_COUNT rawcode=osp1 tick=", j)
+        self.assertIn("GetOwningPlayer(observed)", j)
+        self.assertIn("RE_ObservationTruncated", j)
+        self.assertIn("call RemoveUnit(observed)", j)
+        self.assertIn("required_function_rvas", json.dumps(result["session_cases"]))
+        rejected = j[j.index("function RE_Start_1"):j.index("function RE_Chat")]
+        self.assertIn("IssuePointOrder", rejected)
+        self.assertIn("TimerStart(RE_Timer", rejected)
+        self.assertNotIn("if not RE_OrderAccepted then", rejected)
+
+    def test_watched_unit_limits_and_native_rvas_are_validated(self):
+        source = specification()
+        source["cases"][0]["unit_observation"] = {"unit_ids": ["osp1"], "x": 0, "y": 0,
+                                                     "radius": 100, "max_units": 0}
+        with self.assertRaisesRegex(scenarios.ScenarioError, "max_units"):
+            scenarios.build(source)
+        source = specification()
+        source["cases"][0]["required_function_rvas"] = ["bad"]
+        with self.assertRaisesRegex(scenarios.ScenarioError, "RVA"):
             scenarios.build(source)
 
     def test_invalid_rawcode_and_duplicate_case_ids(self):

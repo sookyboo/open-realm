@@ -65,11 +65,15 @@ class FakeScript:
                 time.sleep(0.004)
                 self.owner.results[self.run_id].write_text(
                     f'call Preload("SESSION_START run_id={self.run_id}")\n'
-                    f'call Preload("SESSION_DONE run_id={self.run_id}")\n'
-                    'call Preload("accepted=true")\n', encoding='utf-8')
-            self.message({"type": "send", "payload": {"source": "wc3_ability_re_frida",
-                          "kind": "enter", "function_rva": "0x0080d820",
-                          "run_id": self.run_id, "capture_id": "capture", "rawcode": "Apxf"}}, None)
+                    'call Preload("setup_failed=false")\n'
+                    'call Preload("accepted=true")\n'
+                    f'call Preload("SESSION_DONE run_id={self.run_id}")\n', encoding='utf-8')
+            event = {"source": "wc3_ability_re_frida", "function_rva": "0x0080d820",
+                     "run_id": self.run_id, "capture_id": "capture", "rawcode": "Apxf",
+                     "thread_id": 1, "invocation_id": 1}
+            self.message({"type": "send", "payload": {**event, "kind": "enter"}}, None)
+            self.message({"type": "send", "payload": {**event, "kind": "leave",
+                          "return_value_raw": "0x0"}}, None)
         return {"armed": self.armed, "stopped": self.stopped}
 
     def disarm(self):
@@ -201,12 +205,14 @@ class SessionTests(unittest.TestCase):
     def test_result_requires_fresh_scoped_start_done(self):
         case = {**self.cases[0], "inconclusive_markers": []}
         file = self.results["case-1"]
-        file.write_text('SESSION_START run_id=case-10\nSESSION_DONE run_id=case-10\naccepted=true')
+        file.write_text('call Preload("SESSION_START run_id=case-10")\ncall Preload("SESSION_DONE run_id=case-10")\ncall Preload("accepted=true")')
         t0 = time.time_ns() - 1000000
-        self.assertEqual(session._fresh_capture(file, None, t0, case)[0], None)
-        file.write_text('SESSION_START run_id=case-1\nSESSION_DONE run_id=case-1\naccepted=true')
+        self.assertEqual(session._fresh_capture(file, None, t0, case)[0], "inconclusive")
+        file.write_text('call Preload("SESSION_START run_id=case-1")\ncall Preload("setup_failed=false")\ncall Preload("accepted=true")\ncall Preload("SESSION_DONE run_id=case-1")')
         self.assertEqual(session._fresh_capture(file, None, t0, case)[0], 'ready_for_review')
         self.assertEqual(session._fresh_capture(file, None, time.time_ns() + 5000000, case)[0], None)
+        file.write_text('call Preload("SESSION_DONE run_id=case-1")')
+        self.assertEqual(session._fresh_capture(file, None, t0, case)[0], "inconclusive")
 
     def test_live_two_cases_one_attachment_no_restarts(self):
         self.create()
@@ -288,9 +294,33 @@ class SessionTests(unittest.TestCase):
     def test_inconclusive_capture_markers_preserved(self):
         case = {**self.cases[0], "inconclusive_markers": ["accepted=false"]}
         file = self.results["case-1"]
-        file.write_text("SESSION_START run_id=case-1\nSESSION_DONE run_id=case-1\naccepted=false")
+        file.write_text('call Preload("SESSION_START run_id=case-1")\ncall Preload("setup_failed=false")\ncall Preload("accepted=false")\ncall Preload("SESSION_DONE run_id=case-1")')
         self.assertEqual(session._fresh_capture(file, None, time.time_ns() - 1_000_000,
                                                 case)[0], "inconclusive")
+
+    def test_expected_rejection_is_complete_and_unexpected_rejection_fails(self):
+        case = {"run_id": "case-1", "result_file": str(self.results["case-1"]),
+                "timeout_seconds": 1, "acceptance_semantics": "issue_order_return",
+                "expected_order_accepted": False,
+                "required_markers": ["setup_failed=false", "accepted=false"],
+                "inconclusive_markers": ["setup_failed=true", "accepted=true", "buffer_overflow=true"]}
+        file = self.results["case-1"]
+        prefix = 'call Preload("SESSION_START run_id=case-1")\ncall Preload("setup_failed=false")\n'
+        suffix = '\ncall Preload("SESSION_DONE run_id=case-1")'
+        file.write_text(prefix + 'call Preload("accepted=false")' + suffix)
+        self.assertEqual(session._fresh_capture(file, None, time.time_ns() - 1_000_000, case)[0],
+                         "ready_for_review")
+        file.write_text(prefix + 'call Preload("accepted=true")' + suffix)
+        self.assertEqual(session._fresh_capture(file, None, time.time_ns() - 1_000_000, case)[0], "failed")
+
+    def test_acceptance_contract_requires_consistent_semantics_and_markers(self):
+        invalid = {"cases": [{"run_id": "case-1", "result_file": str(self.root / "x.txt"),
+                              "timeout_seconds": 1, "acceptance_semantics": "issue_order_return",
+                              "expected_order_accepted": False,
+                              "required_markers": ["accepted=true"],
+                              "inconclusive_markers": ["accepted=false"]}]}
+        with self.assertRaisesRegex(session.SessionError, "markers disagree"):
+            session._validate_cases(invalid, max_seconds=5)
 
     def test_mutated_plan_agent_and_launch_refused(self):
         self.create()

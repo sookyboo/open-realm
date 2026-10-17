@@ -294,6 +294,46 @@ def _implementation(report: dict[str, Any]) -> str:
                 raise SpecError("malformed lookup rank object")
             lines += [f"### {edition.upper()} rank {rank.get('level', index)}", "", "```json",
                       json.dumps(rank, indent=2, ensure_ascii=True, sort_keys=True), "```", ""]
+    if report["analysis"]:
+        lines += ["## Archived runtime observations (case-specific, not a behavior contract)", "",
+                  "These rows preserve measured values from bounded Frida/JASS captures. `Issue*Order`",
+                  "results, native raw return values, and observed units are separate measurements.",
+                  "A capture-ready row does not assign semantic meaning to a native return code.", ""]
+        captures = report["analysis"].get("capture_summaries", [])
+        if not captures:
+            lines.append("No Retail case captures were included in the differential analysis.")
+        for capture in captures:
+            accepted = capture.get("order_acceptance") or {}
+            expectation = accepted.get("expected")
+            observed = accepted.get("observed")
+            lines += [f"### {capture.get('session_id', '?')} / `{capture.get('run_id', '?')}`", "",
+                      f"Capture: `{capture.get('status', 'unknown')}`; JASS samples: "
+                      f"`{capture.get('jass_sample_status', 'unknown')}`; Frida: "
+                      f"`{capture.get('trace_status', 'unknown')}`.",
+                      f"JASS Issue*Order return: expected `{expectation}`; observed `{observed}` "
+                      f"(semantics: {_single_line(accepted.get('semantics', 'not recorded'))}).",
+                      f"JASS SHA-256: `{capture.get('jass_sha256', 'not recorded')}`; "
+                      f"trace SHA-256: `{capture.get('trace_sha256', 'not recorded')}`."]
+            native_calls = capture.get("native_function_calls", {})
+            if native_calls:
+                lines += ["", "Observed native function return values (raw):"]
+                for rva, calls in sorted(native_calls.items()):
+                    pairs = sorted({(call.get("return_address_rva"), call.get("return_value_raw"))
+                                    for call in calls if isinstance(call, dict)},
+                                   key=lambda pair: (pair[0] or "", pair[1] or ""))
+                    rendered = ", ".join(f"caller `{caller or '?'}` → `{value or '?'}`"
+                                          for caller, value in pairs)
+                    lines.append(f"- `{rva}`: {rendered or 'no paired returns recorded'}")
+            for rawcode, ticks in sorted(capture.get("unit_counts", {}).items()):
+                values = ", ".join(f"{tick}:{count}" for tick, count in sorted(
+                    ticks.items(), key=lambda item: int(item[0])))
+                lines.append(f"- Observed `{rawcode}` count by JASS tick: {values}.")
+                records = capture.get("unit_observations", {}).get(rawcode, {})
+                for tick, units in sorted(records.items(), key=lambda item: int(item[0])):
+                    for unit in units:
+                        lines.append(f"  - tick {tick}, index {unit.get('index')}: owner "
+                                     f"{unit.get('owner')}, position ({unit.get('x')}, {unit.get('y')}).")
+            lines.append("")
     lines += ["## Explicit reviewed semantic claims", ""]
     if not r["claims"]:
         lines.append("No reviewed semantic claims supplied. Do not treat the static call graph as ability behavior.")
@@ -444,6 +484,10 @@ def write(report: dict[str, Any], directory: Path) -> None:
         "spec-evidence.json": json.dumps({"schema_version": 1, "rawcode": report["rawcode"],
                                            "executable_sha256": report["executable_sha256"],
                                            "status": report["status"], "source_hashes": sources,
+                                           "runtime_capture_summaries": report["analysis"]["capture_summaries"]
+                                               if report["analysis"] else [],
+                                           "sampled_comparisons": report["analysis"]["comparisons"]
+                                               if report["analysis"] else [],
                                            "claims": report["reviewed"]["claims"],
                                            "open_questions": report["open_questions"],
                                            "guardrails": report["guardrails"]}, indent=2, sort_keys=True) + "\n",

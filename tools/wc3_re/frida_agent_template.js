@@ -101,7 +101,7 @@ const hooks = PLAN.hooks.map(hook => {
     const range = Process.findRangeByAddress(address);
     if (!range || range.protection.indexOf('x') < 0)
         throw new Error('Function not in executable memory: ' + hook.rva);
-    return {rva: hook.rva, address: address};
+    return {rva: hook.rva, address: address, return_addresses: hook.return_addresses};
 });
 const installed = [];
 try {
@@ -110,7 +110,10 @@ try {
             onEnter(args) {
                 this.entryRva = hook.rva;
                 this.traceInvocationId = ++nextInvocationId;
-                this.wasEmitted = emit('enter', this, hook.rva, null, this.traceInvocationId);
+                const returnRva = moduleRva(this.returnAddress);
+                const returnAddresses = hook.return_addresses;
+                this.wasEmitted = (!returnAddresses || returnAddresses.indexOf(returnRva) !== -1) &&
+                    emit('enter', this, hook.rva, null, this.traceInvocationId);
             },
             onLeave(retval) {
                 if (this.wasEmitted) emit('leave', this, hook.rva, retval, this.traceInvocationId);
