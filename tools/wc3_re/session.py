@@ -503,7 +503,10 @@ def _capture_case(script_session: Any, *, plan_dir: Path, plan: dict[str, Any],
               "jass_result_fresh": raw is not None,
               "jass_result_status": jass_status,
               "native_trace_status": review["status"], "native_counts_by_run_id": review["event_counts_by_run_id"],
-              "native_function_calls_by_run_id": review.get("function_calls_by_run_id", {}),
+              # This report is scoped to one case. Keep the field flat here;
+              # the all-runs structure returned by summarize_trace is not the
+              # per-case evidence contract consumed by differential analysis.
+              "native_function_calls_by_run_id": function_calls,
               "missing_required_function_rvas": missing_functions,
               "acceptance_semantics": case.get("acceptance_semantics"),
               "expected_order_accepted": case.get("expected_order_accepted"),

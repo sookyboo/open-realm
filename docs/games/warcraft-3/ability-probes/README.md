@@ -1,5 +1,12 @@
 # Retail ability probe evidence
 
+Live Wine/X11 probe standard: configure **both the X11/Xvfb screen and the
+Warcraft III Retail window at 640×480** before launching. Set the Wine
+`Video\reswidth` / `Video\resheight` registry values to 640 / 480, start or
+select an X server with the same dimensions, and retain its `DISPLAY` and
+`XAUTHORITY` for the game, Frida server, and input tools. Verify the actual
+window geometry before sending clicks or keystrokes. See the [JHCR runbook](jhcr.md#resolution-and-mouse-input).
+
 This directory holds detailed records. Load only the report needed for the
 current investigation; the overview and current work are in
 [Retail ability verification status](../ability-verification-review.md).

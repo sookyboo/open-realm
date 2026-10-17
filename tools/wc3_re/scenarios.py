@@ -208,7 +208,10 @@ def validate(source: dict[str, Any]) -> dict[str, Any]:
         if ((ticks + 1) * (len(targets) + 1 + len(targets) * len(buffs)) +
                 observed_lines + 16 > MAX_LOG_LINES):
             raise ScenarioError(f"{where}: observation buffer limit exceeded")
-        timeout = _integer(case.get("timeout_seconds", min(60, math.ceil(duration) + 15)),
+        # Session timeouts include the manual activation step in Retail. A
+        # short observation window must not time out while waiting for the
+        # operator to activate the already-loaded scenario.
+        timeout = _integer(case.get("timeout_seconds", max(60, math.ceil(duration) + 15)),
                            f"{where}.timeout_seconds", 1, 360)
         normalized.append({"run_id": run_id, "kind": kind, "caster": caster, "targets": targets,
                            "ability_level": level, "learn_mode": learn_mode, "hero_level": hero_level,

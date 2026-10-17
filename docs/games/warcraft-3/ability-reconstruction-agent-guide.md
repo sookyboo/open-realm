@@ -32,6 +32,12 @@ and JASS result files also need copies in the active Wine profile's standard
 their hashes and host paths in the run manifest rather than relying on an
 implicit location. See the [technical reference's location map](ability-reconstruction-harness.md#local-setup-and-discovery).
 
+For live Retail work, configure both the X11/Xvfb screen and Warcraft III to
+**640×480**. Set the Wine registry resolution before game launch, verify the
+window geometry, and pass the active `DISPLAY` and `XAUTHORITY` to Wine,
+Frida, and input tools. The technical reference and [JHCR runbook](ability-probes/jhcr.md#resolution-and-mouse-input)
+document the commands.
+
 ## Non-negotiable evidence and efficiency rules
 
 1. **Static first.** Reuse validated inventories, ability data, saved Ghidra

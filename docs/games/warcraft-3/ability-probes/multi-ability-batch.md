@@ -13,6 +13,10 @@ the manifest, declarations, and JASS helpers. The passive native trace is
 The tested executable SHA-256 was
 `3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`.
 
+The current probe standard keeps **both Xvfb and the Retail game at
+640×480**. The older 1280×720 examples below are updated to the aligned
+640×480 geometry so their input sequence matches the live game window.
+
 The manifest uses `War3xLocal.mpq` and
 `Maps/FrozenThrone/Campaign/OrcX01.w3x`; before preparation, the source JASS
 was checked for ability/tech gates and the gameplay callback. Its cinematic
@@ -62,12 +66,13 @@ sequence:
 
 ```sh
 WINEPREFIX=/home/agent/.wine-war3 xvfb-run -a \
-  -s '-screen 0 1280x720x24' bash -lc '
+  -s '-screen 0 640x480x24' bash -lc '
     export WINEPREFIX=/home/agent/.wine-war3 WAYLAND_DISPLAY= WINEDEBUG=-all
+    wine reg add "HKCU\\Software\\Blizzard Entertainment\\Warcraft III\\Video" /v reswidth /t REG_DWORD /d 640 /f
+    wine reg add "HKCU\\Software\\Blizzard Entertainment\\Warcraft III\\Video" /v resheight /t REG_DWORD /d 480 /f
     python3 tools/wc3_retail_probe.py launch /tmp/wc3-ability-batch/run --control
-    sleep 30
-    xdotool mousemove 642 600 click 1
-    sleep 20
+    xdotool key Return
+    sleep 25
     xdotool key Escape
     sleep 10
     xdotool key Print
@@ -82,14 +87,18 @@ Confirm the untouched screenshot shows OrcX01's “To Tame a Land” chapter
 card/gameplay, then exit Retail. Convert Warcraft's newly created TGA using
 the project tool; do not use XWD conversion. For the prepared launch, use the
 same persistent-Xvfb pattern, passing `--control-confirmed`. Start Frida server
-and the trace before clicking the card; keep the shell/Xvfb alive until the
-batch and bounded trace finish. For example, after the control was visually
-confirmed and closed:
+and the trace before advancing the initial “Press any key” screen. Press
+Return, wait for the intro to run, press Escape to reach normal gameplay, and
+verify the gameplay HUD before typing any scenario chat command. Keep the
+shell/Xvfb alive until the batch and bounded trace finish. For example, after
+the control was visually confirmed and closed:
 
 ```sh
 WINEPREFIX=/home/agent/.wine-war3 xvfb-run -a \
-  -s '-screen 0 1280x720x24' bash -lc '
+  -s '-screen 0 640x480x24' bash -lc '
     export WINEPREFIX=/home/agent/.wine-war3 WAYLAND_DISPLAY= WINEDEBUG=-all
+    wine reg add "HKCU\\Software\\Blizzard Entertainment\\Warcraft III\\Video" /v reswidth /t REG_DWORD /d 640 /f
+    wine reg add "HKCU\\Software\\Blizzard Entertainment\\Warcraft III\\Video" /v resheight /t REG_DWORD /d 480 /f
     PROBE=/tmp/wc3-ability-batch/run
     python3 tools/wc3_retail_probe.py launch "$PROBE" --control-confirmed
     sleep 30
@@ -106,8 +115,8 @@ WINEPREFIX=/home/agent/.wine-war3 xvfb-run -a \
       --output "$TRACE" &
     TRACE_PID=$!
     until rg -q 'agent-ready' "$TRACE" 2>/dev/null; do sleep 0.2; done
-    xdotool mousemove 642 600 click 1
-    sleep 20
+    xdotool key Return
+    sleep 25
     xdotool key Escape
     sleep 50
     xdotool key Print
