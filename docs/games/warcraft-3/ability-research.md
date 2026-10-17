@@ -5,6 +5,8 @@ open the supporting documents only when the task needs their evidence.
 
 ## Start here
 
+- [Forked Lightning Retail native path](forked-lightning-retail.md): exact-build candidate acquisition, cap-before-sort behavior, callback/lifecycle evidence, and unresolved damage/presentation edges.
+
 - [Retail verification status](ability-verification-review.md): tested
   contracts, uncertainty, and the next native investigation.
 - [Ability coverage](architecture/ability-coverage.md): implementation scope

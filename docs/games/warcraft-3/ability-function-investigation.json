@@ -4179,6 +4179,131 @@
       },
       "record_kind": "function_group",
       "related_addresses_semantics": "Calls and candidate virtual-slot relationships described in the source evidence; the possible vtable association is not runtime dispatch proof."
+    },
+{
+      "id": "fn_forked_lightning_anfl_native_path",
+      "label": "Forked Lightning exact-build acquisition and lifecycle path",
+      "category": "ability_execution",
+      "status": "partially_resolved",
+      "confidence": "medium",
+      "addresses": [
+        {
+          "va": "0x00C78440",
+          "rva": "0x00878440",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00C78080",
+          "rva": "0x00878080",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00C78090",
+          "rva": "0x00878090",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00C787D0",
+          "rva": "0x008787d0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00C78A50",
+          "rva": "0x00878a50",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00C78FC0",
+          "rva": "0x00878fc0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00C78F60",
+          "rva": "0x00878f60",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00C788F0",
+          "rva": "0x008788f0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00C781D0",
+          "rva": "0x008781d0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00C78390",
+          "rva": "0x00878390",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00C78170",
+          "rva": "0x00878170",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [
+        "0x30",
+        "0x4C",
+        "0x50",
+        "0x78",
+        "0xA4"
+      ],
+      "evidence_summary": "For Retail 1.29.2.9231 SHA-256 3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed, the registered ANfl factory at RVA 0x00878440 allocates a CAbilityForkedLightning object and installs vtable VA 0x00FAF280. That table maps +0x310 to order getter 0x00C78080 (0xD026B) and +0x42C to 0x00C78090, which calls 0x00C78A50. The latter performs repeated 0x0068EA00 spatial queries through candidate callback 0x00C78FC0, applies callback validation and deduplication, stops collection at a rank-indexed count, sorts the collected subset with 0x00C78F60, then calls 0x00C788F0 for each retained candidate. The worker calls an unresolved virtual slot +0xA4; its edge to shared damage, exact filter meanings, query geometry, and runtime receiver identity remain unresolved. Nearby, currently unbound functions contain transient handle allocation/release paths at field +0x78; no caller or vtable entry proves these functions belong to ANfl. Event ownership semantics remain incomplete. Archived Frida observed 0x00878080/0x00878090/0x00878A50; archived JASS observed three targets each losing about 85 health in one sample, not causal damage attribution.",
+      "related_addresses": [
+        {
+          "va": "0x0068EA00",
+          "rva": "0x0028ea00",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x0067FB80",
+          "rva": "0x0027fb80",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00682180",
+          "rva": "0x00282180",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x00AB2000",
+          "rva": "0x006b2000",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x006A9940",
+          "rva": "0x002a9940",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x006677C0",
+          "rva": "0x002677c0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x0046E210",
+          "rva": "0x0006e210",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x0046E3E0",
+          "rva": "0x0006e3e0",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x007051A0",
+          "rva": "0x003051a0",
+          "kind": "function_va"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Target acquisition and selection"
+      },
+      "record_kind": "function_group",
+      "related_addresses_semantics": "Includes statically referenced query, validation, sorting, transient-handle and shared-damage functions. A related address is not itself proof that ANfl reaches the shared damage receiver."
     }
   ],
   "record_schema": {
@@ -9645,6 +9770,158 @@
         "document": "docs/games/warcraft-3/ability-probes/combat.md",
         "section": "Shared area-query builder and generated predicates"
       }
+    },
+{
+      "from": {
+        "va": "0x00C78090",
+        "rva": "0x00878090",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x00C78A50",
+        "rva": "0x00878a50",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "The vtable order callback body directly calls the ANfl acquisition routine at callsite 0x00C78098.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Registration and relevant methods"
+      }
+    },
+{
+      "from": {
+        "va": "0x00C787D0",
+        "rva": "0x008787d0",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x00C78A50",
+        "rva": "0x00878a50",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "The alternate ANfl method directly calls the acquisition routine with mode argument 1 at callsite 0x00C787D8; caller role remains unresolved.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Registration and relevant methods"
+      }
+    },
+{
+      "from": {
+        "va": "0x00C78A50",
+        "rva": "0x00878a50",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x0068EA00",
+        "rva": "0x0028ea00",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "ANfl constructs repeated spatial queries and directly invokes the shared query builder at callsite 0x00C78E77.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Target acquisition and selection"
+      }
+    },
+{
+      "from": {
+        "va": "0x0068EA00",
+        "rva": "0x0028ea00",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x00C78FC0",
+        "rva": "0x00878fc0",
+        "kind": "function_va"
+      },
+      "kind": "callback_dispatch",
+      "context": "ANfl passes 0x00C78FC0 as the candidate callback to the query builder; the callback validates, deduplicates, records candidate metrics, and enforces the collection limit.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Target acquisition and selection"
+      }
+    },
+{
+      "from": {
+        "va": "0x00C78A50",
+        "rva": "0x00878a50",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x00C788F0",
+        "rva": "0x008788f0",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "After limiting and sorting collected candidates, ANfl directly invokes the per-target worker at callsite 0x00C78F09.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Target acquisition and selection"
+      }
+    },
+{
+      "from": {
+        "va": "0x00C78A50",
+        "rva": "0x00878a50",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x00C78F60",
+        "rva": "0x00878f60",
+        "kind": "function_va"
+      },
+      "kind": "callback_dispatch",
+      "context": "ANfl passes comparator 0x00C78F60 to the sort helper for the collected candidate records.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Target acquisition and selection"
+      }
+    },
+{
+      "from": {
+        "va": "0x00C78FC0",
+        "rva": "0x00878fc0",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x0067FB80",
+        "rva": "0x0027fb80",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "The candidate callback only enters its candidate-record path when 0x0067FB80(candidate, 0, 4) is nonzero; the helper polarity and flag semantics are not established here.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Target acquisition and selection"
+      }
+    },
+{
+      "from": {
+        "va": "0x00C78FC0",
+        "rva": "0x00878fc0",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x00682180",
+        "rva": "0x00282180",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "The callback obtains a value from virtual slot +0x350 on the context leading object and passes it with the context pointer to the shared validator; exact argument semantics remain unresolved.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Target acquisition and selection"
+      }
     }
   ],
   "relationship_kinds": {
@@ -9654,6 +9931,6 @@
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge.",
     "call": "Call asserted by the source notes; dispatch modality is not yet classified as direct, virtual, or callback. Do not promote it to a direct call without evidence."
   },
-  "entry_count": 88,
-  "verified_relationship_count": 312
+  "entry_count": 89,
+  "verified_relationship_count": 320
 }
