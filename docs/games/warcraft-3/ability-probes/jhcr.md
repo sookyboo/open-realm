@@ -64,6 +64,16 @@ proof that a scenario is isolated.
   detection, and actionable errors that prevent a bad run or capture its cause.
   Record a one-off environment limitation in the run notes; do not turn a
   recurring runner defect into a manual checklist item.
+- Bake scenario parameters into the initially prepared map when they affect
+  timer/callback setup. A live Purge probe updated its one-shot `PG_Start` and
+  reported JHCR status `1` plus setup markers, but the newly scheduled timer
+  never produced samples. Keep `PG_Tick` and the setup-to-callback binding
+  stable during live reload; validate samples and `PG_DONE` after every update.
+- JHCR may omit a function whose candidate body matches the original prepared
+  source, even when a previous update replaced that function. In that case the
+  live override remains. Reload a fresh map when resetting setup code, or send
+  an explicitly changed restoration body and verify its marker before relying
+  on the restored behavior.
 
 If the active map or probe lifecycle is incompatible, prepare and load a map
 with the Retail probe runner instead. JHCR is an iteration shortcut when its

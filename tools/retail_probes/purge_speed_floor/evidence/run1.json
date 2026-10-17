@@ -1,0 +1,64 @@
+{
+  "probe_id": "purge-hostile-speed-floor-50ms",
+  "retail_build": "1.29.2.9231",
+  "retail_executable_sha256": "3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed",
+  "prepared_map_sha256": "75978fd4456a6584e6864c64271d6f42ac102da680b2d1b10cf9a668407fed03",
+  "loaded_in_existing_process_pid": 44300,
+  "display": ":105",
+  "wine_prefix": "/home/agent/.wine-war3",
+  "map_load_method": "Single Player > Custom Game > Probe > OrcX01-Purge-Speed-Floor; skip the opening cinematic",
+  "result_capture_note": "The runner capture subcommand requires a runner-created launch.json. This map was loaded through the UI in the already-active Retail process to avoid a second Wine launch, so raw PreloadGen outputs were copied directly before each rerun.",
+  "baseline_marker_note": "Runs 1 and 2 contain PG_LOG_REV2 because it was accidentally present in the initial prepared logger copied from the prior timing probe. It is not evidence of JHCR. The checked-in source has been cleaned; run 3 has the distinct PG_LOG_REV3 marker and status 1.",
+  "run_id": 1,
+  "raw_result": "retail-1292-run1.txt",
+  "raw_result_sha256": "6d4d3e0b907e9c3b58503957cfb0b4f6f261a2037f8ff6d6958f7f707f9e4d8f",
+  "sample_count": 440,
+  "baseline_samples": 39,
+  "requested_speed": 400,
+  "observed_control_speeds": [
+    400.0
+  ],
+  "accepted_purge_order": true,
+  "matching_spell_effect": true,
+  "jhcr_status": null,
+  "jhcr_marker": null,
+  "transitions_after_effect": [
+    {
+      "age_ticks": 1,
+      "age_seconds": 0.05,
+      "target_speed": 0.0
+    },
+    {
+      "age_ticks": 61,
+      "age_seconds": 3.05,
+      "target_speed": 150.0
+    },
+    {
+      "age_ticks": 121,
+      "age_seconds": 6.05,
+      "target_speed": 160.0
+    },
+    {
+      "age_ticks": 181,
+      "age_seconds": 9.05,
+      "target_speed": 240.0
+    },
+    {
+      "age_ticks": 241,
+      "age_seconds": 12.05,
+      "target_speed": 320.0
+    },
+    {
+      "age_ticks": 301,
+      "age_seconds": 15.05,
+      "target_speed": 400.0
+    }
+  ],
+  "completion_marker": "PG_DONE accepted=1 effect=1 effectTick=46 baselineSamples=39 endTick=440",
+  "jhcr_update_applied": false,
+  "source_archive_sha256": "ba7b928c7bf34fb2a1675aeddfdadcfdc7146966ae7ebf36b0980486b7dd9c57",
+  "prepared_source_sha256": "26b1ad301b5461b382431f7022bff391f15eef86439d334ebdf185a022d626a0",
+  "jhcr_cookie": "351973276",
+  "jhcr_sequence": null,
+  "jhcr_update_record": null
+}
