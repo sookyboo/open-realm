@@ -1,0 +1,27 @@
+{
+  "id": "purge-hostile-slow-recovery-timing",
+  "source": {
+    "archive": "../../../data/Warcraft III/War3xLocal.mpq",
+    "member": "Maps/FrozenThrone/Campaign/OrcX01.w3x"
+  },
+  "script_member": "war3map.j",
+  "retail_executable": "../../../data/Warcraft III/Warcraft III.exe",
+  "metadata": {
+    "mode": "TFT",
+    "retail_build": "1.29.2.9231",
+    "ability_rawcodes": ["Apg2"],
+    "question": "Measure hostile Purge immobilize and movement-speed recovery timing against an untreated position-locked control"
+  },
+  "jhcr_reloadable_functions": ["PG_Log"],
+  "output_name": "OrcX01-Purge-Timing.w3x",
+  "result_file": "/home/agent/.wine-war3/drive_c/users/agent/Documents/Warcraft III/CustomMapData/purge-timing-run1.txt",
+  "edits": [
+    {"block": "globals", "anchor": "endglobals", "where": "before", "file": "globals.j"},
+    {"function": "Trig_Intro_Skipped_Actions", "anchor": "function Trig_Intro_Skipped_Actions takes nothing returns nothing", "where": "before", "file": "helpers.j"},
+    {"function": "Trig_Intro_Skipped_Actions", "anchor": "call ConditionalTriggerExecute( gg_trg_Gameplay )", "where": "after", "text": "call PG_Init()"}
+  ],
+  "capture_contract": {
+    "required_markers": ["PG_META", "PG_SETUP", "PG_BASELINE", "PG_CAST_ORDER", "PG_CAST_EFFECT", "PG_SAMPLE", "PG_DONE"],
+    "inconclusive_markers": ["PG_SETUP_FAIL"]
+  }
+}

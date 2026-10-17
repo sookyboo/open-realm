@@ -1,0 +1,11 @@
+globals
+
+endglobals
+
+ function PreloadFiles takes nothing returns nothing
+local  gamecache gc = InitGameCache ("JHCR.w3v")
+call StoreInteger (gc,"seq","0",2)
+call StoreInteger (gc,"functions","count",1)
+call StoreString (gc,"functions","1","262688..2096.1........1........22-1.......1261..2096.1........1........22-2.......1159..2195.-5.......1.....02195.-6.......1.....72096.1........1........2095.2........-5.......2095.3........-6.......22-4.......78....2196.-7.......7.....PG_META5.96.-3.......-4.......-7.......272.....-3.......253.....242.....2196.-9.......11....PG_LOG_REV22096.1........-9.......22-8.......1159..243.....2999.262689..2196.-2.......13....PG_REVISION=12096.1........-2.......22-1.......2688..2999.")
+call StoreInteger (gc,"globals","count",0)
+endfunction
