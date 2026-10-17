@@ -39,7 +39,7 @@ had this receiver type.
 | `0x00C78A50` / `0x00878A50` | Direct calls to query builder `0x0068EA00` and selected-target worker `0x00C788F0`; passes callback `0x00C78FC0` and comparator `0x00C78F60` | Core spatial search, candidate ordering, and dispatch loop. Frida observed this function; the archived raw `EAX` values were 1 and 3. Ghidra decompiles it as `void`, so these raw register values are not treated as returned counts. |
 | `0x00C78FC0` / `0x00878FC0` | Callback supplied to `0x0068EA00` | Candidate gate, deduplication, candidate append, cap check. Static callback dispatch; not separately traced in archived sessions. |
 | `0x00C78F60` / `0x00878F60` | Comparator passed to sort helper `0x00AB2000` | Compares a stored float metric; ties compare the integer at candidate `+0x0C`. The meaning of that integer field is not established. |
-| `0x00C788F0` / `0x008788F0` | Directly called for each retained candidate | Builds a per-target context and dispatches through an object vtable at `+0xA4`. The final damage/effect semantics of that virtual call are unresolved. |
+| `0x00C788F0` / `0x008788F0` | Directly called for each retained candidate | Builds a per-target context, resolves the `MNfl` missile class object, and dispatches through its vtable at `+0xA4` to `CMissileForkedLightning` method `0x00C781D0` / RVA `0x008781D0`. This concrete method starts a generic data-driven action/event handle; its connection to damage remains unresolved. |
 
 ## Target acquisition and selection
 
@@ -94,6 +94,57 @@ immunity, life, hidden, or invulnerability semantics. Authored TFT
 `ANfl` target mask is air/ground/enemy/neutral/organic; that is configuration,
 not proof that every listed bit is tested by this callback.
 
+## Per-target dispatch and action/event path
+
+The `+0xA4` call is now resolved by exact-build static receiver analysis (not
+by archived runtime tracing):
+
+1. `0x00C788F0` / RVA `0x008788F0` calls `0x00C787F0` / RVA `0x008787F0`
+   with FOURCC `MNfl`. That lookup resolves the registered missile-class
+   descriptor and stores its constructed object in `local_14`; the worker then
+   invokes `(*local_14->vtable + 0xA4)` at callsite VA `0x00C7894E` / RVA
+   `0x0087894E` (see Ghidra export `ANfl-dispatch-damage-followup-17`).
+2. The TFT class registry identifies `MNfl` as
+   `CMissileForkedLightning`; the class factory at RVA `0x008790C0` writes
+   vtable VA `0x00FAF6BC`. The pointer table at that exact address has a
+   function entry at slot `+0xA4`: VA `0x00C781D0`, RVA `0x008781D0`.
+   Together, the worker lookup, registered class/factory, constructor table
+   assignment, and executable slot value establish a verified static
+   receiver/vtable relationship. No archived Frida capture observed the
+   receiver pointer or dynamic target, so this is not runtime-observed
+   dispatch.
+3. `0x008781D0` accepts the per-target context produced by the worker. It
+   initializes the object's handle field at `this+0x78` (word index `0x1e`),
+   calls `0x002E4840`, then selects `0x0006E210` or `0x0006E3E0` based on
+   whether the context's second pointer is null. The selected helper performs
+   virtual target/state checks and calls VA `0x00703220` (RVA `0x00303220`)
+   with context values.
+4. `0x00303220` directly calls VA `0x006FC9D0` (RVA `0x002FC9D0`). That
+   routine resolves the supplied string/configuration key, reads the selected
+   record fields at `+0x20` through `+0x34`, and calls VA `0x00703150` (RVA
+   `0x00303150`). The latter initializes generic action-list state and calls
+   VA `0x00977880` (RVA `0x00577880`) to append/populate an action record.
+   These are direct static calls, but the string key and action record's
+   gameplay meaning are not yet mapped to a damage operation.
+5. `0x008781D0` stores the returned handle in `this+0x78`, invokes vtable
+   `+0x9C` when the handle is not `-1`, schedules event `0xD01D3` through
+   `0x003FBE90`, calls `0x002BFFB0`, then invokes vtable `+0x84`. The same
+   missile vtable maps `+0x0C` to event handler `0x00878390`; for event IDs
+   `0xD01A0` and `0xD01D3`, it invokes `+0xA0`, releases the handle through
+   `0x003051A0`, clears the field, invokes `+0x5C` (VA `0x007F2180`, RVA
+   `0x003F2180`), and returns handled. This proves a statically wired handle
+   and event lifecycle for the missile class, but not the event's gameplay
+   meaning or which branch represents cast completion/interruption.
+
+The relevant vtable values are exported in
+`build-re/ability-re/ghidra/ANfl-missile-vtable-full-11/vtables.jsonl`; the
+worker, method and event-handler decompilations are in
+`build-re/ability-re/ghidra/ANfl-dispatch-damage-followup-17/`. Calls to
+`0x002A9940` (damage-payload initializer) and `0x002677C0` (shared CUnit
+damage receiver) were not found on this resolved path. The method currently
+reaches a generic action/event record, whose interpretation and later callback
+are not established.
+
 ## Damage path
 
 Stock TFT data has rank damage values DataA `85`, `160`, and `250`; DataB is
@@ -104,13 +155,15 @@ capture records a 110-mana reduction by that sample, and later health changes
 are contaminated by target movement, attacks, regeneration, and other map
 activity.
 
-The ability-specific worker `0x00C788F0` does **not** make a direct static call
-to the shared damage payload initializer `0x006A9940` or CUnit receiver
-`0x006677C0`. It creates a target/context object and calls an indirect method
-at `+0xA4`. Thus the archived health delta cannot yet be causally connected to
-the generic damage receiver, and the following are unresolved: DataA's native
-lookup, attack/damage type, mitigation path, immunity behavior, per-target
-calculation, and exact damage commit callback. The shared damage receiver
+The worker's virtual call is no longer unresolved: it reaches the missile
+method described above. However, that method currently leads only to a
+data-driven action/event record and a scheduled callback. Neither the
+ability-specific path nor the exported generic action builder has yet been
+followed to the shared damage payload initializer `0x006A9940` or CUnit
+receiver `0x006677C0`. Consequently, the archived health delta cannot yet be
+causally connected to the generic damage receiver. DataA's native lookup,
+attack/damage type, mitigation path, immunity behavior, per-target calculation,
+and exact damage commit callback remain unresolved. The shared damage receiver
 contract is documented in [combat evidence](ability-probes/combat.md#damage-payload-and-receiver-path-retail-1292),
 but ANfl's call edge to it has not been found.
 
@@ -126,11 +179,10 @@ The archived native trace observed the order getter and `0x00C78A50`, not the
 later worker, effect methods, or damage receiver. The routine decompiles as
 `void`; its captured `EAX` is incidental and is not a return-value contract.
 
-Additional unbound functions in the nearby native code region show possible
-transient-handle and event lifecycle logic. These functions are not entries in
-the exported ANfl vtable and no static caller or callback registration ties
-them to that table in the current evidence; treat their ANfl association as a
-candidate pending dispatch proof:
+The resolved `CMissileForkedLightning` table and its methods establish a
+transient-handle/event lifecycle statically. They are associated with the
+ANfl per-target path through its `MNfl` lookup and the `+0xA4` dispatch, but
+none of these methods was observed in the archived Frida traces:
 
 - `0x00C781D0` configures event data with `0x006E4840`, creates a handle via
   one of `0x0046E3E0` / `0x0046E210` depending on target-data shape, stores it
@@ -141,16 +193,18 @@ candidate pending dispatch proof:
   `0x007051A0`, clears the field, invokes virtual `+0x5C`, and reports handled.
   Other IDs go through `0x006E4ED0`, which handles `0xD01A3` through virtual
   `+0x98`.
-- `0x00C78170` contains a similar handle release and state-update path.
-  `0x00C782A0` delegates an event and clears `this+0x78`. `0x00C78330` has a
-  separate shared effect/state call through `0x006EB2B0`.
+- The same `CMissileForkedLightning` table also binds `+0x34` to
+  `0x00C78170`, `+0x3C` to `0x00C782A0`, and `+0x84` to `0x00C78330`.
+  `0x00C78170` contains a related handle release/state-update path;
+  `0x00C782A0` delegates an event and clears `this+0x78`; and `0x00C78330`
+  performs a separate shared effect/state call through `0x006EB2B0`. The
+  `+0x84` method is directly invoked by `0x008781D0` after handle setup.
 
-If these functions receive the expected object, their code establishes
-transient state and cleanup branches. Their ownership by an ANfl instance is
-not established. The branches also do not yet prove which conditions correspond to successful completion,
-interruption, caster death/removal, target death, or ability removal. The
-worker's per-target indirect `+0xA4` dispatch and the lifecycle methods' slots
-are not tied to runtime receiver identities in the archived Frida traces.
+These are now statically tied to the missile class through its constructor's
+vtable assignment. Their branches still do not establish which conditions
+mean successful completion, interruption, caster death/removal, target death,
+or ability removal. Archived Frida traces did not observe these methods or
+their receiver identities at runtime.
 
 Authored presentation resolves `SpecialArt` to
 `Abilities\Weapons\Bolt\BoltImpact.mdx`; its Stand sequence is 0–800 ms.
@@ -169,7 +223,8 @@ sound. Presentation evidence remains authored/static only.
 | Order ID `0xD026B`; order string `forkedlightning` | Static getter plus authored data; order path also observed by Frida | None for this build's order identity. |
 | Spatial candidate path, two native gates, duplicate prevention, early count cap, and post-cap sort | Exact-build static control flow | Decode every query parameter and target gate to name each gameplay predicate. |
 | Three targets each sampled at ~85 loss | Authored-data agreement plus direct archived JASS observations | Identity-stable, stationary targets and a cap-boundary test are needed to resolve which candidates survive enumeration. The existing run does not discriminate target order. |
-| DataA rank mapping and damage implementation | Authored data plus compatible live delta only | Follow virtual `+0xA4` and its concrete callee through effect/damage callback until `+0x120` or another verified damage path. No extra Retail run until this static path is exhausted. |
+| `+0xA4` receiver and method | Exact-build static receiver lookup, factory/vtable assignment and slot target; not runtime-observed | A bounded Frida trace can independently confirm receiver/vtable/target if runtime confirmation is required. It will not by itself identify damage semantics. |
+| DataA rank mapping and damage implementation | Authored data plus compatible live delta; resolved method begins generic action/event setup | Follow the action-record consumer and event callback to a verified damage call site; only then decide whether a live run is needed. |
 | Mana/cast timing | Direct JASS samples, 250ms resolution | Finer timing only if exact ordering matters after static path inspection. |
 | Effect/sound lifecycle | Authored model metadata plus candidate transient-handle code | Prove callback/receiver association, resolve data-to-model mapping; visible/audio confirmation only if static linkage remains ambiguous. |
 | Interrupt/removal/target-death cleanup | Static branches have handle cleanup | Identify callback ownership and branch conditions; use focused runtime probes only for unresolved lifecycle events. |
