@@ -24,6 +24,8 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | GitHub release publication, contributor notes, platform artifacts and verification | [docs/releasing.md](docs/releasing.md) |
 | Agent documentation capture, placement, templates, and indexing | [docs/documentation-guide.md](docs/documentation-guide.md) |
 | Diagnostic tools (mpqtool, dbctool, mdxtool, ability_audit, profiler) | [docs/diagnostic-tools.md](docs/diagnostic-tools.md) |
+| WC3 Retail rawcode-to-implementation RE harness (Ghidra, Frida, JASS, reviewed specs) | [docs/games/warcraft-3/ability-reconstruction-harness.md](docs/games/warcraft-3/ability-reconstruction-harness.md) |
+| WC3 ability RE agent playbook: rawcode-to-evidence-to-spec procedure, minimum probes, handoff gates | [docs/games/warcraft-3/ability-reconstruction-agent-guide.md](docs/games/warcraft-3/ability-reconstruction-agent-guide.md) |
 | Vendored Lua 5.4 and the libxml2-free XML parser (`common/tinyxml.h`) | [docs/vendored-dependencies.md](docs/vendored-dependencies.md) |
 | UI screen authoring, FDF conventions, ConsoleUI, stb_fdf.h | [docs/ui-authoring.md](docs/ui-authoring.md) |
 | Test-suite performance measurement and parallel execution | [docs/test-performance.md](docs/test-performance.md) |
@@ -543,3 +545,18 @@ The opt-in Emscripten/WebGL 2 foundation target and its current limitations are
 recorded in [Browser platform](docs/platform/browser.md). The smoke test is not
 a Warcraft III runtime. Keep browser adapters outside the universal client and
 game simulation modules.
+
+## Warcraft III Ability RE Harness — End-to-end Readiness
+
+For the pinned Retail 1.29.2 ability reconstruction tools, see
+[Ability reconstruction harness](docs/games/warcraft-3/ability-reconstruction-harness.md#patch-12-end-to-end-harness-readiness-and-smoke-procedure).
+`python3 tools/wc3_ability_re.py ability-smoke --output <new-dir>` is a
+**synthetic-only** offline integration test for `Apxf`/`AOsw`, not a Retail
+behavior check. `ability-readiness --reconstruction <directory>` validates
+saved provenance and, when supplied, Frida-plan, session and spec consistency
+without attaching/launching. Never promote function-entry traces, synthetic
+fixture C, authored MDX paths or JASS capture markers into exact gameplay or
+animation claims. Preserve unverified code/visual/audio/lifecycle questions;
+request focused live probes only for semantic uncertainties static evidence
+cannot settle. Keep all proprietary executables, MPQs and model assets outside
+Git fixtures.

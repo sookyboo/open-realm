@@ -99,6 +99,29 @@ the runtime question only for the remaining observable uncertainty.
 - Normalize slashes as needed; both `\` and `/` are accepted.
 - Default to this tool whenever you need to discover MPQ contents, inspect text assets, or extract raw file bytes for analysis.
 
+## Ability presentation dependency inspection
+
+The rawcode-based harness extends `ability_audit -json` with
+`presentation` (`*AbilityFunc.txt`) plus sound/art on decoded buff/effect
+rows, and resolves static model/sound dependencies using `mpqtool` and
+`mdxtool --info-json`. See [Ability Reconstruction Harness](games/warcraft-3/ability-reconstruction-harness.md#patch-5-authored-presentation-and-static-mdx-dependencies).
+
+Patch 6 adds `wc3_ability_re.py ability-package` to merge cached lookup,
+static execution graph and presentation exports into an immutable offline
+report with evidence coverage, unresolved questions and Ghidra C-like code.
+No Retail or native-tool execution is required for the repackaging step. See
+[Ability Reconstruction Harness](games/warcraft-3/ability-reconstruction-harness.md#patch-6-offline-reconstruction-bundle-from-cached-evidence).
+
+## Generated ability Frida trace plans
+
+`python3 tools/wc3_ability_re.py ability-trace Apxf --graph <graph-dir>
+--output <new-plan-dir>` creates a bounded, read-only exact-build function-entry
+Frida agent from a previously validated static graph. Inspect
+[the reconstruction harness guide](games/warcraft-3/ability-reconstruction-harness.md#patch-7-generated-read-only-frida-function-entry-traces)
+for optional `ability-trace-run` (requires the prepared Retail controller),
+`ability-trace-review`, limits, and runtime-evidence caveats. It does not
+launch a game or claim ability-specific execution solely from a function hit.
+
 ## MDX Inspection (mdxtool)
 
 - Use `build/bin/mdxtool` to validate MDX assets and detect data problems before debugging render code.
@@ -331,3 +354,13 @@ This differs from `ability_map.c`, whose rawcode relationships are manually tran
 `python3 tools/galaxy_audit.py <MapScript.galaxy> <NativeLib.galaxy> <LibertyLib.galaxy> <CampaignLib.galaxy>` inventories reachable missing bindings and obvious placeholder candidates without executing scripts. See [Galaxy native coverage](games/starcraft-2/galaxy-native-coverage.md) for exact MPQ extraction commands, audit limits, and the complete Markdown snapshot. Use [bounded runtime traces](games/starcraft-2/galaxy-scripting.md#reproducing-detailed-traces) to distinguish static coverage from executed callbacks.
 
 EOS paired gameplay diagnostics (`game-relay`, `game-crash`, `game-guest-crash`) and the no-login loopback check use the generated Transport map; see [paired gameplay acceptance](architecture/epic-online-services.md#paired-gameplay-acceptance).
+
+## Persistent Retail ability session controller
+
+`wc3_ability_re.py ability-session-create`, `ability-session-check`, and
+`ability-session-run` coordinate Patch 7 Frida agents and per-case JASS outputs
+without launching Retail or requiring the older separate trace controller.
+The matching prepared map must already be running. See
+[Patch 8 of the reconstruction guide](games/warcraft-3/ability-reconstruction-harness.md#patch-8-persistent-retail-session-coordination)
+for per-case markers, Wine/Frida exact-process checks, safe JHCR handling,
+commands and capture-integrity limitations.

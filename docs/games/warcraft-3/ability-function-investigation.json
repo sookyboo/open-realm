@@ -204,8 +204,8 @@
       "evidence_summary": "All four level natives share a preflight check for internal tag 0x2B61676C and object field +0x20 == 0; the meaning of this gate is not yet named. They then locate the attached instance through 0x006D6570. Get returns its stored zero-based rank at object offset +0x50, plus one, or zero if no eligible instance is found. Set clamps the requested level to [1, maxLevel] using 0x0046F5C0, then repeatedly invokes virtual +0x2E4 to raise or +0x2E8 to lower rank on that same instance. It does not remove/recreate the ability. IncUnitAbilityLevel (0x00498B20) and DecUnitAbilityLevel (0x0048F150) use the same virtual hooks with max/level-one bounds.",
       "related_addresses": [
         {
-          "va": "0x2b61676c",
-          "rva": "0x2b21676c"
+          "kind": "constant",
+          "value": "0x2B61676C"
         },
         {
           "va": "0x006d6570",
@@ -4090,7 +4090,7 @@
         },
         {
           "va": "0x00BD70F0",
-          "rva": "0x008D70F0",
+          "rva": "0x007D70F0",
           "kind": "function_va"
         },
         {
@@ -9529,7 +9529,7 @@
     {
       "from": {
         "va": "0x00BD70F0",
-        "rva": "0x008D70F0",
+        "rva": "0x007D70F0",
         "kind": "function_va"
       },
       "to": {
@@ -9607,7 +9607,8 @@
     "direct_call": "Direct call or delegation established by the source notes.",
     "virtual_dispatch": "Virtual method dispatch established from receiver/vtable analysis.",
     "callback_dispatch": "Call through a callback argument or registered callback path.",
-    "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge."
+    "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge.",
+    "call": "Call asserted by the source notes; dispatch modality is not yet classified as direct, virtual, or callback. Do not promote it to a direct call without evidence."
   },
   "entry_count": 86,
   "verified_relationship_count": 312

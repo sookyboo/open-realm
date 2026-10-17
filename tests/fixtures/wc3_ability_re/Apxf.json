@@ -1,0 +1,144 @@
+{
+  "expected": {
+    "entry_rva": "0x0080d820",
+    "implementation_code": "Apxf",
+    "reviewed_claims": 0,
+    "runtime_parity_proven": false,
+    "synthetic_mode": "passive"
+  },
+  "fixture_kind": "synthetic_test_data_only",
+  "graph": {
+    "branch_candidates": {},
+    "claims": {
+      "animation_or_effect_timing_proven": false,
+      "runtime_reachability_proven": false,
+      "semantic_state_fields_proven": false
+    },
+    "class_reference_hint": "CAbilityPhoenixFire",
+    "class_reference_is_native_verified": false,
+    "data_references": {},
+    "decompiled": {
+      "0x0080d820": {
+        "c": "void SYNTHETIC_entry(void) { /* not Retail code */ }",
+        "source": "fixture_not_retail",
+        "status": "complete"
+      },
+      "0x0080ecd0": {
+        "c": "void SYNTHETIC_helper(void) { /* not Retail code */ }",
+        "source": "fixture_not_retail",
+        "status": "complete"
+      }
+    },
+    "edges": [
+      {
+        "evidence": [
+          {
+            "note": "not real call evidence",
+            "origin": "synthetic_fixture"
+          }
+        ],
+        "from": "0x0080d820",
+        "kind": "direct_call",
+        "to": "0x0080ecd0",
+        "traversable": true
+      }
+    ],
+    "executable_sha256": "3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed",
+    "gaps": [
+      {
+        "count": 1,
+        "kind": "dispatch_unverified",
+        "reasons": [
+          "fixture intentionally unresolved"
+        ],
+        "rva": "0x0080d820"
+      }
+    ],
+    "memory_access_candidates": {},
+    "nodes": [
+      {
+        "decompile_status": "complete",
+        "depth": 0,
+        "incoming_static_function_count": 0,
+        "name": "SYNTHETIC_entry",
+        "rva": "0x0080d820",
+        "unresolved_calls": [
+          {
+            "reason": "synthetic_unbound_dispatch",
+            "site_rva": "0x0080d820",
+            "source": "fixture"
+          }
+        ]
+      },
+      {
+        "decompile_status": "complete",
+        "depth": 1,
+        "incoming_static_function_count": 1,
+        "name": "SYNTHETIC_helper",
+        "rva": "0x0080ecd0",
+        "unresolved_calls": []
+      }
+    ],
+    "rawcode": "Apxf",
+    "schema_version": 1,
+    "seeds": [
+      {
+        "rva": "0x0080d820",
+        "source": "synthetic_fixture"
+      }
+    ],
+    "status": "static_candidate_graph",
+    "unbound_vtable_candidates": [],
+    "unresolved_relationship_targets": []
+  },
+  "lookup": {
+    "editions": {
+      "tft": {
+        "found": true,
+        "ranks": [
+          {
+            "area": 600.0,
+            "buff_ids": [],
+            "level": 1
+          }
+        ],
+        "retail_class_reference": {
+          "class": "CAbilityPhoenixFire",
+          "implementation_code": "Apxf"
+        }
+      }
+    },
+    "executable_identity": {
+      "sha256": "3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed"
+    },
+    "rawcode": "Apxf",
+    "schema_version": 1
+  },
+  "presentation": {
+    "editions": {
+      "tft": {
+        "found": true,
+        "gaps": [
+          "synthetic fixture: runtime selection and timing unknown"
+        ],
+        "models": [],
+        "rank_links": [],
+        "references": [
+          {
+            "asset": "Abilities\\Spells\\Other\\SyntheticPhoenix.mdx",
+            "field": "TargetArt",
+            "kind": "model",
+            "source": "Ability:Apxf",
+            "value": "Abilities\\Spells\\Other\\SyntheticPhoenix.mdx"
+          }
+        ],
+        "sounds": []
+      }
+    },
+    "rawcode": "Apxf",
+    "runtime_effect_timing_verified": false,
+    "schema_version": 1
+  },
+  "rawcode": "Apxf",
+  "schema_version": 1
+}

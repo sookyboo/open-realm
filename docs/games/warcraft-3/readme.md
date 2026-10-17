@@ -99,6 +99,8 @@ File formats, renderer notes, UI/FDF behavior, and gameplay coverage work used b
 
 ### Implementation Notes
 
+- [Retail ability reconstruction harness (native graphs, presentation, Frida/JASS labs)](ability-reconstruction-harness.md)
+- [Retail Ability Inventory Validation](ability-inventory-validation.md): check exact-build address consistency, relationship kinds and normalized evidence.
 - [Terrain Deformation](terrain-deformation.md)
 - [Economy And Unit Presentation](economy-and-unit-presentation.md)
 - [Call to Arms And Militia](call-to-arms-and-militia.md)
