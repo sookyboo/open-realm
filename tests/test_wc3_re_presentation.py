@@ -75,7 +75,7 @@ class PresentationTest(unittest.TestCase):
         calls = []
         def run(args, **kwargs):
             calls.append(args)
-            if args[0] == "mpqtool" and args[2] == "War3x.mpq":
+            if args[0] == "mpqtool" and args[2] in ("War3x.mpq", "War3.mpq"):
                 return subprocess.CompletedProcess(args, 0, b"MDLX bytes", b"")
             if args[0] == "mdxtool":
                 return subprocess.CompletedProcess(args, 0, json.dumps({
@@ -84,13 +84,54 @@ class PresentationTest(unittest.TestCase):
                     "events": [],
                 }).encode(), b"")
             return subprocess.CompletedProcess(args, 1, b"", b"missing")
-        resolver = p.ArchiveResolver(["War3.mpq", "War3x.mpq"], Path("mpqtool"), Path("mdxtool"))
+        resolver = p.ArchiveResolver(["War3x.mpq", "War3.mpq"], Path("mpqtool"), Path("mdxtool"))
         with mock.patch.object(p.subprocess, "run", side_effect=run):
             result = resolver.inspect_model(model)
             self.assertEqual(result["status"], "static_model_metadata")
             self.assertEqual(result["archive"], "War3x.mpq")
             self.assertEqual(resolver.inspect_model(model), result)
-        self.assertEqual(len(calls), 2)  # one MPQ cat, one MDX metadata export
+        self.assertEqual(len(calls), 2)  # first-priority MPQ cat, one MDX metadata export
+
+    def test_unit_id_resolves_through_unitui_and_inspects_ward_model(self):
+        item = lookup()
+        item["editions"]["tft"]["ranks"][0]["unit_id"] = "osp1"
+        model = "units\\orc\\SerpentWard\\SerpentWard.mdx"
+        unit_ui = (b'ID;PWXL;N;E\nC;X1;Y1;K"unitUIID"\nC;X2;Y1;K"file"\n'
+                   b'C;X1;Y2;K"osp1"\nC;X2;K"units\\orc\\SerpentWard\\SerpentWard"\nE\n')
+
+        def run(args, **kwargs):
+            if args[0] == "mpqtool" and args[-1] == p.UNIT_UI_TABLE:
+                return subprocess.CompletedProcess(args, 0, unit_ui, b"")
+            if args[0] == "mpqtool" and args[-1] == model:
+                return subprocess.CompletedProcess(args, 0, b"MDLX", b"")
+            if args[0] == "mdxtool":
+                return subprocess.CompletedProcess(args, 0, json.dumps({
+                    "schema_version": 1, "path": model,
+                    "sequences": [{"name": "Stand"}], "textures": [],
+                    "chunks": {"EVTS": 0}, "event_objects_decoded": True,
+                    "events": [],
+                }).encode(), b"")
+            return subprocess.CompletedProcess(args, 1, b"", b"missing")
+
+        with mock.patch.object(p.subprocess, "run", side_effect=run):
+            report = p.build_presentation(item, mpqtool=Path("mpqtool"), mdxtool=Path("mdxtool"))
+        data = report["editions"]["tft"]
+        link = data["rank_links"][0]["unit_ui"]
+        self.assertEqual(link["status"], "authored_unit_ui_row")
+        self.assertEqual(link["model"], model)
+        self.assertEqual(link["model_status"], "static_model_metadata")
+        self.assertIn(model, {entry["path"] for entry in data["models"]})
+        self.assertFalse(any("needs separate UnitUI" in gap for gap in data["gaps"]))
+
+    def test_unit_id_without_unitui_row_is_visible_as_gap(self):
+        item = lookup()
+        item["editions"]["tft"]["ranks"][0]["unit_id"] = "osp1"
+        with mock.patch.object(p.subprocess, "run", return_value=
+                               subprocess.CompletedProcess([], 1, b"", b"missing")):
+            report = p.build_presentation(item, mpqtool=Path("mpqtool"), mdxtool=Path("mdxtool"))
+        data = report["editions"]["tft"]
+        self.assertEqual(data["rank_links"][0]["unit_ui"]["status"], "unit_ui_row_not_found")
+        self.assertTrue(any("osp1" in gap and "UnitUI row" in gap for gap in data["gaps"]))
 
     def test_invalid_model_json_rejected(self):
         resolver = p.ArchiveResolver(["War3.mpq"], Path("mpqtool"), Path("mdxtool"))

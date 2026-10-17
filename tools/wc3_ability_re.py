@@ -143,7 +143,7 @@ def command_reconstruct(args: argparse.Namespace) -> int:
     editions = ["roc", "tft"] if args.edition == "both" else [args.edition]
     payload = resolve(args.rawcode, editions, audit=args.audit, data_dir=args.data_dir,
                       inventory=args.inventory, classes_path=args.classes, executable=args.executable)
-    outdir = args.output_dir or ROOT / "build/ability-re" / args.rawcode
+    outdir = args.output_dir or ROOT / "build-re/ability-re" / args.rawcode
     if outdir.exists():
         raise LookupError(f"refusing existing reconstruction directory: {outdir}")
     graph = None
@@ -398,7 +398,7 @@ def build_parser() -> argparse.ArgumentParser:
     lookup.set_defaults(run=command_lookup)
     index = commands.add_parser("index", help="export offline TFT class reference index (not Ghidra)")
     options(index, data=False)
-    index.add_argument("--output", type=Path, default=ROOT / "build/ability-re/class-reference-index.json")
+    index.add_argument("--output", type=Path, default=ROOT / "build-re/ability-re/class-reference-index.json")
     index.set_defaults(run=command_index)
     reconstruct = commands.add_parser("reconstruct", help="create lookup or optional static execution-graph package")
     reconstruct.add_argument("rawcode", type=check_rawcode)

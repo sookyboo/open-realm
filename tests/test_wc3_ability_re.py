@@ -87,6 +87,31 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(row["ranks"][0]["unit_id"], "osp1")
         self.assertEqual(row["buffs"][0]["target_art"], "Models\\ward.mdx")
 
+    def test_roc_archive_provenance_excludes_tft_overlays(self):
+        row = fake_row(edition="ROC")
+        row["archives"] = ["War3Local.mpq", "War3xLocal.mpq", "War3x.mpq",
+                           "FrozenThrone.mpq", "Deprecated.mpq", "War3.mpq"]
+        result = self.call(row, edition="roc")
+        self.assertEqual(result["archives"],
+                         ["War3Local.mpq", "Deprecated.mpq", "War3.mpq"])
+
+    def test_rank_localized_strings_split_quoted_audit_csv_without_mutating_source(self):
+        row = fake_row()
+        source = 'Summons a ward, now","Summons rank two","Summons rank three'
+        row["strings"]["Ubertip"] = source
+        normalized = self.call(row)
+        self.assertEqual(normalized["strings"]["Ubertip"], source)
+        self.assertEqual([item["values"]["Ubertip"] for item in normalized["strings_by_rank"]],
+                         ["Summons a ward, now", "Summons rank two", "Summons rank three"])
+
+    def test_malformed_rank_localized_string_count_fails_closed(self):
+        row = fake_row()
+        row["strings"]["Ubertip"] = 'First rank","Second rank'
+        with mock.patch.object(lookup.subprocess, "run", return_value=
+                               subprocess.CompletedProcess([], 0, json.dumps(row), "")):
+            with self.assertRaisesRegex(lookup.LookupError, "localized strings for 3 ability ranks"):
+                lookup.audit_one("AOsw", "tft", audit=self.audit, data_dir=self.data)
+
     def test_missing_ability_is_valid_audit_result(self):
         row = {"schema_version": 1, "edition": "ROC", "rawcode": "AOsw",
                "found": False, "archives": ["War3.mpq"]}

@@ -21,13 +21,17 @@ The repository already provides `ability_audit`, a pinned exact-build
 [Retail function inventory](ability-function-investigation.json), and an
 extracted [TFT ability class reference](../../../games/warcraft-3/tft-ability-classes.txt).
 
+Use `build-re/` as the standard location for generated reverse-engineering
+evidence, Ghidra projects, caches, and reports. Git ignores this directory;
+`build/` remains for compiled tools and normal build products.
+
 ```sh
 make ability_audit
 python3 tools/wc3_re/inventory.py
 python3 tools/wc3_ability_re.py doctor
 python3 tools/wc3_ability_re.py lookup Apxf --edition tft
 python3 tools/wc3_ability_re.py lookup AOsw --edition both --format json \
-  --output build/ability-re/serpent-ward-lookup.json
+  --output build-re/ability-re/serpent-ward-lookup.json
 python3 tools/wc3_ability_re.py index
 python3 tools/wc3_ability_re.py reconstruct Apxf
 python3 -m unittest discover -s tests -p 'test_wc3_ability_re.py'
@@ -50,9 +54,12 @@ Missing object data is not a negative Retail gameplay result.
 
 `ability_audit -tft -json -raw Apxf -data 'data/Warcraft III'` outputs
 one JSON object with `schema_version=1`, `edition`, `rawcode`, `found`,
-source archive paths, metadata (`id`, `code`, `uber_alias`, rank count),
+archive candidates, metadata (`id`, `code`, `uber_alias`, rank count),
 per-rank targeting/cost/cooldown/range/duration/cast/data A-I, unit/effect/buff
 identities, available string data, linked buffs/art and other authored aliases.
+`wc3_ability_re.py lookup` narrows that archive list to the selected edition;
+in particular, ROC presentation resolution excludes `War3x`/Frozen Throne
+overlays even though `ability_audit` reports all discovered archive candidates.
 Four-character data slots are tagged `rawcode` rather than forced to a float.
 The current underlying `AbilityData_t` schema exports up to four ranks;
 `levels` separately reports the authored count. The export is intentionally
@@ -65,10 +72,13 @@ is preserved. `retail_class_reference` resolves that code against the saved
 TFT `tft-ability-classes.txt` **only in TFT mode**. For example, stock
 Serpent Ward `AOsw` may resolve through `AOwd` to `CAbilityWard`; this is
 labelled `offline_reference_hint`, not a confirmed factory/vtable binding.
-The `index` command writes a *class reference* index, not a Ghidra index.
+The lookup preserves the audit's raw quote-stripped `strings` object and adds
+`strings_by_rank`, which splits quoted rank lists into authored per-level
+strings without mutating the source. Malformed rank lists fail closed. The `index`
+command writes a *class reference* index, not a Ghidra index.
 
 `reconstruct` currently creates only `lookup.json` and `manifest.json`
-under `build/ability-re/<rawcode>/`; its `status` is `seed_only` and it lists
+under `build-re/ability-re/<rawcode>/`; its `status` is `seed_only` and it lists
 pending Ghidra, graph, presentation, verification and specification phases.
 It refuses to overwrite an existing output directory. `verify` exits with
 code 3 and a clear not-implemented message until runtime orchestration exists.
@@ -105,17 +115,24 @@ own separately reviewed research inventory and export.
 
 ### One-time import and metadata scan
 
-Create a project parent directory and set local paths as needed:
+Create a project parent directory and set local paths as needed. In a
+container with a small home or temporary filesystem, keep the launcher cache on
+the same workspace mount before importing:
 
 ```sh
-mkdir -p build/ghidra-projects
+mkdir -p build-re/ghidra-user build-re/ghidra-tmp
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Duser.home=$PWD/build-re/ghidra-user -Djava.io.tmpdir=$PWD/build-re/ghidra-tmp"
+```
+
+```sh
+mkdir -p build-re/ghidra-projects
 GHIDRA_HEADLESS=/path/to/ghidra_12.1.4_PUBLIC/support/analyzeHeadless
 RETAIL_EXE="$PWD/data/Warcraft III/Warcraft III.exe"
 python3 tools/wc3_ability_re.py ghidra-export \
   --headless "$GHIDRA_HEADLESS" \
-  --project-dir build/ghidra-projects --project-name WC3Retail1292 \
+  --project-dir build-re/ghidra-projects --project-name WC3Retail1292 \
   --executable "$RETAIL_EXE" --import-first --mode scan \
-  --output build/ability-re/ghidra/scan-initial
+  --output build-re/ability-re/ghidra/scan-initial
 ```
 
 `--import-first` creates and analyzes a **new** Ghidra project and refuses a
@@ -132,21 +149,21 @@ function discovery for that project; an empty function scan is rejected.
 ```sh
 python3 tools/wc3_ability_re.py ghidra-export \
   --headless "$GHIDRA_HEADLESS" \
-  --project-dir build/ghidra-projects --project-name WC3Retail1292 \
+  --project-dir build-re/ghidra-projects --project-name WC3Retail1292 \
   --executable "$RETAIL_EXE" --mode detail \
   --rva 0x0080d820 --rva 0x0080ecd0 --rva 0x0080f1e0 \
-  --output build/ability-re/ghidra/phoenix-fire-detail
+  --output build-re/ability-re/ghidra/phoenix-fire-detail
 
 # Or use only explicitly typed inventory function/vtable entries as seeds:
 python3 tools/wc3_ability_re.py ghidra-export \
   --headless "$GHIDRA_HEADLESS" \
-  --project-dir build/ghidra-projects --project-name WC3Retail1292 \
+  --project-dir build-re/ghidra-projects --project-name WC3Retail1292 \
   --executable "$RETAIL_EXE" --mode detail --inventory-seeds \
-  --output build/ability-re/ghidra/inventory-detail
+  --output build-re/ability-re/ghidra/inventory-detail
 
 # Check an export independently without running Ghidra:
 python3 tools/wc3_ability_re.py ghidra-check \
-  build/ability-re/ghidra/phoenix-fire-detail --mode detail
+  build-re/ability-re/ghidra/phoenix-fire-detail --mode detail
 ```
 
 Each export is an immutable, new directory; repeated exports require unique
@@ -196,26 +213,26 @@ not decompiled bodies.
 ```sh
 # First make a Patch 2 lookup (requires installed matching object data).
 python3 tools/wc3_ability_re.py lookup Apxf --edition tft --format json \
-  --output build/ability-re/Apxf-lookup.json
+  --output build-re/ability-re/Apxf-lookup.json
 
 # Use cached Ghidra exports; no new game launch or decompilation.
 python3 tools/wc3_ability_re.py ability-graph Apxf \
-  --lookup build/ability-re/Apxf-lookup.json \
-  --scan build/ability-re/ghidra/scan-initial \
-  --detail build/ability-re/ghidra/phoenix-fire-detail \
-  --output build/ability-re/Apxf-static-graph
+  --lookup build-re/ability-re/Apxf-lookup.json \
+  --scan build-re/ability-re/ghidra/scan-initial \
+  --detail build-re/ability-re/ghidra/phoenix-fire-detail \
+  --output build-re/ability-re/Apxf-static-graph
 
 # When a native binding is not in the curated labels, specify exact seeds.
 python3 tools/wc3_ability_re.py ability-graph Apxf \
-  --scan build/ability-re/ghidra/scan-initial \
+  --scan build-re/ability-re/ghidra/scan-initial \
   --seed-rva 0x0080d820 --no-auto-seeds \
-  --output build/ability-re/Apxf-handler-graph
+  --output build-re/ability-re/Apxf-handler-graph
 
 # Alternatively include the graph in a newly created reconstruction package:
 python3 tools/wc3_ability_re.py reconstruct Apxf --edition tft \
-  --ghidra-scan build/ability-re/ghidra/scan-initial \
-  --ghidra-detail build/ability-re/ghidra/phoenix-fire-detail \
-  --output-dir build/ability-re/Apxf-package
+  --ghidra-scan build-re/ability-re/ghidra/scan-initial \
+  --ghidra-detail build-re/ability-re/ghidra/phoenix-fire-detail \
+  --output-dir build-re/ability-re/Apxf-package
 ```
 
 `ability-graph` does not require installed retail MPQs or `ability_audit`
@@ -280,14 +297,14 @@ actual effects, attachment points, sequence choice, and when they fire.
 ```sh
 make ability_audit mpqtool mdxtool
 python3 tools/wc3_ability_re.py lookup Apxf --edition tft --format json \
-  --output build/ability-re/Apxf-lookup.json
+  --output build-re/ability-re/Apxf-lookup.json
 python3 tools/wc3_ability_re.py ability-presentation \
-  --lookup build/ability-re/Apxf-lookup.json \
-  --output build/ability-re/Apxf-presentation
+  --lookup build-re/ability-re/Apxf-lookup.json \
+  --output build-re/ability-re/Apxf-presentation
 
 # Reconstruct also writes presentation/assets.json and presentation/review.md:
 python3 tools/wc3_ability_re.py reconstruct Apxf --edition tft \
-  --output-dir build/ability-re/Apxf-with-presentation
+  --output-dir build-re/ability-re/Apxf-with-presentation
 
 # Analyze one model without SDL/OpenGL and without extracting asset files:
 build/bin/mdxtool -mpq 'data/Warcraft III/War3x.mpq' \
@@ -303,7 +320,11 @@ from a global all-edition asset search during a ROC investigation.
 
 The enhanced audit reads `*AbilityFunc.txt` keys separately from localized
 `*AbilityStrings.txt`, exposes BuffID and EfctID presentation rows from
-`AbilityBuffData.slk`, and retains unmodified rank links to `UnitID`/BuffID/EfctID.
+`AbilityBuffData.slk`, and retains rank links to `UnitID`/BuffID/EfctID. For a
+rank `UnitID`, the resolver follows the matching `Units\\UnitUI.slk` row,
+records its authored fields and archive, and inspects its model with the same
+bounded MDX dependency traversal. This is an authored data dependency, not
+proof that the ability spawns or plays the model at a particular time.
 Missing or unsupported authoring fields remain `null` rather than being
 filled with likely paths. The bounded `mdxtool --info-json` command returns
 sequence names/intervals, texture paths and replaceable IDs, chunk presence,
@@ -327,8 +348,7 @@ nested event dependencies and available metadata; missing rows/assets and
 traversal budgets remain visible as gaps. The generated `review.md` is **not**
 a validated animation timeline.
 
-Limitations deliberately deferred to later patches: `UnitID` to actual unit
-model, ability-specific display/attachment selection, sequence transitions,
+Limitations: ability-specific display/attachment selection, sequence transitions,
 impact timing, status-effect lifetime, custom map object overrides, animation
 variation/pitch runtime selection, and exact presentation synchronization.
 AbilityFunc `Art` is treated as an icon/texture, never as a spawned 3D model.
@@ -360,19 +380,19 @@ presentation report. A mismatch fails before an output directory is created.
 # All stages in one command, provided local audit, MPQ tools and cached Ghidra
 # scan/detail outputs are available. This NEVER launches Retail or Ghidra.
 python3 tools/wc3_ability_re.py reconstruct Apxf --edition tft \
-  --ghidra-scan build/ability-re/ghidra/scan-initial \
-  --ghidra-detail build/ability-re/ghidra/phoenix-fire-detail \
-  --output-dir build/ability-re/Apxf-offline
+  --ghidra-scan build-re/ability-re/ghidra/scan-initial \
+  --ghidra-detail build-re/ability-re/ghidra/phoenix-fire-detail \
+  --output-dir build-re/ability-re/Apxf-offline
 
 # Or repackage already exported evidence, without ability_audit, MPQ tools,
 # installed Warcraft data, Ghidra, Wine, or Frida. All three inputs are
 # immutable Patch 2 / Patch 4 / Patch 5 artifacts; --graph and --presentation
 # can be omitted for a lookup-only partial report.
 python3 tools/wc3_ability_re.py ability-package \
-  --lookup build/ability-re/Apxf-offline/lookup.json \
-  --graph build/ability-re/Apxf-offline/graph \
-  --presentation build/ability-re/Apxf-offline/presentation \
-  --output build/ability-re/Apxf-offline-review
+  --lookup build-re/ability-re/Apxf-offline/lookup.json \
+  --graph build-re/ability-re/Apxf-offline/graph \
+  --presentation build-re/ability-re/Apxf-offline/presentation \
+  --output build-re/ability-re/Apxf-offline-review
 ```
 
 `reconstruct` also writes `offline/` inside its new output directory.
@@ -413,10 +433,10 @@ was responsible for an observed call.
 
 ```sh
 python3 tools/wc3_ability_re.py ability-trace Apxf \
-  --graph build/ability-re/Apxf-offline/graph \
+  --graph build-re/ability-re/Apxf-offline/graph \
   --capture-id phoenix-probe-01 --max-hooks 24 \
   --max-events 1200 --per-hook-events 120 --seconds 60 \
-  --output build/ability-re/Apxf-trace-plan-01
+  --output build-re/ability-re/Apxf-trace-plan-01
 ```
 
 The new output directory contains `trace-plan.json` (complete graph-derived
@@ -447,12 +467,12 @@ Its original documented command works with the generated `agent.js` too.
 
 ```sh
 python3 tools/wc3_ability_re.py ability-trace-run \
-  --plan build/ability-re/Apxf-trace-plan-01 \
+  --plan build-re/ability-re/Apxf-trace-plan-01 \
   --probe-dir /tmp/wc3-probes/phoenix-prepared \
   --seconds 60 --output /tmp/wc3-probes/phoenix-frida-01.jsonl
 
 python3 tools/wc3_ability_re.py ability-trace-review \
-  --plan build/ability-re/Apxf-trace-plan-01 \
+  --plan build-re/ability-re/Apxf-trace-plan-01 \
   --trace /tmp/wc3-probes/phoenix-frida-01.jsonl \
   --output /tmp/wc3-probes/phoenix-trace-review.json
 ```
@@ -537,7 +557,7 @@ ability scenario construction and input control.
 
 ```sh
 python3 tools/wc3_ability_re.py ability-session-create \
-  --plan build/ability-re/Apxf-trace-plan-01 \
+  --plan build-re/ability-re/Apxf-trace-plan-01 \
   --probe-dir /tmp/wc3-probes/phoenix-prepared \
   --cases /tmp/phoenix-cases.json \
   --output /tmp/phoenix-session-01
@@ -629,7 +649,7 @@ explicit `hero_level` rather than the default `unit_add` path.
 ```sh
 python3 tools/wc3_ability_re.py ability-scenarios Apxf \
   --spec /path/to/phoenix-lab.json \
-  --output build/ability-re/Apxf-lab-01
+  --output build-re/ability-re/Apxf-lab-01
 python3 -m unittest discover -s tests -p 'test_wc3_re_scenarios.py'
 ```
 
@@ -676,9 +696,9 @@ records. The Frida plan's `--seconds` limit must cover the longest scenario
 
 ```sh
 python3 tools/wc3_ability_re.py ability-session-create \
-  --plan build/ability-re/Apxf-trace-plan-01 \
+  --plan build-re/ability-re/Apxf-trace-plan-01 \
   --probe-dir /tmp/wc3-probes/phoenix-prepared \
-  --cases build/ability-re/Apxf-lab-01/lab-session-cases.json \
+  --cases build-re/ability-re/Apxf-lab-01/lab-session-cases.json \
   --output /tmp/phoenix-session-01
 python3 tools/wc3_ability_re.py ability-session-check \
   --session /tmp/phoenix-session-01
@@ -744,8 +764,8 @@ Generate a static-only question queue without any Retail runs:
 
 ```sh
 python3 tools/wc3_ability_re.py ability-analyze \
-  --offline build/ability-re/Apxf-offline/offline \
-  --output build/ability-re/Apxf-static-followups
+  --offline build-re/ability-re/Apxf-offline/offline \
+  --output build-re/ability-re/Apxf-static-followups
 ```
 
 For a paired case/control investigation, keep each compared case **in the same
@@ -789,11 +809,11 @@ end life. The other supported metrics are `mana_change`, `speed_change`,
 
 ```sh
 python3 tools/wc3_ability_re.py ability-analyze \
-  --offline build/ability-re/Apxf-offline/offline \
-  --lab build/ability-re/Apxf-lab-01 \
+  --offline build-re/ability-re/Apxf-offline/offline \
+  --lab build-re/ability-re/Apxf-lab-01 \
   --session /tmp/phoenix-session-01 \
   --comparisons /path/to/phoenix-comparisons.json \
-  --output build/ability-re/Apxf-differential-01
+  --output build-re/ability-re/Apxf-differential-01
 ```
 
 Repeat `--session` for independent sessions if necessary. Each comparison
@@ -852,15 +872,15 @@ or MPQ/model tooling. Run it after reconstructing the ability, e.g.:
 
 ```sh
 python3 tools/wc3_ability_re.py ability-spec \
-  --reconstruction build/ability-re/Apxf-offline \
-  --output build/ability-re/Apxf-implementation-01
+  --reconstruction build-re/ability-re/Apxf-offline \
+  --output build-re/ability-re/Apxf-implementation-01
 
 # After collecting/reviewing independent evidence:
 python3 tools/wc3_ability_re.py ability-spec \
-  --reconstruction build/ability-re/Apxf-offline \
-  --analysis build/ability-re/Apxf-differential-01 \
+  --reconstruction build-re/ability-re/Apxf-offline \
+  --analysis build-re/ability-re/Apxf-differential-01 \
   --review /path/to/reviewed-Apxf-contract.json \
-  --output build/ability-re/Apxf-implementation-02
+  --output build-re/ability-re/Apxf-implementation-02
 ```
 
 A reconstruction root has `lookup.json`, `offline/{coverage,dependencies,
@@ -967,7 +987,7 @@ with Retail. There are two distinct milestones:
 ```sh
 python3 -m unittest discover -s tests -p 'test_wc3_re_*.py'
 python3 tools/wc3_ability_re.py ability-smoke \
-  --output build/ability-re/patch12-smoke-01
+  --output build-re/ability-re/patch12-smoke-01
 ```
 
 Use a **new** output directory on every smoke run. The two committed fixtures
@@ -994,11 +1014,11 @@ can regenerate the offline report without launching Retail. Run:
 
 ```sh
 python3 tools/wc3_ability_re.py ability-readiness \
-  --reconstruction build/ability-re/Apxf-offline \
+  --reconstruction build-re/ability-re/Apxf-offline \
   --check-tools \
   --executable 'data/Warcraft III/Warcraft III.exe' \
   --ghidra-headless /path/to/ghidra/support/analyzeHeadless \
-  --output build/ability-re/Apxf-readiness-01.json
+  --output build-re/ability-re/Apxf-readiness-01.json
 ```
 
 `ability-readiness` checks the offline package's lookup/graph/presentation
@@ -1009,10 +1029,10 @@ map/session provenance:
 
 ```sh
 python3 tools/wc3_ability_re.py ability-readiness \
-  --reconstruction build/ability-re/Apxf-offline \
-  --trace build/ability-re/Apxf-trace-plan-01 \
-  --analysis build/ability-re/Apxf-differential-01 \
-  --specification build/ability-re/Apxf-implementation-01
+  --reconstruction build-re/ability-re/Apxf-offline \
+  --trace build-re/ability-re/Apxf-trace-plan-01 \
+  --analysis build-re/ability-re/Apxf-differential-01 \
+  --specification build-re/ability-re/Apxf-implementation-01
 ```
 
 `--specification` must be generated from the same offline reconstruction and

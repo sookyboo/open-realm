@@ -1,4 +1,5 @@
 build/
+build-re/
 build-win*/
 build-win*.log
 data/
