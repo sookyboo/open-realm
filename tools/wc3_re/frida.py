@@ -45,6 +45,7 @@ def plan(graph: dict[str, Any], *, rawcode: str | None = None,
          max_hooks: int = 24, max_events: int = 1200, per_hook_events: int = 120,
          seconds: int = 60, stack_words: int = 0,
          include_rvas: list[str] | None = None,
+         include_return_addresses: dict[str, list[str]] | None = None,
          capture_id: str = "offline-plan") -> dict[str, Any]:
     """Choose safe function-entry hooks; indirect instruction sites are review-only."""
     if not isinstance(graph, dict) or graph.get("schema_version") != 1 or graph.get("status") != "static_candidate_graph":
@@ -142,6 +143,20 @@ def plan(graph: dict[str, Any], *, rawcode: str | None = None,
     missing_requested = sorted(set(requested) - {item["rva"] for item in hooks})
     if missing_requested:
         raise TraceError("explicit selections were truncated: " + ", ".join(missing_requested))
+    return_address_filters: dict[str, list[str]] = {}
+    for function_value, address_values in (include_return_addresses or {}).items():
+        function_rva = _rva(function_value, "--include-return-address function")
+        if function_rva not in {hook["rva"] for hook in hooks}:
+            raise TraceError(f"return-address filter function is not selected: {function_rva}")
+        if not isinstance(address_values, list) or not address_values:
+            raise TraceError(f"return-address filter for {function_rva} must not be empty")
+        addresses = [_rva(value, "--include-return-address") for value in address_values]
+        if len(set(addresses)) != len(addresses):
+            raise TraceError(f"duplicate return address for {function_rva}")
+        return_address_filters[function_rva] = sorted(addresses)
+    for hook in hooks:
+        if hook["rva"] in return_address_filters:
+            hook["return_addresses"] = return_address_filters[hook["rva"]]
     unresolved_sites = []
     for rva, node in sorted(by_rva.items()):
         for item in node["unresolved_calls"]:
@@ -180,7 +195,9 @@ def _agent_source(result: dict[str, Any]) -> str:
     template = (Path(__file__).parent / "frida_agent_template.js").read_text(encoding="utf-8")
     runtime = {"rawcode": result["rawcode"], "sha256": result["executable_sha256"],
                "capture_id": result["capture_id"], "limits": result["limits"],
-               "hooks": [{"rva": entry["rva"], "name": entry["name"]}
+               "hooks": [{"rva": entry["rva"], "name": entry["name"],
+                          **({"return_addresses": entry["return_addresses"]}
+                             if "return_addresses" in entry else {})}
                          for entry in result["selected_hooks"]]}
     # JSON.stringify safe; ASCII-only values escaped by json.dumps.
     js = json.dumps(runtime, sort_keys=True, ensure_ascii=True)
@@ -259,6 +276,8 @@ def summarize_trace(plan_dir: Path, trace_file: Path) -> dict[str, Any]:
     allowed = {hook["rva"] for hook in config["selected_hooks"]}
     totals: dict[str, dict[str, int]] = {r: {"enter": 0, "leave": 0} for r in sorted(allowed)}
     run_ids: dict[str, int] = {}
+    pending_calls: dict[tuple[str, int, int, str], dict[str, Any]] = {}
+    function_calls: dict[str, dict[str, list[dict[str, Any]]]] = {}
     observed: list[dict[str, Any]] = []
     unknown_records = 0
     invalid = []
@@ -309,8 +328,31 @@ def summarize_trace(plan_dir: Path, trace_file: Path) -> dict[str, Any]:
                     continue
                 totals[rva][kind] += 1
                 run_id = payload.get("run_id")
-                if isinstance(run_id, str):
-                    run_ids[run_id] = run_ids.get(run_id, 0) + 1
+                thread_id = payload.get("thread_id")
+                invocation_id = payload.get("invocation_id")
+                if (not isinstance(run_id, str) or isinstance(thread_id, bool) or
+                        not isinstance(thread_id, int) or isinstance(invocation_id, bool) or
+                        not isinstance(invocation_id, int)):
+                    invalid.append(line_no)
+                    continue
+                run_ids[run_id] = run_ids.get(run_id, 0) + 1
+                call_key = (run_id, thread_id, invocation_id, rva)
+                if kind == "enter":
+                    if call_key in pending_calls:
+                        invalid.append(line_no)
+                    else:
+                        pending_calls[call_key] = {"return_address_rva": payload.get("return_address_rva")}
+                else:
+                    pending = pending_calls.pop(call_key, None)
+                    value = payload.get("return_value_raw")
+                    if pending is None or not isinstance(value, str) or not re.fullmatch(r"0x[0-9a-fA-F]+", value):
+                        invalid.append(line_no)
+                    else:
+                        by_run = function_calls.setdefault(run_id, {})
+                        by_function = by_run.setdefault(rva, [])
+                        by_function.append({"thread_id": thread_id, "invocation_id": invocation_id,
+                                            "return_value_raw": value.lower(),
+                                            "return_address_rva": pending["return_address_rva"]})
             elif kind in ("start", "stop", "overflow", "install_error", "hook_limit"):
                 observed.append({"line": line_no, "kind": kind,
                                  "function_rva": payload.get("function_rva"),
@@ -326,7 +368,10 @@ def summarize_trace(plan_dir: Path, trace_file: Path) -> dict[str, Any]:
         raise TraceError("trace has duplicate controller metadata or end markers")
     valid_controller_envelope = len(meta) == 1 and len(ends) == 1
     start_seen = any(event["kind"] == "start" for event in observed)
-    truncated = any(event["kind"] in ("overflow", "hook_limit") for event in observed)
+    unpaired = [{"run_id": run_id, "thread_id": thread_id,
+                 "invocation_id": invocation_id, "function_rva": rva}
+                for run_id, thread_id, invocation_id, rva in sorted(pending_calls)]
+    truncated = any(event["kind"] in ("overflow", "hook_limit") for event in observed) or bool(unpaired)
     status = ("inconclusive_trace_setup" if failures or not valid_controller_envelope or not start_seen
               else "partial_native_trace" if truncated else "bounded_native_trace")
     return {"schema_version": 1, "rawcode": config["rawcode"],
@@ -337,6 +382,8 @@ def summarize_trace(plan_dir: Path, trace_file: Path) -> dict[str, Any]:
             "agent_start_observed": start_seen,
             "truncated": truncated, "errors": failures,
             "function_entry_counts": totals, "event_counts_by_run_id": run_ids,
+            "function_calls_by_run_id": function_calls,
+            "unpaired_function_calls": unpaired,
             "lifecycle_events": observed, "unclassified_controller_records": unknown_records,
             "not_verified": ["ability_receiver_identity", "calling_conventions",
                              "virtual_dispatch_binding", "gameplay_effects", "animation_timing"]}

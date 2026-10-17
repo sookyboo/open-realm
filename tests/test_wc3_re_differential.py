@@ -21,9 +21,9 @@ def put(path, obj):
     path.write_text(json.dumps(obj), encoding="utf-8")
 
 
-def probe_text(run_id, *, life=90, initial=100, speed=220, complete=True, extras=""):
+def probe_text(run_id, *, life=90, initial=100, speed=220, accepted=True, complete=True, extras=""):
     rows = [f"SESSION_START run_id={run_id}", "ability=Apxf mode=generated_lab",
-            "setup_failed=false", "accepted=true"]
+            "setup_failed=false", f"accepted={'true' if accepted else 'false'}"]
     for tick, health in ((0, initial), (1, life)):
         rows += [f"OBS role=caster tick={tick} time={tick * .25:.2f} life=100 mana=100 x=0 y=0 speed=300 order=0",
                  f"OBS role=target index=0 tick={tick} time={tick * .25:.2f} life={health} mana=10 x={tick * 10} y=0 speed={speed} owner=12"]
@@ -51,7 +51,8 @@ class DifferentialTest(TestCase):
         put(self.offline / "provenance.json", {"executable_sha256": SHA, "input_digests": {}})
         put(self.offline / "coverage.json", {"schema_version": 1, "rawcode": "Apxf", "metrics": {}})
         self.lab = self.root / "lab"
-        self.case = {"kind": "passive", "ticks": 1, "sample_interval_seconds": 0.25,
+        self.case = {"kind": "passive", "acceptance_semantics": "passive_setup",
+                     "ticks": 1, "sample_interval_seconds": 0.25,
                      "targets": [{"unit_id": "hfoo"}], "buff_ids": ["Bpxf"]}
         self.cases = {name: {**self.case, "run_id": name, "result_file": str(self.root / f"{name}.txt")}
                       for name in ("treated", "control")}
@@ -87,6 +88,29 @@ class DifferentialTest(TestCase):
         for fragment in ("setup_failed=true", "accepted=false", "buffer_overflow=true"):
             path.write_text(probe_text("treated", extras=fragment))
             self.assertEqual(diff._parse_result(path, "treated", self.case, "Apxf")["status"], "inconclusive")
+
+    def test_expected_rejection_is_sampled_but_mismatch_is_not(self):
+        path = self.root / "result.txt"
+        contract = {**self.case, "kind": "point", "acceptance_semantics": "issue_order_return",
+                    "expected_order_accepted": False,
+                    "unit_observation": {"unit_ids": ["osp1"], "x": 0, "y": 0,
+                                         "radius": 500, "max_units": 8}}
+        text = probe_text("treated", accepted=False)
+        for tick in (0, 1):
+            text = text.replace('call Preload("SESSION_DONE',
+                                f'call Preload("UNIT_COUNT rawcode=osp1 tick={tick} count=0")\ncall Preload("SESSION_DONE')
+        path.write_text(text)
+        parsed = diff._parse_result(path, "treated", contract, "Apxf")
+        self.assertEqual(parsed["status"], "sampled")
+        self.assertFalse(parsed["order_acceptance"]["observed"])
+        self.assertEqual(parsed["unit_counts"]["osp1"], {0: 0, 1: 0})
+        contract["expected_order_accepted"] = True
+        self.assertEqual(diff._parse_result(path, "treated", contract, "Apxf")["status"],
+                         "expectation_mismatch")
+        path.write_text(text.replace('UNIT_COUNT rawcode=osp1 tick=1 count=0',
+                                     'UNIT_COUNT rawcode=osp1 tick=1 count=1'))
+        contract["expected_order_accepted"] = False
+        self.assertEqual(diff._parse_result(path, "treated", contract, "Apxf")["status"], "inconclusive")
 
     def test_gapped_tick_and_duplicate_samples_are_inconclusive(self):
         path = self.root / "result.txt"
@@ -157,7 +181,10 @@ class DifferentialTest(TestCase):
             out.mkdir()
             put(out / "review.json", {"run_id": run_id, "status": status, "native_trace_status":
                  "partial_native_trace" if bad_native else "bounded_native_trace",
-                 "native_counts_by_run_id": {run_id: 1}, "jass_result_fresh": True})
+                 "native_counts_by_run_id": {run_id: 1},
+                 "native_function_calls_by_run_id": {RVA: [{"thread_id": 1,
+                     "invocation_id": 1, "return_address_rva": None, "return_value_raw": "0x0"}]},
+                 "jass_result_fresh": True})
             (out / "trace.jsonl").write_text("{}\n")
             (out / "result.txt").write_text(probe_text(run_id, life=90 if run_id == "treated" else 100))
         put(session / "run-summary.json", {"rawcode": "Apxf", "cases": statuses})
@@ -167,7 +194,9 @@ class DifferentialTest(TestCase):
         run_id = trace_path.parent.name
         return {"status": "bounded_native_trace", "rawcode": "Apxf", "executable_sha256": SHA,
                 "function_entry_counts": {RVA: {"enter": 1 if run_id == "treated" else 0, "leave": 0}},
-                "event_counts_by_run_id": {run_id: 1}}
+                "event_counts_by_run_id": {run_id: 1},
+                "function_calls_by_run_id": {run_id: {RVA: [{"thread_id": 1,
+                    "invocation_id": 1, "return_address_rva": None, "return_value_raw": "0x0"}]}}}
 
     def test_actual_pipeline_with_mocks_at_live_provenance_boundary(self):
         session, saved = self._fixture_session()

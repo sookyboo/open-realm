@@ -65,6 +65,29 @@ def _unit(value: Any, name: str) -> dict[str, Any]:
     return row
 
 
+def _unit_observation(value: Any, name: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ScenarioError(f"{name} must be an object")
+    unexpected = set(value) - {"unit_ids", "x", "y", "radius", "max_units", "cleanup_before_next"}
+    if unexpected:
+        raise ScenarioError(f"{name}: unsupported fields: " + ", ".join(sorted(unexpected)))
+    unit_ids = value.get("unit_ids")
+    if not isinstance(unit_ids, list) or not 1 <= len(unit_ids) <= 8:
+        raise ScenarioError(f"{name}.unit_ids must contain 1..8 unit rawcodes")
+    unit_ids = [_fourcc(item, f"{name}.unit_ids") for item in unit_ids]
+    if len(unit_ids) != len(set(unit_ids)):
+        raise ScenarioError(f"{name}.unit_ids must be unique")
+    cleanup = value.get("cleanup_before_next", False)
+    if not isinstance(cleanup, bool):
+        raise ScenarioError(f"{name}.cleanup_before_next must be a boolean")
+    return {"unit_ids": unit_ids,
+            "x": _number(value.get("x"), f"{name}.x", -32000, 32000),
+            "y": _number(value.get("y"), f"{name}.y", -32000, 32000),
+            "radius": _number(value.get("radius"), f"{name}.radius", 1, 5000),
+            "max_units": _integer(value.get("max_units", 16), f"{name}.max_units", 1, 32),
+            "cleanup_before_next": cleanup}
+
+
 def _map_config(value: Any) -> dict[str, str]:
     if not isinstance(value, dict):
         raise ScenarioError("map must be an object")
@@ -112,7 +135,8 @@ def validate(source: dict[str, Any]) -> dict[str, Any]:
             raise ScenarioError(f"{where} must be an object")
         allowed = {"run_id", "kind", "caster", "targets", "ability_level", "learn_mode", "hero_level",
                    "order", "expected_order_accepted", "point", "duration_seconds",
-                   "sample_interval_seconds", "buff_ids", "timeout_seconds"}
+                   "sample_interval_seconds", "buff_ids", "unit_observation",
+                   "required_function_rvas", "timeout_seconds"}
         if set(case) - allowed:
             raise ScenarioError(f"{where}: unsupported keys " + ", ".join(sorted(set(case) - allowed)))
         run_id = case.get("run_id")
@@ -170,17 +194,31 @@ def validate(source: dict[str, Any]) -> dict[str, Any]:
         buffs = [_fourcc(b, f"{where}.buff_ids") for b in buffs]
         if len(buffs) != len(set(buffs)):
             raise ScenarioError(f"{where}: duplicate buff identifiers")
-        # Record one snapshot per unit at t=0 and each timer step; headroom for setup.
-        if (ticks + 1) * (len(targets) + 1 + len(targets) * len(buffs)) + 16 > MAX_LOG_LINES:
+        unit_observation = (_unit_observation(case["unit_observation"], f"{where}.unit_observation")
+                            if "unit_observation" in case else None)
+        required_function_rvas = case.get("required_function_rvas", [])
+        if (not isinstance(required_function_rvas, list) or
+                any(not isinstance(rva, str) or not re.fullmatch(r"0x[0-9a-fA-F]{8}", rva)
+                    for rva in required_function_rvas) or
+                len(set(rva.lower() for rva in required_function_rvas)) != len(required_function_rvas)):
+            raise ScenarioError(f"{where}.required_function_rvas must be unique eight-digit RVAs")
+        observed_lines = (sum(1 + watch["max_units"] for watch in
+                              ([unit_observation] if unit_observation else [])) * (ticks + 1))
+        # Count one row for every sampled unit, buff, and watched-unit identity.
+        if ((ticks + 1) * (len(targets) + 1 + len(targets) * len(buffs)) +
+                observed_lines + 16 > MAX_LOG_LINES):
             raise ScenarioError(f"{where}: observation buffer limit exceeded")
         timeout = _integer(case.get("timeout_seconds", min(60, math.ceil(duration) + 15)),
                            f"{where}.timeout_seconds", 1, 360)
         normalized.append({"run_id": run_id, "kind": kind, "caster": caster, "targets": targets,
                            "ability_level": level, "learn_mode": learn_mode, "hero_level": hero_level,
                            "order": order, "expected_order_accepted": expected_order_accepted,
+                           "acceptance_semantics": "passive_setup" if kind == "passive" else "issue_order_return",
                            "point": point, "duration_seconds": duration,
                            "sample_interval_seconds": interval, "ticks": ticks,
-                           "buff_ids": buffs, "timeout_seconds": timeout,
+                           "buff_ids": buffs, "unit_observation": unit_observation,
+                           "required_function_rvas": required_function_rvas,
+                           "timeout_seconds": timeout,
                            "result_file": str(dest_path / (run_id + ".txt")),
                            "chat_command": "-re " + run_id})
     result = {"schema_version": 1, "rawcode": rawcode, "result_dir": str(dest_path),
@@ -214,10 +252,11 @@ def _render_fragments(plan: dict[str, Any]) -> tuple[str, str]:
         "    timer RE_Timer = null", "    trigger RE_SpellTrigger = null", "    unit RE_Caster = null", "    unit array RE_Target",
         "    integer RE_TargetCount = 0", "    integer RE_LogCount = 0", "    string array RE_Log",
         "    boolean RE_Busy = false", "    boolean RE_Overflow = false",
+        "    boolean RE_ObservationTruncated = false",
         "    integer RE_SampleIndex = 0", "    integer RE_MaxSamples = 0",
         "    real RE_Interval = 0.0", "    real RE_Elapsed = 0.0",
         "    boolean RE_SetupOk = false", "    boolean RE_OrderAccepted = false",
-        "    string RE_RunId = \"\"",
+        "    string RE_RunId = \"\"", "    group RE_UnitScan = null",
     ])
     lines = [
         "// Generated Warcraft III ability laboratory. Do not edit active timer callbacks with JHCR.",
@@ -232,6 +271,10 @@ def _render_fragments(plan: dict[str, Any]) -> tuple[str, str]:
         "",
         "function RE_Record takes nothing returns nothing",
         "    local integer i = 0",
+        "    local unit observed = null",
+        "    local integer observedCount = 0",
+        "    local integer observedScanned = 0",
+        "    local boolean observedTruncated = false",
         "    if RE_Caster != null then",
         '        call RE_LogLine("OBS role=caster tick=" + I2S(RE_SampleIndex) + " time=" + R2S(RE_Elapsed) + " life=" + R2S(GetUnitState(RE_Caster, UNIT_STATE_LIFE)) + " mana=" + R2S(GetUnitState(RE_Caster, UNIT_STATE_MANA)) + " x=" + R2S(GetUnitX(RE_Caster)) + " y=" + R2S(GetUnitY(RE_Caster)) + " speed=" + R2S(GetUnitMoveSpeed(RE_Caster)) + " order=" + I2S(GetUnitCurrentOrder(RE_Caster)))',
         "    endif",
@@ -251,7 +294,33 @@ def _render_fragments(plan: dict[str, Any]) -> tuple[str, str]:
             for buff in case["buff_ids"]:
                 lines += [f'        call RE_LogLine("BUFF target={target_index} rawcode={buff} tick=" + I2S(RE_SampleIndex) + " level=" + I2S(GetUnitAbilityLevel(RE_Target[{target_index}], \'{buff}\')))']
         lines += ["    endif"]
-    lines += ["endfunction", "",
+    has_unit_observations = any(case["unit_observation"] for case in plan["cases"])
+    for case in plan["cases"]:
+        watch = case["unit_observation"]
+        if not watch:
+            continue
+        lines += [f'    if RE_RunId == "{case["run_id"]}" then']
+        for rawcode in watch["unit_ids"]:
+            lines += ["        set observedCount = 0", "        set observedScanned = 0",
+                      "        set observedTruncated = false", "        call GroupClear(RE_UnitScan)",
+                      f'        call GroupEnumUnitsInRange(RE_UnitScan, {_real(watch["x"])}, {_real(watch["y"])}, {_real(watch["radius"])}, null)',
+                      "        loop", "            set observed = FirstOfGroup(RE_UnitScan)",
+                      "            exitwhen observed == null or observedScanned >= 256 or observedTruncated",
+                      "            call GroupRemoveUnit(RE_UnitScan, observed)", "            set observedScanned = observedScanned + 1",
+                      f"            if GetUnitTypeId(observed) == '{rawcode}' then",
+                      f"                if observedCount < {watch['max_units']} then",
+                      f'                    call RE_LogLine("UNIT rawcode={rawcode} tick=" + I2S(RE_SampleIndex) + " index=" + I2S(observedCount) + " owner=" + I2S(GetPlayerId(GetOwningPlayer(observed))) + " x=" + R2S(GetUnitX(observed)) + " y=" + R2S(GetUnitY(observed)))',
+                      "                    set observedCount = observedCount + 1", "                else",
+                      "                    set observedTruncated = true", "                endif", "            endif",
+                      "        endloop", "        set observed = FirstOfGroup(RE_UnitScan)",
+                      "        if observed != null then", "            set observedTruncated = true", "        endif",
+                      "        if observedTruncated then", "            set RE_ObservationTruncated = true",
+                      f'            call RE_LogLine("UNIT_SCAN_TRUNCATED rawcode={rawcode} tick=" + I2S(RE_SampleIndex))',
+                      "        endif", "        call GroupClear(RE_UnitScan)",
+                      f'        call RE_LogLine("UNIT_COUNT rawcode={rawcode} tick=" + I2S(RE_SampleIndex) + " count=" + I2S(observedCount))']
+        lines += ["    endif"]
+    lines += ["endfunction", ""]
+    lines += [
         "function RE_OnSpell takes nothing returns nothing",
         "    if not RE_Busy or GetTriggerUnit() != RE_Caster then",
         "        return",
@@ -268,6 +337,34 @@ def _render_fragments(plan: dict[str, Any]) -> tuple[str, str]:
         "endfunction", "",
         "function RE_Reset takes nothing returns nothing",
         "    local integer i = 0",
+        "    local unit observed = null",
+        "    local integer observedScanned = 0",
+        "    set RE_ObservationTruncated = false",
+    ]
+    if has_unit_observations:
+        for case_index, case in enumerate(plan["cases"]):
+            if case["unit_observation"] and case["unit_observation"]["cleanup_before_next"]:
+                watch = case["unit_observation"]
+                prefix = "if" if not any(c["unit_observation"] and c["unit_observation"]["cleanup_before_next"]
+                                          for c in plan["cases"][:case_index]) else "elseif"
+                lines += [f'    {prefix} RE_RunId == "{case["run_id"]}" then',
+                          "        call GroupClear(RE_UnitScan)",
+                          f'        call GroupEnumUnitsInRange(RE_UnitScan, {_real(watch["x"])}, {_real(watch["y"])}, {_real(watch["radius"])}, null)',
+                          "        loop", "            set observed = FirstOfGroup(RE_UnitScan)",
+                          "            exitwhen observed == null or observedScanned >= 256",
+                          "            call GroupRemoveUnit(RE_UnitScan, observed)", "            set observedScanned = observedScanned + 1"]
+                for rawcode in watch["unit_ids"]:
+                    lines += [f"            if GetUnitTypeId(observed) == '{rawcode}' then",
+                              f"                if GetOwningPlayer(observed) == Player({case['caster']['player']}) then",
+                              "                    call RemoveUnit(observed)", "                endif", "            endif"]
+                lines += ["        endloop", "        set observed = FirstOfGroup(RE_UnitScan)",
+                          "        if observed != null then",
+                          "            set RE_ObservationTruncated = true", "        endif",
+                          "        call GroupClear(RE_UnitScan)"]
+        if any(c["unit_observation"] and c["unit_observation"]["cleanup_before_next"]
+               for c in plan["cases"]):
+            lines += ["    endif"]
+    lines += [
         "    if RE_Timer != null then",
         "        call PauseTimer(RE_Timer)",
         "    endif",
@@ -316,6 +413,9 @@ def _render_fragments(plan: dict[str, Any]) -> tuple[str, str]:
         "    endif",
         "    if RE_Overflow then",
         '        call Preload("buffer_overflow=true")',
+        "    endif",
+        "    if RE_ObservationTruncated then",
+        '        call Preload("observation_truncated=true")',
         "    endif",
         "    loop",
         "        exitwhen i >= RE_LogCount",
@@ -387,8 +487,7 @@ def _render_fragments(plan: dict[str, Any]) -> tuple[str, str]:
             lines += [f'    set RE_OrderAccepted = IssuePointOrder(RE_Caster, "{case["order"]}", {_real(case["point"]["x"])}, {_real(case["point"]["y"])})']
         else:
             lines += [f'    set RE_OrderAccepted = IssueImmediateOrder(RE_Caster, "{case["order"]}")']
-        lines += ["    if not RE_OrderAccepted then",
-                  "        call RE_Finish()", "        return", "    endif",
+        lines += ["    // Rejected orders still get the same bounded post-order observation interval.",
                   "    call TimerStart(RE_Timer, RE_Interval, true, function RE_Tick)",
                   "endfunction", ""]
     lines += ["function RE_Chat takes nothing returns nothing",
@@ -401,7 +500,10 @@ def _render_fragments(plan: dict[str, Any]) -> tuple[str, str]:
     lines += ["    endif", "endfunction", "",
               "function RE_Init takes nothing returns nothing",
               "    local trigger t = null", "    if RE_Timer != null then", "        return", "    endif",
-              "    set RE_Timer = CreateTimer()", "    set t = CreateTrigger()",
+              "    set RE_Timer = CreateTimer()"]
+    if any(case["unit_observation"] for case in plan["cases"]):
+        lines += ["    set RE_UnitScan = CreateGroup()"]
+    lines += ["    set t = CreateTrigger()",
               f'    call TriggerRegisterPlayerChatEvent(t, Player({plan["chat_player"]}), "-re ", false)',
               "    call TriggerAddAction(t, function RE_Chat)",
               "    set t = null", "endfunction"]
@@ -418,7 +520,13 @@ def build(source: dict[str, Any]) -> dict[str, Any]:
             "run_id": row["run_id"], "result_file": row["result_file"],
             "timeout_seconds": row["timeout_seconds"],
             "required_markers": ["setup_failed=false", acceptance],
-            "inconclusive_markers": ["setup_failed=true", opposite, "buffer_overflow=true"],
+            "inconclusive_markers": ["setup_failed=true", opposite, "buffer_overflow=true",
+                                      "observation_truncated=true"],
+            "acceptance_semantics": row["acceptance_semantics"],
+            **({"expected_order_accepted": row["expected_order_accepted"]}
+               if row["acceptance_semantics"] == "issue_order_return" else {}),
+            **({"required_function_rvas": row["required_function_rvas"]}
+               if row["required_function_rvas"] else {}),
             "chat_command": row["chat_command"]})
     # Patch 8 rejects unknown case properties on write because it normalizes
     # its own manifests; chat_command goes into a separate operator guide.

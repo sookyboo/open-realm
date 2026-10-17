@@ -140,6 +140,34 @@ class SpecTests(unittest.TestCase):
         self.assertIn("No reviewed algorithm", (out / "implementation.md").read_text())
         self.assertGreater(len(report["open_questions"]), 0)
 
+    def test_runtime_capture_observations_are_rendered_and_preserved(self):
+        analysis_path = self.write_analysis()
+        obj = json.loads(analysis_path.read_text())
+        obj["capture_summaries"] = [{
+            "session_id": "session-001", "run_id": "ward-accepted",
+            "status": "usable_observation", "jass_sample_status": "sampled",
+            "trace_status": "bounded_native_trace",
+            "order_acceptance": {"expected": True, "observed": True,
+                                 "semantics": "Issue*Order return value"},
+            "jass_sha256": "a" * 64, "trace_sha256": "b" * 64,
+            "native_function_calls": {RVA: [{"return_address_rva": "0x0080d850",
+                                              "return_value_raw": "0x41"}]},
+            "unit_counts": {"osp1": {"0": 0, "1": 1}},
+            "unit_observations": {"osp1": {"1": [{"index": 0, "owner": 0,
+                                                      "x": -780.0, "y": -5884.0}]}},
+        }]
+        save(analysis_path, obj)
+        out = self.root / "runtime-spec"
+        report = spec.build(self.recon, analysis=analysis_path)
+        spec.write(report, out)
+        implementation = (out / "implementation.md").read_text()
+        self.assertIn("Archived runtime observations", implementation)
+        self.assertIn("Issue*Order return: expected `True`; observed `True`", implementation)
+        self.assertIn("`0x0080d820`: caller `0x0080d850` → `0x41`", implementation)
+        self.assertIn("tick 1, index 0: owner 0, position (-780.0, -5884.0)", implementation)
+        evidence = json.loads((out / "spec-evidence.json").read_text())
+        self.assertEqual(evidence["runtime_capture_summaries"][0]["run_id"], "ward-accepted")
+
     def test_lookup_changed_after_package_is_rejected(self):
         edited = json.loads((self.recon / "lookup.json").read_text())
         edited["editions"]["tft"]["ranks"][0]["area"] = 900.0
