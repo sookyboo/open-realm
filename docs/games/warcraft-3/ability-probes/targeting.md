@@ -124,6 +124,33 @@ the result to zero/one. The bit's direction and exact ally/enemy meaning are
 not established; keep the label neutral until checked against a controlled
 Retail/JASS result.
 
+### Forked Lightning relationship/mask gate and shared rejection validator
+
+The ANfl candidate callback (`0x00C78FC0`, RVA `0x00878FC0`) uses a separate
+gate before the shared spell-target validator. At callsite `0x00C78FDC`, it
+passes the caster owner as `ECX`, candidate pointer as stack argument 1, then
+raw arguments `0` and `4` to `0x0067FB80`. This helper resolves the caster's
+owner index through virtual `+0xEC`, calls `0x00475150` with that index,
+candidate and raw mode flags, then checks the candidate dwords at `+0x250` and
+`+0x254` against the caster-owner bit if the relation helper returned zero.
+It returns zero only when both paths fail. This establishes owner/relationship
+mask behavior without mapping the modes or masks to enemy, ally, or neutral
+JASS labels.
+
+Candidates passing that gate proceed to `0x00682180`. For ANfl, zero is the
+continue value; nonzero returns are rejection codes. Its built-in paths can
+return `0x36` or `0xBC` after checking virtual slots and unit/context fields,
+then it walks the registered validator list and stops on the first nonzero
+callback. The exact virtual meanings, live registry membership, and the
+gameplay categories represented by those codes remain unresolved. In the
+ANfl callback, rejected candidates and already-recorded pointer duplicates
+still return true to the spatial query; in normal accepted-order mode true
+means “continue enumeration,” not “candidate eligible.”
+
+The ANfl focused static exports are retained at
+`build-re/ability-re/ghidra/ANfl-target-selection-detail-02/` and
+`ANfl-target-selection-order-detail-03/`. No live category matrix was run.
+
 Two inspected callers use the same helper: `CAbilityAttack` vtable method
 `0x00B1A100` calls it at `0x00B1A157` while filtering a unit target, and
 `0x00C0D2F0` calls it at `0x00C0D2FD` before selecting a result-table entry.

@@ -108,6 +108,178 @@ immunity, life, hidden, or invulnerability semantics. Authored TFT
 `ANfl` target mask is air/ground/enemy/neutral/organic; that is configuration,
 not proof that every listed bit is tested by this callback.
 
+### Target-selection detail follow-up (exact-build static)
+
+Focused exports were added under
+`build-re/ability-re/ghidra/ANfl-target-selection-detail-02/` and
+`ANfl-target-selection-order-detail-03/`. They use the cached
+`WC3Retail1292-G21` Ghidra project with `-noanalysis`; no full executable
+analysis or Retail launch was performed for this static follow-up. The
+executable hash was rechecked against the pinned value. The exports cover the
+acquisition/candidate/comparator routines, query builder, shared predicates,
+rank-row readers, numeric helpers, and the generic sort helper.
+
+The callback's filtering contract is more specific than the earlier report,
+but it still does not provide a complete gameplay-category matrix:
+
+| Stage | Exact-build operation | Supported interpretation | Remaining uncertainty |
+|---|---|---|---|
+| Relationship/mask gate | `0x00878FC0` calls `0x0067FB80` with the caster as `ECX`, candidate as stack argument 1, then `0` and `4`. The helper obtains the caster owner index through virtual `+0xEC`, calls `0x00475150` with that index, the candidate and its raw mode arguments, then checks the candidate's dwords at `+0x250` and `+0x254` against the caster-owner bit when the shared relation call returns zero. | Candidate is retained past this gate when the shared owner/candidate relation path succeeds or one of those two candidate masks contains the owner bit. This is a verified owner/relationship mask gate. | The relation helper's raw modes and mask fields have not been mapped to enemy, ally, neutral, or other JASS target labels. The `4` argument is not named. |
+| Shared target validator | On passing the first gate, the callback calls candidate virtual `+0x350`, then `0x00682180`; zero is required to continue. `0x00682180` first runs `0x00682210` and `0x006822E0`, then scans its linked validator registry and returns the first nonzero result. | A zero result means no rejection code was returned by these paths. Nonzero is a rejection result for this ANfl callback, not an acceptance boolean. | The dynamic `+0x350` contract and live registry membership for each tested candidate are not resolved. |
+| Built-in rejection paths | `0x00682210` checks candidate virtual slots `+0xD8`, `+0x1F0`, `+0x1D8`, `+0x1F8`, `+0x1FC`, `+0x20C`, source field `+0x164` bit `0x100`, source values `+0x264/+0x268`, candidate context `+0x30`, and `MagicImmunesResistUltimates`; one conjunction returns `0x36`. `0x006822E0` checks slots `+0xDC`, `+0x1DC`, `+0x1F4`, `+0x1FC`, source `+0x164` bit `0x100`, and `+0x260`; one conjunction returns `0xBC`. | These checks and return codes are verified static behavior. | The virtual slot meanings and user-facing rejection reasons remain unmapped; neither code is labeled as a specific immunity, life, hidden, or unit-type rule. |
+| Deduplication | After both gates pass, the callback compares the candidate pointer for equality against every already-recorded candidate pointer. | Exact pointer duplicates from overlapping queries do not append a second record. | No identity aliasing beyond pointer equality was tested. |
+| Candidate continuation result | Rejected candidates and duplicates return true. In normal accepted-order mode, a newly appended candidate also returns true. The alternate mode returns whether the current count is still below its limit. | The callback result is query continuation control, not candidate eligibility. Normal mode therefore continues enumeration after each rejection, duplicate, or append. | Runtime return values are complete only for the three previously captured accepted casts. |
+
+This static trace does **not** prove the requested gameplay outcomes for enemy,
+ally, neutral, ground, air, organic, mechanical, structure, dead, hidden,
+invulnerable, magic-immune, caster-self, or explicit-primary candidates. The
+authored ANfl target configuration names air, ground, enemy, neutral and
+organic; those authored flags are not substituted for the native outcomes.
+There is no explicit `candidate == caster` or `candidate == primary` special
+case in `0x00878FC0`; both can only enter through the query builder and gates.
+
+### Metric, tie handling, and sorted prefix
+
+Candidate records contain a unit pointer and a floating-point metric.
+`0x00878FC0` obtains the candidate point through its virtual `+0xB8` method,
+converts the point pair with `0x007FCC50`, and calls `0x009A1110` against the
+position pair stored at candidate context `+0x0C`. The helper performs the
+two-coordinate difference, square, sum, and square-root operations. The
+metric is therefore the 2D Euclidean distance from the candidate to the
+explicit order target, not distance to the caster or to an individual query
+center. This establishes an ascending nearest-to-primary-target comparator
+for unequal finite metrics.
+
+Comparator `0x00878F60` subtracts the second record metric from the first and
+returns the corresponding ascending comparison. When the metrics compare
+equal, it subtracts the first candidate object's dword at `+0x0C` from the
+second candidate object's dword at `+0x0C`. That dword's semantic identity is
+unresolved. If both values are equal, the comparator returns zero.
+
+The generic sorter at RVA `0x006B2000` is not stable. For up to eight records
+it repeatedly selects a comparator maximum and swaps it with the end of the
+remaining range; for larger ranges it uses a partitioning quicksort path.
+Consequently, two candidates with equal metric and equal `+0x0C` values have
+no stable-order guarantee. Runtime tie behavior, NaN handling, and a unit
+pointer-to-JASS-handle map were not captured. The accepted path still sorts
+the complete deduplicated set before taking its first `min(count, DataB)`
+records. Spatial traversal order can affect only ties or the candidate set
+delivered by the repeated queries; it does not preempt the sort for unequal
+metrics.
+
+### Query geometry: recovered structure and limits
+
+`0x00878A50` reads the caster and explicit-target positions through their
+virtual `+0xB8` accessors. It computes target-minus-caster coordinate deltas,
+forms a normalized forward vector, and repeatedly builds query type `0xB`
+with a center advanced along that vector. The type-`0xB` parser in
+`0x0028EA00` consumes a radius and two center coordinates. The raw query tail
+passed by ANfl is `0x1D`, the ability-derived mask word, the caster pointer,
+`-1`, and `0x1F`; the meanings of these query flags have not been proven.
+
+The rank-row readers used by acquisition access raw row offsets `+0x18`,
+`+0x28`, and `+0x2C` through RVAs `0x0006E900`, `0x0006EED0`, and `0x0006EF80`
+respectively. Their native addresses and row offsets are verified; mapping
+them to named authored properties and fully simplifying the per-iteration
+radius expression remain open. The loop starts with zero progress, adds the
+previous iteration's advance, clamps progress at its computed endpoint, and
+executes the endpoint query before terminating. The decompiled endpoint is
+`max(A + D, C - (A + D))`, with `A=row+0x18`, `C=row+0x28`, and
+`D=row+0x2C`. This does not establish an inclusive candidate boundary because
+the shared spatial-query predicate has not been decoded to its final
+distance comparison.
+
+Coincident caster/target positions pass through the native reciprocal-length
+calculation; the exact zero-vector fallback and resulting query centers have
+not been verified. No boundary-placement run has been completed. Existing
+runtime captures do not contain valid native candidate coordinates: the old
+Frida script read floats at `CUnit+0x26C`, but static disassembly shows
+`+0x26C` is the point object returned by virtual `+0xB8`, not a pair of
+coordinate floats. Treat those old `candidate_x/candidate_y` JSON values as
+invalid. The JASS scenario positions and health changes remain valid as JASS
+observations, but they do not supply the missing native candidate identity,
+enumeration-order, or boundary measurements.
+
+The detailed implementation-level target-selection specification and exact
+unresolved experiment list are retained in
+`build-re/ability-re/ANfl-target-selection-semantics-02/specification.md`.
+
+#### Native point resolution and target identity follow-up
+
+The CUnit virtual `+0xB8` method at RVA `0x0066E0A0` returns the point object
+stored at CUnit `+0x26C`; it does not return inline X/Y floats. The exact-build
+point resolver at RVA `0x007FCC50` accepts that point object in `ECX` and a
+caller-owned output buffer, then writes coordinates. A bounded Frida follow-up
+resolved three pointers from the reversed five-target capture:
+
+| Native candidate | Resolved point | JASS correspondence | Status |
+|---|---|---|---|
+| `0x02497488` | `(-1040.013, -6055.627, 0)` | Scenario target 3 is a plausible match from tick-12 JASS position `(-1037.754, -6057.930)`; the coordinate samples are not simultaneous. | Correlated candidate; not identity proof |
+| `0x02496A50` | `(-851.316, -5976.288, 0)` | No reliable mapping | Unresolved |
+| `0x02496534` | `(-870.396, -6091.953, 0)` | No reliable mapping | Unresolved |
+| `0x02496018` | `(0, 0, 0)` | Resolver output was zero; likely an invalid/unresolved point handle, not a valid world position | Unresolved |
+| `0x02496F6C` | `(0, 0, 0)` | Resolver output was zero; likely an invalid/unresolved point handle, not a valid world position | Unresolved |
+
+Workers ran for `0x02496018`, `0x02497488`, and `0x02496F6C`; the native damage
+receiver target matched each worker pointer. The JASS case reported target
+indices 0, 3, and 4 losing life. This does not map all five native pointers to
+JASS handles, and the two zero resolver outputs preclude treating the mapping
+as complete. The old raw `candidate_x/y` trace fields remain invalid.
+
+The next useful capture should hook the candidate callback with a bounded
+call to the verified point resolver, record target point coordinates and
+candidate vtable at callback time, and record worker/receiver pointers in the
+same fresh run. The JASS harness should log `GetHandleId`, owner, type, and
+coordinates immediately before the order and at the effect sample. Place
+stationary targets in isolated pathing cells and reject scenarios whose actual
+coordinates differ from the planned positions. This enables direct comparison
+of the complete sorted prefix with the damaged JASS identities.
+
+No category eligibility matrix or controlled boundary/sorting matrix has yet
+been run. Existing accepted cases verify 12 query callback entries, five
+distinct pointers, three workers and three matching receiver calls, but do not
+predictably assign all five pointers to scenario targets. Thus the supported
+algorithm is complete-set pointer deduplication, ascending distance to the
+explicit order target, opaque `+0x0C` tie-break, followed by the DataB prefix;
+the exact eligibility outcomes, query boundary behavior, and deterministic
+target choices for controlled placements remain unresolved. Do not implement
+unverified target-category predicates from authored mask labels alone.
+
+### Current implementation-level algorithm and evidence boundary
+
+```text
+ownerPos = GetPoint(caster)
+primaryPos = GetPoint(explicitOrderTarget)
+direction = Normalize(primaryPos - ownerPos)  // zero-length behavior unresolved
+
+for each native forward query generated by 0x00878A50:
+    for candidate delivered by query type 0xB:
+        if owner/target relation and candidate masks fail: continue
+        if shared target validator returns a nonzero rejection code: continue
+        if candidate pointer is already recorded: continue
+        metric = EuclideanDistance2D(candidatePos, primaryPos)
+        append(candidate, metric)
+
+sort all appended records by:
+    metric ascending,
+    then candidate dword [+0x0C] ascending
+    // unstable when both keys compare equal
+
+for candidate in sorted[0 : min(count, DataB)]:
+    process through the verified per-target worker and damage path
+```
+
+Verified static: gate order, pointer deduplication, metric inputs and math,
+comparator key order, unstable generic sort behavior, full-set sort, and
+post-sort DataB bound. Verified runtime from earlier captures: five distinct
+candidate pointers per cast, 12 callback invocations across overlapping
+queries, three workers and damage receivers for DataB=3, and the rank-one /
+rank-two raw damage values. Unresolved: specific unit-state/category outcomes,
+spatial enumeration algorithm, exact named geometry fields and radius
+expression, boundary inclusion, candidate pointer to JASS handle identity,
+equal-key target determinism, and category/type damage semantics. No new live
+target-selection case was run in this follow-up.
+
 ### Rank-two and five-target runtime follow-up
 
 Fresh evidence is under `build-re/ability-re/ANfl-targeting-rank2-01/`.
