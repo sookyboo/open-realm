@@ -128,14 +128,10 @@ Retail/JASS result.
 
 The ANfl candidate callback (`0x00C78FC0`, RVA `0x00878FC0`) uses a separate
 gate before the shared spell-target validator. At callsite `0x00C78FDC`, it
-passes the caster owner as `ECX`, candidate pointer as stack argument 1, then
-raw arguments `0` and `4` to `0x0067FB80`. This helper resolves the caster's
-owner index through virtual `+0xEC`, calls `0x00475150` with that index,
-candidate and raw mode flags, then checks the candidate dwords at `+0x250` and
-`+0x254` against the caster-owner bit if the relation helper returned zero.
-It returns zero only when both paths fail. This establishes owner/relationship
-mask behavior without mapping the modes or masks to enemy, ally, or neutral
-JASS labels.
+passes the caster in `ECX`, candidate pointer as stack argument 1, then raw
+arguments `0` and `4` to `0x0067FB80`. The exact downstream stack arguments
+are detailed below; the earlier shorthand description of `0x00475150`'s
+arguments is superseded by the instruction-level follow-up.
 
 Candidates passing that gate proceed to `0x00682180`. For ANfl, zero is the
 continue value; nonzero returns are rejection codes. Its built-in paths can
@@ -147,9 +143,38 @@ ANfl callback, rejected candidates and already-recorded pointer duplicates
 still return true to the spatial query; in normal accepted-order mode true
 means “continue enumeration,” not “candidate eligible.”
 
-The ANfl focused static exports are retained at
-`build-re/ability-re/ghidra/ANfl-target-selection-detail-02/` and
-`ANfl-target-selection-order-detail-03/`. No live category matrix was run.
+The exact x86 call sequence is now recorded in
+`build-re/ability-re/ANfl-followup-01-relation-disasm.txt`. The helper call
+uses the shared player context, caster owner index, candidate pointer, a mode
+bit derived from player 13's record flag `+0x04 & 0x200`, and trailing values
+`4,0`. It consults a candidate-owner relation bit when candidate flag
+`+0x164 & 0x01000000` requires that check, can run a point-based relation
+predicate, and falls back to candidate masks at `+0x250/+0x254` using the
+caster-owner bit. This resolves the numeric data flow, but not the JASS
+enemy/ally/neutral meanings of those branches or raw mode `4`. No controlled
+category matrix was run at the time of the static review. A subsequent
+filtered case (`ANfl-target-selection-followup-01-gate-case-b-retry`) directly
+observed all five living Player 12 `hfoo` candidates return 1 from
+`0x0067FB80` and 0 from `0x00682180`. The cast's predicted workers and damage
+receivers matched scenario indices `[0,3,2]`; this is a baseline-category
+observation, not an enemy/allied/neutral matrix. See
+`build-re/ability-re/ANfl-target-selection-followup-01/results/gate-case-b-comparison.json`.
+
+The acquisition's static loop clamps progress to `max(A + D, C - (A + D))`
+and executes the endpoint query. Type `0xB` consumes radius and center X/Y.
+The relevant rank accessors are verified, but the `A/C/D` authored-field
+mapping, full radius/spacing expression, and downstream boundary comparison
+remain unresolved. No geometry boundary case was run.
+
+The receiver `0x002677C0` reads ANfl payload type `+0x14 = 0x400` and selector
+`+0x20 = 0` under the runtime `MagicImmunesResistDamage` branch. It has a
+zero-damage fast path for target state bit `+0x164 & 0x100`, checks payload
+flags `+0x0C & 0x04`, then applies attached callbacks and amount adjustment
+before virtual `+0x128`. These raw conditions are not yet named as specific
+gameplay damage types, immunities, or defense categories, and no defensive
+state comparison was run. The complete partial matrix and implementation
+specification are in
+[`ANfl-target-selection-followup-01/specification.md`](../../../../build-re/ability-re/ANfl-target-selection-followup-01/specification.md).
 
 #### ANfl comparator sign and point conversion ABI
 

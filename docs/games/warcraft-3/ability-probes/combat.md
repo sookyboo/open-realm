@@ -501,6 +501,16 @@ Payload amount `+0x10` was float 85. The receiver entry, helper callsite and
 payload data are documented in the ANfl report; payload type/selector
 semantics and rank-data accessor provenance remain unresolved.
 
+The receiver's static ANfl-relevant branches are now summarized in
+[`forked-lightning-retail.md`](../forked-lightning-retail.md#shared-damage-receiver-behavior-relevant-to-anfl).
+For the observed payload (`flags +0x0C = 1`, amount `+0x10`, type/category
+`+0x14 = 0x400`, selector `+0x20 = 0`), `0x006677C0` can suppress damage on a
+target raw-state bit `+0x164 & 0x100`, honors payload flag bit `0x04`, consults
+`MagicImmunesResistDamage`, runs attached callbacks, adjusts the amount, and
+commits via target virtual `+0x128`. These raw values and branch predicates
+remain distinct from named JASS damage types or confirmed immunity semantics;
+no controlled ANfl mitigation-state comparison has been run.
+
 ### Reproduce
 
 From the repository root, verify the executable hash, then run:

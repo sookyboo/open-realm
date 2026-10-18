@@ -124,11 +124,27 @@ but it still does not provide a complete gameplay-category matrix:
 
 | Stage | Exact-build operation | Supported interpretation | Remaining uncertainty |
 |---|---|---|---|
-| Relationship/mask gate | `0x00878FC0` calls `0x0067FB80` with the caster as `ECX`, candidate as stack argument 1, then `0` and `4`. The helper obtains the caster owner index through virtual `+0xEC`, calls `0x00475150` with that index, the candidate and its raw mode arguments, then checks the candidate's dwords at `+0x250` and `+0x254` against the caster-owner bit when the shared relation call returns zero. | Candidate is retained past this gate when the shared owner/candidate relation path succeeds or one of those two candidate masks contains the owner bit. This is a verified owner/relationship mask gate. | The relation helper's raw modes and mask fields have not been mapped to enemy, ally, neutral, or other JASS target labels. The `4` argument is not named. |
+| Relationship/mask gate | `0x00878FC0` calls `0x0067FB80` with caster in `ECX`, candidate stack argument 1, then `0` and `4`. The helper resolves caster owner through virtual `+0xEC`, derives a low mode bit from player 13's record flag, and calls `0x00475150` with shared player context, owner index, candidate, derived mode, and trailing `4,0`. It may run candidate-owner and point-based relation checks; on helper failure, it tests candidate `+0x250/+0x254` against the owner bit. | The branch and bit flow are verified, including fallback through either candidate mask. | The flags/masks, raw `4` mode, and branch-to-enemy/ally/neutral mapping are not established by controlled category tests. |
 | Shared target validator | On passing the first gate, the callback calls candidate virtual `+0x350`, then `0x00682180`; zero is required to continue. `0x00682180` first runs `0x00682210` and `0x006822E0`, then scans its linked validator registry and returns the first nonzero result. | A zero result means no rejection code was returned by these paths. Nonzero is a rejection result for this ANfl callback, not an acceptance boolean. | The dynamic `+0x350` contract and live registry membership for each tested candidate are not resolved. |
 | Built-in rejection paths | `0x00682210` checks candidate virtual slots `+0xD8`, `+0x1F0`, `+0x1D8`, `+0x1F8`, `+0x1FC`, `+0x20C`, source field `+0x164` bit `0x100`, source values `+0x264/+0x268`, candidate context `+0x30`, and `MagicImmunesResistUltimates`; one conjunction returns `0x36`. `0x006822E0` checks slots `+0xDC`, `+0x1DC`, `+0x1F4`, `+0x1FC`, source `+0x164` bit `0x100`, and `+0x260`; one conjunction returns `0xBC`. | These checks and return codes are verified static behavior. | The virtual slot meanings and user-facing rejection reasons remain unmapped; neither code is labeled as a specific immunity, life, hidden, or unit-type rule. |
 | Deduplication | After both gates pass, the callback compares the candidate pointer for equality against every already-recorded candidate pointer. | Exact pointer duplicates from overlapping queries do not append a second record. | No identity aliasing beyond pointer equality was tested. |
-| Candidate continuation result | Rejected candidates and duplicates return true. In normal accepted-order mode, a newly appended candidate also returns true. The alternate mode returns whether the current count is still below its limit. | The callback result is query continuation control, not candidate eligibility. Normal mode therefore continues enumeration after each rejection, duplicate, or append. | Runtime return values are complete only for the three previously captured accepted casts. |
+| Candidate continuation result | Rejected candidates and duplicates return true. In normal accepted-order mode, a newly appended candidate also returns true. The alternate mode returns whether the current count is still below its limit. | The callback result is query continuation control, not candidate eligibility. Normal mode therefore continues enumeration after each rejection, duplicate, or append. | Gate return values were directly captured for five candidates in the follow-up case only; category meanings remain unresolved. |
+
+The exact-build call sequence further constrains the relationship gate without
+giving its modes gameplay names. `0x0067FB80` is called with the caster in
+`ECX`, candidate as its first stack argument, and raw trailing values `0`
+and `4`. It resolves the caster owner through virtual `+0xEC`, derives a low
+mode bit from player index 13's record flag `+0x04 & 0x200`, and calls
+`0x00475150` with the shared player context, caster owner index, candidate,
+that derived mode, and trailing values `4, 0`. The helper consults the
+candidate owner's bit in a player relation mask when candidate flag
+`+0x164 & 0x01000000` requires it; it can also run a point-based relation
+predicate at the candidate's resolved point. If the shared helper returns
+false, `0x0067FB80` accepts the candidate only when the caster-owner bit is
+present in either candidate dword `+0x250` or `+0x254`. These branches and bit
+operations are verified. The flag meanings, point predicate's raw `4` mode,
+and which branches correspond to enemy/allied/neutral JASS targets have not
+been verified by a controlled category case.
 
 This static trace does **not** prove the requested gameplay outcomes for enemy,
 ally, neutral, ground, air, organic, mechanical, structure, dead, hidden,
@@ -210,6 +226,65 @@ The detailed implementation-level target-selection specification and exact
 unresolved experiment list are retained in
 `build-re/ability-re/ANfl-target-selection-semantics-02/specification.md`.
 
+The acquisition's authored-rank inputs are read through row accessors at
+`0x0046E900`, `0x0046EED0`, `0x0046EF80`, and `0x0046EE20`; the last is the
+DataB worker bound. The acquisition computes a terminal progress value from
+three of the first accessors and uses `max(A + D, C - (A + D))` in the current
+decompilation, then clamps each next progress step to that endpoint and still
+issues the endpoint query. It forms the query center from the normalized
+caster-to-primary direction and that progress. The type-`0xB` query builder
+stores a radius and center X/Y and dispatches a spatial query. The exact
+authored names for the three geometry operands, the radius expression's
+simplified formula, and the shared query's final boundary comparison remain
+unresolved; do not substitute authored `Area`, DataC, or DataD labels until
+the accessor-to-row-field mapping is verified.
+
+### Shared damage receiver behavior relevant to ANfl
+
+Static receiver `0x006677C0` confirms that ANfl's observed payload values
+enter the general CUnit damage path, but numeric `+0x14 = 0x400` is not yet
+mapped to a named JASS damage or attack type. With payload `+0x0C = 1`, the
+receiver's early `flags & 0x04` suppression branch is not taken, and the
+ordinary damage branch can proceed. The receiver can still return zero damage
+before life adjustment due to target state, shared attached callbacks,
+damage-type/immunity checks, or later damage adjustment.
+
+The receiver reads payload `+0x20` and `+0x14` while consulting runtime
+configuration `MagicImmunesResistDamage`. When that configuration is false,
+its built-in classification treats raw type values `0x10`, `0x20`,
+`0x04000000`, and `0x00400000` specially; ANfl's observed `0x400` is not one
+of those four values, so it enters the other branch. That branch tests target
+virtual slot `+0x11C` and target dword `+0x264`; their semantics are not named
+here without a verified vtable/data mapping. When the configuration is true,
+the receiver calls helpers `0x006B6DB0`, `0x006B6DE0`, `0x006B6E00`, and
+`0x006B6E50` with payload selector/type values before choosing those state
+checks. A separate branch can also inspect target dword `+0x260`.
+
+After those gates, the receiver performs attached-object callbacks, invokes
+damage adjustment helpers, and calls target virtual `+0x128` with the negative
+computed amount; it reports the resulting life delta through the output
+pointer. Thus raw payload 85 is verified for the controlled baseline, while
+damage after mitigation depends on receiver state and configuration. No
+controlled ANfl case has varied armor/defense type, spell reduction, magic
+immunity, ethereal state, invulnerability, or absorption. The exact meaning
+of flags `+0x0C = 1`, type `+0x14 = 0x400`, and selector `+0x20 = 0` remains
+unresolved.
+
+### Eligibility outcomes currently established
+
+The two five-target selection cases establish callback delivery for five
+identical, living Player 12 `hfoo` targets, and directly establish that the
+three worker recipients reached the damage path. A separate filtered capture
+reused the case-21 layout and observed the relation gate return 1 and validator
+return 0 for all five unique targets, including the two outside the selected
+prefix. No controlled category/state case has yet separated query delivery,
+relationship gating, shared validation, selection, and damage for
+enemy/allied/neutral, flying, mechanical, structure, dead, hidden,
+invulnerable, or magic-immune units.
+Authored target-mask labels remain data evidence, not a substitute for these
+runtime outcomes. The detailed partial matrix and static conditions are in
+`build-re/ability-re/ANfl-target-selection-followup-01/specification.md`.
+
 #### Native point resolution and target identity follow-up
 
 The CUnit virtual `+0xB8` method at VA `0x0066E0A0` returns the point-handle
@@ -277,7 +352,8 @@ samples provide a one-case identity correlation, with the limits above. Cases
 with five native/JASS-correlated targets.
 
 No category eligibility matrix or controlled boundary/sorting matrix has yet
-been run. The historical four-candidate case verifies only four of its five
+been run. A later filtered gate case is summarized below; it does not change
+the unresolved category matrix. The historical four-candidate case verifies only four of its five
 expected scenario targets and does not predict all five identities. Cases 19
 and 21 below verify exact target choices for two controlled placements, while
 the exact eligibility outcomes, query boundary behavior, and equal-key target
@@ -828,3 +904,22 @@ traces, predictions, placement/cast PreloadGen captures, and machine-readable
 comparisons are retained in
 `build-re/ability-re/ANfl-controlled-target-selection-19/` and
 `ANfl-controlled-target-selection-21/`.
+
+### Follow-up gate observation
+
+A fresh accepted case reused the case-21 layout and saved a separate prediction
+before casting. All five unique callback pointers had resolved coordinates;
+each relationship gate returned 1 and each shared-validator call returned 0.
+The three workers and receiver pointers correlated to predicted indices
+`[0,3,2]`; each native payload carried 85 and JASS recorded matching life
+changes. Thirteen callback deliveries deduplicated to five pointers. The two
+non-selected candidates also passed both observed gates, so their exclusion in
+this case is consistent with the post-sort DataB prefix. Identity remains
+coordinate/owner/type correlated, without a native-handle registry proof.
+
+The immutable prediction, placement/cast JASS outputs, filtered trace, map
+hash, and machine comparison are retained under
+`build-re/ability-re/ANfl-target-selection-followup-01/`. The result extends
+gate evidence only to this living Player 12 `hfoo` setup; it does not identify
+the gameplay meanings of the relation flags or rejection codes, or establish
+eligibility for other categories.
