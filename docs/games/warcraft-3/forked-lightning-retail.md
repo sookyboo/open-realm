@@ -150,11 +150,16 @@ explicit order target, not distance to the caster or to an individual query
 center. This establishes an ascending nearest-to-primary-target comparator
 for unequal finite metrics.
 
-Comparator `0x00878F60` subtracts the second record metric from the first and
-returns the corresponding ascending comparison. When the metrics compare
-equal, it subtracts the first candidate object's dword at `+0x0C` from the
-second candidate object's dword at `+0x0C`. That dword's semantic identity is
-unresolved. If both values are equal, the comparator returns zero.
+Comparator `0x00878F60` calls `0x009A00B0` to calculate `metricA - metricB`,
+then returns `+1` for a nonnegative nonzero difference and `-1` for a negative
+difference. The small-array path in sorter `0x00AB2000` chooses the comparator
+maximum and moves it to the end of the range; for five candidates this
+produces ascending primary metric order. When metrics compare equal, the
+comparator returns signed 32-bit subtraction `keyB - keyA`, where each key is
+the candidate object's dword at `+0x0C`. The selection-sort path therefore
+places larger signed key values earlier, subject to 32-bit subtraction
+behavior. That dword's semantic identity is unresolved. Equal values compare
+as zero and have no stable-order guarantee.
 
 The generic sorter at RVA `0x006B2000` is not stable. For up to eight records
 it repeatedly selects a comparator maximum and swaps it with the end of the
@@ -206,19 +211,30 @@ unresolved experiment list are retained in
 
 #### Native point resolution and target identity follow-up
 
-The CUnit virtual `+0xB8` method at RVA `0x0066E0A0` returns the point object
-stored at CUnit `+0x26C`; it does not return inline X/Y floats. The exact-build
-point resolver at RVA `0x007FCC50` accepts that point object in `ECX` and a
-caller-owned output buffer, then writes coordinates. A bounded Frida follow-up
-resolved three pointers from the reversed five-target capture:
+The CUnit virtual `+0xB8` method at VA `0x0066E0A0` returns the point-handle
+object stored at CUnit `+0x26C`; it does not return inline X/Y floats. The
+observed point-handle vtable is `0x00E9D088`, with its registry pair at
+`+0x08/+0x0C`. Focused Ghidra export `ANfl-point-resolver-abi-04/` and callsite
+assembly verify that VA `0x007FCC50` (RVA `0x003FCC50`) is `thiscall`: `ECX`
+is the point-handle object, stack argument 1 is a caller-owned three-float
+output buffer, and the function returns with `ret 4`. It initializes the
+output and calls VA `0x007FE810`, which resolves the handle pair through
+`0x004707F0` and writes transformed X/Y/Z. Candidate callback VA `0x00C7907F`
+uses this ordinary conversion path, then reads the first two output floats for
+the distance calculation.
+
+A bounded Frida NativeFunction probe in the prior same-process follow-up used
+that point-handle/output-buffer ABI and reported three nonzero coordinate
+outputs. These are historical same-process observations, not a controlled
+five-unit identity match:
 
 | Native candidate | Resolved point | JASS correspondence | Status |
 |---|---|---|---|
 | `0x02497488` | `(-1040.013, -6055.627, 0)` | Scenario target 3 is a plausible match from tick-12 JASS position `(-1037.754, -6057.930)`; the coordinate samples are not simultaneous. | Correlated candidate; not identity proof |
 | `0x02496A50` | `(-851.316, -5976.288, 0)` | No reliable mapping | Unresolved |
 | `0x02496534` | `(-870.396, -6091.953, 0)` | No reliable mapping | Unresolved |
-| `0x02496018` | `(0, 0, 0)` | Resolver output was zero; likely an invalid/unresolved point handle, not a valid world position | Unresolved |
-| `0x02496F6C` | `(0, 0, 0)` | Resolver output was zero; likely an invalid/unresolved point handle, not a valid world position | Unresolved |
+| `0x02496018` | `(0, 0, 0)` | Consistent with failed handle resolution after output initialization; no match asserted | Unresolved |
+| `0x02496F6C` | `(0, 0, 0)` | Consistent with failed handle resolution after output initialization; no match asserted | Unresolved |
 
 Workers ran for `0x02496018`, `0x02497488`, and `0x02496F6C`; the native damage
 receiver target matched each worker pointer. The JASS case reported target
@@ -226,21 +242,46 @@ indices 0, 3, and 4 losing life. This does not map all five native pointers to
 JASS handles, and the two zero resolver outputs preclude treating the mapping
 as complete. The old raw `candidate_x/y` trace fields remain invalid.
 
-The next useful capture should hook the candidate callback with a bounded
-call to the verified point resolver, record target point coordinates and
-candidate vtable at callback time, and record worker/receiver pointers in the
-same fresh run. The JASS harness should log `GetHandleId`, owner, type, and
-coordinates immediately before the order and at the effect sample. Place
-stationary targets in isolated pathing cells and reject scenarios whose actual
-coordinates differ from the planned positions. This enables direct comparison
-of the complete sorted prefix with the damaged JASS identities.
+The fresh filtered observer is preserved under
+`build-re/ability-re/ANfl-deterministic-selection-03/`. After two failed chat
+activation attempts, a retry activated `anfl-r1-five-a`; retain both traces.
+The successful trace hooks the existing resolver callsite and records the
+point object, handle-table resolution result, resolved XYZ, candidate pointer,
+and callback invocation. Four unique candidates resolved successfully. This
+confirms the corrected instrumentation path against live candidate objects;
+the older `candidate_x/y` fields and earlier zero resolver outputs remain
+invalid as world-position evidence.
+
+The successful case is summarized in
+`case-01-analysis.json`, with raw Frida and JASS captures adjacent to it. JASS
+records five scenario handles and their positions; callback-time native
+coordinates correlate to indices 0, 3, 1 and 4. The first three worker and
+damage receiver pointers were indices 0, 3 and 1. Their native distances to
+the explicit target were 0.000, 154.727 and 175.163; the fourth observed
+candidate (index 4) was 229.871 and received no worker. Index 2 did not occur
+in the candidate callback trace. The four observed distances retrospectively
+match ascending worker order and the JASS life changes. This is not a complete
+five-candidate result: the missing index 2 could reflect query coverage, and
+the targets were moving during the case. Index 4 is a coordinate-proximity
+match, not a handle-registry proof. Do not treat this as the requested
+stationary, pre-predicted selection experiment.
+
+Runtime counts for this case are 11 callback deliveries, four unique native
+candidate pointers, four successful coordinate resolutions, three workers,
+and three matching `0x002677C0` receiver calls. Callback return value `1`
+means continue spatial enumeration; it is not an acceptance result. The
+callback-time position plus worker/receiver identity and JASS handle/life
+samples provide a one-case identity correlation, with the limits above. The
+next capture still needs five stationary targets with validated actual
+positions before the cast and a written metric/sorted-prefix prediction made
+before inspecting worker and damage results.
 
 No category eligibility matrix or controlled boundary/sorting matrix has yet
-been run. Existing accepted cases verify 12 query callback entries, five
-distinct pointers, three workers and three matching receiver calls, but do not
-predictably assign all five pointers to scenario targets. Thus the supported
-algorithm is complete-set pointer deduplication, ascending distance to the
-explicit order target, opaque `+0x0C` tie-break, followed by the DataB prefix;
+been run. The fresh case verifies only four of its five expected scenario
+targets as candidates and therefore does not predict all five identities.
+Thus the supported algorithm is complete-set pointer deduplication, ascending
+distance to the explicit order target, then descending signed `+0x0C` key in
+the five-item selection-sort path, followed by the DataB prefix;
 the exact eligibility outcomes, query boundary behavior, and deterministic
 target choices for controlled placements remain unresolved. Do not implement
 unverified target-category predicates from authored mask labels alone.
@@ -260,10 +301,10 @@ for each native forward query generated by 0x00878A50:
         metric = EuclideanDistance2D(candidatePos, primaryPos)
         append(candidate, metric)
 
-sort all appended records by:
-    metric ascending,
-    then candidate dword [+0x0C] ascending
-    // unstable when both keys compare equal
+sort all appended records using comparator/sorter composition:
+    primary metric ascending
+    then signed candidate dword [+0x0C] descending for <=8 candidates
+    // sorter is unstable when both keys compare equal
 
 for candidate in sorted[0 : min(count, DataB)]:
     process through the verified per-target worker and damage path
@@ -274,11 +315,15 @@ comparator key order, unstable generic sort behavior, full-set sort, and
 post-sort DataB bound. Verified runtime from earlier captures: five distinct
 candidate pointers per cast, 12 callback invocations across overlapping
 queries, three workers and damage receivers for DataB=3, and the rank-one /
-rank-two raw damage values. Unresolved: specific unit-state/category outcomes,
-spatial enumeration algorithm, exact named geometry fields and radius
-expression, boundary inclusion, candidate pointer to JASS handle identity,
-equal-key target determinism, and category/type damage semantics. No new live
-target-selection case was run in this follow-up.
+rank-two raw damage values. The fresh coordinate case adds four successfully
+resolved candidates, an observed ascending-distance worker prefix, and a
+partial native-to-JASS correlation; see `case-01-analysis.json`. Unresolved:
+specific unit-state/category outcomes, spatial enumeration algorithm, exact
+named geometry fields and radius expression, boundary inclusion, complete
+candidate pointer to JASS handle identity, equal-key target determinism, and
+category/type damage semantics. This fresh case remains incomplete because
+only four candidates were observed and the targets moved during the cast; it
+does not establish a deterministic five-candidate selection prediction.
 
 ### Rank-two and five-target runtime follow-up
 

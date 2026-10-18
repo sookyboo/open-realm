@@ -151,6 +151,45 @@ The ANfl focused static exports are retained at
 `build-re/ability-re/ghidra/ANfl-target-selection-detail-02/` and
 `ANfl-target-selection-order-detail-03/`. No live category matrix was run.
 
+#### ANfl comparator sign and point conversion ABI
+
+For five-target runs, sorter `0x00AB2000` takes its selection-sort path. It
+selects the comparator maximum and places it at the end of the remaining
+range. ANfl comparator `0x00878F60` returns the sign of `metricA - metricB`,
+so the resulting primary order is ascending distance. When distances compare
+equal, it returns the signed 32-bit subtraction `keyB - keyA` using candidate
+object dword `+0x0C`; the five-entry result therefore orders larger signed key
+values first. The field meaning is unresolved, and fully equal keys have no
+stable-order guarantee. Static export `ANfl-comparator-helper-07/` verifies
+the float subtraction helper `0x009A00B0`; `ANfl-target-selection-order-detail-03/`
+contains the sorter.
+
+The correct candidate coordinate path is also statically verified. CUnit
+virtual `+0xB8` returns its point-handle object (`CUnit+0x26C`); observed point
+vtable is `0x00E9D088`. The existing callback call at VA `0x00C7907F` enters
+VA `0x007FCC50` (RVA `0x003FCC50`) as `thiscall`, with `ECX` equal to the
+point-handle object and stack argument 1 equal to a caller-owned three-float
+output buffer. The callee returns `ret 4`, resolves the pair at point-object
+`+0x08/+0x0C` through `0x004707F0`, and writes transformed X/Y/Z via
+`0x007FE810`. A filtered read-only observer is retained at
+`build-re/ability-re/ANfl-deterministic-selection-03/`; it armed successfully,
+and a retry produced an accepted rank-one cast. Its coordinate/identity
+analysis is `case-01-analysis.json`. Four unique native candidates resolved to
+four valid coordinate triples; JASS tick-3 coordinates correlate them with
+scenario indices 0, 3, 1 and 4. The first three sorted distances to the
+explicit target were 0.000, 154.727 and 175.163 and matched worker/receiver
+order (indices 0, 3, 1); the fourth observed candidate at 229.871 was not
+processed. Eleven callback deliveries included duplicates. The fifth JASS
+unit, index 2, did not appear in callbacks, and the targets moved during the
+case. The candidate callback's return value `1` means enumeration continues,
+not that the candidate was accepted. This is useful runtime confirmation of
+coordinate capture and ascending selection, but not a controlled five-target
+prediction: the missing candidate's query/eligibility status and the moving
+target placement leave the requested deterministic test open. Full raw data
+is in `native-position-trace-retry.jsonl` and
+`jass-anfl-r1-five-a-retry.txt`; the earlier failed activation trace is
+preserved separately.
+
 Two inspected callers use the same helper: `CAbilityAttack` vtable method
 `0x00B1A100` calls it at `0x00B1A157` while filtering a unit target, and
 `0x00C0D2F0` calls it at `0x00C0D2FD` before selecting a result-table entry.
