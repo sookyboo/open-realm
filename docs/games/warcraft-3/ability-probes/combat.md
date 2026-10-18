@@ -456,6 +456,51 @@ shared damage-event layer for `UnitDamageTarget` and Carrion Swarm:
   on common payload and receiver infrastructure. This does not establish the
   ordinary weapon attack-hit producer.
 
+### Receiver ABI and payload fields
+
+The exact-build Ghidra export `build-re/ability-re/ghidra/ANfl-shared-damage-detail-01/`
+and the instruction dump retained with the ANfl damage-execution investigation
+establish this entry contract for VA `0x006677C0` (RVA `0x002677C0`): x86
+`__thiscall`, with the receiving CUnit in `ECX` and four stack arguments at
+`[ESP+4]` through `[ESP+0x10]` on entry. The first stack argument is a writable
+`float *` result/output slot; argument two is a pointer to the nine-word
+`WidgetDamageData`; arguments three and four are forwarded as scalar values to
+helpers and are not named here. The function uses `ret 0x10`. Thus the receiver
+is a dispatcher/mitigator, not itself the final life-field write.
+
+Verified payload layout (all fields are 32-bit words):
+
+| Offset | Verified use in `0x006677C0` | Interpretation limit |
+|---:|---|---|
+| `+0x00` | Dereferenced as the source pointer; source is passed with the receiver to `0x0069BA10` and later source-dependent checks. | Source-unit identity is supported by these uses; not every call populates it with a unit. |
+| `+0x04` | Written by initializer `0x006A9940`; no receiver use identified in this body. | Meaning unresolved. |
+| `+0x08` | Written by initializer; no receiver use identified in this body. | Meaning unresolved. |
+| `+0x0C` | Read as payload flags; bits `0x2`, `0x4`, `0x8`, `0x10`, `0x20`, and `0x40` gate receiver paths. | Individual flag names/semantics remain unresolved. |
+| `+0x10` | Read as a float amount, bounded/adjusted by receiver helpers, then negated and sent to virtual `+0x128`. | This is the strongest supported raw damage-quantity field; post-mitigation committed amount can differ. |
+| `+0x14` | Read through enum-like comparisons and resistance helpers. | Encoded category/type semantics are not fully mapped. |
+| `+0x18` | Written from a global by the initializer. | Timing/state meaning unresolved. |
+| `+0x1C` | Zeroed by initializer; no receiver use identified in this body. | Meaning unresolved. |
+| `+0x20` | Read by receiver and passed to shared damage-bonus lookup `0x0067B920`. | Selector semantics unresolved; do not label as attack type without tracing its producers. |
+
+`0x006A9940` (RVA `0x002A9940`) is an initializer using `ECX` as the payload
+destination and five stack words. Its instructions store the dereferenced first
+stack value at `+0x10`, the second at `+0x14`, the third at `+0x00`, the fourth
+at `+0x0C`, the fifth at `+0x04`, copy a global to `+0x18`, and zero `+0x1C`
+and `+0x20`. Because call-site prototypes have inconsistent decompiler
+parameter naming, the stack words are not assigned semantic names here.
+
+At the receiver’s successful damage branch, it calls unit virtual slot `+0x128`
+with a local float containing the negative mitigated amount. The pinned CUnit
+vtable resolves this slot to VA `0x00668DB0` (RVA `0x00268DB0`). This is the
+health-commit boundary reached by the receiver implementation. In the focused
+Retail ANfl trace at `build-re/ability-re/ANfl-damage-execution-01/`, the
+observed caller was helper `0x006EB2B0`, which initialized the payload and
+dispatched via target slot `+0x120`. The receiver `ECX` matched the worker's
+target argument, and source `+0x00` matched the ability owner at `+0x30`.
+Payload amount `+0x10` was float 85. The receiver entry, helper callsite and
+payload data are documented in the ANfl report; payload type/selector
+semantics and rank-data accessor provenance remain unresolved.
+
 ### Reproduce
 
 From the repository root, verify the executable hash, then run:

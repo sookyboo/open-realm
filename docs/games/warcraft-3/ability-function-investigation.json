@@ -748,7 +748,7 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "Full-analysis Ghidra found 49 direct calls from 47 functions. Its body writes payload fields and clears two counters/flags. Three traced paths converge on target virtual slot +0x120: UnitDamageTarget (0x004AEF70), Carrion Swarm (0x00C30BB0), and positive UnitDamagePoint processing (0x006EB640 -> 0x006E9ED0). The initializer is shared, while receiver behavior differs by target class.",
+      "evidence_summary": "Full-analysis Ghidra found 49 direct calls from 47 functions. Its body writes payload fields and clears two counters/flags. Three traced paths converge on target virtual slot +0x120: UnitDamageTarget (0x004AEF70), Carrion Swarm (0x00C30BB0), and positive UnitDamagePoint processing (0x006EB640 -> 0x006E9ED0). The initializer is shared, while receiver behavior differs by target class. Runtime tracing of Forked Lightning shows this initializer called from helper 0x006EB2B0 immediately before its target +0x120 dispatch; the tested rank-one payload amount word was 85. The rank data accessor provenance remains unresolved.",
       "related_addresses": [
         {
           "va": "0x004aef70",
@@ -1788,7 +1788,7 @@
         "0x120",
         "0x128"
       ],
-      "evidence_summary": "The CUnit constructor installs vtable 0x00E9C504. Its +0x120 method returns early when unit flag +0x164 has bit 0x100; checks MagicImmunesResistDamage and payload-class predicates; dispatches attached-object callbacks through slots +0xF8, +0xFC, and +0x100; reads configured DamageBonusSpells/Normal/Pierce/Siege/Magic/Chaos/Hero values through 0x0067B920; and applies configured ethereal adjustments. The first attached-object pass queries +0xF8: return 1 invokes +0xFC immediately, while other nonzero values are collected as phase IDs. A later pass revisits matching groups for phase IDs 0..8 and invokes +0xFC. Concrete recipients include Thorns Aura (group 1, redispatches a flagged damage payload through the referenced object +0x120), Frost Armor (group 1, refreshes/applies Bfro to the event-referenced unit), Anti-Magic Shell Two (group 5, subtracts a capped event amount from its +0xD4 numeric value and removes itself when 0x0046D630 reports the terminal condition), Spirit Link (group 2, linked damage redistribution through +0x364), and Mana Shield (group 5, damage absorption/depletion, removing itself through 0x006D8530). Poison Attack and Venom Spear instead inherit no-op +0xF8/+0xFC methods and apply their on-hit status through source ability slot +0x354 in dispatcher 0x0068F950. The receiver calls 0x006A0630, computes an adjusted amount, then invokes its +0x128 method (0x00668DB0) with the negative amount and returns the resulting value through an output pointer. UnitDamageTarget, UnitDamagePoint, Carrion Swarm, Poison/Venom impact damage, and ordinary attack types 1/4 when unhandled by source abilities converge at +0x120; ordinary projectile attack impact convergence remains unresolved.",
+      "evidence_summary": "The CUnit constructor installs vtable 0x00E9C504. Its +0x120 method returns early when unit flag +0x164 has bit 0x100; checks MagicImmunesResistDamage and payload-class predicates; dispatches attached-object callbacks through slots +0xF8, +0xFC, and +0x100; reads configured DamageBonusSpells/Normal/Pierce/Siege/Magic/Chaos/Hero values through 0x0067B920; and applies configured ethereal adjustments. The first attached-object pass queries +0xF8: return 1 invokes +0xFC immediately, while other nonzero values are collected as phase IDs. A later pass revisits matching groups for phase IDs 0..8 and invokes +0xFC. Concrete recipients include Thorns Aura (group 1, redispatches a flagged damage payload through the referenced object +0x120), Frost Armor (group 1, refreshes/applies Bfro to the event-referenced unit), Anti-Magic Shell Two (group 5, subtracts a capped event amount from its +0xD4 numeric value and removes itself when 0x0046D630 reports the terminal condition), Spirit Link (group 2, linked damage redistribution through +0x364), and Mana Shield (group 5, damage absorption/depletion, removing itself through 0x006D8530). Poison Attack and Venom Spear instead inherit no-op +0xF8/+0xFC methods and apply their on-hit status through source ability slot +0x354 in dispatcher 0x0068F950. The receiver calls 0x006A0630, computes an adjusted amount, then invokes its +0x128 method (0x00668DB0) with the negative amount and returns the resulting value through an output pointer. UnitDamageTarget, UnitDamagePoint, Carrion Swarm, Poison/Venom impact damage, and ordinary attack types 1/4 when unhandled by source abilities converge at +0x120; ordinary projectile attack impact convergence remains unresolved. A fresh ANfl accepted-cast trace records this receiver with vtable 0x00E9C504: slot +0x120 reaches 0x006677C0, with ECX equal to the ANfl target-worker candidate pointer. Its x86 thiscall ABI is ECX=CUnit, stack arg1=float output pointer, arg2=WidgetDamageData pointer, args3-4 scalar; payload +0x00 is the source CUnit pointer, +0x0C receiver flags, +0x10 raw float damage, +0x14 category/type candidate, +0x20 selector candidate. For the tested rank-one ANfl cast, amount was 85 and source pointer equaled CAbilityForkedLightning +0x30. The receiver applies adjustments and forwards a negative amount through +0x128 (0x00668DB0).",
       "related_addresses": [
         {
           "va": "0x0067b920",
@@ -1821,6 +1821,10 @@
         {
           "va": "0x00b1ccb0",
           "rva": "0x0071ccb0"
+        },
+        {
+          "va": "0x006eb2b0",
+          "rva": "0x002eb2b0"
         }
       ],
       "source": {
@@ -4347,7 +4351,7 @@
         "0x78",
         "0xA4"
       ],
-      "evidence_summary": "For Retail 1.29.2.9231 SHA-256 3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed, the registered ANfl factory at RVA 0x00878440 allocates a CAbilityForkedLightning object and installs vtable VA 0x00FAF280. That table maps +0x310 to order getter 0x00C78080 (0xD026B) and +0x42C to 0x00C78090, which calls 0x00C78A50. The latter performs repeated 0x0068EA00 spatial queries through candidate callback 0x00C78FC0, applies callback validation and deduplication, stops collection at a rank-indexed count, sorts the collected subset with 0x00C78F60, then calls 0x00C788F0 for each retained candidate. The worker resolves the MNfl class object and calls vtable slot +0xA4 at RVA 0x008781D0. The MNfl class reference identifies CMissileForkedLightning; its factory RVA 0x008790C0 installs vtable VA 0x00FAF6BC and the executable slot value at +0xA4 is VA 0x00C781D0. This is a verified static receiver/vtable relationship, not a runtime-observed dispatch. The method creates a generic configured action/event handle through RVA 0x0006E210 or 0x0006E3E0, then schedules event 0xD01D3. Its configured record is a CVLightning-compatible presentation object, not evidence of a damage action. The renderer list at global context +0x34 is a consumer candidate; pointer identity with the record writer container remains unproven. Targeted exports ANfl-damage-caller-triage-24 and ANfl-damage-vtable-followup-25 found no direct ANfl call to payload initializer RVA 0x002A9940 and no mapped missile method constructing a verified damage payload. CUnit receiver RVA 0x002677C0 is normally reached through virtual +0x120 dispatch, so no direct-call edge is expected; ANfl\u2019s indirect damage callback is still unresolved. Exact damage amount/data flow, damage type, mitigation path and runtime receiver identity remain unresolved. Archived Frida observed 0x00878080/0x00878090/0x00878A50; archived JASS observed three targets each losing about 85 health in one sample, not causal damage attribution.",
+      "evidence_summary": "For Retail 1.29.2.9231 SHA-256 3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed, the registered ANfl factory at RVA 0x00878440 allocates a CAbilityForkedLightning object and installs vtable VA 0x00FAF280. That table maps +0x310 to order getter 0x00C78080 (0xD026B) and +0x42C to 0x00C78090, which calls 0x00C78A50. The latter performs repeated 0x0068EA00 spatial queries through candidate callback 0x00C78FC0, applies callback validation and deduplication, stops collection at a rank-indexed count, sorts the collected subset with 0x00C78F60, then calls 0x00C788F0 for each retained candidate. The worker resolves the MNfl class object and calls vtable slot +0xA4 at RVA 0x008781D0. The MNfl class reference identifies CMissileForkedLightning; its factory RVA 0x008790C0 installs vtable VA 0x00FAF6BC and the executable slot value at +0xA4 is VA 0x00C781D0. This is a verified static receiver/vtable relationship, not a runtime-observed dispatch. The method creates a generic configured action/event handle through RVA 0x0006E210 or 0x0006E3E0, then schedules event 0xD01D3. Its configured record is a CVLightning-compatible presentation object, not evidence of a damage action. The renderer list at global context +0x34 is a consumer candidate; pointer identity with the record writer container remains unproven. Targeted exports ANfl-damage-caller-triage-24 and ANfl-damage-vtable-followup-25 found no direct ANfl call to payload initializer RVA 0x002A9940 and no mapped missile method constructing a verified damage payload. CUnit receiver RVA 0x002677C0 is normally reached through virtual +0x120 dispatch, so no direct-call edge is expected; ANfl\u2019s indirect damage callback is still unresolved. Exact damage amount/data flow, damage type, mitigation path and runtime receiver identity remain unresolved. Archived Frida observed 0x00878080/0x00878090/0x00878A50; archived JASS observed three targets each losing about 85 health in one sample, not causal damage attribution. Fresh Retail Frida tracing now observes the per-target +0xA4 method 0x00C781D0, its +0x84 method 0x00C78330, helper 0x006EB2B0, and target +0x120 receiver 0x006677C0. In the focused run, worker target pointer equaled receiver ECX, the payload source equaled the ability owner at +0x30, and raw amount was 85.",
       "related_addresses": [
         {
           "va": "0x0068EA00",
@@ -4393,6 +4397,14 @@
           "va": "0x007051A0",
           "rva": "0x003051a0",
           "kind": "function_va"
+        },
+        {
+          "va": "0x006eb2b0",
+          "rva": "0x002eb2b0"
+        },
+        {
+          "va": "0x00c78330",
+          "rva": "0x00878330"
         }
       ],
       "source": {
@@ -4400,7 +4412,45 @@
         "section": "Per-target dispatch and action/event path; Focused damage-path follow-up"
       },
       "record_kind": "function_group",
-      "related_addresses_semantics": "Includes statically referenced query, validation, sorting, transient-handle and shared-damage functions. A related address is not itself proof that ANfl reaches the shared damage receiver."
+      "related_addresses_semantics": "Related addresses include statically referenced query/presentation helpers and the now-runtime-confirmed damage callback/helper path; consult the evidence summary and verified relationships for per-edge confidence."
+    },
+    {
+      "id": "fn_002eb2b0",
+      "label": "Generic effect damage payload and target dispatcher",
+      "category": "damage",
+      "status": "observed",
+      "confidence": "high",
+      "addresses": [
+        {
+          "va": "0x006eb2b0",
+          "rva": "0x002eb2b0",
+          "kind": "function_va"
+        }
+      ],
+      "object_offsets": [
+        "0x120"
+      ],
+      "evidence_summary": "Targeted exact-build Ghidra detail export shows this helper constructs WidgetDamageData with 0x006A9940 and dispatches through the target vtable slot +0x120. Frida observed it called synchronously from ANfl missile callback 0x00C78330; its callsite at RVA 0x002EB5F3 returned to 0x006EB5F9 from CUnit receiver 0x006677C0. In two accepted rank-one runs, the source pointer matched ability owner +0x30, the receiver ECX matched the ANfl worker target argument, and payload +0x10 was 85. Other payload selector/type semantics and rank-data accessor provenance remain unresolved.",
+      "related_addresses": [
+        {
+          "va": "0x006a9940",
+          "rva": "0x002a9940"
+        },
+        {
+          "va": "0x006677c0",
+          "rva": "0x002677c0"
+        },
+        {
+          "va": "0x00c78330",
+          "rva": "0x00878330"
+        }
+      ],
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Observed helper and payload"
+      },
+      "record_kind": "function",
+      "related_addresses_semantics": "Addresses mentioned in static and runtime evidence; see verified relationships for the supported call/dispatch edges."
     }
   ],
   "record_schema": {
@@ -10266,6 +10316,82 @@
         "document": "docs/games/warcraft-3/forked-lightning-retail.md",
         "section": "Configured record layout and consumer"
       }
+    },
+    {
+      "from": {
+        "va": "0x00c788f0",
+        "rva": "0x008788f0",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x00c781d0",
+        "rva": "0x008781d0",
+        "kind": "function_va"
+      },
+      "kind": "virtual_dispatch",
+      "context": "Runtime Frida observed the ANfl per-target worker dispatching through missile slot +0xA4 to 0x00C781D0 during the accepted rank-one cast; static receiver/vtable ownership is recorded in the ANfl report.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Live accepted/control trace"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c781d0",
+        "rva": "0x008781d0",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x00c78330",
+        "rva": "0x00878330",
+        "kind": "function_va"
+      },
+      "kind": "virtual_dispatch",
+      "context": "The missile +0xA4 method invokes its +0x84 vtable method; Frida observed 0x00C78330 synchronously from caller return VA 0x00C78287 during the accepted cast.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Live accepted/control trace"
+      }
+    },
+    {
+      "from": {
+        "va": "0x00c78330",
+        "rva": "0x00878330",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x006eb2b0",
+        "rva": "0x002eb2b0",
+        "kind": "function_va"
+      },
+      "kind": "direct_call",
+      "context": "Static callsite RVA 0x00878377 and runtime return address VA 0x00C7837C establish the callback-to-helper call.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Observed helper and payload"
+      }
+    },
+    {
+      "from": {
+        "va": "0x006eb2b0",
+        "rva": "0x002eb2b0",
+        "kind": "function_va"
+      },
+      "to": {
+        "va": "0x006677c0",
+        "rva": "0x002677c0",
+        "kind": "function_va"
+      },
+      "kind": "virtual_dispatch",
+      "context": "The helper constructs WidgetDamageData then dispatches at RVA 0x002EB5F3 through target slot +0x120. Runtime receiver ECX matched the ANfl worker target pointer and used CUnit vtable 0x00E9C504.",
+      "confidence": "high",
+      "source": {
+        "document": "docs/games/warcraft-3/forked-lightning-retail.md",
+        "section": "Observed helper and payload"
+      }
     }
   ],
   "relationship_kinds": {
@@ -10275,6 +10401,6 @@
     "related_call_path": "The source establishes both stages in one path but does not claim an immediate direct edge.",
     "call": "Call asserted by the source notes; dispatch modality is not yet classified as direct, virtual, or callback. Do not promote it to a direct call without evidence."
   },
-  "entry_count": 89,
-  "verified_relationship_count": 333
+  "entry_count": 90,
+  "verified_relationship_count": 337
 }

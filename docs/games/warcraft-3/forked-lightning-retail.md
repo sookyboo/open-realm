@@ -152,19 +152,13 @@ The relevant vtable values are exported in
 worker, method and event-handler decompilations are in
 `build-re/ability-re/ghidra/ANfl-dispatch-damage-followup-17/`. Calls to
 `0x002A9940` (damage-payload initializer) and `0x002677C0` (shared CUnit
-damage receiver) are not present in the resolved ANfl/missile path. A targeted
-exact-build caller triage (`ANfl-damage-caller-triage-24/`) confirms that the
-initializer has many direct callers, but none is in the ANfl functions. The
-shared CUnit receiver is reached through the target's virtual `+0x120` damage
-dispatch, so its lack of direct callers in the global callsite export is
-expected. This does not prove ANfl never reaches it through an indirect damage
-dispatch. The missile vtable follow-up (`ANfl-damage-vtable-followup-25/`)
-confirms the known methods and slots, but reveals no separately named direct
-damage operation in `0x008781D0`, `0x00878170`, `0x008782A0`, `0x00878330`, or
-`0x00878390`. The independent gameplay-damage callback therefore remains
-unlocated; the last proven ANfl gameplay-side point is candidate dispatch into
-`0x008788F0` and its per-target missile method. The lightning record is
-presentation data and is not evidence of a damage action.
+damage receiver) are reached indirectly. The live trace and targeted static
+caller export below now establish a path through `0x00878330` to
+`0x006EB2B0`, which constructs the payload and dispatches through the target's
+virtual `+0x120`. The CUnit receiver is `0x006677C0`; its lack of direct
+callers in the global callsite export is expected because the dispatch is
+virtual. The lightning record remains presentation data and is a separate
+path from the now-observed damage dispatch.
 
 ### Configured record layout and consumer
 
@@ -247,15 +241,11 @@ The worker's virtual call is no longer unresolved: it reaches the missile
 method described above. The generic record branch resolves to lightning
 presentation. A targeted static caller triage found no direct ANfl call to
 payload initializer RVA `0x002A9940`; the CUnit receiver RVA `0x002677C0` is
-normally reached through a virtual `+0x120` damage dispatch and cannot be
-located by direct call references alone. Inspection of all currently mapped
-Forked Lightning missile methods found no verified damage-payload construction
-or target damage call. Thus the archived health delta still cannot be causally
-connected to a native ANfl callback or to the shared receiver. DataA's native
-lookup, attack/damage type, mitigation path, immunity behavior, per-target
-calculation, and exact damage commit callback remain unresolved.
-The shared damage receiver contract is documented in [combat evidence](ability-probes/combat.md#damage-payload-and-receiver-path-retail-1292),
-but ANfl's call edge to it has not been found.
+reached through virtual `+0x120`. A fresh Retail trace now observes that edge
+from an affected target during an accepted rank-one cast. DataA accessor
+provenance, category/type interpretation, full mitigation behavior, and
+behavior for other target classes/ranks remain open. The shared receiver
+contract is documented in [combat evidence](ability-probes/combat.md#damage-payload-and-receiver-path-retail-1292).
 
 ## Timing, effect state, and cleanup
 
@@ -313,39 +303,121 @@ sound. Presentation evidence remains authored/static only.
 | Order ID `0xD026B`; order string `forkedlightning` | Static getter plus authored data; order path also observed by Frida | None for this build's order identity. |
 | Spatial candidate path, two native gates, duplicate prevention, early count cap, and post-cap sort | Exact-build static control flow | Decode every query parameter and target gate to name each gameplay predicate. |
 | Three targets each sampled at ~85 loss | Authored-data agreement plus direct archived JASS observations | Identity-stable, stationary targets and a cap-boundary test are needed to resolve which candidates survive enumeration. The existing run does not discriminate target order. |
-| `+0xA4` receiver and method | Exact-build static receiver lookup, factory/vtable assignment and slot target; not runtime-observed | A bounded Frida trace can independently confirm receiver/vtable/target if runtime confirmation is required. It will not by itself identify damage semantics. |
-| DataA rank mapping and damage implementation | Authored data plus compatible live delta; resolved method begins presentation-handle/event setup | The mapped missile methods contain no verified damage call. Next resolve the callback behind the ability effect/per-target context, then trace its indirect `+0x120`-style damage dispatch. A focused Retail trace is warranted once static callback candidates are narrowed. |
+| `+0xA4` receiver and method | Static class/vtable binding and fresh runtime method entry | Rank/target variants beyond the tested single-target cast. |
+| Shared receiver and exact target | Runtime `+0x120` receiver; `ECX` equals the ANfl worker's target argument and the sole JASS target's life changes | Extend JASS/native unit identity mapping to multi-target cases if testing the target cap/order. |
+| Rank-one amount | Runtime payload float `85`, matching authored `ANfl` DataA rank 1; JASS target life falls by about 85 by the 0.75s sample | Trace the data accessor through missile state to prove field provenance; distinguish raw payload from post-mitigation damage on other armor/type targets. |
 | Mana/cast timing | Direct JASS samples, 250ms resolution | Finer timing only if exact ordering matters after static path inspection. |
 | Effect/sound lifecycle | Authored model metadata plus candidate transient-handle code | Prove callback/receiver association, resolve data-to-model mapping; visible/audio confirmation only if static linkage remains ambiguous. |
 | Interrupt/removal/target-death cleanup | Static branches have handle cleanup | Identify callback ownership and branch conditions; use focused runtime probes only for unresolved lifecycle events. |
 
-No new Retail launch was needed for this static follow-up. Existing captures
-remain unchanged and are reused from `ANfl-live-session-06/` and
-`ANfl-live-session-07/`.
+No new Warcraft process was launched. The already-running prepared probe process
+was reused after verifying its launch/executable/map identity; the existing
+captures from `ANfl-live-session-06/` and `ANfl-live-session-07/` were preserved.
 
 ## Focused damage-path follow-up
 
-For this follow-up, the cached Ghidra project and pinned executable identity were
-reused; no full analysis or Retail launch was performed. Targeted exports are
-`build-re/ability-re/ghidra/ANfl-damage-caller-triage-24/` and
-`ANfl-damage-vtable-followup-25/`. The former examined selected direct callers of
-`0x002A9940` and the initializer itself. Its callers demonstrate generic
-damage-event construction patterns, including `0x000AEF70` for the JASS
-`UnitDamageTarget` bridge, but none establish an ANfl edge. The initializer
-writes an eight-word payload from its arguments; it does not itself apply
-damage. The latter export revalidated missile slots and the mapped lifecycle
-methods.
+The cached exact-build Ghidra project was reused read-only; no full analysis
+was run. A single targeted detail export,
+`build-re/ability-re/ghidra/ANfl-observed-damage-caller-26/`, decompiled the
+actual observed caller at RVA `0x002EB2B0`.
 
-The most useful structural clue is the shared combat contract already
-documented in [combat probes](ability-probes/combat.md#damage-payload-and-receiver-path-retail-1292):
-CUnit damage is dispatched through virtual slot `+0x120` with a payload. No
-Forked Lightning callback currently provides a proven callsite to that slot,
-and no verified damage amount/data flow from ANfl DataA has been recovered.
-The per-target worker's `+0xA4` missile call remains the last proven ability
-edge; the concrete function `0x008781D0` creates presentation/configuration
-state and schedules event `0xD01D3`, while its event handler clears/releases
-the transient handle. Existing samples bracket health changes after the JASS
-spell-effect sample, but are too coarse to identify the native invocation.
+### Live accepted/control trace
+
+The evidence is in
+`build-re/ability-re/ANfl-damage-execution-01/`: `jass-valid-01.txt` and
+`jass-valid-02.txt` are two completed accepted rank-one runs;
+`jass-reject-01.txt` is the completed expected-rejection control
+(`accepted=false`). Both Frida traces are complete and have `trace-end` with no
+errors. The first trace covers the accepted and rejected cases in one
+90-second window; the second accepted run adds the focused callback and helper
+hooks. The prepared Retail process was reused, and all captures are separate
+from the prior Oct 17 outputs.
+
+In the first accepted run, JASS reports the sole Player 12 `hfoo` target at
+`(-880,-6084)`, life `210` at tick 0 and `125.001` at tick 3 (0.75 s), with
+spell-effect sampled at tick 2 (0.50 s). Frida records one ANfl acquisition
+and one target-worker invocation. The worker's target argument equals the
+receiver's `ECX`; the receiver uses CUnit vtable `0x00E9C504`. The matching
+receiver call's payload source pointer equals the ability owner's verified
+`this+0x30` pointer. This identifies the native target and source without
+assuming JASS handle IDs are native pointers.
+
+The focused second accepted run reproduces the same path and values. In one
+thread, Frida records these entries 5 ms apart: ANfl acquisition at
+`0x00C78A50`; target worker at `0x00C788F0`; its virtual `+0xA4` missile method
+at `0x00C781D0`; missile `+0x84` callback `0x00C78330`; helper
+`0x006EB2B0`; then the target's virtual `+0x120` call into `0x006677C0`.
+Payload initialization at `0x006A9940` occurs inside the helper. The actual
+receiver return address is VA `0x006EB5F9` (RVA `0x002EB5F9`).
+
+The expected-rejection control has `accepted=false`, no spell-effect event,
+and no additional ANfl acquisition/worker entry in the shared trace. Generic
+receiver traffic continues during the window, so the other receiver entries
+are not attributed to Forked Lightning. There is exactly one accepted-cast
+receiver call with the worker's target pointer and amount `85` per capture;
+the initial and later background calls carry different amounts/callers.
+
+### Observed helper and payload
+
+The observed receiver callsite is VA `0x006EB5F3`, instruction `call
+[eax+0x120]`, inside helper `0x006EB2B0`. Its decompilation at
+`build-re/ability-re/ghidra/ANfl-observed-damage-caller-26/decompiled.jsonl`
+shows it constructs `WidgetDamageData` with `0x006A9940`, then dispatches
+through the target's `+0x120` slot. The exact callsite RVA is `0x002EB5F3`;
+the return address recorded by Frida is five bytes later at `0x002EB5F9`.
+
+The runtime words for the rank-one payload are:
+
+| Offset | Raw value | Supported reading |
+|---:|---:|---|
+| `+0x00` | target-independent pointer, equal to ability owner `0x00FF9D6AC` in the focused run | Source CUnit; verified by receiver behavior and equality to ability `+0x30`. |
+| `+0x04` | `0` | Meaning unresolved. |
+| `+0x08` | `0` | Meaning unresolved. |
+| `+0x0C` | `1` | Receiver flags word; flag semantics unresolved. |
+| `+0x10` | float `85` (`0x42AA0000`) | Raw amount supplied to receiver; matches authored rank-one DataA. The exact ability-data accessor remains unresolved. |
+| `+0x14` | `0x400` | Category/type field candidate; semantic mapping unresolved. |
+| `+0x18` | `0` | Initializer's global value. |
+| `+0x1C` | `0` | Zeroed by initializer. |
+| `+0x20` | `0` | Receiver selector word; semantic mapping unresolved. |
+
+The initializer entry recorded raw stack words
+`[0x12F58C, 0x400, source, 1, 0]`; its instructions dereference the first
+pointer into payload `+0x10` and place the remaining words at their verified
+offsets. The receiver's output pointer is a separate writable float pointer.
+Its successful branch applies resistance/bonus handling and calls target
+virtual `+0x128` (`0x00668DB0`) with a negative adjusted amount. The JASS
+sampled life change from 210 to about 125 supports 85 actual loss on this
+single `hfoo`; later life samples include unrelated damage and are not used to
+infer the spell amount. Damage type label, attack type, armor multiplier,
+immunity branches for other targets, and the exact post-mitigation commit
+value remain open.
+
+### Receiver ABI (static contract, live arguments observed)
+
+The shared receiver contract is now specified in
+[combat probes](ability-probes/combat.md#receiver-abi-and-payload-fields).
+VA `0x006677C0` / RVA `0x002677C0` is an x86 `__thiscall`: target CUnit in
+`ECX`, writable `float *` result at stack argument 1, `WidgetDamageData *` at
+stack argument 2, then two scalar stack arguments; it returns with `ret 0x10`.
+The payload amount is `+0x10`; runtime observations confirm `85`. The output
+pointer contains receiver output, not an input parameter. At the trace entry,
+Frida safely read the 36-byte payload from validated readable memory and
+recorded raw words, receiver vtable, caller, and argument pointers. No return
+value was interpreted for the receiver because it decompiles as `void`.
+
+### `mdxtool` fixture discrepancy check
+
+The isolated `test_wc3_re_mdx_events.py` fixture passed (1 test). It generated
+a two-event synthetic MDX in a temporary directory, packed it with
+`build/bin/mpqtool`, and read it through `build/bin/mdxtool --info-json`; no
+external Warcraft asset was required. `build/bin/mdxtool` was present with
+SHA-256 `14e87eacb198218a480838a2850e396de9ae55c5d4c9d1926e5ebaaefa762b1a`.
+The full `python3 -m unittest discover -s tests -p 'test_wc3_re_*.py' -v`
+run also passed all 176 tests, and `make test TEST_JOBS=4` passed. The prior
+reported single failure did not reproduce, so no production or fixture change
+is justified from the available evidence. The original failing test name and
+stdout/stderr were not present in the checkout and remain necessary to explain
+that historical discrepancy conclusively.
 
 The lightning-container alias also remains unresolved. Existing Ghidra
 decompilation establishes a writer call from `0x00303150` to `0x00577880` and
