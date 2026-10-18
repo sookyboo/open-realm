@@ -51,11 +51,19 @@ fields `+0x264/+0x268` were `1/1`, compared with `0/0` for a normal candidate.
 The source selector virtual `+0x1F0` was not measured reliably, so the trace
 does not show which field participates in the return. Virtual-hook slot
 aliasing prevents interpretation of repeated return events. For
-invulnerability, the follow-up candidate passed the final geometry check but
-was not observed at the callback; the JASS getter also returned true on
-untreated units and false after the setter. This conflicts with the earlier
-case-three callback-level `0x36` observation and leaves the state semantics
-and first downstream filter unresolved. See the machine-readable summary at
+invulnerability, exact-build registration maps `BlzIsUnitInvulnerable` to VA
+`0x00499FA0` / RVA `0x00099FA0` and `SetUnitInvulnerable` to VA `0x004AB600` /
+RVA `0x000AB600`. The getter returns the inverse of bit 3 in dword `+0x20` of
+the resolved object. The setter resolves an attached object tagged
+`0x2B61676C` and invokes the unit virtual at `+0xA8` with the requested
+boolean. The getter's raw bit transition is verified; the tag, bit's gameplay
+meaning, and setter's effect on ANfl query eligibility are not. The newer
+case-three run reached geometry but not the callback; the older case-three
+run reached the callback and returned `0x36`, without a getter readback. Both
+observations remain, and the first divergent post-geometry stage is
+unresolved. Static exports are under
+`build-re/ability-re/ANfl-invulnerability-static-followup-01/` and
+`ANfl-invulnerability-native-impl-01/`; runtime comparison is at
 `build-re/ability-re/ANfl-invulnerability-readback-01/results/followup-comparison.json`.
 Only one conjunction returns rejection code `0x36`; all other paths return
 zero. `0x006822E0` is a parallel predicate: it returns zero for null

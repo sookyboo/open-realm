@@ -28,8 +28,11 @@ Rank-two geometry now has a runtime trace; `p+Area` matches and the original
 candidate's `+0x264/+0x268` values differ from the normal candidate, but the
 selector and virtual returns were not measured reliably. The new
 invulnerability readback and callback observations conflict with the earlier
-case-three run, so no single invulnerability rejection stage or getter
-semantics is promoted to the implementation contract.
+case-three run, so no single invulnerability rejection stage is promoted to
+the implementation contract. Exact-build registration and implementation
+exports now establish the getter/setter code and raw bit polarity; the
+gameplay meaning of the bit and the discrepancy between callback observations
+remain unresolved.
 
 ## Registration and relevant methods
 

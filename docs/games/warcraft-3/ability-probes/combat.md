@@ -1396,13 +1396,17 @@ and the shared target validator returned `54` (`0x36`). No worker or receiver
 was called for that target. It remained at 210 life; replacement candidates
 received 85. This is target-validator rejection, not damage mitigation.
 
-The invulnerability treatment called `SetUnitInvulnerable(target1,true)` and
-showed the same geometry/callback/gate/validator sequence, including return
-`0x36`, with no worker or receiver for target1. Other selected units received
-85. The fixture records the setter request but has no independent
-invulnerability readback, so that state confirmation is qualified. The native
-meaning of `0x36` and receiver-side mitigation for a defensive candidate that
-passes validation remain open. Traces and case outputs are preserved under
+The earlier invulnerability treatment called
+`SetUnitInvulnerable(target1,true)` and showed the same
+geometry/callback/gate/validator sequence, including return `0x36`, with no
+worker or receiver for target1. Other selected units received 85. A later
+fixture logged `BlzIsUnitInvulnerable` changing from true to false on the same
+JASS handle after the setter; its native trace showed geometry pass but no
+owner-filter or callback event. Preserve both observations. Exact native
+binding and raw bit polarity are documented below, but the bit's gameplay
+meaning and reason for the callback-stage discrepancy remain unresolved.
+Receiver-side mitigation for a defensive candidate that passes validation is
+still untested. Traces and case outputs are preserved under
 `build-re/ability-re/ANfl-state-alliance-ranks-01/`; startup diagnostics are
 under `build-re/ability-re/ANfl-startup-diagnostic-01/`.
 
@@ -1436,10 +1440,10 @@ sourceAbility.vfunc(+0x20C) != 0
 
 The condition is verified static. The Amim case correlates ability level 1
 with runtime `0x36`, but does not identify the first individual operand that
-changes relative to the normal target. The invulnerability setter case also
-returned `0x36`, but the state was not independently read back. The matching
-Retail `common.j` provides `BlzIsUnitInvulnerable` at line 2529; a future case
-should log it before and after `SetUnitInvulnerable`.
+changes relative to the normal target. The older invulnerability setter case
+also returned `0x36`, but had no state readback. The newer fixture logged the
+matching Retail getter before and after the setter; see the native binding and
+state limitations below.
 
 An operand follow-up (`ANfl-invulnerability-readback-01`) correlated the
 Amim target at `(-720,-6160)` with candidate `0x10875a74`. Its `+0x164` was
@@ -1451,15 +1455,31 @@ which candidate field is selected: source virtual `+0x1F0` was not captured
 reliably, and shared-address virtual hooks produced aliased/inconsistent
 results. Do not assign semantic names to these fields from this correlation.
 
-The same follow-up found a contradictory `BlzIsUnitInvulnerable` readback:
-untreated Footmen returned true, while the setter changed the treated target's
-readback from true to false. That treated target passed final geometry but did
-not reach the callback, worker, or receiver in the case-three trace. This
-conflicts with the earlier case-three trace that reported callback-level
-`0x36`. The getter's state meaning and the first post-geometry predicate are
-unresolved; neither result is used as a clean mitigation measurement. Details
-and hashes are in
-`build-re/ability-re/ANfl-invulnerability-readback-01/results/followup-comparison.json`.
+The exact-build native registration was subsequently verified in
+`ANfl-invulnerability-static-followup-01/decompiled.jsonl`: JASS
+`BlzIsUnitInvulnerable` resolves to VA `0x00499FA0` (RVA `0x00099FA0`), with
+signature `(Hunit;)B`; `SetUnitInvulnerable` resolves to VA `0x004AB600` (RVA
+`0x000AB600`), with signature `(Hunit;B)V`. The getter resolves the unit and
+returns `(~(dword[resolved+0x20] >> 3)) & 1`. Thus its observed `true` to
+`false` transition corresponds exactly to bit 3 changing from clear to set,
+assuming the getter and setter resolve the same object. The setter resolves an
+attached object by the unit's handle pair, checks tag `0x2B61676C`, then calls
+the unit virtual at `+0xA8` with the requested boolean. The semantic name of
+that tag and the gameplay meaning/writer of resolved-object `+0x20` bit 3 are
+not established. Treat the getter output as a verified native bit-derived
+value, not yet as independent proof of gameplay invulnerability.
+
+The newer case-three trace reached the target's final geometry observation
+but did not record a relation-filter call or ANfl callback for it; its JASS
+handle was `1056136`, and the getter changed from true before the setter to
+false after it. The older `ANfl-state-alliance-ranks-01` case three recorded
+callback delivery and validator `0x36` after a setter call, but did not record
+the getter state or independently correlate the native unit state. Both runs
+remain valid observations with different evidentiary limits; the first
+post-geometry exclusion stage and reason for this difference are unresolved.
+Neither result is a clean receiver-mitigation measurement. Details and hashes
+are in `build-re/ability-re/ANfl-invulnerability-readback-01/results/followup-comparison.json`
+and the exact-build exports under `build-re/ability-re/ANfl-invulnerability-native-impl-01/`.
 
 The rank-three case in `ANfl-neutral-passive-rank3-01` read back ability level
 3 and was accepted. Three workers and three receiver calls carried raw damage
