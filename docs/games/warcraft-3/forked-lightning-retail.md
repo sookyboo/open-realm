@@ -993,3 +993,49 @@ The current implementation-level specification, including evidence labels,
 the limited eligibility matrix, query measurements, numeric damage payload
 and remaining gaps, is retained at
 `build-re/ability-re/ANfl-target-eligibility-ally-01/specification.md`.
+
+### Clean damage control and query-shape predicate (October 18, 2026)
+
+`ANfl-clean-combat-01` used a fresh prepared-map run, removed nearby local
+units, set ordinary attack damage and dice to zero for the caster and five
+test Footmen, issued Hold Position, and sampled the targets every 0.25 seconds
+for five seconds before casting. All five remained at 210 life over 21
+samples; the no-cast output contains no nonzero damage event. This establishes
+a clean target-life control for that fixture. The accepted rank-one cast then
+produced three receiver calls and three JASS damage events of 85 against the
+predicted `[0,1,2]` prefix; those targets fell from 210 to approximately 125,
+while the two unselected targets stayed at 210. This is the first clean
+life-delta confirmation for ANfl in this investigation. The caster itself
+lost health while exposed during the trace interval, so caster life is not a
+clean control. Artifacts and hashes are in
+`build-re/ability-re/ANfl-clean-combat-01/`.
+
+Focused exact-build exports under
+`build-re/ability-re/ANfl-spatial-query-predicate-detail-03/`,
+`ANfl-spatial-query-shapes-detail-01/`, and
+`ANfl-spatial-query-math-detail-01/` resolve the type-0xB final geometric
+predicate. Query construction at VA `0x0068EA00` passes the radial shape to
+`0x007F4CF0`, which dispatches the relevant shape to `0x00807130`. That path
+uses spatial bounds enumeration, computes squared 2D center distance,
+computes `radius + candidateEntry[+0x90]`, squares that sum, and accepts when
+`distanceSquared <= expandedRadiusSquared`. Thus the final comparison is
+inclusive and candidate-entry-extent-adjusted; the scalar at spatial entry
+`+0x90` is not yet mapped to a gameplay property. This does not prove the
+broadphase returns every matching unit or that the scalar is WC3 collision
+radius.
+
+The rank-one query model remains corroborated, with `Area=125`, `DataC=900`,
+`DataD=300`, `L=max(Area+DataD, DataC-(Area+DataD))=475`,
+`r(p)=Area+p*(DataD-Area)/L`, `pNext=min(p+r(p),L)`, and query center
+`caster + normalize(primary-caster)*(p+DataD/4)`. Prior four-query observations
+match predicted radii `125`, `171.0526`, `234.0720`, and `300`; the clean
+control independently observed the same four radii. Exact native source
+position at construction, rank-two/three inputs, zero-vector handling, and
+runtime boundary outcomes remain open.
+
+The prepared follow-up `ANfl-geometry-distance-02` did not produce valid
+geometry results. Its script retained stale chat run IDs/output branches from
+the earlier ally probe, so the chat handler marker appeared but no matching
+geometry scenario result was written. The preserved map hash and corrected
+pre-observation prediction are setup evidence only; this attempt is not
+counted as a boundary test.

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "retail_executable_sha256": "3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed",
+  "clean_control": {
+    "case": "ANfl-clean-combat-01",
+    "prepared_map_sha256": "4d4e664db24b81bd99f15343fc0163015e849cedbcd91ab34352c355023c76ce",
+    "no_cast_result": "build-re/ability-re/ANfl-clean-combat-01/results/no-cast-control.txt",
+    "no_cast_result_sha256": "89df37977b1961e01b0da13bf412e84ef451a87bf2a18a4ec8ef2e1bb1e85dd7",
+    "cast_result": "build-re/ability-re/ANfl-clean-combat-01/results/cast-result.txt",
+    "cast_result_sha256": "54e0d6da1576935f2ce757031eebbf39eb99aa33b2bf8f4e6d1242e648bff3f8",
+    "trace": "build-re/ability-re/ANfl-clean-combat-01/runtime/clean-control-trace.jsonl",
+    "trace_sha256": "61a290e09e4d4be32c2cd312115f61c64bcf1c5f5b5b1dd9bb0b53f569e8ca15",
+    "outcome": "no-cast target life stable at 210 for 21 samples; accepted rank-one cast matched prediction [0,1,2], with three 85-point native receiver calls and matching JASS damage events"
+  },
+  "geometry_followup": {
+    "case": "ANfl-geometry-distance-02",
+    "prepared_map_sha256": "ef71af9577f3dc9a60dfb18fcfe100a0a30dc9154210b9a39eaf4709ec569e3d",
+    "prediction": "build-re/ability-re/ANfl-geometry-distance-02/predictions/geometry-distance-02-v2.json",
+    "outcome": "rejected harness case: stale run IDs/output branches; no geometry result and no Frida capture; not a boundary observation"
+  },
+  "static_exports": [
+    "build-re/ability-re/ANfl-spatial-query-predicate-detail-03/",
+    "build-re/ability-re/ANfl-spatial-query-shapes-detail-01/",
+    "build-re/ability-re/ANfl-spatial-query-math-detail-01/"
+  ],
+  "same_owner_evidence": "build-re/ability-re/ANfl-target-eligibility-ally-01/"
+}

@@ -535,10 +535,16 @@ own Footmen attacking one another while holding position, as well as old/stale
 `hfoo` and `Nngs` source handles absent from the replay's placement list. The
 logs do not establish whether every such source is campaign-owned or a
 lingering scenario unit/projectile. This contaminates life deltas and does not
-extend verified life-change/mitigation results. A clean mitigation fixture
-should set ordinary attack base damage and dice to zero on all test units,
-then confirm a no-cast interval with stable life. That fixture has not yet
-been run. Raw payload flags/type/selector and defensive-state
+extend verified life-change/mitigation results. A clean target-life fixture
+has now been run in `build-re/ability-re/ANfl-clean-combat-01/`. It set
+ordinary attack base damage and dice to zero on the caster and five Footmen,
+held them stationary, and recorded a five-second no-cast interval with all
+target life values stable at 210. The subsequent accepted rank-one cast
+produced three receiver calls and three JASS damage events of 85 matching the
+saved recipient prediction; the selected targets fell to about 125 while
+nonselected targets stayed at 210. This validates clean baseline attribution,
+but it does not test defensive states or decode the payload classification.
+Raw payload flags/type/selector and defensive-state
 behavior remain unresolved; see the evidence-bounded update in
 [`forked-lightning-retail.md`](../forked-lightning-retail.md#same-owner-secondary-target-probe-october-18-2026)
 and the implementation specification under

@@ -812,3 +812,20 @@ preregistered conditional hypotheses are under
 `build-re/ability-re/ANfl-target-eligibility-ally-01/`. The capture expands
 only the same-owner case and does not establish allied/enemy relation rules
 for other unit categories.
+
+### Clean ANfl fixture and query predicate
+
+The later `ANfl-clean-combat-01` fixture zeroed ordinary attack base damage
+and dice on the caster and test Footmen, cleared nearby local units, and held
+all targets stationary. A five-second no-cast interval kept every target at
+210 life. A known-good cast then matched the saved `[0,1,2]` prediction with
+three workers and three 85-point receiver/JASS damage events. See
+`build-re/ability-re/ANfl-clean-combat-01/` for raw outputs and trace.
+
+Static query-shape analysis now shows that the type-0xB path's final spatial
+predicate is inclusive (`distanceSquared <= (radius + entryScalar)^2`). It
+also uses an earlier bounds enumeration. The added scalar comes from spatial
+entry `+0x90`; its semantic identity and value for each unit are unresolved.
+This is not yet an experimentally measured circle boundary. The follow-up
+geometry map was prepared with stale run IDs and wrote no valid result, so its
+candidate delivery must not be used as a boundary observation.
