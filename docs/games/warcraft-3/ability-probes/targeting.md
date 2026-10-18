@@ -43,6 +43,20 @@ when candidate slot `+0xD8` reports nonzero. Otherwise it checks source flag
 `+0x164 & 0x100`, candidate slots `+0x1F0`, `+0x1D8`, `+0x1F8`, `+0x1FC`,
 and `+0x20C`, a source field selected from `+0x264/+0x268`, a candidate
 context at `+0x30`, and the configured `MagicImmunesResistUltimates` value.
+
+The latest Amim runtime operand capture is preserved at
+`build-re/ability-re/ANfl-invulnerability-readback-01/runtime/trace-case2-amim-operands.jsonl`.
+The treated candidate reached the callback and returned `0x36`; its candidate
+fields `+0x264/+0x268` were `1/1`, compared with `0/0` for a normal candidate.
+The source selector virtual `+0x1F0` was not measured reliably, so the trace
+does not show which field participates in the return. Virtual-hook slot
+aliasing prevents interpretation of repeated return events. For
+invulnerability, the follow-up candidate passed the final geometry check but
+was not observed at the callback; the JASS getter also returned true on
+untreated units and false after the setter. This conflicts with the earlier
+case-three callback-level `0x36` observation and leaves the state semantics
+and first downstream filter unresolved. See the machine-readable summary at
+`build-re/ability-re/ANfl-invulnerability-readback-01/results/followup-comparison.json`.
 Only one conjunction returns rejection code `0x36`; all other paths return
 zero. `0x006822E0` is a parallel predicate: it returns zero for null
 candidates or nonzero candidate slot `+0xDC`, checks the same source flag and
@@ -925,7 +939,26 @@ In the same run, a rank-three case read back ANfl level 3 and was accepted.
 The four observed query centers and radii matched the rank-one values for the
 authored `Area=125`, `DataC=900`, `DataD=300`. Three workers and receivers
 carried raw 250. Targets had 210 maximum life, so final life is overkill
-limited and the receiver payload is the raw damage evidence. A rank-two cast
-also completed with three JASS damage events of 160 in a later case, but that
-case ran after the native trace window ended; rank-two query geometry remains
-unverified by runtime capture.
+limited and the receiver payload is the raw damage evidence. A separate
+single-case rank-two capture at `build-re/ability-re/ANfl-rank2-geometry-03/`
+read back rank 2, recorded four query centers/radii matching the corrected
+`p+Area` center progression and radius progression, and captured three workers
+and three raw-160 receivers. The retained precast prediction used `p+DataD/4`
+and missed the observed centers; it remains unchanged as the preregistered
+hypothesis. See `results/geometry-comparison.json` for observed values and
+errors.
+
+
+### Retail profile warning follow-up
+
+The earlier profile warning coincided with the container overlay at 100% use
+and zero available bytes. On October 18 follow-up, that same overlay had 3.8
+GiB free and inode use was 7%. Wine resolved the Warcraft Documents path,
+write/delete checks passed in CustomMapData and both save/profile directories,
+and the Warcraft registry retained Allow Local Files=1. One control launch
+reached the expected chapter card and gameplay HUD without the warning. The
+exact profile operation that failed during the earlier full-overlay condition
+was not recorded. Startup evidence is preserved in
+`build-re/ability-re/ANfl-environment-diagnostic-02/`. The later rank-two
+single-case trace used the Frida endpoint and is preserved separately under
+`build-re/ability-re/ANfl-rank2-geometry-03/`.

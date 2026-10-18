@@ -40,6 +40,44 @@ The candidate/source field ownership is established from the call frame: `+0x164
 
 **Unresolved:** exact first query-stage exclusion for Player 1 allied and Player 15 Neutral Passive candidates; ordinary separately owned enemy behavior; independent invulnerability readback and its first divergent validator operand; runtime meaning of the `0x36` conjunction virtual returns and fields; flying, mechanical, structure, dead, hidden, and ethereal eligibility; and immunity behavior under other configuration. Do not generalize the Player 1 or Player 15 results to all owner relationships.
 
+**Verified runtime operand observation (Amim follow-up):** in
+`ANfl-invulnerability-readback-01`, the level-one Amim target at
+`(-720,-6160)` was matched to native candidate `0x10875a74`. It passed the
+final geometry check and callback relationship gate, then returned `0x36`
+from the shared validator. Its candidate dword `+0x164` was `0x245`, while
+signed `+0x264` and `+0x268` were both `1`. A normal Footman candidate in the
+same cast had `+0x164 = 0x245`, `+0x264 = 0`, `+0x268 = 0`, and validator
+return zero. The target remained at 210 life and had no worker/receiver call.
+This is a measured field difference, not proof that either field is the
+selected operand or the cause: the source `+0x1F0` selector was not captured
+reliably. The virtual-return trace contains slot/address aliasing and
+contradictory or missing returns, so it is not used to assign meanings to
+those values. Raw trace, output, and bounded comparison are retained under
+`build-re/ability-re/ANfl-invulnerability-readback-01/`.
+
+**Verified runtime observation with unresolved readback semantics
+(invulnerability follow-up):** `BlzIsUnitInvulnerable` returned true for
+untreated Footmen that were damaged in the normal control. On the treated
+target it returned true before `SetUnitInvulnerable(target,true)` and false
+immediately after. In the accepted case-three cast, its native spatial entry
+passed the final geometry operand comparison, but no ANfl callback, worker,
+or receiver was observed for that candidate; target life stayed at 210. This
+does not independently confirm what native state the getter reports. It also
+differs from `ANfl-state-alliance-ranks-01` case three, which recorded
+callback delivery followed by validator `0x36`. Preserve both runs; the
+rejection stage and state semantics are unresolved. See
+`ANfl-invulnerability-readback-01/results/followup-comparison.json` and
+`runtime/trace-case3-cast.jsonl`.
+
+**Verified runtime rank-two geometry:** the single-case trace in
+`ANfl-rank2-geometry-03` captured four queries, radii
+`[125,171.05263,234.07201,299.99997]`, three workers, and three raw receiver
+payloads of 160. Observed centers match `p + Area` along the acquisition ray;
+the preregistered `p + DataD/4` centers missed by approximately 50 world units.
+The immutable prediction and corrected comparison are both retained at
+`ANfl-rank2-geometry-03/predictions/case-6-precast.json` and
+`ANfl-rank2-geometry-03/results/geometry-comparison.json`.
+
 | Candidate setup | Spatial delivery | Query relation result | Callback gates | Worker/damage | Evidence |
 |---|---|---|---|---|---|
 | Neutral Hostile Player 12 living Footman | Yes | Accepted in tested setup | relation 1; validator 0 | selected according to sorted prefix | Runtime cases 19/21 and clean control |
@@ -55,7 +93,7 @@ Callback return `1` is continuation, not an eligibility result. A callback-level
 
 ## Spatial geometry
 
-**Authored data / corroborated rank-one model:** Area `A=125`, DataC `C=900`, DataD `D=300`.
+**Authored data / runtime-verified ranks 1–3:** Area `A=125`, DataC `C=900`, DataD `D=300` at each rank. Runtime query traces exist for ranks 1, 2, and 3.
 
 ```text
 L = max(A + D, C - (A + D)) = 475
@@ -68,7 +106,7 @@ pNext = min(p + r(p), L)
 query at p; stop after query where p == L
 ```
 
-This yields progress `[0,125,296.0526,475]`, radii `[125,171.0526,234.0720,300]`, and along-ray center offsets `[125,250,421.0526,600]`. The v3 trace captured acquisition-time caster `(-1072,-5968)` and target `(-880,-6084)`, then centers `(-965.01196,-6032.63867)`, `(-858.02386,-6097.27734)`, `(-711.61908,-6185.72998)`, and `(-558.45715,-6278.26563)` with radii `125`, `171.05263`, `234.07201`, and `299.99997`. These match within float rounding. JASS logged caster pre-order at `(-1180,-6084)`; it moved before acquisition, explaining why the earlier center formula was wrong. **Verified runtime rank three:** because Area/DataC/DataD are authored identically at all three ANfl ranks, rank-three case 7 generated the same four centers and radii, within float rounding. **Rank two:** authored inputs are also identical, but the bounded trace ended before case 6, so its query geometry is not runtime-confirmed. Exact float operation order, zero-length direction, and range clamps remain unresolved.
+This yields progress `[0,125,296.0526,475]`, radii `[125,171.0526,234.0720,300]`, and along-ray center offsets `[125,250,421.0526,600]`. Rank-one and rank-three traces captured the four centers and radii in the earlier boundary and rank-three fixtures. **Verified runtime rank two (new):** the single-case run captured four queries with radii `125`, `171.05263`, `234.07201`, and `299.99997`; observed centers were `(-965.01196,-6032.63867)`, `(-858.02386,-6097.27734)`, `(-711.61908,-6185.72998)`, and `(-558.45715,-6278.26563)`. With acquisition-time caster `(-1072,-5968)` and target `(-880,-6084)`, these match the `p + A` offsets within float rounding. The pre-cast rank-two file retained an older `p + DataD/4` center prediction; that prediction missed by about 50 world units along the query ray and is preserved as a historical prediction, not counted as a match. Exact float operation order, zero-length direction, and range clamps remain unresolved.
 
 **Verified static query predicate:** type-`0xB` shape dispatch reaches VA `0x00807130` through `0x007F4CF0`. The query radius is normalized by 32 before comparison. The enumerator computes squared 2D center distance, adds spatial-entry dword `+0x90` to normalized radius, squares the sum, then accepts inclusively:
 
@@ -101,7 +139,7 @@ Native flow: per-target worker → `CMissileForkedLightning` callback → shared
 
 **Verified runtime (new):** the Amim and invulnerability treatments were rejected inside the candidate callback before list retention/worker dispatch, so these runs did not exercise damage suppression or mitigation. For both, the relationship gate passed and shared validator returned `54` (`0x36`). Amim level 1 was read back in JASS. Invulnerability was set by the supported JASS native but not independently read back. The normal matched control selected three targets and delivered raw 85 to each. **Unresolved:** meaning of `0x36`; receiver-side behavior if a defensive target reaches the worker; armor/defense category, spell reduction, ethereal, absorption, `MagicImmunesResistDamage` variation, adjusted amounts, and selected-but-suppressed damage. Do not describe the observed validator result as damage mitigation.
 
-**Verified runtime rank three:** case 7 logged rank 3 and three receiver calls each carrying raw 250. Those targets had 210 maximum/current life and died; use the receiver payload, not life deltas, as the raw-damage result. Rank-three query radii were `125`, `171.05263`, `234.07201`, and `299.99997`; centers were `(-965.01196,-6032.63867)`, `(-858.02386,-6097.27734)`, `(-711.61908,-6185.72998)`, and `(-558.45715,-6278.26563)`. They match the rank-one progression because the three authored ranks share Area 125, DataC 900, DataD 300. Rank-two cast case 6 produced JASS 160 damage events, but native tracing had expired before that case; no new rank-two geometry result is claimed.
+**Verified runtime rank three:** case 7 logged rank 3 and three receiver calls each carrying raw 250. Those targets had 210 maximum/current life and died; use the receiver payload, not life deltas, as the raw-damage result. Rank-three query values match the common progression. **Verified runtime rank two (new):** a fresh single-case accepted cast logged rank 2, four query centers/radii matching the `p + Area` progression, three workers, and three receiver calls carrying raw 160. Three JASS damage events also recorded 160. The targets remained alive; the native payload confirms raw damage. The immutable pre-cast prediction is `build-re/ability-re/ANfl-rank2-geometry-03/predictions/case-6-precast.json`; it predicted the older `p + DataD/4` center offset, so query centers did not match that part of the written prediction. `results/geometry-comparison.json` records the mismatch and comparison against the corrected center model.
 
 For the shared validator, a nonzero result is a rejection code. In particular, the statically proven `0x36` path is the exact conjunction documented above; runtime Amim correlation does not establish which term was decisive. The same-owner query rejection and early absences for different-owner allies and Neutral Passive must remain separate branches in an OpenRealm implementation until their native stages are distinguished.
 
@@ -130,6 +168,7 @@ Do not assume a stable tie, exact candidate scalar meaning, or named damage type
 ## Evidence paths and next parity tests
 
 - Clean control and trace: `build-re/ability-re/ANfl-clean-combat-01/` (map SHA-256 `4d4e664db24b81bd99f15343fc0163015e849cedbcd91ab34352c355023c76ce`).
+- Rank-two accepted cast, prediction, setup/cast outputs, and bounded native query/worker/receiver trace: `build-re/ability-re/ANfl-rank2-geometry-03/` (map SHA-256 `0bd800973a9f103d974d7a906ca85ad80e3a3a2b6198e00501ff8e79209b106e`; embedded JASS SHA-256 `acbab2178d12d3ec2bc17d4309c5c8f24493eeaa01fd35a2b785115b296a9d0a`; trace SHA-256 `a5929e6b0cab827cffb8dd427c79342c8342d99c069852ca2ee6feec3f0dfe06`). `results/geometry-comparison.json` records observed versus preregistered and corrected center models.
 - Exact built-in validator `0x36` analysis and pinned disassembly: `build-re/ability-re/ANfl-validator-36-static-01/`.
 - Neutral Passive case 5, rank-three case 7, rank-two case 6, predictions, outputs, prepared map identity, and bounded trace: `build-re/ability-re/ANfl-neutral-passive-rank3-01/` (map SHA-256 `9ead2f225f2c8e625dd62d2a30091b2ae6dd6a03557c71ba8c848a987b3338c3`; embedded JASS SHA-256 `cbe5fd003ebf101d6dcdbc0a1915f74df53d8eeb1e348ba38fbc31597ed3157f`). Case 1/2 `*-validator-repeat.txt` files are stale copies and are not new evidence; `validator-detail-trace.jsonl` contains only `agent-ready` and is incomplete.
 - Repaired geometry fixture, preflight, fresh JASS output, acquisition/query trace, and native comparison operands: `build-re/ability-re/ANfl-geometry-boundary-01/` (prepared-v3 map SHA-256 `9082fe582d52e7e4625a340f531ac77990b6bf4d74a98e45ebd139352bc54c1e`). The earlier failed distance fixture remains preserved at `build-re/ability-re/ANfl-geometry-distance-02/` and is not evidence.
@@ -137,7 +176,7 @@ Do not assume a stable tie, exact candidate scalar meaning, or named damage type
 - Relation-filter evidence and prior same-owner observation: `build-re/ability-re/ANfl-target-eligibility-ally-01/`.
 - Updated docs: `docs/games/warcraft-3/forked-lightning-retail.md`, `docs/games/warcraft-3/ability-probes/targeting.md`, `docs/games/warcraft-3/ability-probes/combat.md`.
 
-Smallest useful next experiments: (1) add `BlzIsUnitInvulnerable` readback before/after setter and removal, then capture the first differing `0x36` operand against the matched normal target; (2) move the filtered trace to broadphase entry/shape dispatch and compare the same-position Player 1, Player 12, and Player 15 entries; (3) capture rank-two query geometry during an active trace window; (4) use one defense that remains callback-eligible and capture receiver-adjusted amount; (5) test an ordinary non-neutral enemy owner and distinguish it from Neutral Hostile/Passive. Rank-three raw damage and geometry are now verified. An exact comparator tie requires equal native metric bits and remains lower priority.
+Smallest useful next experiments: (1) add `BlzIsUnitInvulnerable` readback before/after setter and removal, then capture the first differing `0x36` operand against the matched normal target; (2) move the filtered trace to broadphase entry/shape dispatch and compare the same-position Player 1, Player 12, and Player 15 entries; (3) use one defense that remains callback-eligible and capture receiver-adjusted amount; (4) test an ordinary non-neutral enemy owner and distinguish it from Neutral Hostile/Passive. Rank-one through rank-three query geometry and raw damage are now verified. An exact comparator tie requires equal native metric bits and remains lower priority.
 
 ## Controlled immunity and startup follow-up (October 18, 2026)
 
@@ -148,3 +187,22 @@ For normal case 1, JASS recorded an accepted order and three matching 85-damage 
 Case 3 called `SetUnitInvulnerable(target,true)` on the matched secondary Footman. It too reached the callback, passed the relationship gate, and returned `0x36` from the shared validator; no worker or receiver targeted it. Three other targets received raw 85. The setup records the native call request, but there is no independent state readback in this fixture, so the exact invulnerability-state assurance is narrower than the Amim case. The exact static `0x36` return branch and conjunction were established in the later focused disassembly; the first runtime-divergent operand remains unknown. Raw output, predictions, map hashes, and bounded traces are under `build-re/ability-re/ANfl-state-alliance-ranks-01/`; startup sentinels and captured outputs are under `build-re/ability-re/ANfl-startup-diagnostic-01/`.
 
 Case 4 changed target 1 to Player 1 and set mutual passive alliance with Player 0 (JASS confirmed both directional `IsPlayerAlly` checks). The target did not reach the ANfl callback or a worker; three Player 12 targets received raw 85. The target was absent from the captured final geometry comparator and from calls to VA `0x006AD670`; these hooks do not distinguish exclusion in broadphase enumeration from an earlier query predicate. Do not call this a confirmed owner-mask rejection until the earlier candidate path is observed.
+
+
+## Environment follow-up and investigation status
+
+The earlier Retail profile dialog occurred while the overlay containing
+`/home/agent/.wine-war3` had zero available bytes. A later bounded check found
+3.8 GiB free and 7% inode use; Wine Documents/save/profile path checks passed,
+and the pinned Retail control map reached both chapter card and gameplay HUD.
+No files were removed. The precise profile write that failed earlier is
+unresolved. Evidence is in
+`build-re/ability-re/ANfl-environment-diagnostic-02/`. The Frida endpoint
+`127.0.0.1:27043` was unavailable during the environment-only control check, but
+was subsequently available for the rank-two capture in
+`ANfl-rank2-geometry-03`. Player 1/Player 15 first exclusion stage, invulnerability
+readback and `0x36` operand divergence, earliest Player 1/Player 15 query
+exclusion, and eligible-target damage mitigation remain open. Rank-two geometry
+is now covered by `ANfl-rank2-geometry-03`; its comparison documents that the
+pre-cast `DataD/4` center prediction was wrong and that observed centers match
+the corrected `p + Area` model.

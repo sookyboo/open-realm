@@ -20,6 +20,17 @@ archived Retail observations. Pseudocode below summarizes Ghidra output; it is
 not original source. RVA-to-VA translation for this build is `VA = RVA +
 0x00400000`.
 
+The rank-two single-case capture and the October 18 validator/readback
+follow-up are summarized in the implementation specification and
+`build-re/ability-re/ANfl-invulnerability-readback-01/results/followup-comparison.json`.
+Rank-two geometry now has a runtime trace; `p+Area` matches and the original
+`p+DataD/4` prediction remains archived as a failed hypothesis. The Amim
+candidate's `+0x264/+0x268` values differ from the normal candidate, but the
+selector and virtual returns were not measured reliably. The new
+invulnerability readback and callback observations conflict with the earlier
+case-three run, so no single invulnerability rejection stage or getter
+semantics is promoted to the implementation contract.
+
 ## Registration and relevant methods
 
 The exact-build class registration identifies factory file offset `0x00877840`,
@@ -242,15 +253,13 @@ The rank-one lookup values align these with `Area=125`, `DataC=900`, and
 `DataD=300`; the endpoint is `L=max(Area+DataD, DataC-(Area+DataD))=475`.
 For the recorded rank-one case, the four query radii agree with
 `r(p)=Area + p*(DataD-Area)/L`, and successive progress is
-`p_next=min(p+r(p),L)`. Query centers are consistent with
-`caster + normalize(primary-caster)*(p+DataD/4)`. The four observed center
-coordinates track this ray within about 1.3 world units and the measured radii
-match the formula within captured float precision. This is a **corroborated
-rank-one runtime model**; a native caster point sample and boundary probes
-remain missing, so exact center rounding, circle-edge inclusion, collision
-extent, and rank-two/three geometry remain unresolved. The endpoint query is
-issued before termination. Coincident caster/target zero-vector behavior is
-also unresolved.
+`p_next=min(p+r(p),L)`. The initially considered center offset
+`p+DataD/4` was falsified by acquisition-time point and query observations.
+The corrected model is `caster + normalize(primary-caster)*(p+Area)`. Runtime
+query traces for ranks 1, 2, and 3 match that center progression and the radius
+formula within captured float precision. Exact center rounding, circle-edge
+inclusion, collision extent, and coincident caster/target zero-vector behavior
+remain unresolved. The endpoint query is issued before termination.
 
 Coincident caster/target positions pass through the native reciprocal-length
 calculation; the exact zero-vector fallback and resulting query centers have
@@ -280,11 +289,9 @@ observations corroborate the radius and progress model below; they do not prove
 the final candidate boundary comparison. The rank-one values align with
 `Area=125`, `DataC=900`, and `DataD=300`, yielding endpoint `L=475`,
 `r(p)=Area+p*(DataD-Area)/L`, `p_next=min(p+r(p),L)`, and center progress
-`p+DataD/4`. This field mapping and simplified model are currently
-corroborated by authored values, exact-build accessor flow, and one runtime
-query trace, rather than verified across ranks. Circle-edge inclusion, unit
-footprint effects, native-point rounding, and rank-two/three geometry remain
-unresolved.
+`p+Area`. Runtime query traces now verify this model for all three ranks.
+Circle-edge inclusion, unit footprint effects, native-point rounding,
+zero-vector behavior, and other range clamps remain unresolved.
 
 ### Shared damage receiver behavior relevant to ANfl
 
@@ -694,7 +701,7 @@ sound. Presentation evidence remains authored/static only.
 | Factory registration points at the ANfl class factory; that factory installs `CAbilityForkedLightning`'s table | Exact-build static relationship | No runtime receiver identity claim. |
 | Order ID `0xD026B`; order string `forkedlightning` | Static getter plus authored data; order path also observed by Frida | None for this build's order identity. |
 | Candidate filtering, repeated query deduplication, full-set sort, then DataB-bounded worker prefix | Exact-build static control flow; corroborated by three live casts with five distinct callback pointers and three workers each | Decode every query parameter and target gate to name each gameplay predicate; isolate creation-order effects from placement. |
-| Rank-one and rank-two amounts | Runtime payload floats 85 and 160; static row accessors read DataA; JASS samples show matching losses on five-target tests | Rank three and other target defenses remain untested; raw amount can differ from life delta after mitigation. |
+| Rank-one through rank-three amounts | Runtime receiver payloads 85, 160, and 250; static row accessors read DataA; rank-one/two JASS samples show matching damage events | Receiver-adjusted amount under an eligible defensive treatment remains untested; rank-three life loss was overkill-limited. |
 | Shared receiver and selected targets | Runtime worker target equals receiver ECX; cases 19 and 21 correlate all five native candidate coordinates one-to-one with JASS targets and match the predicted three damage recipients | Correlation uses exact live coordinates, owner, and type; a handle-registry mapping and individual gate outcomes for non-selected targets remain open. |
 | DataB target limit | Static DataB row accessor and post-sort `min(candidate_count, DataB)` worker bound; live cases produced three workers at ranks 1 and 2 | DataB is 3 at all authored ranks, so rank-varying limit behavior is not tested. |
 | Mana/cast timing | Direct JASS samples, 250ms resolution | Finer timing only if exact ordering matters after static path inspection. |
@@ -766,7 +773,7 @@ The runtime words for the rank-one payload are:
 | `+0x04` | `0` | Meaning unresolved. |
 | `+0x08` | `0` | Meaning unresolved. |
 | `+0x0C` | `1` | Receiver flags word; flag semantics unresolved. |
-| `+0x10` | rank 1: float `85` (`0x42AA0000`); rank 2: float `160` (`0x43200000`) | Raw amount supplied to receiver; static row accessor and worker context map these tested values to DataA. Rank three is untested. |
+| `+0x10` | rank 1: float `85` (`0x42AA0000`); rank 2: float `160` (`0x43200000`); rank 3: float `250` (`0x437A0000`) | Raw amount supplied to receiver; static row accessor and worker context map these tested values to DataA. Rank-three target deaths make life loss unsuitable as the raw amount. |
 | `+0x14` | `0x400` | Category/type field candidate; semantic mapping unresolved. |
 | `+0x18` | `0` | Initializer's global value. |
 | `+0x1C` | `0` | Zeroed by initializer. |
@@ -1161,9 +1168,28 @@ the accepted cast generated four type-`0xB` queries with radii
 rank-one progression because authored `Area=125`, `DataC=900`, and `DataD=300`
 are the same. Three workers and CUnit receivers carried raw 250, confirming
 rank-three DataA at runtime. Target maximum life was 210, so the receiver
-payload—not final life loss—is the raw damage measurement. Rank two had a
-fresh accepted JASS case with three 160 damage events, but its geometry was
-not captured in the valid native trace. A later repeat attempt after the
-Frida window ended did not refresh PreloadGen timestamps and is excluded. A
-subsequent Retail launch stopped at the system “not enough space on disk”
-profile dialog before map startup; it adds no gameplay evidence.
+payload—not final life loss—is the raw damage measurement. A separate
+single-case rank-two run is now captured at
+`build-re/ability-re/ANfl-rank2-geometry-03/`. It recorded rank 2, the same
+four query radii and centers as ranks 1 and 3, three workers, and three
+receiver payloads of raw 160. Its saved pre-cast prediction contains the older
+`p+DataD/4` center expression; measured centers miss that prediction and
+match the corrected `p+Area` model. The prediction is preserved, and this
+discrepancy is recorded in `results/geometry-comparison.json`.
+
+
+### Retail disk/profile warning follow-up (October 18, 2026)
+
+The failed Retail launch coincided with the container overlay backing the Wine
+prefix reporting zero available bytes and 100% use. It now reports 3.8 GiB
+free and 7% inode use. Wine's Warcraft Documents path resolved correctly;
+write/delete checks passed in CustomMapData and save/Profile1 directories, and
+the registry reports Allow Local Files enabled. A bounded launch of the known
+OrcX01 control map reached its chapter card and gameplay HUD without a profile
+warning. The exact profile operation that failed during exhaustion was not
+captured. No files were deleted to resolve it. Evidence is in
+`build-re/ability-re/ANfl-environment-diagnostic-02/`. A later rank-two run
+used the available Frida endpoint at `127.0.0.1:27043` and produced a bounded
+native capture under `build-re/ability-re/ANfl-rank2-geometry-03/`. This does
+not resolve owner filtering, invulnerability readback, `0x36` operand
+differences, or receiver mitigation.

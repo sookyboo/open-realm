@@ -1441,13 +1441,36 @@ returned `0x36`, but the state was not independently read back. The matching
 Retail `common.j` provides `BlzIsUnitInvulnerable` at line 2529; a future case
 should log it before and after `SetUnitInvulnerable`.
 
+An operand follow-up (`ANfl-invulnerability-readback-01`) correlated the
+Amim target at `(-720,-6160)` with candidate `0x10875a74`. Its `+0x164` was
+`0x245`, `+0x264` was `1`, and `+0x268` was `1`; a normal Footman in the same
+cast had the same `+0x164` but zero at both signed fields and validator return
+zero. The Amim target passed geometry and the callback relationship gate,
+returned `0x36`, and received no worker or receiver. This does not identify
+which candidate field is selected: source virtual `+0x1F0` was not captured
+reliably, and shared-address virtual hooks produced aliased/inconsistent
+results. Do not assign semantic names to these fields from this correlation.
+
+The same follow-up found a contradictory `BlzIsUnitInvulnerable` readback:
+untreated Footmen returned true, while the setter changed the treated target's
+readback from true to false. That treated target passed final geometry but did
+not reach the callback, worker, or receiver in the case-three trace. This
+conflicts with the earlier case-three trace that reported callback-level
+`0x36`. The getter's state meaning and the first post-geometry predicate are
+unresolved; neither result is used as a clean mitigation measurement. Details
+and hashes are in
+`build-re/ability-re/ANfl-invulnerability-readback-01/results/followup-comparison.json`.
+
 The rank-three case in `ANfl-neutral-passive-rank3-01` read back ability level
 3 and was accepted. Three workers and three receiver calls carried raw damage
 250. The test targets had 210 maximum life, so their final life is not a raw
 damage measurement. The same trace recorded four query centers/radii equal to
-rank one for authored `Area=125`, `DataC=900`, and `DataD=300`. Rank-two's
-accepted cast logged three 160 JASS damage events, but its geometry had no
-valid native trace in that run because the Frida observation window ended.
+rank one for authored `Area=125`, `DataC=900`, and `DataD=300`. A fresh
+single-case rank-two run at `ANfl-rank2-geometry-03` captured four query
+centers/radii, three workers, and three raw-160 receiver payloads. The centers
+match the corrected `p+Area` model. Its immutable pre-cast prediction used the
+older `p+DataD/4` expression and missed; `results/geometry-comparison.json`
+records both the mismatch and the corrected-model comparison.
 
 Neutral Passive Player 15 at target index 1 had stable life and an accepted
 cast, but its expected point `(169.5,63.5)` was absent from the final geometry
@@ -1455,3 +1478,16 @@ operand trace. No callback, worker, or receiver was observed for it. Other
 selected targets received raw 85. This is a pregeometry-stage eligibility
 difference, not receiver-side mitigation; the exact broadphase/predicate
 boundary remains unknown.
+
+
+### Retail environment check (October 18 follow-up)
+
+The previous “not enough disk space” profile warning occurred while the
+Wine-prefix overlay had zero bytes available. Current checks show 3.8 GiB free,
+7% inode use, correct Documents/save-folder resolution, and successful
+profile-directory write checks. A bounded control launch reached gameplay with
+no warning. This confirms current startup/profile access but does not add ANfl
+gameplay evidence. See
+`build-re/ability-re/ANfl-environment-diagnostic-02/`. The subsequent
+rank-two trace used the Frida endpoint and is preserved separately at
+`build-re/ability-re/ANfl-rank2-geometry-03/`.
