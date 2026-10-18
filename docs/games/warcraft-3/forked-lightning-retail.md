@@ -691,3 +691,27 @@ a separate renderer loop over the global context's `+0x34` list. It does not
 establish that the first argument at the writer call equals the address of
 that list. No pointer identity is promoted from matching element shape or
 allocator label.
+
+## Controlled five-target follow-up: activation failure
+
+A later attempt is preserved under
+`build-re/ability-re/ANfl-controlled-target-selection-04/` and
+`ANfl-controlled-target-selection-05/`. Case 04 reached the gameplay HUD, but
+its chat scenario produced no fresh JASS placement result. The first map wired
+chat registration to the campaign intro-skip action; that registration point
+was not shown to have executed. Case 05 moved the registration call into map
+`main` immediately before `RunInitializationTriggers`, verified the call in
+the generated `war3map.j`, launched the prepared map, advanced it to the
+expected gameplay HUD, and displayed `-re anfl-prepare-a` in chat. It still
+produced no fresh placement result. See `investigation-status.json`,
+`investigation-notes.md`, launch records, and `failure-screen.png` in case 05.
+
+These attempts produced no target position or handle observations, no
+pre-cast predictions, and no new Frida trace. They are classified
+`trace_incomplete`; they do not add evidence about candidate eligibility,
+query coverage, movement, native-to-JASS identity, or final recipients. The
+historical four-candidate capture remains movement-confounded and incomplete;
+the absent fifth callback candidate is still unexplained. The next useful step
+is a minimal startup-initialized chat/PreloadGen sentinel in this same map.
+Only after that sentinel emits a fresh result should the ANfl placement logic
+be restored and enabled for casts.

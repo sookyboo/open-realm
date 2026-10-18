@@ -672,3 +672,13 @@ directory. The normal runner `capture` command requires its own launch record;
 these runs were loaded through the in-process Custom Game UI, so the raw
 PreloadGen result was copied before each rerun. The probe README documents that
 path and the JHCR update step.
+
+The later controlled five-target follow-up did not complete: case 04's
+intro-skip registration produced no JASS output, and case 05 moved registration
+into `main` but still produced no fresh placement result after the command was
+shown in gameplay chat. This is an activation/capture failure, not a negative
+targeting result. No predictions were recorded and no casts from those cases
+are counted. Details are preserved in
+`build-re/ability-re/ANfl-controlled-target-selection-05/investigation-status.json`
+and `investigation-notes.md`; the four-candidate retry above remains the most
+recent usable coordinate trace and is not a complete five-target proof.
