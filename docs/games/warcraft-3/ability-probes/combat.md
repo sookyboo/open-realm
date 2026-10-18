@@ -1383,3 +1383,32 @@ discarded. The v6 lane search instead tested all intended points before
 selecting the origin. If setup markers are present but the behavior is
 unexpected, review the raw output, object data, map gates, and verification
 docs before changing the launch route or drawing a conclusion.
+
+### ANfl immunity-state rejection before damage dispatch
+
+The October 18 controlled follow-up reuses the clean-combat five-Footman
+fixture. A normal rank-one case had an accepted cast, three native worker
+calls, three receiver calls with raw damage 85, and matching JASS damage
+events. In the Amim treatment, JASS read back `GetUnitAbilityLevel(target1,
+'Amim') == 1`. Native tracing observed the target passing spatial geometry
+and reaching the ANfl candidate callback; the relationship gate returned 1
+and the shared target validator returned `54` (`0x36`). No worker or receiver
+was called for that target. It remained at 210 life; replacement candidates
+received 85. This is target-validator rejection, not damage mitigation.
+
+The invulnerability treatment called `SetUnitInvulnerable(target1,true)` and
+showed the same geometry/callback/gate/validator sequence, including return
+`0x36`, with no worker or receiver for target1. Other selected units received
+85. The fixture records the setter request but has no independent
+invulnerability readback, so that state confirmation is qualified. The native
+meaning of `0x36` and receiver-side mitigation for a defensive candidate that
+passes validation remain open. Traces and case outputs are preserved under
+`build-re/ability-re/ANfl-state-alliance-ranks-01/`; startup diagnostics are
+under `build-re/ability-re/ANfl-startup-diagnostic-01/`.
+
+Case 4 set the secondary Footman owner to Player 1 and explicitly enabled
+mutual passive alliance with Player 0. It did not reach the ANfl callback or
+worker; the three selected Player 12 Footmen received 85. The filtered trace
+did not observe this target at final geometry or inside VA `0x006AD670`, so
+the exact pre-callback exclusion point remains unresolved. This is not
+evidence that different-owner allies use the same equal-owner `0x84` branch.

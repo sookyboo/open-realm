@@ -1058,10 +1058,12 @@ or the broadphase edge. The gameplay meaning/writer of `+0x90` remains
 unresolved; do not label it collision size based on the numeric value alone.
 
 Player 12 is Neutral Hostile; prior reports calling it a generic enemy player
-are corrected here. Separately allied Player 1, neutral passive Player 15,
-magic immunity, invulnerability, and another caster-to-target distance remain
-untested. The clean-combat fixture remains valid baseline evidence, but does
-not itself establish mitigation.
+are corrected here. At this point in the investigation, separately allied
+Player 1, neutral passive Player 15, magic immunity, invulnerability, and
+another caster-to-target distance had not yet been tested. The later immunity
+and Player 1 findings are recorded in the follow-up section below. Neutral
+Passive Player 15 and another caster-to-target distance remain untested. The
+clean-combat fixture alone does not establish mitigation.
 
 The prepared follow-up `ANfl-geometry-distance-02` did not produce valid
 geometry results. Its script retained stale chat run IDs/output branches from
@@ -1069,3 +1071,46 @@ the earlier ally probe, so the chat handler marker appeared but no matching
 geometry scenario result was written. The preserved map hash and corrected
 pre-observation prediction are setup evidence only; this attempt is not
 counted as a boundary test.
+
+### Immunity callback validation and prepared-map transition (October 18, 2026)
+
+The first `ANfl-state-alliance-ranks-01` launch was stopped while the OrcX01
+campaign intro/transition was still in progress. A minimal diagnostic derived
+from the working clean-combat fixture emitted a startup PreloadGen result and,
+after the map reached gameplay, a separate `-re anfl-startup-check` handler
+result for Player 0. A subsequent launch of the original seven-case map
+completed its normal campaign sequence and produced fresh setup and cast
+outputs. No script or archive fix was needed; the earlier black screen was a
+normal transition, not an observed JASS startup failure. The diagnostic and
+capture are preserved in `build-re/ability-re/ANfl-startup-diagnostic-01/`.
+
+The normal rank-one control (case 1) had an accepted order, three native
+workers and three CUnit receivers with raw payload 85, plus matching JASS
+damage events. The saved prediction was matched by target indices 0, 1 and 2.
+
+In case 2, the secondary Player 12 Footman had `Amim` ability level 1 in the
+JASS setup/cast records. Its spatial entry passed the geometric predicate and
+was delivered to the ANfl callback. The callback relationship gate returned
+1, but the shared target validator returned decimal 54 (`0x36`). It did not
+reach a worker or damage receiver; the selected replacement candidates did.
+Its life remained 210 while the three recipients received 85. This is
+callback-level rejection, not pre-callback filtering or damage suppression.
+
+In case 3, the same secondary Footman received a `SetUnitInvulnerable(...,
+true)` call. The callback delivered it, the relationship gate returned 1, and
+the shared validator again returned `0x36`; it reached no worker or receiver.
+Three other selected targets received raw 85. This fixture did not separately
+read back the invulnerability state, so that treatment's state verification is
+less direct than the Amim level readback. The `0x36` validator code's general
+semantic name is unresolved. Runtime traces and per-case outputs are in
+`build-re/ability-re/ANfl-state-alliance-ranks-01/runtime/` and `results/`.
+
+Case 4 changed target 1 to Player 1 and explicitly set mutual passive
+alliance with Player 0; the setup output confirms both directional alliance
+checks. The target did not reach the ANfl callback or a worker, while three
+Player 12 targets received 85. The target-specific pointer was absent from
+the final geometry-comparator and `0x006AD670` observations, so these captures
+do not distinguish broadphase omission from rejection in an earlier query
+predicate. The exact exclusion stage remains open. Trace and JASS output are
+`runtime/state-trace-v5-allied.jsonl`, `results/case-4-setup.txt`, and
+`results/case-4-cast.txt`.

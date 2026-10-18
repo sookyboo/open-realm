@@ -841,3 +841,35 @@ JASS, archive hash, and stale identifiers. Prepared-v3 passed and produced
 fresh outputs. Acquisition-time native points also corrected the center model:
 the caster moved before acquisition, so the ray starts at native position
 `(-1072,-5968)`, not the earlier JASS pre-order point.
+
+### Magic immunity and invulnerability callback outcomes
+
+The controlled `ANfl-state-alliance-ranks-01` follow-up used the clean
+stationary Footman layout. A normal rank-one control selected targets 0, 1,
+and 2 and reached three workers/receivers with raw 85 damage. With Amim added
+to secondary target 1 (JASS ability level read back as 1), native tracing
+showed that its spatial entry passed geometry and reached the ANfl callback.
+The relationship gate passed (`1`), then the shared target validator returned
+`54` (`0x36`), so the target did not enter the retained/worker set. The
+invulnerability setup produced the same callback and validator result after
+`SetUnitInvulnerable(target,true)`; this fixture did not independently read
+back that state. For both treatments, other candidates filled the three-worker
+prefix and received 85. Thus these captures establish callback-level
+eligibility rejection, not a query-mask exclusion or receiver-side damage
+suppression. The meaning of validator code `0x36` remains unresolved.
+
+The initial black screen was a campaign transition. The minimal diagnostic
+derived from the known-good clean fixture produced separate startup and chat
+handler outputs after the documented transition completed. The original
+seven-case map then produced fresh setup/cast outputs without a script change.
+Artifacts are in `build-re/ability-re/ANfl-startup-diagnostic-01/` and
+`build-re/ability-re/ANfl-state-alliance-ranks-01/`.
+
+A separately owned allied case changed the secondary Footman to Player 1 and
+set mutual passive alliance with Player 0. The target did not reach the ANfl
+callback; three Player 12 targets were selected and damaged. The candidate was
+not seen at the final geometry comparison or the filtered VA `0x006AD670`
+owner-relation hook. The evidence therefore establishes callback absence but
+does not yet distinguish broadphase exclusion from an earlier query filter.
+It does not justify extending the static same-owner `0x84` branch to all
+different-owner allies. See case 4 and `runtime/state-trace-v5-allied.jsonl`.
