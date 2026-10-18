@@ -37,9 +37,9 @@ had this receiver type.
 | `0x00C78090` / `0x00878090` | vtable slot `+0x42C`; direct call to `0x00C78A50(this, 0)` | Native callback enters the target acquisition/application path. Archived Frida observed entry/exit. Its raw `EAX` value is not a declared result contract. |
 | `0x00C787D0` / `0x008787D0` | Direct call to `0x00C78A50(this, 1)` | Same acquisition routine with a mode that skips per-target processing; caller's exact lifecycle role is unresolved. |
 | `0x00C78A50` / `0x00878A50` | Direct calls to query builder `0x0068EA00` and selected-target worker `0x00C788F0`; passes callback `0x00C78FC0` and comparator `0x00C78F60` | Core spatial search, candidate ordering, and dispatch loop. Frida observed this function; the archived raw `EAX` values were 1 and 3. Ghidra decompiles it as `void`, so these raw register values are not treated as returned counts. |
-| `0x00C78FC0` / `0x00878FC0` | Callback supplied to `0x0068EA00` | Candidate gate, deduplication, candidate append, cap check. Static callback dispatch; not separately traced in archived sessions. |
+| `0x00C78FC0` / `0x00878FC0` | Callback supplied to `0x0068EA00` | Candidate gates, deduplication and candidate append; normal-order cap is applied by the caller after sorting. Runtime callback returns were captured in the new cases. |
 | `0x00C78F60` / `0x00878F60` | Comparator passed to sort helper `0x00AB2000` | Compares a stored float metric; ties compare the integer at candidate `+0x0C`. The meaning of that integer field is not established. |
-| `0x00C788F0` / `0x008788F0` | Directly called for each retained candidate | Builds a per-target context, resolves the `MNfl` missile class object, and dispatches through its vtable at `+0xA4` to `CMissileForkedLightning` method `0x00C781D0` / RVA `0x008781D0`. This concrete method starts a generic data-driven action/event handle; its connection to damage remains unresolved. |
+| `0x00C788F0` / `0x008788F0` | Directly called for each selected candidate | Loads rank DataA into the per-target context, resolves the `MNfl` missile class object, and dispatches through its vtable at `+0xA4`; the runtime callback path proceeds to shared damage helper `0x002EB2B0`. |
 
 ## Target acquisition and selection
 
@@ -47,14 +47,16 @@ The statically recovered path in `0x00C78A50` is:
 
 1. Read the owning unit from ability field `+0x30`; read positions through unit
    virtual slot `+0xB8` for the owner and the order target.
-2. Read several rank-indexed values from the ability data object at `+0x50`.
-   The accessors read distinct fields in the indexed data row. One value is
-   converted to an integer and used as a hard candidate limit. In stock TFT
-   `ANfl`, authored DataB is `3`; the live JASS case sampled three affected
-   targets, consistent with that value. The raw `EAX=3` from the void callback
-   is not used as count evidence. The native row-field-to-DataB mapping is not
-   independently proven here, so treat the equality as strong corroboration,
-   not a field-name proof.
+2. Read rank-indexed ability data from the object at ability `+0x50`. Accessor
+   `0x0046EE20` reads the active row's dword at `+0x24`; `0x00878A50`
+   converts it with `0x009A07B0` into `local_124`. The caller later uses that
+   value as the maximum number of workers. The row layout and authored
+   `AbilityData.slk` identify `+0x24` as DataB. Accessor `0x0046ED70` reads
+   row `+0x20` (DataA); the per-target worker loads that value into its
+   temporary missile context. Runtime rank-one and rank-two casts observed
+   payload `+0x10` as 85 and 160 respectively, proving this authored DataA
+   mapping for those ranks. The rank-three value 250 remains authored/static
+   only.
 3. Compute a forward spatial path from the owner toward the explicit order
    target. In a loop, invoke `0x0068EA00` (VA) with query type `0xB`, a radius
    and center derived from rank data and path geometry, flags/mask arguments,
@@ -72,21 +74,33 @@ The statically recovered path in `0x00C78A50` is:
    the candidate and metric. The numeric meanings of `0x0067FB80`'s flags and
    the shared validator's internal return codes remain those documented in the
    shared targeting notes.
-5. Once the retained count reaches the configured limit, the callback returns
-   false. The shared query builder stops candidate processing on a zero
-   callback result. The caller also bounds its later processing loop by
-   `min(candidate_count, limit)`.
-6. The caller sorts only the candidates collected before that early stop. The
-   comparator orders by its stored floating-point metric and uses the integer
-   at candidate `+0x0C` on ties. It then invokes `0x00C788F0` for those entries.
+5. In the accepted order path, `0x00C78090` calls acquisition with mode
+   `param_3=0`. In this mode callback `0x00C78FC0` records accepted unique
+   candidates and returns true; its mode-dependent cap return is used only
+   when `param_3` is nonzero. The acquisition loop continues its repeated
+   spatial queries until its geometric termination condition. Runtime Frida
+   observed 12 callback entries per cast across the overlapping queries, five
+   distinct candidate pointers, and return value 1 for all 12 entries in each
+   of three casts. The duplicate candidate pointers show that the query
+   regions overlap and the callback deduplicates across them.
+6. After query enumeration, normal mode sorts the collected records when the
+   count exceeds one. The comparator orders by the stored floating-point
+   metric and uses the record integer at `+0x0C` for ties. The caller then
+   computes `min(candidate_count, local_124)` and invokes `0x00C788F0` only
+   for that prefix. Thus the accepted Retail path sorts the complete unique
+   candidate set before applying the DataB worker limit. The other mode
+   (`param_3 != 0`) has separate early-stop behavior and does not run the
+   normal sort/worker loop; its lifecycle caller remains unresolved.
 
-This is **not** a global nearest-target search: candidates are capped during
-spatial enumeration, before the distance sort. The sort establishes per-target
-processing order only for the already-retained subset. The repeated query
-geometry is consistent with a forward cone/wedge but exact width, length,
-spacing, boundary inclusivity, and traversal order are not fully decoded from
-the caller. Do not implement an arbitrary nearest-neighbor policy from the
-sort alone.
+The accepted-order path is a nearest-first selection among candidates
+enumerated by the repeated forward spatial queries, subject to the callback
+filters and comparator tie-break. It is not a global search over every map
+unit: only units delivered by those queries can enter the sorted set. The
+exact query radius, forward spacing, boundary inclusivity, shared spatial
+traversal order, and all comparator tie cases are not fully decoded. The
+runtime callback order is recorded, but because the five test units were
+relocated by pathing at creation, the reverse-creation experiment does not
+isolate creation order from actual position changes.
 
 The callback and shared query builder apply native filtering, but this pass
 has not tied each numeric condition to ground/air, alliance, structure,
@@ -94,10 +108,44 @@ immunity, life, hidden, or invulnerability semantics. Authored TFT
 `ANfl` target mask is air/ground/enemy/neutral/organic; that is configuration,
 not proof that every listed bit is tested by this callback.
 
+### Rank-two and five-target runtime follow-up
+
+Fresh evidence is under `build-re/ability-re/ANfl-targeting-rank2-01/`.
+The prepared map and executable hashes are pinned in `prepared/launch.json`;
+the control-map bytes match the earlier visually confirmed control map. One
+new Warcraft process was launched at 640×480 after advancing the campaign
+intro to the gameplay HUD. A bounded read-only Frida agent hooked the candidate
+callback, ANfl acquisition/worker, missile method/callback, damage helper,
+payload initializer and CUnit receiver. The three JASS files are copied into
+the session directory and preserve full 250 ms sampling output.
+
+| Case | Rank | Targets | Unique callback pointers | Workers / damage calls | Payload | JASS targets losing life by effect sample |
+|---|---:|---:|---:|---:|---:|---|
+| `anfl-r2-five-a` | 2 | 5 | 5 | 3 / 3 | 160 each | 0, 1, 3; 210 → 50.002 |
+| `anfl-r1-five-a` | 1 | 5 | 5 | 3 / 3 | 85 each | 0, 1, 3; 210 → 125.000 |
+| `anfl-r1-five-reverse` | 1 | 5 | 5 | 3 / 3 | 85 each | 0, 3, 4; 210 → 125.001 |
+
+Each case produced 12 callback invocations across repeated queries, with
+return value 1 on every callback; five distinct pointers were seen per cast.
+The worker target pointer equaled each corresponding damage receiver `ECX`.
+All nine damage receiver calls came from return address `0x006EB5F9` (RVA
+`0x002EB5F9`), used vtable `0x00E9C504`, and carried the corresponding caster
+pointer at payload `+0x00`. This establishes the rank-to-payload values and
+the three-worker cap for both tested ranks. JASS health changes identify the
+three affected scenario units as a set; the native callback records do not yet
+provide a pointer-to-individual-JASS-handle mapping for all five units.
+
+The reverse-creation case changed actual initial positions because placement
+resolved collisions differently (for example, secondary units spawned at
+different snapped coordinates). Its changed selected set therefore cannot
+attribute the difference to creation order alone. This is consistent with a
+position-ranked retained prefix, but the exact candidate-to-JASS mapping and
+spatial traversal implementation remain open.
+
 ## Per-target dispatch and action/event path
 
-The `+0xA4` call is now resolved by exact-build static receiver analysis (not
-by archived runtime tracing):
+The `+0xA4` call is resolved by exact-build static receiver analysis and was
+also observed in the new rank/target runtime traces:
 
 1. `0x00C788F0` / RVA `0x008788F0` calls `0x00C787F0` / RVA `0x008787F0`
    with FOURCC `MNfl`. That lookup resolves the registered missile-class
@@ -110,9 +158,8 @@ by archived runtime tracing):
    function entry at slot `+0xA4`: VA `0x00C781D0`, RVA `0x008781D0`.
    Together, the worker lookup, registered class/factory, constructor table
    assignment, and executable slot value establish a verified static
-   receiver/vtable relationship. No archived Frida capture observed the
-   receiver pointer or dynamic target, so this is not runtime-observed
-   dispatch.
+   receiver/vtable relationship. New Frida captures observed three worker
+   target pointers entering this concrete method in each accepted cast.
 3. `0x008781D0` accepts the per-target context produced by the worker. It
    initializes the object's handle field at `this+0x78` (word index `0x1e`),
    calls `0x002E4840`, then selects `0x0006E210` or `0x0006E3E0` based on
@@ -230,21 +277,23 @@ missile callback or to the ANfl record's container argument.
 ## Damage path
 
 Stock TFT data has rank damage values DataA `85`, `160`, and `250`; DataB is
-`3` at all ranks. The archived multiple-target JASS capture records three
-enemy targets at 210 health before the effect and approximately 125 health at
-the `0.75s` sample. This is consistent with 85 damage per target. The same
-capture records a 110-mana reduction by that sample, and later health changes
-are contaminated by target movement, attacks, regeneration, and other map
-activity.
+`3` at all ranks. Exact-build accessor `0x0046ED70` reads the active row at
+`+0x20` (DataA), and the worker puts that result in the per-target context
+before missile dispatch. Accessor `0x0046EE20` reads row `+0x24` (DataB),
+which acquisition converts to the worker-count bound. Three new accepted
+Retail cases observed payload amounts 160 at rank two and 85 at rank one;
+each dispatched three receiver calls. Five-target JASS cases observed three
+targets losing the rank-matching amount by the 0.75-second sample. The exact
+native-pointer-to-each-JASS-handle map remains incomplete.
 
 The worker's virtual call is no longer unresolved: it reaches the missile
 method described above. The generic record branch resolves to lightning
 presentation. A targeted static caller triage found no direct ANfl call to
 payload initializer RVA `0x002A9940`; the CUnit receiver RVA `0x002677C0` is
 reached through virtual `+0x120`. A fresh Retail trace now observes that edge
-from an affected target during an accepted rank-one cast. DataA accessor
-provenance, category/type interpretation, full mitigation behavior, and
-behavior for other target classes/ranks remain open. The shared receiver
+from affected targets during accepted rank-one and rank-two casts. Payload
+category/type interpretation, full mitigation behavior, and behavior for
+other target classes and rank three remain open. The shared receiver
 contract is documented in [combat evidence](ability-probes/combat.md#damage-payload-and-receiver-path-retail-1292).
 
 ## Timing, effect state, and cleanup
@@ -301,18 +350,18 @@ sound. Presentation evidence remains authored/static only.
 |---|---|---|
 | Factory registration points at the ANfl class factory; that factory installs `CAbilityForkedLightning`'s table | Exact-build static relationship | No runtime receiver identity claim. |
 | Order ID `0xD026B`; order string `forkedlightning` | Static getter plus authored data; order path also observed by Frida | None for this build's order identity. |
-| Spatial candidate path, two native gates, duplicate prevention, early count cap, and post-cap sort | Exact-build static control flow | Decode every query parameter and target gate to name each gameplay predicate. |
-| Three targets each sampled at ~85 loss | Authored-data agreement plus direct archived JASS observations | Identity-stable, stationary targets and a cap-boundary test are needed to resolve which candidates survive enumeration. The existing run does not discriminate target order. |
-| `+0xA4` receiver and method | Static class/vtable binding and fresh runtime method entry | Rank/target variants beyond the tested single-target cast. |
-| Shared receiver and exact target | Runtime `+0x120` receiver; `ECX` equals the ANfl worker's target argument and the sole JASS target's life changes | Extend JASS/native unit identity mapping to multi-target cases if testing the target cap/order. |
-| Rank-one amount | Runtime payload float `85`, matching authored `ANfl` DataA rank 1; JASS target life falls by about 85 by the 0.75s sample | Trace the data accessor through missile state to prove field provenance; distinguish raw payload from post-mitigation damage on other armor/type targets. |
+| Candidate filtering, repeated query deduplication, full-set sort, then DataB-bounded worker prefix | Exact-build static control flow; corroborated by three live casts with five distinct callback pointers and three workers each | Decode every query parameter and target gate to name each gameplay predicate; isolate creation-order effects from placement. |
+| Rank-one and rank-two amounts | Runtime payload floats 85 and 160; static row accessors read DataA; JASS samples show matching losses on five-target tests | Rank three and other target defenses remain untested; raw amount can differ from life delta after mitigation. |
+| Shared receiver and selected targets | Runtime worker target equals receiver ECX for all nine damage calls; three of five JASS targets lose the rank-matching amount per case | Native-pointer-to-individual-JASS-handle mapping remains incomplete for all five candidate pointers. |
+| DataB target limit | Static DataB row accessor and post-sort `min(candidate_count, DataB)` worker bound; live cases produced three workers at ranks 1 and 2 | DataB is 3 at all authored ranks, so rank-varying limit behavior is not tested. |
 | Mana/cast timing | Direct JASS samples, 250ms resolution | Finer timing only if exact ordering matters after static path inspection. |
 | Effect/sound lifecycle | Authored model metadata plus candidate transient-handle code | Prove callback/receiver association, resolve data-to-model mapping; visible/audio confirmation only if static linkage remains ambiguous. |
 | Interrupt/removal/target-death cleanup | Static branches have handle cleanup | Identify callback ownership and branch conditions; use focused runtime probes only for unresolved lifecycle events. |
 
-No new Warcraft process was launched. The already-running prepared probe process
-was reused after verifying its launch/executable/map identity; the existing
-captures from `ANfl-live-session-06/` and `ANfl-live-session-07/` were preserved.
+For the preceding damage-path follow-up, no new Warcraft process was launched;
+that session reused its already-running prepared probe process. The current
+rank/target follow-up below launched one prepared-map process. Captures from
+`ANfl-live-session-06/` and `ANfl-live-session-07/` remain preserved.
 
 ## Focused damage-path follow-up
 
@@ -374,7 +423,7 @@ The runtime words for the rank-one payload are:
 | `+0x04` | `0` | Meaning unresolved. |
 | `+0x08` | `0` | Meaning unresolved. |
 | `+0x0C` | `1` | Receiver flags word; flag semantics unresolved. |
-| `+0x10` | float `85` (`0x42AA0000`) | Raw amount supplied to receiver; matches authored rank-one DataA. The exact ability-data accessor remains unresolved. |
+| `+0x10` | rank 1: float `85` (`0x42AA0000`); rank 2: float `160` (`0x43200000`) | Raw amount supplied to receiver; static row accessor and worker context map these tested values to DataA. Rank three is untested. |
 | `+0x14` | `0x400` | Category/type field candidate; semantic mapping unresolved. |
 | `+0x18` | `0` | Initializer's global value. |
 | `+0x1C` | `0` | Zeroed by initializer. |

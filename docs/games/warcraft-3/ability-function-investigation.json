@@ -356,7 +356,7 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "The CUnit spell/direct-damage receiver 0x006677C0 and ordinary attack calculation 0x00B23C30 both call this helper. It lazily loads seven eight-entry Misc rows (DamageBonusSpells, Normal, Pierce, Siege, Magic, Chaos, Hero), then returns row[param2 * 8 + param3]. The installed base MiscGame.txt labels columns SMALL, MEDIUM, LARGE, FORT, NORMAL, HERO, DIVINE, NONE, confirming param3 as defense class in the weapon calculation. The attack routine selects a weapon/attack type from unit attack data for param2. Its static body calls target validation and state helpers and this matrix lookup, but does not call payload initializer 0x006A9940 or receiver 0x006677C0; this negative finding applies only to attack calculation 0x00B23C30, not later impact processing. Later ordinary attack impact now establishes payload and CUnit receiver convergence for attack types 1 and 4 when no attached ability handles the event. Types 2, 3, and 5\u20138 schedule distinct effects, with impact convergence still open. Receiver-side param2/type derivation and behavior for the legacy table remain open; ethereal adjustments are handled separately.",
+      "evidence_summary": "The CUnit spell/direct-damage receiver 0x006677C0 and ordinary attack calculation 0x00B23C30 both call this helper. It lazily loads seven eight-entry Misc rows (DamageBonusSpells, Normal, Pierce, Siege, Magic, Chaos, Hero), then returns row[param2 * 8 + param3]. The installed base MiscGame.txt labels columns SMALL, MEDIUM, LARGE, FORT, NORMAL, HERO, DIVINE, NONE, confirming param3 as defense class in the weapon calculation. The attack routine selects a weapon/attack type from unit attack data for param2. Its static body calls target validation and state helpers and this matrix lookup, but does not call payload initializer 0x006A9940 or receiver 0x006677C0; this negative finding applies only to attack calculation 0x00B23C30, not later impact processing. Later ordinary attack impact now establishes payload and CUnit receiver convergence for attack types 1 and 4 when no attached ability handles the event. Types 2, 3, and 5–8 schedule distinct effects, with impact convergence still open. Receiver-side param2/type derivation and behavior for the legacy table remain open; ethereal adjustments are handled separately.",
       "related_addresses": [
         {
           "va": "0x006677c0",
@@ -748,7 +748,7 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "Full-analysis Ghidra found 49 direct calls from 47 functions. Its body writes payload fields and clears two counters/flags. Three traced paths converge on target virtual slot +0x120: UnitDamageTarget (0x004AEF70), Carrion Swarm (0x00C30BB0), and positive UnitDamagePoint processing (0x006EB640 -> 0x006E9ED0). The initializer is shared, while receiver behavior differs by target class. Runtime tracing of Forked Lightning shows this initializer called from helper 0x006EB2B0 immediately before its target +0x120 dispatch; the tested rank-one payload amount word was 85. The rank data accessor provenance remains unresolved.",
+      "evidence_summary": "Full-analysis Ghidra found 49 direct calls from 47 functions. Its body writes payload fields and clears two counters/flags. Three traced paths converge on target virtual slot +0x120: UnitDamageTarget (0x004AEF70), Carrion Swarm (0x00C30BB0), and positive UnitDamagePoint processing (0x006EB640 -> 0x006E9ED0). The initializer is shared, while receiver behavior differs by target class. Runtime tracing of Forked Lightning shows this initializer called from helper 0x006EB2B0 immediately before its target +0x120 dispatch; the tested rank-one payload amount word was 85. ANfl DataA provenance is now established for ranks one and two by static row offsets and runtime payloads; provenance for other producers remains unresolved.",
       "related_addresses": [
         {
           "va": "0x004aef70",
@@ -781,7 +781,7 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "Exact-build callers 0x00B1EC60 and 0x00B1EF60 are CAbilityAttack target-selection routines; both examine two authored target slots, expand masks through 0x006AEA70, call this validator, treat return 0 as a match, and aggregate nonzero results as rejection codes. On success they write the selected slot index; 0xFFFFFFFF indicates no slot selected. Ordinary weapon attack calculation 0x00B23C30 calls 0x00B1EC60, and common order/attack helpers also reach both selector functions. The validator rejects malformed or empty masks, intersects the expanded mask with normalized candidate target flags, emits distinct codes for target-category mismatches, then delegates self/owner and player-relation checks to 0x006AD670. That helper compares owner indices, supports a self-target case, and queries two player-relation bitsets through 0x00478DA0 and 0x0047FAA0; flag bits selectively allow failed checks. The two relation branches specifically test passive alliance (type 0) and shared spells (type 4), identified from GetPlayerAlliance table indexing and Retail common.j. Rejection-code text remains unmapped. The higher-level gate 0x006ADB90 supplies unit state, relation, and visibility checks before invoking it. Numeric mask bit meanings and each returned code\u2019s JASS/UI text remain unmapped.",
+      "evidence_summary": "Exact-build callers 0x00B1EC60 and 0x00B1EF60 are CAbilityAttack target-selection routines; both examine two authored target slots, expand masks through 0x006AEA70, call this validator, treat return 0 as a match, and aggregate nonzero results as rejection codes. On success they write the selected slot index; 0xFFFFFFFF indicates no slot selected. Ordinary weapon attack calculation 0x00B23C30 calls 0x00B1EC60, and common order/attack helpers also reach both selector functions. The validator rejects malformed or empty masks, intersects the expanded mask with normalized candidate target flags, emits distinct codes for target-category mismatches, then delegates self/owner and player-relation checks to 0x006AD670. That helper compares owner indices, supports a self-target case, and queries two player-relation bitsets through 0x00478DA0 and 0x0047FAA0; flag bits selectively allow failed checks. The two relation branches specifically test passive alliance (type 0) and shared spells (type 4), identified from GetPlayerAlliance table indexing and Retail common.j. Rejection-code text remains unmapped. The higher-level gate 0x006ADB90 supplies unit state, relation, and visibility checks before invoking it. Numeric mask bit meanings and each returned code’s JASS/UI text remain unmapped.",
       "related_addresses": [
         {
           "va": "0x006aea70",
@@ -2321,7 +2321,7 @@
       "object_offsets": [
         "relation rows begin at +0x38; alliance-type stride is 0x10; owner-index bit is tested"
       ],
-      "evidence_summary": "Registered by 0x0049B3C0 under JASS name GetPlayerAlliance with signature (Hplayer;Hplayer;Halliancetype;)B. Resolves both player handles, reads the second player index at +0x30, validates alliance type 0\u20139 and player index 0\u201327, then reads the relation bitset at firstPlayer+0x38+16*allianceType and tests the second-player bit. Retail common.j maps type 0 to ALLIANCE_PASSIVE and type 4 to ALLIANCE_SHARED_SPELLS. Thus fixed query 0x00478DA0 reads type 0 (+0x38), while 0x0047FAA0 reads type 4 (+0x78).",
+      "evidence_summary": "Registered by 0x0049B3C0 under JASS name GetPlayerAlliance with signature (Hplayer;Hplayer;Halliancetype;)B. Resolves both player handles, reads the second player index at +0x30, validates alliance type 0–9 and player index 0–27, then reads the relation bitset at firstPlayer+0x38+16*allianceType and tests the second-player bit. Retail common.j maps type 0 to ALLIANCE_PASSIVE and type 4 to ALLIANCE_SHARED_SPELLS. Thus fixed query 0x00478DA0 reads type 0 (+0x38), while 0x0047FAA0 reads type 4 (+0x78).",
       "related_addresses": [
         {
           "va": "0x0049b3c0",
@@ -2409,7 +2409,7 @@
         "instance category vtable slot +0x138",
         "impact handler vtable slot +0x154"
       ],
-      "evidence_summary": "Walks the source unit attached-instance registry, querying each instance category via slot +0x138 for IDs 0x1B\u20130x29. For matching categories it invokes slot +0x154 with the supplied target and context, stopping and returning 1 when a handler reports success; otherwise returns 0. Attack processing 0x00B1CCB0 uses this before ordinary damage fallback. CAbilityPoisonAttack and CAbilityVenomSpear return category 0x28 and route +0x154 to 0x00BDD5C0.",
+      "evidence_summary": "Walks the source unit attached-instance registry, querying each instance category via slot +0x138 for IDs 0x1B–0x29. For matching categories it invokes slot +0x154 with the supplied target and context, stopping and returning 1 when a handler reports success; otherwise returns 0. Attack processing 0x00B1CCB0 uses this before ordinary damage fallback. CAbilityPoisonAttack and CAbilityVenomSpear return category 0x28 and route +0x154 to 0x00BDD5C0.",
       "related_addresses": [
         {
           "va": "0x00b1ccb0",
@@ -2453,7 +2453,7 @@
         }
       ],
       "object_offsets": [],
-      "evidence_summary": "Exact-build attack update callback 0x00B21DD0 calls this effect routine with the attack object's current target, selected target slot, attack flag, and enabled context flags. The routine constructs a shared payload through 0x006A9940 before branching on attack-type field +0xE0 + slot*4. For attack types 1 and 4, after impact gate 0x006ED680 succeeds it calls source attached-ability dispatcher 0x0068F950. A handled callback bypasses ordinary target +0x120 fallback; if unhandled, it dispatches the payload through target +0x120, with a related alternate target route where applicable. The poison/Venom Spear category-0x28 handler is confirmed. Other attack types 2, 3, and 5\u20138 branch to missile or specialized effect constructors; their eventual impact routes remain open. For type 2, switch case 0x00B1D085 builds an effect record, offers it to source attached-object callback family 0x0068FD10, then on unhandled status configures an effect object via 0x006EB060 and invokes its virtual slot +0xC8 with the record. This routine does not dispatch that payload through target +0x120; the concrete runtime object/vtable, +0xC8 implementation and later impact callback remain unresolved. Ability-side caller 0x00BDBDC0 also invokes this routine for selected target slots.",
+      "evidence_summary": "Exact-build attack update callback 0x00B21DD0 calls this effect routine with the attack object's current target, selected target slot, attack flag, and enabled context flags. The routine constructs a shared payload through 0x006A9940 before branching on attack-type field +0xE0 + slot*4. For attack types 1 and 4, after impact gate 0x006ED680 succeeds it calls source attached-ability dispatcher 0x0068F950. A handled callback bypasses ordinary target +0x120 fallback; if unhandled, it dispatches the payload through target +0x120, with a related alternate target route where applicable. The poison/Venom Spear category-0x28 handler is confirmed. Other attack types 2, 3, and 5–8 branch to missile or specialized effect constructors; their eventual impact routes remain open. For type 2, switch case 0x00B1D085 builds an effect record, offers it to source attached-object callback family 0x0068FD10, then on unhandled status configures an effect object via 0x006EB060 and invokes its virtual slot +0xC8 with the record. This routine does not dispatch that payload through target +0x120; the concrete runtime object/vtable, +0xC8 implementation and later impact callback remain unresolved. Ability-side caller 0x00BDBDC0 also invokes this routine for selected target slots.",
       "related_addresses": [
         {
           "va": "0x0068f950",
@@ -2878,7 +2878,7 @@
         "0xFC",
         "0x20"
       ],
-      "evidence_summary": "RTTI identifies CBuffRegeneration, CBuffRegenLife, and CBuffRegenMana vtables 0x00F663AC, 0x00F66730, and 0x00F66ABC. All three use this shared callback pair. Slot +0xF8 resolves to 0x00BEE5C0, which returns phase 1; +0xFC resolves to 0x00BEE5D0. The handler removes the attached instance through 0x006D8530 only when buff flags +0x20 & 0x201 are set and payload byte +0x0C & 0x14 is zero, with payload +0x14 equal 0x10 or 0x20 or payload float +0x10 >= global 0x0112D870. Payload meanings and the callback\u2019s gameplay role remain unresolved.",
+      "evidence_summary": "RTTI identifies CBuffRegeneration, CBuffRegenLife, and CBuffRegenMana vtables 0x00F663AC, 0x00F66730, and 0x00F66ABC. All three use this shared callback pair. Slot +0xF8 resolves to 0x00BEE5C0, which returns phase 1; +0xFC resolves to 0x00BEE5D0. The handler removes the attached instance through 0x006D8530 only when buff flags +0x20 & 0x201 are set and payload byte +0x0C & 0x14 is zero, with payload +0x14 equal 0x10 or 0x20 or payload float +0x10 >= global 0x0112D870. Payload meanings and the callback’s gameplay role remain unresolved.",
       "related_addresses": [
         {
           "va": "0x006677c0",
@@ -3423,7 +3423,7 @@
         "0x3E8",
         "0x3EC"
       ],
-      "evidence_summary": "The ordinary attack switch in 0x00B1CCB0 maps attack types 2, 3, 5, 6, 7, 8 to helper/slot pairs 0x0068FD10/+0x150, 0x0068FA90/+0x140, 0x0068FC70/+0x14C, 0x0068FB30/+0x148, 0x0068FBD0/+0x144, and 0x0068F9F0/+0x13C respectively. Each helper checks the source ability registry, scans attached objects with category IDs 0x1B through 0x29 via virtual +0x138, and invokes the matching slot. First nonzero callback result returns handled; zero across the scan allows the caller\u2019s type-specific effect construction/scheduling branch. These are distinct from direct-hit dispatcher 0x0068F950 and do not identify eventual missile impact callbacks.",
+      "evidence_summary": "The ordinary attack switch in 0x00B1CCB0 maps attack types 2, 3, 5, 6, 7, 8 to helper/slot pairs 0x0068FD10/+0x150, 0x0068FA90/+0x140, 0x0068FC70/+0x14C, 0x0068FB30/+0x148, 0x0068FBD0/+0x144, and 0x0068F9F0/+0x13C respectively. Each helper checks the source ability registry, scans attached objects with category IDs 0x1B through 0x29 via virtual +0x138, and invokes the matching slot. First nonzero callback result returns handled; zero across the scan allows the caller’s type-specific effect construction/scheduling branch. These are distinct from direct-hit dispatcher 0x0068F950 and do not identify eventual missile impact callbacks.",
       "related_addresses": [
         {
           "va": "0x00b1ccb0",
@@ -4351,7 +4351,7 @@
         "0x78",
         "0xA4"
       ],
-      "evidence_summary": "For Retail 1.29.2.9231 SHA-256 3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed, the registered ANfl factory at RVA 0x00878440 allocates a CAbilityForkedLightning object and installs vtable VA 0x00FAF280. That table maps +0x310 to order getter 0x00C78080 (0xD026B) and +0x42C to 0x00C78090, which calls 0x00C78A50. The latter performs repeated 0x0068EA00 spatial queries through candidate callback 0x00C78FC0, applies callback validation and deduplication, stops collection at a rank-indexed count, sorts the collected subset with 0x00C78F60, then calls 0x00C788F0 for each retained candidate. The worker resolves the MNfl class object and calls vtable slot +0xA4 at RVA 0x008781D0. The MNfl class reference identifies CMissileForkedLightning; its factory RVA 0x008790C0 installs vtable VA 0x00FAF6BC and the executable slot value at +0xA4 is VA 0x00C781D0. This is a verified static receiver/vtable relationship, not a runtime-observed dispatch. The method creates a generic configured action/event handle through RVA 0x0006E210 or 0x0006E3E0, then schedules event 0xD01D3. Its configured record is a CVLightning-compatible presentation object, not evidence of a damage action. The renderer list at global context +0x34 is a consumer candidate; pointer identity with the record writer container remains unproven. Targeted exports ANfl-damage-caller-triage-24 and ANfl-damage-vtable-followup-25 found no direct ANfl call to payload initializer RVA 0x002A9940 and no mapped missile method constructing a verified damage payload. CUnit receiver RVA 0x002677C0 is normally reached through virtual +0x120 dispatch, so no direct-call edge is expected; ANfl\u2019s indirect damage callback is still unresolved. Exact damage amount/data flow, damage type, mitigation path and runtime receiver identity remain unresolved. Archived Frida observed 0x00878080/0x00878090/0x00878A50; archived JASS observed three targets each losing about 85 health in one sample, not causal damage attribution. Fresh Retail Frida tracing now observes the per-target +0xA4 method 0x00C781D0, its +0x84 method 0x00C78330, helper 0x006EB2B0, and target +0x120 receiver 0x006677C0. In the focused run, worker target pointer equaled receiver ECX, the payload source equaled the ability owner at +0x30, and raw amount was 85.",
+      "evidence_summary": "For Retail 1.29.2.9231 SHA-256 3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed, the registered ANfl factory at RVA 0x00878440 allocates a CAbilityForkedLightning object and installs vtable VA 0x00FAF280. That table maps +0x310 to order getter 0x00C78080 (0xD026B) and +0x42C to 0x00C78090, which calls 0x00C78A50. The latter performs repeated 0x0068EA00 spatial queries through candidate callback 0x00C78FC0, applies callback validation and deduplicates candidates across repeated queries, sorts the complete unique set with 0x00C78F60 in accepted-order mode, then processes at most the rank-indexed DataB count with 0x00C788F0. The alternate mode has separate callback early-stop behavior. The worker resolves the MNfl class object and calls vtable slot +0xA4 at RVA 0x008781D0. The MNfl class reference identifies CMissileForkedLightning; its factory RVA 0x008790C0 installs vtable VA 0x00FAF6BC and the executable slot value at +0xA4 is VA 0x00C781D0. This static receiver/vtable relationship was also observed at runtime in all three new accepted casts. The method creates a generic configured action/event handle through RVA 0x0006E210 or 0x0006E3E0, then schedules event 0xD01D3. Its configured record is a CVLightning-compatible presentation object, not evidence of a damage action. The renderer list at global context +0x34 is a consumer candidate; pointer identity with the record writer container remains unproven. Earlier targeted exports ANfl-damage-caller-triage-24 and ANfl-damage-vtable-followup-25 found no direct ANfl call to initializer RVA 0x002A9940; the subsequent runtime trace resolved the indirect callback path through 0x00878330 and 0x002EB2B0 to target virtual +0x120. Damage type and selector semantics, full target eligibility predicates, exact query geometry, and individual native-pointer-to-JASS-handle mapping remain unresolved. Archived Frida observed 0x00878080/0x00878090/0x00878A50; archived JASS observed three targets each losing about 85 health in one sample, not causal damage attribution. Fresh Retail Frida tracing now observes the per-target +0xA4 method 0x00C781D0, its +0x84 method 0x00C78330, helper 0x006EB2B0, and target +0x120 receiver 0x006677C0. In the focused run, worker target pointer equaled receiver ECX, the payload source equaled the ability owner at +0x30, and raw amount was 85. Static rank-data flow: 0x0046ED70 reads the active AbilityData row dword at +0x20 (DataA), which 0x008788F0 places at +0x18 of the per-target context passed through missile slot +0xA4. 0x0046EE20 reads row +0x24 (DataB); 0x00878A50 converts it with 0x009A07B0 and uses it as the final worker bound after sorting. Three fresh accepted Retail cases observed ranks 2/1/1 with payload amounts 160/85/85, three workers and three receiver calls each. In the normal order path, Frida observed five distinct callback pointers, 12 callbacks per cast (overlap duplicates), all callback returns true, followed by exactly three workers. JASS health samples for five hfoo targets identified three target losses per cast: rank 2 indices 0/1/3 lost about 160; rank 1 creation order A indices 0/1/3 lost 85; reversed creation indices 0/3/4 lost about 85. Placement relocation differed between cases, so this does not isolate creation order.",
       "related_addresses": [
         {
           "va": "0x0068EA00",
@@ -4405,6 +4405,21 @@
         {
           "va": "0x00c78330",
           "rva": "0x00878330"
+        },
+        {
+          "va": "0x0046ED70",
+          "rva": "0x0006ed70",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x0046EE20",
+          "rva": "0x0006ee20",
+          "kind": "function_va"
+        },
+        {
+          "va": "0x009A07B0",
+          "rva": "0x005a07b0",
+          "kind": "function_va"
         }
       ],
       "source": {
@@ -4430,7 +4445,7 @@
       "object_offsets": [
         "0x120"
       ],
-      "evidence_summary": "Targeted exact-build Ghidra detail export shows this helper constructs WidgetDamageData with 0x006A9940 and dispatches through the target vtable slot +0x120. Frida observed it called synchronously from ANfl missile callback 0x00C78330; its callsite at RVA 0x002EB5F3 returned to 0x006EB5F9 from CUnit receiver 0x006677C0. In two accepted rank-one runs, the source pointer matched ability owner +0x30, the receiver ECX matched the ANfl worker target argument, and payload +0x10 was 85. Other payload selector/type semantics and rank-data accessor provenance remain unresolved.",
+      "evidence_summary": "Targeted exact-build Ghidra detail export shows this helper constructs WidgetDamageData with 0x006A9940 and dispatches through the target vtable slot +0x120. Frida observed it called synchronously from ANfl missile callback 0x00C78330; its callsite at RVA 0x002EB5F3 returned to 0x006EB5F9 from CUnit receiver 0x006677C0. Across three new accepted casts at ranks 2/1/1, source matched ability owner +0x30, receiver ECX matched each ANfl worker target argument, and payload +0x10 was 160/85/85. Static accessors read DataA from active row +0x20 and the worker places it into its per-target context before missile +0xA4 dispatch. Rank-three propagation and payload selector/type semantics remain unresolved.",
       "related_addresses": [
         {
           "va": "0x006a9940",
@@ -6741,7 +6756,7 @@
         "rva": "0x0006eb20"
       },
       "kind": "direct_call",
-      "context": "Attack types 2, 3, and 5\u20138 prepare effect records and call the shared scheduler after type-specific field setup; this does not establish common impact behavior.",
+      "context": "Attack types 2, 3, and 5–8 prepare effect records and call the shared scheduler after type-specific field setup; this does not establish common impact behavior.",
       "confidence": "high",
       "source": {
         "document": "docs/games/warcraft-3/ability-probes/combat.md",
@@ -9987,7 +10002,7 @@
         "kind": "function_va"
       },
       "kind": "callback_dispatch",
-      "context": "ANfl passes 0x00C78FC0 as the candidate callback to the query builder; the callback validates, deduplicates, records candidate metrics, and enforces the collection limit.",
+      "context": "ANfl passes 0x00C78FC0 as the candidate callback to the query builder; the accepted-order path filters, deduplicates and records candidate metrics, while the sorted worker loop applies the DataB bound.",
       "confidence": "high",
       "source": {
         "document": "docs/games/warcraft-3/forked-lightning-retail.md",
@@ -10006,7 +10021,7 @@
         "kind": "function_va"
       },
       "kind": "direct_call",
-      "context": "After limiting and sorting collected candidates, ANfl directly invokes the per-target worker at callsite 0x00C78F09.",
+      "context": "After sorting the complete unique candidate set and bounding the worker count by min(candidate_count, DataB), ANfl directly invokes the per-target worker at callsite 0x00C78F09.",
       "confidence": "high",
       "source": {
         "document": "docs/games/warcraft-3/forked-lightning-retail.md",
