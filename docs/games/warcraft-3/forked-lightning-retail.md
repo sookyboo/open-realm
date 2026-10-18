@@ -54,9 +54,8 @@ The statically recovered path in `0x00C78A50` is:
    `AbilityData.slk` identify `+0x24` as DataB. Accessor `0x0046ED70` reads
    row `+0x20` (DataA); the per-target worker loads that value into its
    temporary missile context. Runtime rank-one and rank-two casts observed
-   payload `+0x10` as 85 and 160 respectively, proving this authored DataA
-   mapping for those ranks. The rank-three value 250 remains authored/static
-   only.
+   payload `+0x10` as 85, 160, and 250 respectively, confirming the authored
+   DataA mapping at all three ranks.
 3. Compute a forward spatial path from the owner toward the explicit order
    target. In a loop, invoke `0x0068EA00` (VA) with query type `0xB`, a radius
    and center derived from rank data and path geometry, flags/mask arguments,
@@ -138,9 +137,36 @@ but it still does not provide a complete gameplay-category matrix:
 |---|---|---|---|
 | Relationship/mask gate | `0x00878FC0` calls `0x0067FB80` with caster in `ECX`, candidate stack argument 1, then `0` and `4`. The helper resolves caster owner through virtual `+0xEC`, derives a low mode bit from player 13's record flag, and calls `0x00475150` with shared player context, owner index, candidate, derived mode, and trailing `4,0`. It may run candidate-owner and point-based relation checks; on helper failure, it tests candidate `+0x250/+0x254` against the owner bit. | The branch and bit flow are verified, including fallback through either candidate mask. | The flags/masks, raw `4` mode, and branch-to-enemy/ally/neutral mapping are not established by controlled category tests. |
 | Shared target validator | On passing the first gate, the callback calls candidate virtual `+0x350`, then `0x00682180`; zero is required to continue. `0x00682180` first runs `0x00682210` and `0x006822E0`, then scans its linked validator registry and returns the first nonzero result. | A zero result means no rejection code was returned by these paths. Nonzero is a rejection result for this ANfl callback, not an acceptance boolean. | The dynamic `+0x350` contract and live registry membership for each tested candidate are not resolved. |
-| Built-in rejection paths | `0x00682210` checks candidate virtual slots `+0xD8`, `+0x1F0`, `+0x1D8`, `+0x1F8`, `+0x1FC`, `+0x20C`, source field `+0x164` bit `0x100`, source values `+0x264/+0x268`, candidate context `+0x30`, and `MagicImmunesResistUltimates`; one conjunction returns `0x36`. `0x006822E0` checks slots `+0xDC`, `+0x1DC`, `+0x1F4`, `+0x1FC`, source `+0x164` bit `0x100`, and `+0x260`; one conjunction returns `0xBC`. | These checks and return codes are verified static behavior. | The virtual slot meanings and user-facing rejection reasons remain unmapped; neither code is labeled as a specific immunity, life, hidden, or unit-type rule. |
+| Built-in rejection paths | In the call from `0x00682180`, `0x00682210` receives the candidate CUnit, the source ability's `+0x350` return, and the source ability object. It returns `0x36` only for the exact conjunction recorded below. `0x006822E0` is a separate built-in predicate returning `0xBC` under its own conditions. | `0x36` originates at VA `0x006822CE` in the built-in predicate, before the registered-validator walk. Candidate `+0x164`, `+0x264`, and `+0x268` fields were previously mislabeled as source fields; the call frame shows they belong to the candidate CUnit. | Virtual-slot meanings and the first runtime-divergent operand for Amim remain unresolved. Do not name `0x36` as an immunity rule from the code or the correlated treatment alone. |
 | Deduplication | After both gates pass, the callback compares the candidate pointer for equality against every already-recorded candidate pointer. | Exact pointer duplicates from overlapping queries do not append a second record. | No identity aliasing beyond pointer equality was tested. |
 | Candidate continuation result | Rejected candidates and duplicates return true. In normal accepted-order mode, a newly appended candidate also returns true. The alternate mode returns whether the current count is still below its limit. | The callback result is query continuation control, not candidate eligibility. Normal mode therefore continues enumeration after each rejection, duplicate, or append. | Gate return values were directly captured for five candidates in the follow-up case only; category meanings remain unresolved. |
+
+The `0x36` result has one built-in static origin: `0x00682210` returns it at
+VA `0x006822CE`, before the registered-validator walk. The call frame passes
+the candidate CUnit, the source ability's `+0x350` result, and the source
+ability object. The exact conjunction is:
+
+```text
+a.vfunc(+0xD8) == 0
+(u.raw[+0x164] & 0x100) == 0
+field = a.vfunc(+0x1F0) != 0 ? u.signed[+0x268] : u.signed[+0x264]
+field > 0
+(a.vfunc(+0x1D8) != 0 || a.vfunc(+0x1F8) != 0)
+a.vfunc(+0x1FC) == 0 || candidate_predicate(u, a[+0x30] ?? resolve(a)) == 0
+GetConfigInt("Misc", "MagicImmunesResistUltimates", 0) == 0
+a.vfunc(+0x20C) != 0
+```
+
+Here `u` is candidate CUnit and `a` is the source ability object. The other
+built-in predicate at VA `0x006822E0` returns `0xBC` through a distinct branch.
+Runtime Amim level 1 correlates with `0x36`, but no trace captured the first
+individual operand that differed from the normal target. The configured
+`MagicImmunesResistUltimates` value is one term in this conjunction; its name
+does not prove that it caused the observed return. The matching JASS library
+declares `BlzIsUnitInvulnerable` at
+`data/maps/War3xLocal/Scripts/common.j:2529`; the earlier invulnerability
+case did not read it back, so state confirmation remains pending. See
+`build-re/ability-re/ANfl-validator-36-static-01/validator-36-analysis.md`.
 
 The exact-build call sequence further constrains the relationship gate without
 giving its modes gameplay names. `0x0067FB80` is called with the caster in
@@ -1114,3 +1140,30 @@ do not distinguish broadphase omission from rejection in an earlier query
 predicate. The exact exclusion stage remains open. Trace and JASS output are
 `runtime/state-trace-v5-allied.jsonl`, `results/case-4-setup.txt`, and
 `results/case-4-cast.txt`.
+
+The later Neutral Passive case used Player 15 for the same `hfoo` at
+`(-720,-6160)`. JASS confirmed owner 15, position, and 210 life after the
+five-second hold, and accepted the rank-one order. The final geometry trace
+did not contain the target's expected spatial-index point `(169.5,63.5)` in
+any query; the matched Player 12 control and Amim candidate at this location
+did reach the geometry stage. No Player 15 candidate was seen at
+`0x006AD670` or the ANfl callback. This places its exclusion at or before the
+final geometry-operand hook, without distinguishing broadphase omission from
+a pregeometry candidate predicate. The other selected candidates received
+three raw-85 receiver calls. Raw files and trace are under
+`build-re/ability-re/ANfl-neutral-passive-rank3-01/`.
+
+That run also completed a rank-three cast. JASS read back ability level 3;
+the accepted cast generated four type-`0xB` queries with radii
+`125, 171.05263, 234.07201, 299.99997` and centers
+`(-965.01196,-6032.63867)`, `(-858.02386,-6097.27734)`,
+`(-711.61908,-6185.72998)`, and `(-558.45715,-6278.26563)`. These match the
+rank-one progression because authored `Area=125`, `DataC=900`, and `DataD=300`
+are the same. Three workers and CUnit receivers carried raw 250, confirming
+rank-three DataA at runtime. Target maximum life was 210, so the receiver
+payload—not final life loss—is the raw damage measurement. Rank two had a
+fresh accepted JASS case with three 160 damage events, but its geometry was
+not captured in the valid native trace. A later repeat attempt after the
+Frida window ended did not refresh PreloadGen timestamps and is excluded. A
+subsequent Retail launch stopped at the system “not enough space on disk”
+profile dialog before map startup; it adds no gameplay evidence.

@@ -1412,3 +1412,46 @@ worker; the three selected Player 12 Footmen received 85. The filtered trace
 did not observe this target at final geometry or inside VA `0x006AD670`, so
 the exact pre-callback exclusion point remains unresolved. This is not
 evidence that different-owner allies use the same equal-owner `0x84` branch.
+
+### Validator `0x36` and rank-three payload
+
+Focused exact-build disassembly maps the built-in validator call arguments:
+the candidate is a CUnit and the other object is the source ability. VA
+`0x00682210` returns `0x36` at VA `0x006822CE` when the following conjunction
+is true:
+
+```text
+sourceAbility.vfunc(+0xD8) == 0
+(candidate.raw[+0x164] & 0x100) == 0
+selectedField = sourceAbility.vfunc(+0x1F0) != 0
+    ? candidate.signed[+0x268]
+    : candidate.signed[+0x264]
+selectedField > 0
+(sourceAbility.vfunc(+0x1D8) != 0 || sourceAbility.vfunc(+0x1F8) != 0)
+sourceAbility.vfunc(+0x1FC) == 0
+    || candidatePredicate(candidate, sourceAbility[+0x30] ?? resolve(sourceAbility)) == 0
+GetConfigInt("Misc", "MagicImmunesResistUltimates", 0) == 0
+sourceAbility.vfunc(+0x20C) != 0
+```
+
+The condition is verified static. The Amim case correlates ability level 1
+with runtime `0x36`, but does not identify the first individual operand that
+changes relative to the normal target. The invulnerability setter case also
+returned `0x36`, but the state was not independently read back. The matching
+Retail `common.j` provides `BlzIsUnitInvulnerable` at line 2529; a future case
+should log it before and after `SetUnitInvulnerable`.
+
+The rank-three case in `ANfl-neutral-passive-rank3-01` read back ability level
+3 and was accepted. Three workers and three receiver calls carried raw damage
+250. The test targets had 210 maximum life, so their final life is not a raw
+damage measurement. The same trace recorded four query centers/radii equal to
+rank one for authored `Area=125`, `DataC=900`, and `DataD=300`. Rank-two's
+accepted cast logged three 160 JASS damage events, but its geometry had no
+valid native trace in that run because the Frida observation window ended.
+
+Neutral Passive Player 15 at target index 1 had stable life and an accepted
+cast, but its expected point `(169.5,63.5)` was absent from the final geometry
+operand trace. No callback, worker, or receiver was observed for it. Other
+selected targets received raw 85. This is a pregeometry-stage eligibility
+difference, not receiver-side mitigation; the exact broadphase/predicate
+boundary remains unknown.

@@ -873,3 +873,59 @@ owner-relation hook. The evidence therefore establishes callback absence but
 does not yet distinguish broadphase exclusion from an earlier query filter.
 It does not justify extending the static same-owner `0x84` branch to all
 different-owner allies. See case 4 and `runtime/state-trace-v5-allied.jsonl`.
+
+### Exact static origin of validator code `0x36`
+
+The pinned executable was rechecked with focused VA disassembly. The return
+`0x36` is emitted by the built-in predicate VA `0x00682210` at VA
+`0x006822CE`, before the shared validator's registered-callback walk. VA
+`0x006822E0` is a separate path that can return `0xBC`.
+
+The call frame maps `u` to the candidate CUnit and `a` to the source ability
+object. The exact `0x36` conjunction is:
+
+```text
+a.vfunc(+0xD8) == 0
+(u.raw[+0x164] & 0x100) == 0
+field = a.vfunc(+0x1F0) != 0 ? u.signed[+0x268] : u.signed[+0x264]
+field > 0
+(a.vfunc(+0x1D8) != 0 || a.vfunc(+0x1F8) != 0)
+a.vfunc(+0x1FC) == 0 || candidate_predicate(u, a[+0x30] ?? resolve(a)) == 0
+GetConfigInt("Misc", "MagicImmunesResistUltimates", 0) == 0
+a.vfunc(+0x20C) != 0
+```
+
+This corrects earlier descriptions that assigned candidate fields `+0x164`,
+`+0x264`, and `+0x268` to the source. Runtime Amim level 1 plus validator
+return `0x36` confirms the treatment reaches this rejecting result, but the
+captured trace did not expose which operand first differs from a normal
+Footman. The config name is one term in the conjunction; it does not establish
+that it caused the observed return. The full branch account is in
+`build-re/ability-re/ANfl-validator-36-static-01/validator-36-analysis.md`.
+
+The matching `data/maps/War3xLocal/Scripts/common.j` declares
+`BlzIsUnitInvulnerable` at line 2529. The prior case 3 did not call this
+native, so invulnerability remains unconfirmed independently despite the
+recorded setter and validator result.
+
+### Neutral Passive and rank-three follow-up
+
+The Player 15 Neutral Passive treatment used the same `hfoo` at
+`(-720,-6160)`, owner read back as 15, and stable life 210 after five seconds.
+The cast order was accepted. The final geometry trace had no entry at the
+expected spatial-index point `(169.5,63.5)` in any of the four queries; a
+matched Player 12 candidate and the Amim candidate at the same location did
+reach that stage. The Player 15 target also had no owner-relation or callback
+event. This establishes exclusion by or before the final geometry-operand
+hook, but broadphase versus an earlier predicate remains unresolved. Other
+selected targets generated three raw-85 receiver calls. See
+`build-re/ability-re/ANfl-neutral-passive-rank3-01/`. The matched Player 12 `hfoo` at the same point did appear at the geometry/callback stage, but this does not distinguish broadphase from pregeometry filtering for Player 15.
+
+In the same run, a rank-three case read back ANfl level 3 and was accepted.
+The four observed query centers and radii matched the rank-one values for the
+authored `Area=125`, `DataC=900`, `DataD=300`. Three workers and receivers
+carried raw 250. Targets had 210 maximum life, so final life is overkill
+limited and the receiver payload is the raw damage evidence. A rank-two cast
+also completed with three JASS damage events of 160 in a later case, but that
+case ran after the native trace window ended; rank-two query geometry remains
+unverified by runtime capture.
