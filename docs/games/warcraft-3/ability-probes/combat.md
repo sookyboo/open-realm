@@ -497,9 +497,13 @@ Retail ANfl trace at `build-re/ability-re/ANfl-damage-execution-01/`, the
 observed caller was helper `0x006EB2B0`, which initialized the payload and
 dispatched via target slot `+0x120`. The receiver `ECX` matched the worker's
 target argument, and source `+0x00` matched the ability owner at `+0x30`.
-Payload amount `+0x10` was float 85. The receiver entry, helper callsite and
-payload data are documented in the ANfl report; payload type/selector
-semantics and rank-data accessor provenance remain unresolved.
+Payload amount `+0x10` was float 85. For ANfl, accessor `0x0046ED70` reads
+active rank-row `+0x20` (DataA), and accessor `0x0046EE20` reads row `+0x24`
+(DataB). The worker propagates DataA into the per-target damage context;
+acquisition uses DataB as the post-sort worker bound. Runtime payloads confirm
+DataA 85 at rank one and 160 at rank two. Rank-three DataA 250 remains
+authored/static pending runtime confirmation. Payload type/selector semantics
+remain unresolved.
 
 The receiver's static ANfl-relevant branches are now summarized in
 [`forked-lightning-retail.md`](../forked-lightning-retail.md#shared-damage-receiver-behavior-relevant-to-anfl).
@@ -510,6 +514,15 @@ target raw-state bit `+0x164 & 0x100`, honors payload flag bit `0x04`, consults
 commits via target virtual `+0x128`. These raw values and branch predicates
 remain distinct from named JASS damage types or confirmed immunity semantics;
 no controlled ANfl mitigation-state comparison has been run.
+
+An October 18, 2026 allied-secondary probe also observed three rank-one ANfl
+receiver calls carrying raw amount 85. Campaign combat contaminated the JASS
+life deltas, so this does not extend the verified life-change/mitigation
+result. Raw payload flags/type/selector and defensive-state behavior remain
+unresolved; see the evidence-bounded update in
+[`forked-lightning-retail.md`](../forked-lightning-retail.md#same-owner-secondary-target-probe-october-18-2026)
+and the implementation specification under
+`build-re/ability-re/ANfl-target-eligibility-ally-01/`.
 
 ### Reproduce
 

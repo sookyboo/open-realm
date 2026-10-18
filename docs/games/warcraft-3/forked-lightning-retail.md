@@ -923,3 +923,36 @@ hash, and machine comparison are retained under
 gate evidence only to this living Player 12 `hfoo` setup; it does not identify
 the gameplay meanings of the relation flags or rejection codes, or establish
 eligibility for other categories.
+
+### Same-owner secondary target probe (October 18, 2026)
+
+An additional rank-one cast changed only secondary scenario index 3 from
+Player 12 to Player 0 (the caster owner), retaining `hfoo` and the case-21
+requested coordinate `(-720,-6160)`. The map recorded all five actual target
+coordinates and handles before the cast. It also recorded campaign-combat
+damage during the setup interval, so this is not a clean life-state control.
+
+The accepted cast's type-0xB query trace delivered four of the five scenario
+positions: indices 0, 1, 2 and 4. Index 3 was never delivered to the ANfl
+candidate callback, so this run does **not** show a relationship-gate or
+shared-validator rejection for that allied unit. All four delivered unique
+units returned 1 from `0x0027FB80` and 0 from `0x00282180`; workers and damage
+receivers were indices `[0,2,1]`, with raw payload 85. This matches the
+pre-registered branch where the allied candidate is absent from the accepted
+set. Its point exclusion occurred before the callback gates; the responsible
+query-mask bit or native predicate is not yet identified.
+
+This single same-owner case is category-specific runtime evidence, not a full
+alliance matrix. The selected units' JASS life observations were confounded by
+campaign combat; native receiver calls establish the ANfl worker recipients.
+Raw map, JASS outputs, bounded trace, screenshots, static acquisition
+disassembly and query input records are preserved in
+`build-re/ability-re/ANfl-target-eligibility-ally-01/`. The four query centers
+and radii are recorded in its `results.json`; they confirm forward progression
+and overlap for this cast but do not by themselves establish boundary
+inclusion or the general radius formula.
+
+The current implementation-level specification, including evidence labels,
+the limited eligibility matrix, query measurements, numeric damage payload
+and remaining gaps, is retained at
+`build-re/ability-re/ANfl-target-eligibility-ally-01/specification.md`.

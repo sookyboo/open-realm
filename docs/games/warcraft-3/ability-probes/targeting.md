@@ -763,5 +763,28 @@ corrected the layout and verified five stationary targets, but its order was
 rejected with 105.991 mana and produced no native acquisition. Case 21 used
 that corrected, validated layout and restored full mana plus cooldown before
 the order. Cases 19 and 21 verify the predicted DataB-limited prefix for
-distinct per-unit distance rankings; tie ordering, category-specific
-rejection semantics and query boundaries remain untested.
+distinct per-unit distance rankings. Runtime tie ordering and exact query
+boundaries remain untested; the same-owner probe below adds one narrow
+pre-callback category observation.
+
+### Same-owner secondary candidate (October 18, 2026)
+
+The focused case `ANfl-target-eligibility-ally-01` retained case-21 target
+types and coordinates while changing target index 3 to Player 0, the caster's
+owner. The accepted order generated four type-0xB spatial queries. Four
+scenario positions (indices 0, 1, 2 and 4) reached the callback; the same-owner
+candidate at index 3 did not. Every delivered unique candidate passed the
+relationship gate (`0x0027FB80` return 1) and shared validator
+(`0x00282180` return 0). Workers and native receivers were `[0,2,1]` with raw
+85 payloads. Thus this capture shows pre-callback exclusion for this allied
+`hfoo`, not rejection by either callback gate. It does not identify whether
+the unit failed a particular query mask bit or an earlier spatial-query
+predicate.
+
+The map logged campaign-combat damage to targets before and after the cast;
+its JASS life deltas are therefore not attributed to ANfl. The exact map,
+coordinate-resolved trace, result files, screenshots and preregistered
+conditional hypotheses are under
+`build-re/ability-re/ANfl-target-eligibility-ally-01/`. The capture expands
+only the same-owner case and does not establish allied/enemy relation rules
+for other unit categories.
