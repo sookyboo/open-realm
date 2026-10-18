@@ -550,6 +550,14 @@ behavior remain unresolved; see the evidence-bounded update in
 and the implementation specification under
 `build-re/ability-re/ANfl-target-eligibility-ally-01/`.
 
+The repaired geometry capture at
+`build-re/ability-re/ANfl-geometry-boundary-01/` produced fresh JASS output
+after correcting stale run IDs. It measured Footman spatial-entry `+0x90` as
+`0.96875` and confirmed one predicted inside point passes the inclusive
+native query predicate while a separate outside point fails. This is
+geometric eligibility evidence; no magic-immunity or invulnerability
+comparison has yet been run, so it establishes no mitigation rule.
+
 ### Reproduce
 
 From the repository root, verify the executable hash, then run:

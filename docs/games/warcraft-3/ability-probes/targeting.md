@@ -823,9 +823,21 @@ three workers and three 85-point receiver/JASS damage events. See
 `build-re/ability-re/ANfl-clean-combat-01/` for raw outputs and trace.
 
 Static query-shape analysis now shows that the type-0xB path's final spatial
-predicate is inclusive (`distanceSquared <= (radius + entryScalar)^2`). It
-also uses an earlier bounds enumeration. The added scalar comes from spatial
-entry `+0x90`; its semantic identity and value for each unit are unresolved.
-This is not yet an experimentally measured circle boundary. The follow-up
-geometry map was prepared with stale run IDs and wrote no valid result, so its
-candidate delivery must not be used as a boundary observation.
+predicate is inclusive. The native path divides query radius by 32, adds the
+spatial-entry scalar at `+0x90`, squares the sum, and accepts when
+`distanceSquared <= (radius/32 + entry[+0x90])^2`. It also uses an earlier
+bounds enumeration. In the repaired `ANfl-geometry-boundary-01` run,
+`+0x90` was `0.96875` (`0x3f780000`) for observed Footman entries. One candidate
+just inside query 2's boundary (`39.85868 <= 39.86842`) reached the callback;
+another failed final-circle checks for queries 3 and 4 and received no callback.
+Its correlation to JASS target index 3 is inferred from allocation stride.
+Exact equality and broadphase boundaries remain untested, and the scalar's
+gameplay meaning/writer remain unresolved.
+
+The geometry harness failed earlier because stale scenario IDs left a chat
+handler marker without a matching `RE_Finish` output branch. A preflight now
+checks setup/chat/finish IDs, unique outputs, canonical manifest IDs, embedded
+JASS, archive hash, and stale identifiers. Prepared-v3 passed and produced
+fresh outputs. Acquisition-time native points also corrected the center model:
+the caster moved before acquisition, so the ray starts at native position
+`(-1072,-5968)`, not the earlier JASS pre-order point.

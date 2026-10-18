@@ -1024,14 +1024,44 @@ inclusive and candidate-entry-extent-adjusted; the scalar at spatial entry
 broadphase returns every matching unit or that the scalar is WC3 collision
 radius.
 
-The rank-one query model remains corroborated, with `Area=125`, `DataC=900`,
-`DataD=300`, `L=max(Area+DataD, DataC-(Area+DataD))=475`,
-`r(p)=Area+p*(DataD-Area)/L`, `pNext=min(p+r(p),L)`, and query center
-`caster + normalize(primary-caster)*(p+DataD/4)`. Prior four-query observations
-match predicted radii `125`, `171.0526`, `234.0720`, and `300`; the clean
-control independently observed the same four radii. Exact native source
-position at construction, rank-two/three inputs, zero-vector handling, and
-runtime boundary outcomes remain open.
+The repaired `ANfl-geometry-boundary-01` fixture fixed the stale scenario-ID
+and output-branch mismatch. Its preflight checked run IDs at chat dispatch,
+setup, finish/output, manifest and generated JASS; rejected duplicate output
+names and stale IDs; and verified archive/script hashes before launch. Fresh
+placement and cast outputs were produced. The exact prepared-v3 map SHA-256 is
+`9082fe582d52e7e4625a340f531ac77990b6bf4d74a98e45ebd139352bc54c1e`.
+
+The trace resolved the relevant position timing: native acquisition sampled
+the caster at `(-1072,-5968)` and explicit target at `(-880,-6084)`, after the
+caster moved from its JASS pre-order location `(-1180,-6084)`. Observed query
+centers match `center(p)=acquisitionCaster + normalize(target-caster)*(p+Area)`.
+For `Area=125`, `DataC=900`, `DataD=300`, `L=475`, the observed progress,
+radii and along-ray offsets are `[0,125,296.0526,475]`,
+`[125,171.05263,234.07201,299.99997]`, and `[125,250,421.0526,600]`.
+Native centers were `(-965.01196,-6032.63867)`, `(-858.02386,-6097.27734)`,
+`(-711.61908,-6185.72998)`, and `(-558.45715,-6278.26563)`. The earlier
+`DataD/4` center-offset expression was incorrect; the checked-in specification
+has been corrected. Higher-rank geometry, zero-vector handling and other
+range clamps remain open.
+
+The type-0xB predicate normalizes query radius by 32, reads spatial entry
+`+0x90`, adds that scalar and compares squared 2D distance inclusively. The
+native comparison operands observed `+0x90 = 0.96875` (`0x3f780000`) for tested
+Footman entries, equivalent to 31 world units after the query-radius scaling.
+One candidate just inside a query-2 boundary had `distance²=39.85868` versus
+`boundary²=39.86842` and reached the callback. A second candidate failed the
+query-3 and query-4 final-circle tests (`199.56389 > 68.61636`,
+`184.66995 > 106.99314`) and had no callback delivery. Its correlation to JASS
+target index 3 is inferred from allocation stride. These results verify one
+inside and one outside prediction for the final predicate, not exact equality
+or the broadphase edge. The gameplay meaning/writer of `+0x90` remains
+unresolved; do not label it collision size based on the numeric value alone.
+
+Player 12 is Neutral Hostile; prior reports calling it a generic enemy player
+are corrected here. Separately allied Player 1, neutral passive Player 15,
+magic immunity, invulnerability, and another caster-to-target distance remain
+untested. The clean-combat fixture remains valid baseline evidence, but does
+not itself establish mitigation.
 
 The prepared follow-up `ANfl-geometry-distance-02` did not produce valid
 geometry results. Its script retained stale chat run IDs/output branches from
