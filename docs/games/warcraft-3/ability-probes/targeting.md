@@ -673,12 +673,24 @@ these runs were loaded through the in-process Custom Game UI, so the raw
 PreloadGen result was copied before each rerun. The probe README documents that
 path and the JHCR update step.
 
-The later controlled five-target follow-up did not complete: case 04's
-intro-skip registration produced no JASS output, and case 05 moved registration
-into `main` but still produced no fresh placement result after the command was
-shown in gameplay chat. This is an activation/capture failure, not a negative
-targeting result. No predictions were recorded and no casts from those cases
-are counted. Details are preserved in
-`build-re/ability-re/ANfl-controlled-target-selection-05/investigation-status.json`
-and `investigation-notes.md`; the four-candidate retry above remains the most
-recent usable coordinate trace and is not a complete five-target proof.
+The activation failure was isolated in follow-up cases 06–08. Case 05's
+launch record and map archive identify the prepared map, and its embedded
+`war3map.j` byte-matches the generated script with `RE_Init()` in `main`. Case
+06 proved startup execution with a fresh run-specific `PreloadGen` result;
+case 07 proved exact-match chat-handler entry and chat-triggered output; case
+08 emitted one target's handle, type, owner, position and health. Evidence is
+in `build-re/ability-re/ANfl-startup-sentinel-06/` and
+`ANfl-chat-sentinel-07/`.
+
+Case 11 restored five stationary target placements and emitted complete JASS
+identity records. It did not reach targeting: the caster wandered from
+`(-1072,-5968)` at placement to `(-4896,-7296)` before the cast, so
+`IssueTargetOrder` returned false. The bounded trace has no ANfl acquisition,
+candidate, worker or damage events. Its pre-cast prediction is therefore not
+a selection result. The immutable prediction and rejection comparison are in
+`build-re/ability-re/ANfl-controlled-target-selection-11/predictions/` and
+`results/case-a-comparison.json`. Case 12 adds a caster Hold Position order but
+its restarted Retail window rendered black; there is no fresh scenario output
+or cast. That run is inconclusive. The earlier four-candidate capture remains
+movement-confounded, and the missing fifth callback candidate is not
+diagnosed. See the session manifest under case 11 for stage classifications.

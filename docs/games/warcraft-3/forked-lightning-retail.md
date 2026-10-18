@@ -692,7 +692,7 @@ establish that the first argument at the writer call equals the address of
 that list. No pointer identity is promoted from matching element shape or
 allocator label.
 
-## Controlled five-target follow-up: activation failure
+## Controlled five-target follow-up: activation and placement recovery
 
 A later attempt is preserved under
 `build-re/ability-re/ANfl-controlled-target-selection-04/` and
@@ -706,12 +706,42 @@ expected gameplay HUD, and displayed `-re anfl-prepare-a` in chat. It still
 produced no fresh placement result. See `investigation-status.json`,
 `investigation-notes.md`, launch records, and `failure-screen.png` in case 05.
 
-These attempts produced no target position or handle observations, no
-pre-cast predictions, and no new Frida trace. They are classified
-`trace_incomplete`; they do not add evidence about candidate eligibility,
-query coverage, movement, native-to-JASS identity, or final recipients. The
-historical four-candidate capture remains movement-confounded and incomplete;
-the absent fifth callback candidate is still unexplained. The next useful step
-is a minimal startup-initialized chat/PreloadGen sentinel in this same map.
-Only after that sentinel emits a fresh result should the ANfl placement logic
-be restored and enabled for casts.
+The later activation checks isolated a working pipeline. Case 05's launch
+record and archive identify the exact prepared map; its embedded `war3map.j`
+byte-matches the generated script with `RE_Init()` in `main`. A direct startup
+sentinel in case 06 wrote a fresh run-specific `PreloadGen` file. Case 07's
+exact-match chat trigger wrote a separate output containing the current run
+ID, command, and triggering player. Case 08 emitted a one-unit identity
+record. This verifies map `main` → startup PreloadGen and chat registration →
+handler → PreloadGen. Evidence is retained in
+`build-re/ability-re/ANfl-startup-sentinel-06/` and
+`ANfl-chat-sentinel-07/`.
+
+The first five-unit output failures were localized to scenario preparation.
+Case 09 checkpoints reached `after_targets` but not the end of the target
+loop. Case 10 completed the loop after shortening its per-target JASS record
+expression and adding checkpoints; it recorded five units but detected
+pathing relocation, so that layout was rejected. The precise reason case
+08/09 stopped remains unresolved; expression size is only a hypothesis.
+
+Case 11 used five pathable positions and reproduced all five requested target
+coordinates. Their handles were `1055960`, `1056238`, `1056242`, `1056234`, and
+`1056211`; all were Player 12 `hfoo` units. Five 0.25-second samples showed
+each target stationary. The caster was not given Hold Position, however: it
+moved from `(-1072,-5968)` at placement to `(-4896,-7296)` by the cast sample.
+`IssueTargetOrder` returned false, and the bounded Frida trace contained no
+ANfl acquisition, candidate, worker, or damage events. Case 11 is an
+order-rejected movement-confounded diagnostic, not a target-selection
+comparison. Its pre-cast prediction is retained but marked invalid for
+comparison in
+`build-re/ability-re/ANfl-controlled-target-selection-11/results/case-a-comparison.json`.
+
+Case 12 changed caster setup to a previously successful coordinate and issued
+Hold Position. Its prepared map is retained, but the restarted Retail window
+rendered black on the new Xvfb session. No gameplay command, placement result,
+or cast was observed, so that launch is inconclusive. The complete session
+manifest and artifacts are in
+`build-re/ability-re/ANfl-controlled-target-selection-11/` and
+`ANfl-controlled-target-selection-12/`. No deterministic five-target
+selection success is claimed. The historical four-candidate trace remains
+incomplete; it does not establish why its intended fifth target was absent.
