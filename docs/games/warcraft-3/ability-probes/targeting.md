@@ -690,7 +690,53 @@ candidate, worker or damage events. Its pre-cast prediction is therefore not
 a selection result. The immutable prediction and rejection comparison are in
 `build-re/ability-re/ANfl-controlled-target-selection-11/predictions/` and
 `results/case-a-comparison.json`. Case 12 adds a caster Hold Position order but
-its restarted Retail window rendered black; there is no fresh scenario output
-or cast. That run is inconclusive. The earlier four-candidate capture remains
-movement-confounded, and the missing fifth callback candidate is not
-diagnosed. See the session manifest under case 11 for stage classifications.
+its JASS source references undeclared `ordersOk` inside `RE_SetupOne`; that
+prepared script was defective, and the black-window run produced no usable
+scenario result. These are preserved historical diagnostics. The earlier
+four-candidate capture remains movement-confounded and does not diagnose its
+missing fifth callback candidate.
+
+### Controlled five-target selection verification (October 18, 2026)
+
+Cases 19 and 21 completed two rank-one casts with five stationary Player 12
+`hfoo` targets. Each map recorded five unique JASS handles, actual positions,
+five stable 0.25-second placement samples, and a prediction written before the
+cast. The caster was repositioned immediately before the order. Case 21 also
+restored full mana and reset cooldown immediately before issuing the order
+after case 20 showed a rejected order with only 105.991 mana. Its successful
+cast logged 330 mana and ability level one.
+
+| Case | Predicted sorted units | Predicted recipients | Observed workers | Native receivers | JASS damage events |
+|---|---|---|---|---|---|
+| 19 A | `[0,1,2,3,4]` | `[0,1,2]` | `[0,1,2]` | `[0,1,2]` at 85 | `[0,1,2]` at 85 |
+| 21 B | `[0,3,2,1,4]` | `[0,3,2]` | `[0,3,2]` | `[0,3,2]` at 85 | `[0,3,2]` at 85 |
+
+Both traces contain 13 candidate callback deliveries, five unique CUnit
+pointers, five successful coordinate resolutions using the engine's existing
+`0x007FCC50` call, three workers, and three matching damage receiver calls.
+The resolved XYZ positions match the five live JASS positions one-to-one by
+coordinates, owner and type. This is a coordinate-based correlation rather
+than handle-registry proof. Callback entry establishes query delivery; the
+three selected units' eligibility is directly established by their worker
+calls. The relationship/shared-validator result was not instrumented for the
+two unselected targets, so their gate passage remains inferred from the
+identical target setup and static native path.
+
+Case 19's prediction is
+`build-re/ability-re/ANfl-controlled-target-selection-19/predictions/case-a-v1.json`;
+its raw JASS and Frida captures and comparison are in that case's `results/`
+and `traces/` directories. Case 21's immutable prediction is
+`build-re/ability-re/ANfl-controlled-target-selection-21/predictions/case-b-v1.json`;
+its raw captures and comparison are in the corresponding directories. Both
+predictions precede their cast-result file timestamps. The full native pointer
+to JASS correlation and per-unit distance/worker/damage tables are in
+[`forked-lightning-retail.md`](../forked-lightning-retail.md#controlled-five-target-prediction-verification-october-18-2026).
+
+The first case-19-B placement was rejected before casting: target 3 was on
+blocked pathing and two targets shifted before the stable samples. Case 20
+corrected the layout and verified five stationary targets, but its order was
+rejected with 105.991 mana and produced no native acquisition. Case 21 used
+that corrected, validated layout and restored full mana plus cooldown before
+the order. Cases 19 and 21 verify the predicted DataB-limited prefix for
+distinct per-unit distance rankings; tie ordering, category-specific
+rejection semantics and query boundaries remain untested.

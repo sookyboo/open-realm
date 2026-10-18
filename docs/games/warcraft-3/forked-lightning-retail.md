@@ -196,13 +196,14 @@ distance comparison.
 
 Coincident caster/target positions pass through the native reciprocal-length
 calculation; the exact zero-vector fallback and resulting query centers have
-not been verified. No boundary-placement run has been completed. Existing
-runtime captures do not contain valid native candidate coordinates: the old
-Frida script read floats at `CUnit+0x26C`, but static disassembly shows
-`+0x26C` is the point object returned by virtual `+0xB8`, not a pair of
-coordinate floats. Treat those old `candidate_x/candidate_y` JSON values as
-invalid. The JASS scenario positions and health changes remain valid as JASS
-observations, but they do not supply the missing native candidate identity,
+not been verified. No boundary-placement run has been completed. Historical
+Frida captures that read floats at `CUnit+0x26C` remain invalid: static
+disassembly shows `+0x26C` is the point object returned by virtual `+0xB8`, not
+a pair of coordinate floats. Treat those old `candidate_x/candidate_y` JSON
+values as invalid. Cases 19 and 21 below observe the engine's existing point
+resolver call and correlate its live coordinates with JASS positions. Earlier
+JASS observations remain valid for their recorded positions and health, but
+they do not supply the missing native candidate identity,
 enumeration-order, or boundary measurements.
 
 The detailed implementation-level target-selection specification and exact
@@ -252,7 +253,7 @@ confirms the corrected instrumentation path against live candidate objects;
 the older `candidate_x/y` fields and earlier zero resolver outputs remain
 invalid as world-position evidence.
 
-The successful case is summarized in
+The successful historical case is summarized in
 `case-01-analysis.json`, with raw Frida and JASS captures adjacent to it. JASS
 records five scenario handles and their positions; callback-time native
 coordinates correlate to indices 0, 3, 1 and 4. The first three worker and
@@ -271,20 +272,17 @@ candidate pointers, four successful coordinate resolutions, three workers,
 and three matching `0x002677C0` receiver calls. Callback return value `1`
 means continue spatial enumeration; it is not an acceptance result. The
 callback-time position plus worker/receiver identity and JASS handle/life
-samples provide a one-case identity correlation, with the limits above. The
-next capture still needs five stationary targets with validated actual
-positions before the cast and a written metric/sorted-prefix prediction made
-before inspecting worker and damage results.
+samples provide a one-case identity correlation, with the limits above. Cases
+19 and 21 below later meet the stationary, pre-predicted selection requirement
+with five native/JASS-correlated targets.
 
 No category eligibility matrix or controlled boundary/sorting matrix has yet
-been run. The fresh case verifies only four of its five expected scenario
-targets as candidates and therefore does not predict all five identities.
-Thus the supported algorithm is complete-set pointer deduplication, ascending
-distance to the explicit order target, then descending signed `+0x0C` key in
-the five-item selection-sort path, followed by the DataB prefix;
-the exact eligibility outcomes, query boundary behavior, and deterministic
-target choices for controlled placements remain unresolved. Do not implement
-unverified target-category predicates from authored mask labels alone.
+been run. The historical four-candidate case verifies only four of its five
+expected scenario targets and does not predict all five identities. Cases 19
+and 21 below verify exact target choices for two controlled placements, while
+the exact eligibility outcomes, query boundary behavior, and equal-key target
+choices remain unresolved. Do not implement unverified target-category
+predicates from authored mask labels alone.
 
 ### Current implementation-level algorithm and evidence boundary
 
@@ -312,18 +310,18 @@ for candidate in sorted[0 : min(count, DataB)]:
 
 Verified static: gate order, pointer deduplication, metric inputs and math,
 comparator key order, unstable generic sort behavior, full-set sort, and
-post-sort DataB bound. Verified runtime from earlier captures: five distinct
-candidate pointers per cast, 12 callback invocations across overlapping
-queries, three workers and damage receivers for DataB=3, and the rank-one /
-rank-two raw damage values. The fresh coordinate case adds four successfully
-resolved candidates, an observed ascending-distance worker prefix, and a
-partial native-to-JASS correlation; see `case-01-analysis.json`. Unresolved:
-specific unit-state/category outcomes, spatial enumeration algorithm, exact
-named geometry fields and radius expression, boundary inclusion, complete
-candidate pointer to JASS handle identity, equal-key target determinism, and
-category/type damage semantics. This fresh case remains incomplete because
-only four candidates were observed and the targets moved during the cast; it
-does not establish a deterministic five-candidate selection prediction.
+post-sort DataB bound. Verified runtime: earlier captures recorded five
+distinct candidate pointers and three workers for DataB=3. Cases 19 and 21
+each recorded 13 callback deliveries, five distinct candidates, five
+successful point resolutions, three workers, and three matching damage
+receivers. Their unique native positions correlate one-to-one with all five
+JASS scenario units by exact coordinates, owner, and type; no native handle-
+registry mapping was used. Both pre-cast predictions matched worker order,
+receiver pointers, and JASS damage. Unresolved: individual gate outcomes for
+the two non-selected candidates, specific unit-state/category outcomes, exact
+named query geometry fields and radius expression, boundary inclusion,
+registry-based handle mapping, equal-key target determinism, and category/type
+damage semantics.
 
 ### Rank-two and five-target runtime follow-up
 
@@ -350,7 +348,9 @@ All nine damage receiver calls came from return address `0x006EB5F9` (RVA
 pointer at payload `+0x00`. This establishes the rank-to-payload values and
 the three-worker cap for both tested ranks. JASS health changes identify the
 three affected scenario units as a set; the native callback records do not yet
-provide a pointer-to-individual-JASS-handle mapping for all five units.
+provide a pointer-to-individual-JASS-handle mapping for all five units in
+these archived rank-two/rank-one cases. Cases 19 and 21 below add that
+coordinate-based mapping for their controlled rank-one casts.
 
 The reverse-creation case changed actual initial positions because placement
 resolved collisions differently (for example, secondary units spawned at
@@ -500,8 +500,11 @@ before missile dispatch. Accessor `0x0046EE20` reads row `+0x24` (DataB),
 which acquisition converts to the worker-count bound. Three new accepted
 Retail cases observed payload amounts 160 at rank two and 85 at rank one;
 each dispatched three receiver calls. Five-target JASS cases observed three
-targets losing the rank-matching amount by the 0.75-second sample. The exact
-native-pointer-to-each-JASS-handle map remains incomplete.
+targets losing the rank-matching amount by the 0.75-second sample. In the
+controlled rank-one cases 19 and 21, all five native candidate positions were
+correlated one-to-one with JASS handles; the three selected native receiver
+pointers map to the three JASS damage events. This is coordinate-based
+correlation, not a verified native handle-registry mapping.
 
 The worker's virtual call is no longer unresolved: it reaches the missile
 method described above. The generic record branch resolves to lightning
@@ -569,7 +572,7 @@ sound. Presentation evidence remains authored/static only.
 | Order ID `0xD026B`; order string `forkedlightning` | Static getter plus authored data; order path also observed by Frida | None for this build's order identity. |
 | Candidate filtering, repeated query deduplication, full-set sort, then DataB-bounded worker prefix | Exact-build static control flow; corroborated by three live casts with five distinct callback pointers and three workers each | Decode every query parameter and target gate to name each gameplay predicate; isolate creation-order effects from placement. |
 | Rank-one and rank-two amounts | Runtime payload floats 85 and 160; static row accessors read DataA; JASS samples show matching losses on five-target tests | Rank three and other target defenses remain untested; raw amount can differ from life delta after mitigation. |
-| Shared receiver and selected targets | Runtime worker target equals receiver ECX for all nine damage calls; three of five JASS targets lose the rank-matching amount per case | Native-pointer-to-individual-JASS-handle mapping remains incomplete for all five candidate pointers. |
+| Shared receiver and selected targets | Runtime worker target equals receiver ECX; cases 19 and 21 correlate all five native candidate coordinates one-to-one with JASS targets and match the predicted three damage recipients | Correlation uses exact live coordinates, owner, and type; a handle-registry mapping and individual gate outcomes for non-selected targets remain open. |
 | DataB target limit | Static DataB row accessor and post-sort `min(candidate_count, DataB)` worker bound; live cases produced three workers at ranks 1 and 2 | DataB is 3 at all authored ranks, so rank-varying limit behavior is not tested. |
 | Mana/cast timing | Direct JASS samples, 250ms resolution | Finer timing only if exact ordering matters after static path inspection. |
 | Effect/sound lifecycle | Authored model metadata plus candidate transient-handle code | Prove callback/receiver association, resolve data-to-model mapping; visible/audio confirmation only if static linkage remains ambiguous. |
@@ -742,6 +745,86 @@ rendered black on the new Xvfb session. No gameplay command, placement result,
 or cast was observed, so that launch is inconclusive. The complete session
 manifest and artifacts are in
 `build-re/ability-re/ANfl-controlled-target-selection-11/` and
-`ANfl-controlled-target-selection-12/`. No deterministic five-target
-selection success is claimed. The historical four-candidate trace remains
-incomplete; it does not establish why its intended fifth target was absent.
+`ANfl-controlled-target-selection-12/`. These remain rejected/inconclusive
+historical cases. Case 12's script references `ordersOk` in `RE_SetupOne`
+while declaring `holdOk` there, so its prepared JASS setup was defective; the
+control map and later prepared cases render correctly on the recovered display.
+The historical four-candidate trace remains incomplete; it does not establish
+why its intended fifth target was absent.
+
+### Controlled five-target prediction verification (October 18, 2026)
+
+The previously active case 19 Retail process was reused for baseline case A.
+Case 19 used the case 11/19 five-point layout, Player 12 `hfoo` targets,
+caster attack damage and dice set to zero, zero acquisition range, and
+accepted Hold Position orders. All five targets had their requested actual
+coordinates and remained stationary across five 0.25-second samples. The
+prediction `predictions/case-a-v1.json` was written at 14:52:20 UTC; the
+PreloadGen cast result was written at 14:52:25 UTC. Its prepared map SHA-256 is
+`3e14dbfb556d8aa4221fc0d2fd98abf4fa6ac779fc68829e7bbf7a29ca7f2483`.
+
+| Index | JASS handle | Native CUnit | Actual X,Y | Distance | Rank | Worker | Damage |
+|---:|---:|---|---|---:|---:|---:|---|
+| 0 | 1056216 | `0xfadcb64` | `(-880,-6084)` | 0.000 | 1 | 1 | 85; life 125.000 |
+| 1 | 1056217 | `0xfadd080` | `(-720,-6160)` | 177.133 | 2 | 2 | 85; life 125.000 |
+| 2 | 1056127 | `0xfadd59c` | `(-656,-6096)` | 224.321 | 3 | 3 | 85; life 125.000 |
+| 3 | 1056047 | `0xfaddab8` | `(-656,-6160)` | 236.542 | 4 | — | none; life 210.000 |
+| 4 | 1055982 | `0xfaddfd4` | `(-592,-6224)` | 320.225 | 5 | — | none; life 210.000 |
+
+The order was accepted at rank one with 330 mana. Caster position was set to
+`(-1030,-5994)` immediately before the order; after order acceptance the JASS
+sample recorded it at `(-1072,-5968)` with current order `0xD026B`. The spell
+effect arrived at 0.5 seconds. Native Frida observed 13 callback deliveries,
+five unique CUnit pointers, five successful coordinate resolutions through
+the engine's existing `0x007FCC50` calls, three workers, and three receiver
+calls of 85. All five native XYZ coordinates exactly matched one unique JASS
+target position, owner and type. This is a one-to-one coordinate correlation,
+not a native handle-registry mapping. The worker and receiver sequence was
+`[0,1,2]`, exactly matching the saved prediction.
+
+The first case-19-B placement attempt is preserved but was discarded before a
+cast: target 3's requested `(-760,-6084)` position was pathing-blocked, and
+targets 3 and 4 shifted before the first stable sample. Case 20 corrected the
+layout by using already validated positions; all five actual positions matched
+the prediction and remained stationary. Its pre-cast prediction is retained,
+but `IssueTargetOrder` returned false with caster mana 105.991 and native
+acquisition did not run. Case 20 does not distinguish mana from cooldown as
+the sole order rejection cause.
+
+For the independent rank variation, case 21 swapped target identities 1 and 3
+between already verified case 19 positions. All five requested positions were
+walkable, reproduced exactly, and remained stationary in five samples. The
+prediction was written at 15:06:00 UTC, before the cast result at 15:06:43 UTC.
+The prepared map SHA-256 is
+`25323133e7d824622a96ccd3d9e66b00b03c3ed2aff230ca9f1dd3a3ac91c59e`.
+Immediately before order issuance, the harness restored caster mana to its
+330 maximum and called `UnitResetCooldown`; the logged caster was alive at
+92.968 life, rank one, with current order zero.
+
+| Index | JASS handle | Native CUnit | Actual X,Y | Distance | Rank | Worker | Damage |
+|---:|---:|---|---|---:|---:|---:|---|
+| 0 | 1056016 | `0xe358870` | `(-880,-6084)` | 0.000 | 1 | 1 | 85; life 125.002 |
+| 1 | 1055866 | `0xe358d8c` | `(-656,-6160)` | 236.542 | 4 | — | none; life 210.000 |
+| 2 | 1056020 | `0xe3592a8` | `(-656,-6096)` | 224.321 | 3 | 3 | 85; life 125.002 |
+| 3 | 1055943 | `0xe3597c4` | `(-720,-6160)` | 177.133 | 2 | 2 | 85; life 125.002 |
+| 4 | 1055970 | `0xe359ce0` | `(-592,-6224)` | 320.225 | 5 | — | none; life 210.000 |
+
+This order was accepted; native acquisition resolved five unique candidate
+positions from 13 callback deliveries. Workers and damage receivers were
+`[0,3,2]`, matching the new prediction and the JASS `amount=85` events.
+Across both valid cases, the native coordinates, JASS identities, distinct
+distance order, DataB=3 worker prefix, receiver order, and life changes agree.
+The prediction changed from `[0,1,2]` to `[0,3,2]` when target identities 1
+and 3 exchanged their validated coordinates. The tie-break key values were
+captured, but these distinct-distance cases do not runtime-test tie ordering.
+
+The exact callback-level relationship/shared-validator decisions and candidate
+array append were not separately hooked. All five identical living targets
+were delivered to the callback; the selected three's gate passage is directly
+established by their workers, while gate passage for the two non-selected
+targets is inferred from the identical setup and static callback path. Exact
+rejection-category behavior and spatial boundaries remain open. Full raw
+traces, predictions, placement/cast PreloadGen captures, and machine-readable
+comparisons are retained in
+`build-re/ability-re/ANfl-controlled-target-selection-19/` and
+`ANfl-controlled-target-selection-21/`.
