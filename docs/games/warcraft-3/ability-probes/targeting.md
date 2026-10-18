@@ -162,9 +162,30 @@ observation, not an enemy/allied/neutral matrix. See
 
 The acquisition's static loop clamps progress to `max(A + D, C - (A + D))`
 and executes the endpoint query. Type `0xB` consumes radius and center X/Y.
-The relevant rank accessors are verified, but the `A/C/D` authored-field
-mapping, full radius/spacing expression, and downstream boundary comparison
-remain unresolved. No geometry boundary case was run.
+The query has a second, pre-callback target-mask stage. For ANfl, the `0x1D`
+clause installs `0x00696BE0`; it calls `0x006ADB90(candidate, query+0x3C,
+query+0x40, query+0x44)` and returns false when that shared filter returns a
+nonzero rejection code. The shared filter reaches `0x006ADA20` and then
+`0x006AD670`, before `0x00878FC0` can run. `0x006AD670` compares candidate and
+source owner indices. For a same-owner pair it returns `0x84` unless normalized
+target-mask bit `0x2000` permits that relation. ANfl passes mask word
+`0x04010006`; `0x006AEA70` expands it to `0xF5D10006`, which lacks `0x2000`.
+The historical same-owner Footman was absent from the callback, while enemy
+Footmen were delivered. This is **verified static** and **runtime-correlated**
+evidence for the pre-callback same-owner rejection. The internal `0x84` return
+was not captured in the corrected live trace, so its runtime value remains
+static-only.
+
+The rank-one geometry samples support, but do not yet prove at native-point
+precision, this model: `A=Area=125`, `C=DataC=900`, `D=DataD=300`, endpoint
+progress `L=max(A+D,C-(A+D))=475`; radius at progress `p` is
+`A + p*(D-A)/L`; then `p_next=min(p+radius,L)`. Query centers are consistent
+with `caster + normalized(target-caster)*(p + D/4)`. The four measured radii
+match that formula within the captured float precision; center positions track
+the predicted ray within about 1.2 world units. This is **corroborated runtime**
+for rank one, not a verified boundary rule. The native caster point was not
+independently resolved in this capture, exact circle-edge inclusion is
+untested, and no inside/outside boundary placements were made.
 
 The receiver `0x002677C0` reads ANfl payload type `+0x14 = 0x400` and selector
 `+0x20 = 0` under the runtime `MagicImmunesResistDamage` branch. It has a
@@ -776,15 +797,18 @@ scenario positions (indices 0, 1, 2 and 4) reached the callback; the same-owner
 candidate at index 3 did not. Every delivered unique candidate passed the
 relationship gate (`0x0027FB80` return 1) and shared validator
 (`0x00282180` return 0). Workers and native receivers were `[0,2,1]` with raw
-85 payloads. Thus this capture shows pre-callback exclusion for this allied
-`hfoo`, not rejection by either callback gate. It does not identify whether
-the unit failed a particular query mask bit or an earlier spatial-query
-predicate.
+85 payloads. Thus this capture shows pre-callback exclusion for this same-owner
+`hfoo`, not rejection by either callback gate. Exact-build static analysis
+identifies query predicate `0x00696BE0` → `0x006ADB90` → `0x006ADA20` →
+`0x006AD670` as the pre-callback path. ANfl mask `0x04010006` normalizes to
+`0xF5D10006`; its missing `0x2000` bit causes `0x006AD670` to reject equal
+owner indices with code `0x84`. The callback absence agrees with this branch,
+but the `0x84` return itself was not captured live.
 
-The map logged campaign-combat damage to targets before and after the cast;
-its JASS life deltas are therefore not attributed to ANfl. The exact map,
-coordinate-resolved trace, result files, screenshots and preregistered
-conditional hypotheses are under
+The map logged Footman-to-Footman attacks and stale unit sources before and
+after the cast; its JASS life deltas are therefore not attributed to ANfl.
+The exact map, coordinate-resolved trace, result files, screenshots and
+preregistered conditional hypotheses are under
 `build-re/ability-re/ANfl-target-eligibility-ally-01/`. The capture expands
 only the same-owner case and does not establish allied/enemy relation rules
 for other unit categories.

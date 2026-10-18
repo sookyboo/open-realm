@@ -381,6 +381,20 @@ candidate field `+0x34` through `0x006993A0`, then compares the result's
 fails). These are observed data contracts; the field meanings are not
 established.
 
+For ANfl's actual `0x1D` clause, this chain has a concrete owner-relation
+effect. The builder registers predicate `0x00696BE0`, which calls
+`0x006ADB90(candidate, query+0x3C, query+0x40, query+0x44)`. The shared filter
+builds candidate target flags in `0x006B1C90`, validates them in
+`0x006ADA20`, then reaches `0x006AD670` for unit-owner and player-relation
+checks. The ANfl authored mask word is `0x04010006`; normalization through
+`0x006AEA70` gives `0xF5D10006`. `0x006AD670` returns `0x84` for a candidate
+whose owner index equals the source owner's index when mask bit `0x2000` is
+clear. That bit is clear for ANfl, so same-owner candidates are rejected by
+the query predicate before ANfl's `0x00878FC0` callback. The same-owner
+candidate's exact `0x84` return was not captured live; the static branch
+explains the callback absence in the allied-target case. Do not collapse this
+into the callback's separate `0x0027FB80` relationship gate.
+
 After parsing clauses, `0x0068EA00` runs the selected spatial enumerator and
 applies its generated predicates in order to each candidate. Only candidates
 passing all generated predicates reach the caller callback. A zero callback
@@ -516,10 +530,16 @@ remain distinct from named JASS damage types or confirmed immunity semantics;
 no controlled ANfl mitigation-state comparison has been run.
 
 An October 18, 2026 allied-secondary probe also observed three rank-one ANfl
-receiver calls carrying raw amount 85. Campaign combat contaminated the JASS
-life deltas, so this does not extend the verified life-change/mitigation
-result. Raw payload flags/type/selector and defensive-state behavior remain
-unresolved; see the evidence-bounded update in
+receiver calls carrying raw amount 85. Its JASS damage events show the probe's
+own Footmen attacking one another while holding position, as well as old/stale
+`hfoo` and `Nngs` source handles absent from the replay's placement list. The
+logs do not establish whether every such source is campaign-owned or a
+lingering scenario unit/projectile. This contaminates life deltas and does not
+extend verified life-change/mitigation results. A clean mitigation fixture
+should set ordinary attack base damage and dice to zero on all test units,
+then confirm a no-cast interval with stable life. That fixture has not yet
+been run. Raw payload flags/type/selector and defensive-state
+behavior remain unresolved; see the evidence-bounded update in
 [`forked-lightning-retail.md`](../forked-lightning-retail.md#same-owner-secondary-target-probe-october-18-2026)
 and the implementation specification under
 `build-re/ability-re/ANfl-target-eligibility-ally-01/`.

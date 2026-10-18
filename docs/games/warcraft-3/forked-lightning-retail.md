@@ -108,6 +108,18 @@ immunity, life, hidden, or invulnerability semantics. Authored TFT
 `ANfl` target mask is air/ground/enemy/neutral/organic; that is configuration,
 not proof that every listed bit is tested by this callback.
 
+The query-level relation filter is now identified separately from those
+callback gates. `0x0028EA00` parses ANfl's `0x1D` clause and installs
+`0x00696BE0`. That predicate calls `0x006ADB90` before the ANfl callback;
+`0x006ADA20` then delegates owner/relation decisions to `0x006AD670`. The
+ANfl mask `0x04010006` expands to `0xF5D10006`. In `0x006AD670`, candidate and
+source owner indices that match produce rejection `0x84` unless mask bit
+`0x2000` is set. That bit is clear in ANfl's normalized mask. The historical
+same-owner Player 0 Footman did not reach the callback, consistent with this
+exact static branch. The corrected runtime trace did not capture the
+candidate-specific return, so the branch's `0x84` value remains verified
+static rather than verified runtime.
+
 ### Target-selection detail follow-up (exact-build static)
 
 Focused exports were added under
@@ -199,16 +211,20 @@ passed by ANfl is `0x1D`, the ability-derived mask word, the caster pointer,
 `-1`, and `0x1F`; the meanings of these query flags have not been proven.
 
 The rank-row readers used by acquisition access raw row offsets `+0x18`,
-`+0x28`, and `+0x2C` through RVAs `0x0006E900`, `0x0006EED0`, and `0x0006EF80`
-respectively. Their native addresses and row offsets are verified; mapping
-them to named authored properties and fully simplifying the per-iteration
-radius expression remain open. The loop starts with zero progress, adds the
-previous iteration's advance, clamps progress at its computed endpoint, and
-executes the endpoint query before terminating. The decompiled endpoint is
-`max(A + D, C - (A + D))`, with `A=row+0x18`, `C=row+0x28`, and
-`D=row+0x2C`. This does not establish an inclusive candidate boundary because
-the shared spatial-query predicate has not been decoded to its final
-distance comparison.
+`+0x28`, and `+0x2C` through RVAs `0x0006E900`, `0x0006EED0`, and `0x0006EF80`.
+The rank-one lookup values align these with `Area=125`, `DataC=900`, and
+`DataD=300`; the endpoint is `L=max(Area+DataD, DataC-(Area+DataD))=475`.
+For the recorded rank-one case, the four query radii agree with
+`r(p)=Area + p*(DataD-Area)/L`, and successive progress is
+`p_next=min(p+r(p),L)`. Query centers are consistent with
+`caster + normalize(primary-caster)*(p+DataD/4)`. The four observed center
+coordinates track this ray within about 1.3 world units and the measured radii
+match the formula within captured float precision. This is a **corroborated
+rank-one runtime model**; a native caster point sample and boundary probes
+remain missing, so exact center rounding, circle-edge inclusion, collision
+extent, and rank-two/three geometry remain unresolved. The endpoint query is
+issued before termination. Coincident caster/target zero-vector behavior is
+also unresolved.
 
 Coincident caster/target positions pass through the native reciprocal-length
 calculation; the exact zero-vector fallback and resulting query centers have
@@ -233,11 +249,16 @@ three of the first accessors and uses `max(A + D, C - (A + D))` in the current
 decompilation, then clamps each next progress step to that endpoint and still
 issues the endpoint query. It forms the query center from the normalized
 caster-to-primary direction and that progress. The type-`0xB` query builder
-stores a radius and center X/Y and dispatches a spatial query. The exact
-authored names for the three geometry operands, the radius expression's
-simplified formula, and the shared query's final boundary comparison remain
-unresolved; do not substitute authored `Area`, DataC, or DataD labels until
-the accessor-to-row-field mapping is verified.
+stores a radius and center X/Y and dispatches a spatial query. The rank-one
+observations corroborate the radius and progress model below; they do not prove
+the final candidate boundary comparison. The rank-one values align with
+`Area=125`, `DataC=900`, and `DataD=300`, yielding endpoint `L=475`,
+`r(p)=Area+p*(DataD-Area)/L`, `p_next=min(p+r(p),L)`, and center progress
+`p+DataD/4`. This field mapping and simplified model are currently
+corroborated by authored values, exact-build accessor flow, and one runtime
+query trace, rather than verified across ranks. Circle-edge inclusion, unit
+footprint effects, native-point rounding, and rank-two/three geometry remain
+unresolved.
 
 ### Shared damage receiver behavior relevant to ANfl
 
@@ -395,7 +416,7 @@ JASS scenario units by exact coordinates, owner, and type; no native handle-
 registry mapping was used. Both pre-cast predictions matched worker order,
 receiver pointers, and JASS damage. Unresolved: individual gate outcomes for
 the two non-selected candidates, specific unit-state/category outcomes, exact
-named query geometry fields and radius expression, boundary inclusion,
+rank-one query geometry beyond the corroborated model, boundary inclusion,
 registry-based handle mapping, equal-key target determinism, and category/type
 damage semantics.
 
@@ -929,28 +950,44 @@ eligibility for other categories.
 An additional rank-one cast changed only secondary scenario index 3 from
 Player 12 to Player 0 (the caster owner), retaining `hfoo` and the case-21
 requested coordinate `(-720,-6160)`. The map recorded all five actual target
-coordinates and handles before the cast. It also recorded campaign-combat
-damage during the setup interval, so this is not a clean life-state control.
+coordinates and handles before the cast. Its damage log shows ordinary
+Footman-to-Footman attacks while the targets hold position. Later replay logs
+also include old/stale `hfoo` and `Nngs` source handles not present in that
+replay's placement list. The logs therefore establish ordinary combat
+contamination but do not identify every source as a campaign unit or as a
+current scenario unit.
 
 The accepted cast's type-0xB query trace delivered four of the five scenario
 positions: indices 0, 1, 2 and 4. Index 3 was never delivered to the ANfl
 candidate callback, so this run does **not** show a relationship-gate or
 shared-validator rejection for that allied unit. All four delivered unique
 units returned 1 from `0x0027FB80` and 0 from `0x00282180`; workers and damage
-receivers were indices `[0,2,1]`, with raw payload 85. This matches the
-pre-registered branch where the allied candidate is absent from the accepted
-set. Its point exclusion occurred before the callback gates; the responsible
-query-mask bit or native predicate is not yet identified.
+receivers were indices `[0,2,1]`, with raw payload 85. The same-owner unit's
+exclusion is now explained by exact-build static evidence: the query's `0x1D`
+clause installs predicate `0x00696BE0`, which calls
+`0x006ADB90` → `0x006ADA20` → `0x006AD670` before the callback. The authored
+mask `0x04010006` normalizes to `0xF5D10006`; same-owner rejection code `0x84`
+applies when bit `0x2000` is absent. The observed callback absence agrees with
+that branch. The follow-up live hooks did not capture the candidate-specific
+`0x84` result; the mask-filtered captures either hit generic-query limits or
+filtered on another query's mask. This return-value link is static, not runtime
+proof.
 
 This single same-owner case is category-specific runtime evidence, not a full
-alliance matrix. The selected units' JASS life observations were confounded by
-campaign combat; native receiver calls establish the ANfl worker recipients.
-Raw map, JASS outputs, bounded trace, screenshots, static acquisition
-disassembly and query input records are preserved in
+alliance matrix. Selected units' JASS life observations were confounded by
+ordinary attacks and stale unit/projectile sources; native receiver calls
+establish the ANfl worker recipients in the original capture. Three later
+same-map Frida attempts are preserved:
+the first saturated on general query traffic; the second recorded a different
+query mask (`0x0400F006`) and saturated; the third emitted only `agent-ready`
+because its filter did not match that mask. None captured this ANfl query's
+candidate-specific return. The raw map, JASS outputs, bounded traces,
+follow-up outputs, static exports and query inputs are preserved in
 `build-re/ability-re/ANfl-target-eligibility-ally-01/`. The four query centers
-and radii are recorded in its `results.json`; they confirm forward progression
-and overlap for this cast but do not by themselves establish boundary
-inclusion or the general radius formula.
+and radii are recorded in its `results.json`; together with the pre-cast caster
+and primary-target coordinates, they corroborate the rank-one progression and
+radius model described above. The native caster point and exact circle-edge
+inclusion remain unverified.
 
 The current implementation-level specification, including evidence labels,
 the limited eligibility matrix, query measurements, numeric damage payload
