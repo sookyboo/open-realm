@@ -227,3 +227,82 @@ the corrected `p + Area` model.
 ## October 19 native-binding follow-up
 
 Verified the Retail executable hash again and inspected the existing exact-build Ghidra exports for native registration VA `0x0049B3C0`, getter VA `0x00499FA0`, and setter VA `0x004AB600`. No new Ghidra export, Retail launch, accepted cast, rejected cast, Frida hook, prepared map, or JASS output was created in this continuation. Reused evidence is under `ANfl-invulnerability-static-followup-01/`, `ANfl-invulnerability-native-impl-01/`, and `ANfl-invulnerability-readback-01/`. The four documentation/specification files listed above were modified. Documentation validation was `git diff --check`; it passed. `make test TEST_JOBS=4` was skipped because no C source, header, or relevant C build configuration changed.
+
+## October 19 confirmed-invulnerability candidate-trace attempt
+
+A fresh scenario and prepared map were created under
+`build-re/ability-re/ANfl-invulnerability-candidate-trace-01/`. The generated
+map embeds a unique scenario ID and its script was verified byte-for-byte by
+the Retail probe runner. The bounded Frida agent correlates
+`BlzIsUnitInvulnerable` calls through the resolver to a CUnit pointer, samples
+that CUnit's `+0x20` bit 3, records query-predicate and filter arguments,
+captures final-geometry candidates and their `+0x20/+0x164/+0x264/+0x268`
+fields, and observes the callback, relationship gate, shared validator,
+worker, and damage receiver. Its hook-load check passed for Retail image base
+`0x00400000`.
+
+No gameplay result was obtained. Two control-map launches left a Retail
+process without a visible X window; no screenshot or gameplay HUD could be
+confirmed, so the prepared map was not launched and no scenario chat command
+or ANfl cast was issued. Treat this as an environment failure. It adds no
+evidence about the active invulnerability target's first exclusion stage,
+validator `0x36`, owner filtering, or mitigation. The launch attempts, hashes,
+agent-load-only trace, and failure classification are recorded in
+`build-re/ability-re/ANfl-invulnerability-candidate-trace-01/README.md` and
+`runtime/attempt-manifest.json`. Earlier reversible-state and historical
+callback observations remain unchanged.
+
+## October 19 confirmed-invulnerability candidate trace (successful retry)
+
+The follow-up trace is preserved at
+`build-re/ability-re/ANfl-invulnerability-candidate-trace-02/`. Retail hash,
+prepared map hash, and embedded JASS hash are recorded in its README and
+scenario artifacts. The accepted rank-one cast treated secondary target index
+1 without changing owner, type, or placement. JASS handle pointer `0x101d74`
+resolved to CUnit `0x0f166128` and spatial entry `0x0fdb5b78`; before query
+acquisition CUnit `+0x20` was `0x164e`, bit 3 was set, and the native getter
+returned false. The target had life 210 and its spatial entry had `+0x90 =
+0.96875`.
+
+**Verified runtime:** the candidate passed final geometry in queries 2–4. In
+each it reached query predicate `0x00696BE0`, filter `0x006ADB90`, and
+target-mask function `0x006ADA20`. Candidate flags were `0x55a00002`; normal
+Footmen in the same trace had `0x55900002`. ANfl raw mask was `0x04010006`,
+normalized to `0xf5d10006`. The target-mask function returned `0x96`,
+propagating to a zero query-predicate result. Exact-build static export
+`ANfl-query-relation-helper-04/decompiled.jsonl` ties the `0x100000` versus
+`0x200000` target class difference to CUnit `+0x20` bit 3 and shows the
+normalized ANfl mask excludes the bit-3-set category. The first observed
+exclusion is query-level target-mask filtering, before owner/relation
+filtering, ANfl callback, relationship gate, shared validator, retention,
+selection, worker, or receiver. Three other selected targets reached
+worker/receiver with raw damage 85.
+
+This explains why the confirmed active-state target does not reach validator
+`0x36`. The historical callback-level `0x36` candidate lacked getter and bit
+readback; its actual state remains unknown. A different state or candidate
+path is possible but unproven. Preserve both observations with these limits.
+
+The matched normal/Amim post-call experiment is at
+`ANfl-validator-operands-postcall-02/`. JASS accepted both orders and the
+Amim-treated case showed level 1, but Frida recorded only `agent-ready`; no
+callback or operand events were captured. Classify the attempt as incomplete.
+The decisive `0x36` runtime operand remains unresolved. Player 1/Player 15
+earliest rejection, ordinary hostile-player behavior, and receiver-side
+mitigation remain open. The invulnerable candidate was removed before the
+receiver, so it supplies no mitigation measurement.
+
+### Implementation-ready eligibility update
+
+For candidates delivered by ANfl's spatial query, apply the query target-mask
+test before owner/relation filtering and callback validation. In the verified
+active invulnerability state, target classification derived from CUnit
+`+0x20` bit 3 is the `0x200000` category; normalized ANfl mask `0xf5d10006`
+does not include it, so the candidate fails target-mask filtering (`0x96`)
+even after passing geometry. Do not route it to the callback or worker.
+Keep target-flag construction and mask normalization as separate helpers; this
+evidence does not establish every category mapping. Candidates that pass query
+filtering still use the existing callback relationship gate and shared
+validator. `0x36` operand semantics, allied/Neutral Passive rejection stage,
+and receiver mitigation remain unresolved and must not be inferred from this
+case.

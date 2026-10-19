@@ -992,3 +992,24 @@ stage remains unresolved. The historical case that reached callback and
 returned `0x36` lacks getter/native-state confirmation; it cannot establish
 that the same active state was present. Both records remain valid with these
 narrowed conclusions. Full traces and comparison artifacts are in the fixture.
+
+### Confirmed active invulnerability target mask result (October 19)
+
+`build-re/ability-re/ANfl-invulnerability-candidate-trace-02/` contains a
+candidate-correlated accepted cast. The treated Player 12 Footman (JASS handle
+pointer `0x101d74`, CUnit `0x0f166128`, spatial entry `0x0fdb5b78`) had CUnit
+`+0x20 = 0x164e`, bit 3 set, and `BlzIsUnitInvulnerable == false` immediately
+before acquisition. It was registered spatially and passed final geometry in
+queries 2–4. It then reached `0x006ADA20` with flags `0x55a00002`, ANfl raw
+mask `0x04010006` (normalized `0xf5d10006`), and returned `0x96`. The enclosing
+query predicate returned zero before owner/relation filtering or ANfl callback.
+Exact-build static analysis ties the `0x100000` versus `0x200000` class choice
+to CUnit `+0x20` bit 3; the normalized ANfl mask excludes the bit-3-set class.
+This is the first verified exclusion for this active state.
+
+The older candidate that reached shared validator `0x36` had no getter or
+native bit readback, so the two cases cannot be assumed to share native state.
+A matched normal/Amim post-call capture in
+`ANfl-validator-operands-postcall-02/` is incomplete: JASS orders were
+accepted, but Frida recorded only agent readiness and no candidate events.
+Runtime operands for `0x36` remain unresolved.

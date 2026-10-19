@@ -1240,3 +1240,29 @@ has independent damage confirmation, while the old callback observation and
 the new recipient omission remain unreconciled at the ANfl stage level. The
 JASS outputs, native JSONL, prepared map, and machine-readable comparison are
 in the fixture's `results/` and `runtime/` directories.
+
+## October 19 confirmed-invulnerability candidate trace
+
+The candidate-correlated accepted cast in
+`build-re/ability-re/ANfl-invulnerability-candidate-trace-02/` identifies the
+first exclusion stage. The treated Player 12 Footman (JASS handle pointer
+`0x101d74`, CUnit `0x0f166128`, spatial entry `0x0fdb5b78`) had CUnit
+`+0x20 = 0x164e`, bit 3 set, and `BlzIsUnitInvulnerable == false` immediately
+before acquisition. Its spatial entry was registered (`+0x90 = 0.96875`) and
+it passed final geometry in queries 2–4. It then reached query predicate
+`0x00696BE0`, shared filter `0x006ADB90`, and target-mask function
+`0x006ADA20` with flags `0x55a00002`. ANfl raw mask `0x04010006` normalizes to
+`0xf5d10006`; the target-mask function returned `0x96`, causing the enclosing
+query predicate to return zero. Owner/relation filtering, ANfl callback,
+relationship gate, shared validator, retention, worker, and receiver were not
+reached. Three normal targets reached the receiver with raw damage 85.
+
+Exact-build static evidence in `ANfl-query-relation-helper-04/decompiled.jsonl`
+shows the target classification uses CUnit `+0x20` bit 3 to choose the
+`0x100000` versus `0x200000` category, and the normalized ANfl mask excludes
+the latter. Thus the confirmed active state is rejected at query-level
+masking, before callback validation. The earlier callback-level `0x36` case
+has no independent getter/bit readback and cannot be assigned this same
+confirmed state. A matched normal/Amim instruction-local capture was attempted
+in `ANfl-validator-operands-postcall-02/`, but Frida recorded only agent
+readiness and no callback events; its runtime operands remain unresolved.

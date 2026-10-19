@@ -1524,3 +1524,15 @@ stayed `192.143`; after setter false, getter true and life changed
 This validates the invulnerability state transition for ordinary damage; it
 is not an ANfl receiver-mitigation test because the protected candidate was
 not observed among the cast recipients.
+
+### Forked Lightning and confirmed invulnerability (October 19)
+
+The candidate-level accepted cast in
+`build-re/ability-re/ANfl-invulnerability-candidate-trace-02/` confirms that a
+setter-confirmed invulnerable target is removed before ANfl callback and
+receiver dispatch. CUnit `+0x20` bit 3 was set and the getter returned false;
+the query target-mask function returned `0x96` after successful geometry.
+Three other targets reached the damage receiver with raw payload 85. The
+protected candidate did not reach the receiver, so this is targeting
+eligibility evidence rather than receiver-side mitigation. No callback-eligible
+defensive treatment was measured at the ANfl receiver in this continuation.
