@@ -26,13 +26,13 @@ follow-up are summarized in the implementation specification and
 Rank-two geometry now has a runtime trace; `p+Area` matches and the original
 `p+DataD/4` prediction remains archived as a failed hypothesis. The Amim
 candidate's `+0x264/+0x268` values differ from the normal candidate, but the
-selector and virtual returns were not measured reliably. The new
-invulnerability readback and callback observations conflict with the earlier
-case-three run, so no single invulnerability rejection stage is promoted to
-the implementation contract. Exact-build registration and implementation
-exports now establish the getter/setter code and raw bit polarity; the
-gameplay meaning of the bit and the discrepancy between callback observations
-remain unresolved.
+selector and virtual returns were not measured reliably. The reversible
+October 19 probe now correlates setter/getter state with a resolved CUnit bit
+and independent ordinary-damage prevention. A fresh active-state ANfl cast
+did not select the treated target, but did not trace its callback path; the
+older case-three callback observation remains uncorrelated to an independently
+confirmed state. The precise ANfl exclusion stage and discrepancy remain
+unresolved.
 
 ## Registration and relevant methods
 
@@ -1196,3 +1196,47 @@ used the available Frida endpoint at `127.0.0.1:27043` and produced a bounded
 native capture under `build-re/ability-re/ANfl-rank2-geometry-03/`. This does
 not resolve owner filtering, invulnerability readback, `0x36` operand
 differences, or receiver mitigation.
+
+### Reversible invulnerability native and damage probe (October 19, 2026)
+
+The single-unit reversible run in
+`build-re/ability-re/ANfl-invulnerability-reversible-02/` used Retail
+1.29.2.9231 (executable SHA-256
+`3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a7584224559570eed`), a
+prepared OrcX01 map (SHA-256
+`0440b71cbda30eaeff0aca19e54d2e7478c4b9cbba0f72e3acf2cf21e9f00b4a`), and
+embedded `war3map.j` SHA-256
+`fdb6c9a25641cc9066a1d3f95de5414b56e525436d80467cc8e6f395161ad973`.
+
+**Verified runtime native state:** JASS handle `0x101DAA` resolved in both
+`BlzIsUnitInvulnerable` and `SetUnitInvulnerable` to CUnit `0x103F2350`.
+Its dword `+0x20` transitioned `0x1646 → 0x164E → 0x1646` for setter
+true then false; the getter returned `true → false → true`. The setter's
+attached object was a different pointer (`0x0D7A4DF0`) with tag
+`0x2B61676C` and `+0x20 = 0`. This ties the getter's inverse bit-3 calculation
+to the exact state changed on the same resolved CUnit. The attached tag's
+class meaning and the implementation behind virtual slot `+0xA8` remain
+unknown.
+
+**Verified runtime gameplay effect:** the same Player 12 Footman received
+three ordinary `UnitDamageTarget` requests for 20 damage. Before setter true,
+getter true and life fell `210 → 192.143` (damage event 17.857). With setter
+true, getter false and life stayed `192.143` (event amount 0). After setter
+false, getter true and life fell `192.143 → 174.286` (event amount 17.857).
+`UnitDamageTarget` returned true in all three phases, demonstrating that its
+return value means the request was accepted, not that life changed. This
+confirms damage prevention in this ordinary-damage configuration; it does not
+establish behavior for every damage category.
+
+**Verified runtime ANfl observation, stage unresolved:** a fresh rank-one
+cast was accepted with target index 1 actively treated (getter false before
+and throughout the cast). That target stayed at 210 and was not one of the
+three 85-damage JASS recipients (indices 0, 2, and 4 were hit). This run did
+not trace that candidate through the callback and validator, so its earliest
+exclusion remains unknown. The older case that reached callback and returned
+`0x36` had no getter or native-state readback; it does not establish that the
+setter had activated the state. Preserve both cases: actual active state now
+has independent damage confirmation, while the old callback observation and
+the new recipient omission remain unreconciled at the ANfl stage level. The
+JASS outputs, native JSONL, prepared map, and machine-readable comparison are
+in the fixture's `results/` and `runtime/` directories.

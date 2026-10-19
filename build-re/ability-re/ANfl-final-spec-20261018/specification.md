@@ -17,7 +17,7 @@ Executable SHA-256: `3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a75842245595
 
 **Verified runtime:** in the same-owner case, a Player 0 `hfoo` was not delivered to callback while four Player 12 `hfoo` candidates were. The four delivered candidates passed callback relationship gate (`0x0027FB80` return 1) and shared validator (`0x00282180` return 0). **Corroborated inference:** the absent same-owner candidate was excluded by the static equal-owner `0x84` branch. Candidate-specific `0x84` has not been captured live. Player 12 is Neutral Hostile; this evidence does not establish ordinary player-owner enemy behavior.
 
-**Verified runtime:** the Amim level-one secondary Footman reached the callback, passed its relationship gate, and received validator code `0x36`; it was not sent to a worker or receiver. A separate earlier case recorded the same callback/validator outcome after a `SetUnitInvulnerable(target,true)` call, but had no independent state readback. The newer readback fixture recorded the getter changing true to false after that setter; its candidate passed final geometry but had no observed owner-filter call or ANfl callback. Therefore both callback-stage observations stand, and there is no established single invulnerability exclusion stage. Neither experiment measured receiver mitigation.
+**Verified runtime:** the Amim level-one secondary Footman reached the callback, passed its relationship gate, and received validator code `0x36`; it was not sent to a worker or receiver. The older invulnerability case recorded the same callback/validator outcome after a setter call, but had no state readback. A later getter-false case passed final geometry without observed callback/owner-filter events. The new reversible native-correlated experiment established the setter state and ordinary-damage effect; a fresh accepted ANfl cast with that active state did not select the treated target, but its callback path was not instrumented. Preserve each result and do not collapse them into a single exclusion stage.
 
 **Verified runtime (new alliance case):** a Player 1 Footman at the same secondary position, with mutual Player 0/Player 1 `ALLIANCE_PASSIVE=true`, did not appear in the ANfl callback and received no worker. The cast still selected three Player 12 Footmen. This differs from the same-owner case (statically rejected by the owner relation function) and does not establish that all different-owner allies behave alike. The target-specific pointer was not observed at the final geometry comparator or filtered `0x006AD670` hook, so the exact earliest exclusion stage remains unresolved: spatial enumeration/broadphase or an earlier query predicate are still possible.
 
@@ -38,9 +38,11 @@ a.vfunc(+0x20C) != 0
 
 The candidate/source field ownership is established from the call frame: `+0x164`, `+0x264`, and `+0x268` are candidate CUnit fields; the listed virtual slots are on the source ability. **Verified runtime correlation:** the normal candidate returned zero and the Amim level-one candidate returned `0x36`, passed the relationship gate, and was not dispatched to a worker. No instruction-local operand capture identifies the first divergence from normal, so the code must not be labeled a universal magic-immunity rule. Separate built-in VA `0x006822E0` can return `0xBC`. Full analysis and pinned disassembly: `build-re/ability-re/ANfl-validator-36-static-01/validator-36-analysis.md` and `validator-disassembly-r2.txt`.
 
-**Verified static (invulnerability natives):** exact-build registration VA `0x0049B3C0` binds JASS `SetUnitInvulnerable(Hunit;B)V` to VA `0x004AB600` / RVA `0x000AB600`, and `BlzIsUnitInvulnerable(Hunit;)B` to VA `0x00499FA0` / RVA `0x00099FA0`. The getter resolves the unit and returns `(~(dword[resolved+0x20] >> 3)) & 1`. The setter resolves an attached object from the unit handle pair, checks dword `+0x0C == 0x2B61676C`, and, when that object's `+0x20` is zero, invokes the resolved unit's virtual `+0xA8` with the requested boolean. This verifies binding, ABI shape, and raw getter polarity. The checked tag's class meaning, the writer and gameplay meaning of resolved-object bit 3, and identity correlation between that object and the candidate CUnit remain unresolved. Getter `false` after setter `true` is not yet treated as an independent gameplay-state confirmation.
+**Verified static and runtime (invulnerability natives):** exact-build registration VA `0x0049B3C0` binds JASS `SetUnitInvulnerable(Hunit;B)V` to VA `0x004AB600` / RVA `0x000AB600`, and `BlzIsUnitInvulnerable(Hunit;)B` to VA `0x00499FA0` / RVA `0x00099FA0`. The getter resolves the unit and returns `(~(dword[resolved+0x20] >> 3)) & 1`. A same-unit read-only Frida trace matched JASS handle `0x101DAA` to getter/setter-resolved CUnit `0x103F2350`; its `+0x20` changed `0x1646 → 0x164E → 0x1646` across setter true/false, and getter results changed `true → false → true`. The setter separately resolved attached object `0x0D7A4DF0`, tag `0x2B61676C`, with `+0x20 = 0`. The CUnit pointer and attached-object pointer are distinct. This establishes the getter's bit transition and setter/getter identity correlation. The exact vtable implementation/writer behind slot `+0xA8` and the tag's class meaning remain unresolved.
 
-**Unresolved:** exact first query-stage exclusion for Player 1 allied and Player 15 Neutral Passive candidates; ordinary separately owned enemy behavior; gameplay meaning of the invulnerability getter bit and the conflicting callback-stage observations; runtime `0x36` operand divergence and the conjunction's virtual returns/fields; flying, mechanical, structure, dead, hidden, and ethereal eligibility; and immunity behavior under other configuration. Do not generalize the Player 1 or Player 15 results to all owner relationships.
+**Verified runtime gameplay effect:** in `ANfl-invulnerability-reversible-02`, ordinary `UnitDamageTarget` requested 20 normal damage against the same 210-life Footman before, during, and after the reversible setter sequence. Before: getter true, receiver/JASS event amount 17.857, life `210 → 192.143`; after setter true: getter false, event amount 0, life unchanged; after setter false: getter true, amount 17.857, life `192.143 → 174.286`. Thus in this tested configuration getter false plus bit 3 set corresponds to damage immunity, while getter true plus bit clear is damageable. `UnitDamageTarget` returned true in each phase and therefore did not itself distinguish applied damage. This is independent gameplay confirmation for this ordinary-damage case, not proof that every damage category is blocked.
+
+**Unresolved:** exact first query-stage exclusion for Player 1 allied and Player 15 Neutral Passive candidates; ordinary separately owned enemy behavior; exact first ANfl exclusion stage for a demonstrably active invulnerability state and why the older callback trace differs; runtime `0x36` operand divergence and the conjunction's virtual returns/fields; flying, mechanical, structure, dead, hidden, and ethereal eligibility; and immunity behavior under other configuration. Do not generalize the Player 1 or Player 15 results to all owner relationships.
 
 **Verified runtime operand observation (Amim follow-up):** in
 `ANfl-invulnerability-readback-01`, the level-one Amim target at
@@ -57,20 +59,24 @@ contradictory or missing returns, so it is not used to assign meanings to
 those values. Raw trace, output, and bounded comparison are retained under
 `build-re/ability-re/ANfl-invulnerability-readback-01/`.
 
-**Verified runtime observation with unresolved gameplay semantics
-(invulnerability follow-up):** `BlzIsUnitInvulnerable` returned true before
-`SetUnitInvulnerable(target,true)` and false immediately after on the same
-JASS target handle. The exact native implementation confirms this is the
-inverse of resolved-object dword `+0x20` bit 3. In the newer accepted
-case-three cast, the spatial entry passed final geometry, but no owner-filter
-call, ANfl callback, worker, or receiver was observed for that candidate;
-target life stayed at 210. The older `ANfl-state-alliance-ranks-01` case three
-recorded callback delivery followed by validator `0x36`, without getter
-readback. That older fixture therefore does not establish that the same
-native state was active. Preserve both runs; the bit's gameplay meaning and
-the exact reason the traces diverge remain unresolved. See
-`ANfl-invulnerability-readback-01/results/followup-comparison.json` and
-`runtime/trace-case3-cast.jsonl`.
+**Verified runtime invulnerability state and damage effect (new):** a
+reversible probe matched JASS handle `0x101DAA` to CUnit `0x103F2350`. Its
+`+0x20` dword changed `0x1646 → 0x164E → 0x1646` across
+`SetUnitInvulnerable(true/false)`, while the getter returned
+`true → false → true`. The setter's attached object was distinct at
+`0x0D7A4DF0`, with tag `0x2B61676C`. A matched ordinary-damage probe requested
+20: normal damage applied 17.857, active setter state applied zero, and the
+restored state again applied 17.857. The JASS native returned true in all
+three phases, so actual life changes and event amounts establish the effect.
+In a separate accepted rank-one cast, a getter-false treated target remained
+at 210 and did not appear among the three 85-damage recipients. That run did
+not instrument callback/validator delivery. An older setter case did reach
+callback and return `0x36`, but had no independent getter/state readback; it
+does not prove that the setter activated the same state. Native bit semantics
+are now correlated with ordinary damage immunity; the active target's exact
+ANfl exclusion stage and the discrepancy between the historical callback
+trace and current case remain unresolved. Results are in
+`build-re/ability-re/ANfl-invulnerability-reversible-02/`.
 
 **Verified runtime rank-two geometry:** the single-case trace in
 `ANfl-rank2-geometry-03` captured four queries, radii
@@ -86,7 +92,7 @@ The immutable prediction and corrected comparison are both retained at
 | Neutral Hostile Player 12 living Footman | Yes | Accepted in tested setup | relation 1; validator 0 | selected according to sorted prefix | Runtime cases 19/21 and clean control |
 | Same-owner Player 0 Footman | No callback delivery | Static same-owner rejection `0x84` when mask bit `0x2000` clear | Not reached | No worker | Callback absence runtime; exact return static |
 | Magic-immune Player 12 Footman (`Amim` level 1) | Yes | Geometry passed | Relationship 1; shared validator `0x36` | No worker or receiver; no spell damage | `ANfl-state-alliance-ranks-01`, case 2 |
-| Invulnerability requested on Player 12 Footman | Conflicting runs: callback delivered in one; geometry passed but no owner-filter/callback event in later trace | Final geometry passed in later trace | Older run: relationship 1; validator `0x36`; later run: callback not observed | No worker or receiver in either | `ANfl-state-alliance-ranks-01`, case 3; `ANfl-invulnerability-readback-01` case 3 |
+| Active invulnerability state on Player 12 Footman | Fresh accepted cast; active state independently confirmed in matched reversible run | Not captured in the same trace | Callback/validator path not instrumented in fresh cast; older unconfirmed setter case reached validator `0x36` | No worker/receiver for treated target; other three got 85 | `ANfl-invulnerability-reversible-02/` plus historical cases |
 | Mutually passive Player 1 Footman | No ANfl callback observed | Not narrowed; target absent at final-geometry and `0x006AD670` observations | No callback gates | No worker; other three selected targets received 85 | `ANfl-state-alliance-ranks-01`, case 4 |
 | Neutral Passive Player 15 Footman | No callback observed | Absent at/before final geometry operands; broadphase vs earlier predicate unresolved | Not reached/observed | No worker; other three selected targets received 85 | `ANfl-neutral-passive-rank3-01`, case 5 |
 | Separate ordinary enemy player | Untested | Unresolved | Unresolved | Unresolved | — |
@@ -167,11 +173,12 @@ for candidate in retained[0:min(count, DataB)]:
 ```
 
 Do not assume a stable tie, exact candidate scalar meaning, or named damage type.
-Do not implement an invulnerability special case from `BlzIsUnitInvulnerable`
-until its returned bit polarity is tied to gameplay behavior; the exact native
-getter/setter implementation is known, but its bit's gameplay semantics and
-the conflicting ANfl callback traces remain unresolved. Keep the native
-`0x36` conjunction structural until its runtime operands are captured.
+The getter's state is now tied to ordinary damage prevention: false while
+setter state is active, true after clearing it. ANfl did not select a target
+with confirmed active state in the fresh cast, but the first exclusion stage
+was not captured. Implement an invulnerability eligibility rule only after
+that stage is established. Keep the native `0x36` conjunction structural
+until its runtime operands are captured.
 
 ## Evidence paths and next parity tests
 
@@ -179,13 +186,14 @@ the conflicting ANfl callback traces remain unresolved. Keep the native
 - Rank-two accepted cast, prediction, setup/cast outputs, and bounded native query/worker/receiver trace: `build-re/ability-re/ANfl-rank2-geometry-03/` (map SHA-256 `0bd800973a9f103d974d7a906ca85ad80e3a3a2b6198e00501ff8e79209b106e`; embedded JASS SHA-256 `acbab2178d12d3ec2bc17d4309c5c8f24493eeaa01fd35a2b785115b296a9d0a`; trace SHA-256 `a5929e6b0cab827cffb8dd427c79342c8342d99c069852ca2ee6feec3f0dfe06`). `results/geometry-comparison.json` records observed versus preregistered and corrected center models.
 - Exact built-in validator `0x36` analysis and pinned disassembly: `build-re/ability-re/ANfl-validator-36-static-01/`.
 - Exact-build invulnerability native registration and getter/setter decompilation: `build-re/ability-re/ANfl-invulnerability-static-followup-01/` and `build-re/ability-re/ANfl-invulnerability-native-impl-01/`; JASS getter and contradictory callback-stage trace: `build-re/ability-re/ANfl-invulnerability-readback-01/`.
+- Reversible native-correlated state, ordinary-damage control, fresh accepted active-state cast, hashes, and machine-readable comparison: `build-re/ability-re/ANfl-invulnerability-reversible-02/`. Comparison: `results/invulnerability-comparison.json`; native setter/getter trace: `runtime/invulnerability-focused.jsonl`; direct damage output: `results/damage.txt`; accepted cast output: `results/anfl-cast-3.txt`.
 - Neutral Passive case 5, rank-three case 7, rank-two case 6, predictions, outputs, prepared map identity, and bounded trace: `build-re/ability-re/ANfl-neutral-passive-rank3-01/` (map SHA-256 `9ead2f225f2c8e625dd62d2a30091b2ae6dd6a03557c71ba8c848a987b3338c3`; embedded JASS SHA-256 `cbe5fd003ebf101d6dcdbc0a1915f74df53d8eeb1e348ba38fbc31597ed3157f`). Case 1/2 `*-validator-repeat.txt` files are stale copies and are not new evidence; `validator-detail-trace.jsonl` contains only `agent-ready` and is incomplete.
 - Repaired geometry fixture, preflight, fresh JASS output, acquisition/query trace, and native comparison operands: `build-re/ability-re/ANfl-geometry-boundary-01/` (prepared-v3 map SHA-256 `9082fe582d52e7e4625a340f531ac77990b6bf4d74a98e45ebd139352bc54c1e`). The earlier failed distance fixture remains preserved at `build-re/ability-re/ANfl-geometry-distance-02/` and is not evidence.
 - Query predicate Ghidra exports: `build-re/ability-re/ANfl-spatial-query-predicate-detail-03/`, `ANfl-spatial-query-shapes-detail-01/`, `ANfl-spatial-query-math-detail-01/`.
 - Relation-filter evidence and prior same-owner observation: `build-re/ability-re/ANfl-target-eligibility-ally-01/`.
 - Updated docs: `docs/games/warcraft-3/forked-lightning-retail.md`, `docs/games/warcraft-3/ability-probes/targeting.md`, `docs/games/warcraft-3/ability-probes/combat.md`.
 
-Smallest useful next experiments: (1) on one stable unit, log getter plus resolved native bit before/after setter true and false, then verify ordinary `UnitDamageTarget` behavior; (2) use instruction-local validator post-call captures for the same normal and Amim cast; (3) move the filtered owner trace to broadphase entry/shape dispatch and compare same-position Player 1, Player 12, and Player 15 entries; (4) use one defense that remains callback-eligible and capture receiver-adjusted amount; (5) test an ordinary non-neutral enemy owner. Rank-one through rank-three query geometry and raw damage are now verified. An exact comparator tie requires equal native metric bits and remains lower priority.
+Smallest useful next experiments: (1) capture the active invulnerability target from spatial enumeration through query predicates, callback, validator, and retained-list insertion in one accepted cast; (2) use instruction-local validator post-call captures for matched normal and Amim candidates; (3) trace same-position Player 1, Player 12, Player 15, and ordinary hostile owner candidates from broadphase entry/shape dispatch; (4) choose one verified defensive modifier that remains callback-eligible and capture receiver-adjusted amount; (5) test an ordinary non-neutral enemy owner. Rank-one through rank-three query geometry and raw damage are complete. An exact comparator tie requires equal native metric bits and remains lower priority.
 
 ## Controlled immunity and startup follow-up (October 18, 2026)
 

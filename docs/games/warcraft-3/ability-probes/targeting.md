@@ -926,9 +926,10 @@ that it caused the observed return. The full branch account is in
 `build-re/ability-re/ANfl-validator-36-static-01/validator-36-analysis.md`.
 
 The matching `data/maps/War3xLocal/Scripts/common.j` declares
-`BlzIsUnitInvulnerable` at line 2529. The prior case 3 did not call this
-native, so invulnerability remains unconfirmed independently despite the
-recorded setter and validator result.
+`BlzIsUnitInvulnerable` at line 2529. The historical case 3 did not call this
+native, so that setter/validator observation alone does not establish that
+invulnerability state was active. The reversible follow-up below independently
+confirms the native state and ordinary-damage effect.
 
 ### Neutral Passive and rank-three follow-up
 
@@ -970,3 +971,24 @@ was not recorded. Startup evidence is preserved in
 `build-re/ability-re/ANfl-environment-diagnostic-02/`. The later rank-two
 single-case trace used the Frida endpoint and is preserved separately under
 `build-re/ability-re/ANfl-rank2-geometry-03/`.
+
+### Reversible invulnerability state and ANfl recipient follow-up
+
+The October 19 fixture `build-re/ability-re/ANfl-invulnerability-reversible-02/`
+independently confirmed the state changed by the native setter. JASS handle
+`0x101DAA` and both native getter/setter paths resolved to CUnit
+`0x103F2350`; its dword `+0x20` changed `0x1646 → 0x164E → 0x1646`, and
+`BlzIsUnitInvulnerable` returned `true → false → true` across setter true then
+false. The attached object was a distinct pointer `0x0D7A4DF0`, tag
+`0x2B61676C`. The ordinary-damage comparison showed 17.857 life loss before
+and after the active state, with zero loss while the getter was false. This
+correlates the bit transition with damage prevention for the tested ordinary
+damage request.
+
+A fresh accepted ANfl rank-one cast with target index 1 at getter-false state
+left it at 210 life and delivered 85 to indices 0, 2, and 4. No candidate
+callback/validator trace was active in this cast, so the earliest exclusion
+stage remains unresolved. The historical case that reached callback and
+returned `0x36` lacks getter/native-state confirmation; it cannot establish
+that the same active state was present. Both records remain valid with these
+narrowed conclusions. Full traces and comparison artifacts are in the fixture.

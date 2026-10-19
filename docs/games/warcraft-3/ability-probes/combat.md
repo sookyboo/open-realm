@@ -1511,3 +1511,16 @@ gameplay evidence. See
 `build-re/ability-re/ANfl-environment-diagnostic-02/`. The subsequent
 rank-two trace used the Frida endpoint and is preserved separately at
 `build-re/ability-re/ANfl-rank2-geometry-03/`.
+
+### Reversible invulnerability damage control
+
+`build-re/ability-re/ANfl-invulnerability-reversible-02/results/damage.txt`
+records a same-target ordinary-damage sequence. `UnitDamageTarget` requested
+20 each time and returned true in all phases. With getter true, life changed
+`210 → 192.143`; after `SetUnitInvulnerable(true)`, getter false and life
+stayed `192.143`; after setter false, getter true and life changed
+`192.143 → 174.286`. Matching JASS damage events reported `17.857`, `0`, and
+`17.857`. Thus the accepted-request return is not an applied-damage signal.
+This validates the invulnerability state transition for ordinary damage; it
+is not an ANfl receiver-mitigation test because the protected candidate was
+not observed among the cast recipients.
