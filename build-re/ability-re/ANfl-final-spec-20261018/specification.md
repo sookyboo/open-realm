@@ -33,7 +33,7 @@ field > 0
 (a.vfunc(+0x1D8) != 0 || a.vfunc(+0x1F8) != 0)
 a.vfunc(+0x1FC) == 0 || candidate_predicate(u, a[+0x30] ?? resolve(a)) == 0
 GetConfigInt("Misc", "MagicImmunesResistUltimates", 0) == 0
-a.vfunc(+0x20C) != 0
+a.vfunc(+0x20C) == 0
 ```
 
 The candidate/source field ownership is established from the call frame: `+0x164`, `+0x264`, and `+0x268` are candidate CUnit fields; the listed virtual slots are on the source ability. **Verified runtime correlation:** the normal candidate returned zero and the Amim level-one candidate returned `0x36`, passed the relationship gate, and was not dispatched to a worker. No instruction-local operand capture identifies the first divergence from normal, so the code must not be labeled a universal magic-immunity rule. Separate built-in VA `0x006822E0` can return `0xBC`. Full analysis and pinned disassembly: `build-re/ability-re/ANfl-validator-36-static-01/validator-36-analysis.md` and `validator-disassembly-r2.txt`.
@@ -283,11 +283,20 @@ This explains why the confirmed active-state target does not reach validator
 readback; its actual state remains unknown. A different state or candidate
 path is possible but unproven. Preserve both observations with these limits.
 
-The matched normal/Amim post-call experiment is at
-`ANfl-validator-operands-postcall-02/`. JASS accepted both orders and the
-Amim-treated case showed level 1, but Frida recorded only `agent-ready`; no
-callback or operand events were captured. Classify the attempt as incomplete.
-The decisive `0x36` runtime operand remains unresolved. Player 1/Player 15
+The earlier sign on the last term was incorrect. Static instruction
+`0x006822C3` tests the `+0x20C` return and branches on zero to the `0x36`
+return at `0x006822CE`. Matched normal/Amim instruction-local traces are in
+`ANfl-validator-operands-postcall-05/` and `-06/`. Normal candidate
+`0x0ed7f960` had `+0x164=0x244`, `+0x264=0`, `+0x268=0`; source `+0xD8=0`
+and `+0x1F0=0` selected `+0x264`, whose zero value caused an early zero
+return. Amim candidate `0x0ed7fe7c` had `+0x164=0x245`, `+0x264=1`,
+`+0x268=1`; source `+0xD8=0`, `+0x1F0=0`, `+0x1D8=1`, `+0x1FC=0`,
+`GetConfigInt("Misc","MagicImmunesResistUltimates",0)=0`, and `+0x20C=0`.
+The selected positive field allows evaluation to continue; `+0x1F8` and the
+candidate predicate are short-circuited. The validator returns `0x36`.
+Stalker did not expose EFLAGS, so branch flow is established by executed
+instruction observations and static disassembly. Field meanings and writers
+remain unknown. Player 1/Player 15
 earliest rejection, ordinary hostile-player behavior, and receiver-side
 mitigation remain open. The invulnerable candidate was removed before the
 receiver, so it supplies no mitigation measurement.

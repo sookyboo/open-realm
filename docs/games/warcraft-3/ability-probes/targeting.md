@@ -46,11 +46,18 @@ context at `+0x30`, and the configured `MagicImmunesResistUltimates` value.
 
 The latest Amim runtime operand capture is preserved at
 `build-re/ability-re/ANfl-invulnerability-readback-01/runtime/trace-case2-amim-operands.jsonl`.
-The treated candidate reached the callback and returned `0x36`; its candidate
-fields `+0x264/+0x268` were `1/1`, compared with `0/0` for a normal candidate.
-The source selector virtual `+0x1F0` was not measured reliably, so the trace
-does not show which field participates in the return. Virtual-hook slot
-aliasing prevents interpretation of repeated return events. For
+The earlier trace in `ANfl-validator-operands-postcall-02/` captured the
+callback result but not its operands. A corrected instruction-local Stalker
+comparison is preserved in `ANfl-validator-operands-postcall-05/` (normal)
+and `-06/` (Amim level one). Source `+0x1F0=0` selects candidate `+0x264` in
+both: normal has selected value 0 and returns zero early; Amim has selected
+value 1 and continues. The Amim path observes source `+0x1D8=1`,
+`+0x1FC=0`, config `MagicImmunesResistUltimates=0`, and `+0x20C=0`, reaching
+the `0x36` return. Static instruction `0x006822C3` confirms zero at `+0x20C`
+branches to `0x006822CE`; the previously written `!= 0` sign was wrong.
+Candidate predicate and `+0x1F8` are short-circuited. See the exact candidate
+values and caveats in `ANfl-validator-36-static-01/validator-36-analysis.md`.
+For
 invulnerability, exact-build registration maps `BlzIsUnitInvulnerable` to VA
 `0x00499FA0` / RVA `0x00099FA0` and `SetUnitInvulnerable` to VA `0x004AB600` /
 RVA `0x000AB600`. The getter returns the inverse of bit 3 in dword `+0x20` of
@@ -914,7 +921,7 @@ field > 0
 (a.vfunc(+0x1D8) != 0 || a.vfunc(+0x1F8) != 0)
 a.vfunc(+0x1FC) == 0 || candidate_predicate(u, a[+0x30] ?? resolve(a)) == 0
 GetConfigInt("Misc", "MagicImmunesResistUltimates", 0) == 0
-a.vfunc(+0x20C) != 0
+a.vfunc(+0x20C) == 0
 ```
 
 This corrects earlier descriptions that assigned candidate fields `+0x164`,

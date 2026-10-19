@@ -151,7 +151,7 @@ but it still does not provide a complete gameplay-category matrix:
 |---|---|---|---|
 | Relationship/mask gate | `0x00878FC0` calls `0x0067FB80` with caster in `ECX`, candidate stack argument 1, then `0` and `4`. The helper resolves caster owner through virtual `+0xEC`, derives a low mode bit from player 13's record flag, and calls `0x00475150` with shared player context, owner index, candidate, derived mode, and trailing `4,0`. It may run candidate-owner and point-based relation checks; on helper failure, it tests candidate `+0x250/+0x254` against the owner bit. | The branch and bit flow are verified, including fallback through either candidate mask. | The flags/masks, raw `4` mode, and branch-to-enemy/ally/neutral mapping are not established by controlled category tests. |
 | Shared target validator | On passing the first gate, the callback calls candidate virtual `+0x350`, then `0x00682180`; zero is required to continue. `0x00682180` first runs `0x00682210` and `0x006822E0`, then scans its linked validator registry and returns the first nonzero result. | A zero result means no rejection code was returned by these paths. Nonzero is a rejection result for this ANfl callback, not an acceptance boolean. | The dynamic `+0x350` contract and live registry membership for each tested candidate are not resolved. |
-| Built-in rejection paths | In the call from `0x00682180`, `0x00682210` receives the candidate CUnit, the source ability's `+0x350` return, and the source ability object. It returns `0x36` only for the exact conjunction recorded below. `0x006822E0` is a separate built-in predicate returning `0xBC` under its own conditions. | `0x36` originates at VA `0x006822CE` in the built-in predicate, before the registered-validator walk. Candidate `+0x164`, `+0x264`, and `+0x268` fields were previously mislabeled as source fields; the call frame shows they belong to the candidate CUnit. | Virtual-slot meanings and the first runtime-divergent operand for Amim remain unresolved. Do not name `0x36` as an immunity rule from the code or the correlated treatment alone. |
+| Built-in rejection paths | In the call from `0x00682180`, `0x00682210` receives the candidate CUnit, the source ability's `+0x350` return, and the source ability object. It returns `0x36` only for the exact conjunction recorded below. `0x006822E0` is a separate built-in predicate returning `0xBC` under its own conditions. | `0x36` originates at VA `0x006822CE` in the built-in predicate, before the registered-validator walk. Candidate `+0x164`, `+0x264`, and `+0x268` fields belong to the candidate CUnit. A matched instruction-local normal/Amim trace identifies the selected field and final `+0x20C` branch. | Virtual-slot meanings and field writers remain unresolved. Do not name `0x36` as a universal immunity rule from the code or correlated treatment alone. |
 | Deduplication | After both gates pass, the callback compares the candidate pointer for equality against every already-recorded candidate pointer. | Exact pointer duplicates from overlapping queries do not append a second record. | No identity aliasing beyond pointer equality was tested. |
 | Candidate continuation result | Rejected candidates and duplicates return true. In normal accepted-order mode, a newly appended candidate also returns true. The alternate mode returns whether the current count is still below its limit. | The callback result is query continuation control, not candidate eligibility. Normal mode therefore continues enumeration after each rejection, duplicate, or append. | Gate return values were directly captured for five candidates in the follow-up case only; category meanings remain unresolved. |
 
@@ -168,13 +168,28 @@ field > 0
 (a.vfunc(+0x1D8) != 0 || a.vfunc(+0x1F8) != 0)
 a.vfunc(+0x1FC) == 0 || candidate_predicate(u, a[+0x30] ?? resolve(a)) == 0
 GetConfigInt("Misc", "MagicImmunesResistUltimates", 0) == 0
-a.vfunc(+0x20C) != 0
+a.vfunc(+0x20C) == 0
 ```
+
+The earlier written sign on the last term was incorrect. At VA `0x006822C3`,
+the zero test branches to the `0x36` return at `0x006822CE`. The matched
+instruction-local capture in `ANfl-validator-operands-postcall-05/` and
+`ANfl-validator-operands-postcall-06/` shows a normal candidate selecting
+`+0x264=0` (and returning zero early), while the Amim level-one candidate
+selects `+0x264=1`, then observes source returns `+0x1D8=1`, `+0x1FC=0`,
+`GetConfigInt("Misc","MagicImmunesResistUltimates",0)=0`, and `+0x20C=0`;
+the executed path returns `0x36`. The candidate predicate and `+0x1F8` call
+are skipped by short-circuiting. Stalker did not sample EFLAGS, so the branch
+path is established by executed instruction sites and static disassembly.
+Candidate pointers and raw observations are recorded in each run's
+`runtime/validator-stalker.jsonl`. The old static conjunction has been
+corrected; the fields' semantics and writers remain unverified.
 
 Here `u` is candidate CUnit and `a` is the source ability object. The other
 built-in predicate at VA `0x006822E0` returns `0xBC` through a distinct branch.
-Runtime Amim level 1 correlates with `0x36`, but no trace captured the first
-individual operand that differed from the normal target. The configured
+Runtime Amim level 1 correlates with `0x36`; the matched instruction-local
+trace identifies the selected field as the earliest observed divergence and
+the zero `+0x20C` return as the final decisive branch. The configured
 `MagicImmunesResistUltimates` value is one term in this conjunction; its name
 does not prove that it caused the observed return. The matching JASS library
 declares `BlzIsUnitInvulnerable` at
@@ -1263,6 +1278,14 @@ shows the target classification uses CUnit `+0x20` bit 3 to choose the
 the latter. Thus the confirmed active state is rejected at query-level
 masking, before callback validation. The earlier callback-level `0x36` case
 has no independent getter/bit readback and cannot be assigned this same
-confirmed state. A matched normal/Amim instruction-local capture was attempted
-in `ANfl-validator-operands-postcall-02/`, but Frida recorded only agent
-readiness and no callback events; its runtime operands remain unresolved.
+confirmed state. The earlier matched normal/Amim attempt in
+`ANfl-validator-operands-postcall-02/` was incomplete: Frida recorded only
+agent readiness. The repaired instruction-local comparison is in
+`ANfl-validator-operands-postcall-05/` and `-06/`. The normal selected
+candidate field `+0x264` was zero and returned zero early; the Amim level-one
+candidate had selected `+0x264=1`, then source virtual returns
+`+0x1D8=1`, `+0x1FC=0`, config value 0, and `+0x20C=0`, reaching validator
+return `0x36`. The `+0x20C` sign in the earlier conjunction was incorrect:
+static branch `0x006822C3` takes the `0x36` path when this return is zero.
+Field semantics and writers remain unresolved. Case 05 JSONL embeds run ID
+`postcall-04`; this artifact naming mismatch is preserved.
