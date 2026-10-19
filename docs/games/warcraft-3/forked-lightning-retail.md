@@ -172,18 +172,22 @@ a.vfunc(+0x20C) == 0
 ```
 
 The earlier written sign on the last term was incorrect. At VA `0x006822C3`,
-the zero test branches to the `0x36` return at `0x006822CE`. The matched
-instruction-local capture in `ANfl-validator-operands-postcall-05/` and
-`ANfl-validator-operands-postcall-06/` shows a normal candidate selecting
-`+0x264=0` (and returning zero early), while the Amim level-one candidate
-selects `+0x264=1`, then observes source returns `+0x1D8=1`, `+0x1FC=0`,
-`GetConfigInt("Misc","MagicImmunesResistUltimates",0)=0`, and `+0x20C=0`;
-the executed path returns `0x36`. The candidate predicate and `+0x1F8` call
-are skipped by short-circuiting. Stalker did not sample EFLAGS, so the branch
-path is established by executed instruction sites and static disassembly.
-Candidate pointers and raw observations are recorded in each run's
-`runtime/validator-stalker.jsonl`. The old static conjunction has been
-corrected; the fields' semantics and writers remain unverified.
+the zero test branches to the `0x36` return at `0x006822CE`. In the matched
+same-cast capture `ANfl-validator-operands-postcall-07/`, ordinary candidate
+CUnit `0x0fb559ec` had `+0x164=0x244`, `+0x264=0`, `+0x268=0`; source ability
+`0x03067580` returned `+0xD8=0`, `+0x1F0=0` selecting `+0x264`, and the
+validator returned zero after the early `jle` at `0x0068225B`. Amim-associated
+candidate `0x0fb55f08` had `+0x164=0x245`, `+0x264=1`, `+0x268=1`; source
+returns were `+0xD8=0`, `+0x1F0=0`, `+0x1D8=1`, `+0x1FC=0`, config value
+zero, and `+0x20C=0`, reaching `0x36`. Candidate predicate and `+0x1F8` were
+short-circuited. Stalker did not sample EFLAGS, so path interpretation uses
+executed sites, returns, and exact-build disassembly. Case 07's map auto-ran
+case 2 although the original manifest described case 1; this is called out in
+its comparison JSON. The run summary also records that candidate-to-JASS
+handle correlation is not direct. The `postcall-05` no-instruction trace was
+caused by 50 Stalker iterator-exhaustion errors and embeds run ID `postcall-04`.
+The selected candidate field is now the first observed runtime divergence, but
+the fields' meanings and actual CUnit writer remain unresolved.
 
 Here `u` is candidate CUnit and `a` is the source ability object. The other
 built-in predicate at VA `0x006822E0` returns `0xBC` through a distinct branch.
@@ -1280,12 +1284,11 @@ masking, before callback validation. The earlier callback-level `0x36` case
 has no independent getter/bit readback and cannot be assigned this same
 confirmed state. The earlier matched normal/Amim attempt in
 `ANfl-validator-operands-postcall-02/` was incomplete: Frida recorded only
-agent readiness. The repaired instruction-local comparison is in
-`ANfl-validator-operands-postcall-05/` and `-06/`. The normal selected
-candidate field `+0x264` was zero and returned zero early; the Amim level-one
-candidate had selected `+0x264=1`, then source virtual returns
-`+0x1D8=1`, `+0x1FC=0`, config value 0, and `+0x20C=0`, reaching validator
-return `0x36`. The `+0x20C` sign in the earlier conjunction was incorrect:
-static branch `0x006822C3` takes the `0x36` path when this return is zero.
-Field semantics and writers remain unresolved. Case 05 JSONL embeds run ID
-`postcall-04`; this artifact naming mismatch is preserved.
+agent readiness. The same-cast repaired comparison is in
+`ANfl-validator-operands-postcall-07/`; the ordinary candidate selected
+`+0x264=0` and returned zero early, while the Amim-associated candidate
+selected `+0x264=1`, then source returns `+0x1D8=1`, `+0x1FC=0`, config value
+zero, and `+0x20C=0`, reaching validator return `0x36`. Static branch
+`0x006822C3` confirms the zero `+0x20C` condition. Candidate field semantics
+and writer remain unresolved. The older `postcall-05` mismatch and Stalker
+errors are preserved in the comparison report.

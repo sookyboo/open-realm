@@ -44,19 +44,25 @@ when candidate slot `+0xD8` reports nonzero. Otherwise it checks source flag
 and `+0x20C`, a source field selected from `+0x264/+0x268`, a candidate
 context at `+0x30`, and the configured `MagicImmunesResistUltimates` value.
 
-The latest Amim runtime operand capture is preserved at
-`build-re/ability-re/ANfl-invulnerability-readback-01/runtime/trace-case2-amim-operands.jsonl`.
 The earlier trace in `ANfl-validator-operands-postcall-02/` captured the
-callback result but not its operands. A corrected instruction-local Stalker
-comparison is preserved in `ANfl-validator-operands-postcall-05/` (normal)
-and `-06/` (Amim level one). Source `+0x1F0=0` selects candidate `+0x264` in
-both: normal has selected value 0 and returns zero early; Amim has selected
-value 1 and continues. The Amim path observes source `+0x1D8=1`,
-`+0x1FC=0`, config `MagicImmunesResistUltimates=0`, and `+0x20C=0`, reaching
-the `0x36` return. Static instruction `0x006822C3` confirms zero at `+0x20C`
-branches to `0x006822CE`; the previously written `!= 0` sign was wrong.
-Candidate predicate and `+0x1F8` are short-circuited. See the exact candidate
-values and caveats in `ANfl-validator-36-static-01/validator-36-analysis.md`.
+callback result but not its operands. Its first normal attempt in
+`postcall-05/` had 10 callbacks but no instruction-local events because its
+Stalker transform raised 50 `cannot read property 'address' of null` errors
+when the iterator was exhausted. That file also embeds run ID `postcall-04`.
+The repaired matched capture is `ANfl-validator-operands-postcall-07/`: in
+one accepted case-2 cast, an ordinary candidate selected `+0x264=0` and
+returned zero at the early `jle` site `0x0068225B`; the Amim-associated
+candidate selected `+0x264=1` and reached `0x36`. Its observed returns were
+`+0xD8=0`, `+0x1F0=0`, `+0x1D8=1`, `+0x1FC=0`, config value zero, and
+`+0x20C=0`; the candidate predicate and `+0x1F8` were short-circuited.
+Static instruction `0x006822C3` confirms zero at `+0x20C` branches to
+`0x006822CE`; the previously written `!= 0` sign was wrong. Stalker did not
+provide EFLAGS, so branch paths are established by executed sites, return
+values, and exact disassembly. Case 07's initial manifest described case 1,
+but the map auto-ran case 2; its result summary preserves that mismatch.
+The native `+0x264/+0x268` writer and meanings remain unresolved. See
+`ANfl-validator-36-static-01/validator-36-analysis.md` and
+`ANfl-validator-operands-postcall-07/results/validator-comparison.json`.
 For
 invulnerability, exact-build registration maps `BlzIsUnitInvulnerable` to VA
 `0x00499FA0` / RVA `0x00099FA0` and `SetUnitInvulnerable` to VA `0x004AB600` /
@@ -1019,4 +1025,5 @@ native bit readback, so the two cases cannot be assumed to share native state.
 A matched normal/Amim post-call capture in
 `ANfl-validator-operands-postcall-02/` is incomplete: JASS orders were
 accepted, but Frida recorded only agent readiness and no candidate events.
-Runtime operands for `0x36` remain unresolved.
+The corrected same-cast comparison is now in `postcall-07/`; see its
+candidate-level identities and provenance notes above.

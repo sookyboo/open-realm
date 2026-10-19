@@ -36,13 +36,13 @@ GetConfigInt("Misc", "MagicImmunesResistUltimates", 0) == 0
 a.vfunc(+0x20C) == 0
 ```
 
-The candidate/source field ownership is established from the call frame: `+0x164`, `+0x264`, and `+0x268` are candidate CUnit fields; the listed virtual slots are on the source ability. **Verified runtime correlation:** the normal candidate returned zero and the Amim level-one candidate returned `0x36`, passed the relationship gate, and was not dispatched to a worker. No instruction-local operand capture identifies the first divergence from normal, so the code must not be labeled a universal magic-immunity rule. Separate built-in VA `0x006822E0` can return `0xBC`. Full analysis and pinned disassembly: `build-re/ability-re/ANfl-validator-36-static-01/validator-36-analysis.md` and `validator-disassembly-r2.txt`.
+The candidate/source field ownership is established from the call frame: `+0x164`, `+0x264`, and `+0x268` are candidate CUnit fields; the listed virtual slots are on the source ability. **Verified runtime:** the same accepted case-2 cast in `ANfl-validator-operands-postcall-07/` delivered an ordinary Player 12 Footman with selected `+0x264=0` to the built-in validator, which returned zero at the early `jle`; its level-one Amim candidate had selected `+0x264=1` and returned `0x36` after source `+0x20C=0`. The `+0x20C` final term is equality to zero. The selected field is the first observed normal/Amim divergence, but its writer and semantic name remain unresolved. Separate built-in VA `0x006822E0` can return `0xBC`. Full analysis and pinned disassembly: `build-re/ability-re/ANfl-validator-36-static-01/validator-36-analysis.md` and `validator-disassembly-r2.txt`.
 
 **Verified static and runtime (invulnerability natives):** exact-build registration VA `0x0049B3C0` binds JASS `SetUnitInvulnerable(Hunit;B)V` to VA `0x004AB600` / RVA `0x000AB600`, and `BlzIsUnitInvulnerable(Hunit;)B` to VA `0x00499FA0` / RVA `0x00099FA0`. The getter resolves the unit and returns `(~(dword[resolved+0x20] >> 3)) & 1`. A same-unit read-only Frida trace matched JASS handle `0x101DAA` to getter/setter-resolved CUnit `0x103F2350`; its `+0x20` changed `0x1646 → 0x164E → 0x1646` across setter true/false, and getter results changed `true → false → true`. The setter separately resolved attached object `0x0D7A4DF0`, tag `0x2B61676C`, with `+0x20 = 0`. The CUnit pointer and attached-object pointer are distinct. This establishes the getter's bit transition and setter/getter identity correlation. The exact vtable implementation/writer behind slot `+0xA8` and the tag's class meaning remain unresolved.
 
 **Verified runtime gameplay effect:** in `ANfl-invulnerability-reversible-02`, ordinary `UnitDamageTarget` requested 20 normal damage against the same 210-life Footman before, during, and after the reversible setter sequence. Before: getter true, receiver/JASS event amount 17.857, life `210 → 192.143`; after setter true: getter false, event amount 0, life unchanged; after setter false: getter true, amount 17.857, life `192.143 → 174.286`. Thus in this tested configuration getter false plus bit 3 set corresponds to damage immunity, while getter true plus bit clear is damageable. `UnitDamageTarget` returned true in each phase and therefore did not itself distinguish applied damage. This is independent gameplay confirmation for this ordinary-damage case, not proof that every damage category is blocked.
 
-**Unresolved:** exact first query-stage exclusion for Player 1 allied and Player 15 Neutral Passive candidates; ordinary separately owned enemy behavior; exact first ANfl exclusion stage for a demonstrably active invulnerability state and why the older callback trace differs; runtime `0x36` operand divergence and the conjunction's virtual returns/fields; flying, mechanical, structure, dead, hidden, and ethereal eligibility; and immunity behavior under other configuration. Do not generalize the Player 1 or Player 15 results to all owner relationships.
+**Unresolved:** exact first query-stage exclusion for Player 1 allied and Player 15 Neutral Passive candidates; ordinary separately owned enemy behavior; why the old setter-without-readback invulnerability case reached the callback; `+0x264/+0x268` native writer and meaning; source ability `+0x1F0` implementation; flying, mechanical, structure, dead, hidden, and ethereal eligibility; and immunity behavior under other configuration. The matched normal/Amim selected operand and executed branch path are now verified; do not generalize the Player 1 or Player 15 results to all owner relationships.
 
 **Verified runtime operand observation (Amim follow-up):** in
 `ANfl-invulnerability-readback-01`, the level-one Amim target at
@@ -146,11 +146,11 @@ Native flow: per-target worker → `CMissileForkedLightning` callback → shared
 
 **Verified runtime clean baseline:** `ANfl-clean-combat-01` zeroed ordinary attack base damage and dice on the caster and five targets, cleared nearby local units, held targets, and captured a five-second no-cast interval. All targets stayed at 210 life across 21 samples. A rank-one cast matched prediction `[0,1,2]`, reached three receivers with raw 85, emitted three matching JASS damage events, and reduced selected targets to about 125; nonselected targets remained at 210. Caster health changed during the run and is excluded as a clean measurement. This validates baseline attribution only.
 
-**Verified runtime:** the Amim treatment was rejected by the callback validator and did not reach damage dispatch. The earlier invulnerability case had the same observed callback/validator outcome, while the later readback case had no observed callback after geometry. Neither run tests receiver mitigation. The normal matched control selected three targets and delivered raw 85 to each. **Unresolved:** runtime `0x36` operand divergence; receiver-side behavior for an eligible defensive target; armor/defense category, spell reduction, ethereal, absorption, `MagicImmunesResistDamage` variation, adjusted amounts, and selected-but-suppressed damage. Do not describe the observed validator result as damage mitigation.
+**Verified runtime:** the Amim treatment was rejected by the callback validator and did not reach damage dispatch. The same accepted cast in `ANfl-validator-operands-postcall-07/` also recorded an ordinary candidate's selected-field early zero return; its JASS case-2 damage events were not a clean combat isolation. The earlier invulnerability case had the same observed callback/validator outcome without state readback, while the later confirmed active-state case was filtered earlier by query target mask. Neither run tests receiver mitigation. **Unresolved:** receiver-side behavior for an eligible defensive target; armor/defense category, spell reduction, ethereal, absorption, `MagicImmunesResistDamage` variation, adjusted amounts, and selected-but-suppressed damage. Do not describe the observed validator result as damage mitigation.
 
 **Verified runtime rank three:** case 7 logged rank 3 and three receiver calls each carrying raw 250. Those targets had 210 maximum/current life and died; use the receiver payload, not life deltas, as the raw-damage result. Rank-three query values match the common progression. **Verified runtime rank two (new):** a fresh single-case accepted cast logged rank 2, four query centers/radii matching the `p + Area` progression, three workers, and three receiver calls carrying raw 160. Three JASS damage events also recorded 160. The targets remained alive; the native payload confirms raw damage. The immutable pre-cast prediction is `build-re/ability-re/ANfl-rank2-geometry-03/predictions/case-6-precast.json`; it predicted the older `p + DataD/4` center offset, so query centers did not match that part of the written prediction. `results/geometry-comparison.json` records the mismatch and comparison against the corrected center model.
 
-For the shared validator, a nonzero result is a rejection code. In particular, the statically proven `0x36` path is the exact conjunction documented above; runtime Amim correlation does not establish which term was decisive. The same-owner query rejection and early absences for different-owner allies and Neutral Passive must remain separate branches in an OpenRealm implementation until their native stages are distinguished.
+For the shared validator, a nonzero result is a rejection code. In the matched runtime comparison, selector `+0x1F0=0` chose candidate `+0x264`: zero on the ordinary Footman returned early with zero, while positive one on the Amim-associated Footman continued through the later checks to `0x36`. This identifies the first observed normal/Amim divergence, but not the field's writer or semantic name. The same-owner query rejection and early absences for different-owner allies and Neutral Passive must remain separate branches in an OpenRealm implementation until their native stages are distinguished.
 
 ## Implementation pseudocode (proven portion)
 
@@ -173,12 +173,13 @@ for candidate in retained[0:min(count, DataB)]:
 ```
 
 Do not assume a stable tie, exact candidate scalar meaning, or named damage type.
-The getter's state is now tied to ordinary damage prevention: false while
-setter state is active, true after clearing it. ANfl did not select a target
-with confirmed active state in the fresh cast, but the first exclusion stage
-was not captured. Implement an invulnerability eligibility rule only after
-that stage is established. Keep the native `0x36` conjunction structural
-until its runtime operands are captured.
+The getter's state is tied to ordinary damage prevention: false while setter
+state is active, true after clearing it. The confirmed active-state ANfl
+candidate was rejected by query-level target-mask filtering (`0x96`) after
+passing geometry and before callback validation. For validator `0x36`, retain
+the static conjunction, and apply the observed early return when the selected
+candidate field is nonpositive; for ANfl the captured selector was zero and
+selected `+0x264`. The field's broader semantics and writer remain unresolved.
 
 ## Evidence paths and next parity tests
 
@@ -285,18 +286,25 @@ path is possible but unproven. Preserve both observations with these limits.
 
 The earlier sign on the last term was incorrect. Static instruction
 `0x006822C3` tests the `+0x20C` return and branches on zero to the `0x36`
-return at `0x006822CE`. Matched normal/Amim instruction-local traces are in
-`ANfl-validator-operands-postcall-05/` and `-06/`. Normal candidate
-`0x0ed7f960` had `+0x164=0x244`, `+0x264=0`, `+0x268=0`; source `+0xD8=0`
-and `+0x1F0=0` selected `+0x264`, whose zero value caused an early zero
-return. Amim candidate `0x0ed7fe7c` had `+0x164=0x245`, `+0x264=1`,
-`+0x268=1`; source `+0xD8=0`, `+0x1F0=0`, `+0x1D8=1`, `+0x1FC=0`,
-`GetConfigInt("Misc","MagicImmunesResistUltimates",0)=0`, and `+0x20C=0`.
-The selected positive field allows evaluation to continue; `+0x1F8` and the
-candidate predicate are short-circuited. The validator returns `0x36`.
-Stalker did not expose EFLAGS, so branch flow is established by executed
-instruction observations and static disassembly. Field meanings and writers
-remain unknown. Player 1/Player 15
+return at `0x006822CE`. The matched instruction-local comparison in
+`ANfl-validator-operands-postcall-07/` has an ordinary candidate CUnit
+`0x0fb559ec` with `+0x164=0x244`, `+0x264=0`, `+0x268=0`; source ability
+`0x03067580` returned `+0xD8=0`, `+0x1F0=0`, selecting `+0x264`. It reached
+the `jle` site at `0x0068225B`, no subsequent built-in predicate sites,
+and validator return zero. The Amim-associated candidate `0x0fb55f08` had
+`+0x164=0x245`, `+0x264=1`, `+0x268=1`; the source selector was again zero,
+selecting the positive `+0x264`. It continued through `+0x1D8=1`,
+`+0x1FC=0`, config value zero, and `+0x20C=0`, then returned `0x36`.
+Candidate predicate and `+0x1F8` are short-circuited. Stalker did not expose
+EFLAGS; branch flow follows the executed instruction sequence and exact
+disassembly. The source map auto-ran case 2 (Amim on target index 1) despite
+the initial manifest describing case 1; this provenance mismatch is recorded
+in `results/validator-comparison.json`, and the corrected manifest intent was
+not silently substituted. The ordinary candidate-to-JASS handle mapping is
+not direct, while the CUnit pointer and validator invocation are correlated.
+The runtime identifies `+0x264` as the first observed normal/Amim divergence,
+but static raw-offset stores do not yet identify its CUnit writer. Field
+semantics and writer, the `+0x1F0` implementation, Player 1/Player 15
 earliest rejection, ordinary hostile-player behavior, and receiver-side
 mitigation remain open. The invulnerable candidate was removed before the
 receiver, so it supplies no mitigation measurement.

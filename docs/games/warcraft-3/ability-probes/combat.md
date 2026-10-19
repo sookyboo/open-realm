@@ -1536,3 +1536,13 @@ Three other targets reached the damage receiver with raw payload 85. The
 protected candidate did not reach the receiver, so this is targeting
 eligibility evidence rather than receiver-side mitigation. No callback-eligible
 defensive treatment was measured at the ANfl receiver in this continuation.
+
+The matched validator trace in
+`build-re/ability-re/ANfl-validator-operands-postcall-07/` was not a damage
+mitigation comparison. Its case-2 cast output records JASS damage events, but
+the case was not paired with a fresh stable no-cast control for that run, and
+the Stalker agent did not hook the ANfl worker or native damage receiver.
+Do not use those events to infer armor or receiver adjustment. The smallest
+useful mitigation follow-up is an otherwise identical normal and armor-raised
+Footman pair, with both candidates verified through selection, worker, and
+receiver before comparing applied life change.
