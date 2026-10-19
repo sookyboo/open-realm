@@ -1320,6 +1320,49 @@ query coverage, so this run does not test same-owner rejection. See
 limits. No new Player 1/Player 15 owner predicate is specified from these
 observations.
 
+### Static spatial-cell candidate construction (October 19, 2026)
+
+Focused exact-build exports in
+`build-re/ability-re/ANfl-spatial-list-upstream-01/`,
+`ANfl-spatial-query-materialize-01/`, `ANfl-spatial-cell-iterator-01/`, and
+`ANfl-spatial-prefilter-01/` recover the static stage before the shape-entry
+loop. Type-B shape visitation clears a per-query count, computes cell bounds,
+and calls `0x00808FC0`; that routine sends the bounded cell rectangle to
+`0x008092A0`, which visits intersecting grid cells and calls `0x00809170` for
+each. `0x00809170` walks each cell's linked node indices through the grid's
+node table, using an entry stamp to suppress repeat visits. The `0x008073C0`
+shape-entry loop later walks the resulting query-local array.
+
+At VA `0x00809170`, the cell-list item is a wrapper whose `+0x30` points to
+the spatial entry later used by shape geometry. Packed node kind `0x02000000`
+branches around further processing. After shared stamp checks, kinds other
+than `0x01000000` only update the wrapper's `+0x38` visit stamp and do not
+append to the query array. For kind `0x01000000`, the code calls
+`0x00809030(wrapper)` and combines its 64-bit result with query words at
+`+0x48/+0x4C` and one bit from wrapper `+0x44`; only a zero combined value
+appends the wrapper. The static pointer relationship and operations are
+verified; field meanings and candidate-specific branch outcomes are not.
+
+This narrows where Player 1 allied and Player 15 Neutral Passive entries could
+first disappear: before cell traversal, during stamp handling, by packed-kind
+handling, or at the wrapper-derived query-mask test. It does **not** say
+which branch either candidate took. The prior owner-matrix snapshot recovered
+no spatial-entry pointer for them, which is not independent evidence that no
+entry was registered. A new read-only trace was armed at the cell-list and
+mask branches, but Retail crashed during map startup before any query/candidate
+event; its only Frida record is `agent-ready`. Preserve this as an incomplete
+attempt, not negative evidence. The cell-entry runtime trace, registration
+writer, live same-owner `0x84`, and spell-reduction receiver test remain open.
+Artifacts and crash log are under
+`build-re/ability-re/ANfl-spatial-query-registration-01/`.
+
+The exact-build `Aegr` lookup identifies the `AIdd` Elune's Grace row with
+`DataE=0.800000012`; its authored tooltip says spell and Magic attack damage
+are taken at 80%. It is a candidate for the next receiver experiment, not a
+verified ANfl mitigation rule. The treatment's runtime activation, eligibility
+and interaction with the ANfl payload remain unresolved. See
+`build-re/ability-re/ANfl-spatial-query-registration-01/results/Aegr-lookup.json`.
+
 Retail's exact-build native registry lists `BlzGetUnitArmor` at VA
 `0x00497280` (RVA `0x00097280`) and `BlzSetUnitArmor` at VA `0x004AB130`
 (RVA `0x000AB130`). The exact-build registration is used in the matched test at

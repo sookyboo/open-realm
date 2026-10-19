@@ -1052,3 +1052,31 @@ and supplies no rejection code. Do not label this as a verified owner/relation
 predicate. The Player 0 reference was not established to lie in relevant query
 coverage and is not a same-owner result. See the comparison JSON and README in
 the experiment directory for candidate identities and caveats.
+
+### Pregeometry spatial-cell construction (October 19, 2026)
+
+Static exports in `ANfl-spatial-list-upstream-01/`,
+`ANfl-spatial-query-materialize-01/`, `ANfl-spatial-cell-iterator-01/`, and
+`ANfl-spatial-prefilter-01/` identify the builder before the observed
+`0x008073C0` shape-entry loop. The type-B shape path calls `0x00808FC0`, which
+visits intersecting spatial grid cells through `0x008092A0`; each cell is
+walked by `0x00809170`. The cell-list item is a wrapper whose `+0x30` points
+to the spatial entry later used by shape geometry. It uses a visit stamp;
+packed kind `0x02000000` branches around further processing. Other kinds
+besides `0x01000000` update wrapper `+0x38` but do not append. Kind
+`0x01000000` applies a wrapper-derived 64-bit mask against query words at
+`+0x48/+0x4C` plus one bit from wrapper `+0x44`; a zero combined mask appends
+the wrapper to a query-local array before shape geometry follows `+0x30`. These
+code paths and offsets are static evidence; packed kinds and fields do not yet
+have gameplay meanings.
+
+This narrows the possible first divergence for Player 1 allied and Player 15
+Neutral Passive candidates to before the cell iterator or within its packed
+kind, stamp, or query-mask handling, but does not identify their branch. The new
+read-only runtime attempt crashed during map startup; its trace contains only
+`agent-ready` and has no query or candidate events. It is incomplete, not
+evidence that either candidate was absent from registration or the cell lists.
+The live entry-to-cell trace and registration writer remain unresolved. Raw
+exports and the preserved failed run are under
+`build-re/ability-re/ANfl-spatial-query-registration-01/` and the four
+`build-re/ability-re/ANfl-spatial-*-01/` export directories above.

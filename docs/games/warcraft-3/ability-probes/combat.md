@@ -1569,3 +1569,17 @@ life decrease (84.940 over 250ms, with stable no-cast life). No measurable
 armor mitigation was observed for this tested payload. This does not resolve
 spell-reduction modifiers or all damage categories. Word `+0x14=0x400` remains
 unnamed.
+
+The October 19 spatial-cell follow-up did not run a damage treatment: Retail
+crashed during prepared-map startup before setup output or any captured ANfl
+query event. Its Frida trace contains only `agent-ready`; it supplies no
+receiver or mitigation observation. Preserve the existing armor result as the
+only callback-eligible defensive comparison currently verified.
+
+The exact-build `Aegr` (`AIdd`, Elune's Grace) lookup gives `DataE=0.800000012`
+and a rank-one tooltip stating that spell and Magic attack damage are taken at
+80%. This is the strongest identified spell-reduction candidate for a next
+receiver comparison. It remains authored-data evidence only: whether adding it
+to a Footman activates the passive, preserves ANfl eligibility, and affects
+the ANfl damage payload is unmeasured. Lookup JSON:
+`build-re/ability-re/ANfl-spatial-query-registration-01/results/Aegr-lookup.json`.

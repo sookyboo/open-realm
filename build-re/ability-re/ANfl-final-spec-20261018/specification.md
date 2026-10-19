@@ -407,6 +407,91 @@ Player 0 candidate was outside demonstrated query coverage and supplies no
 same-owner runtime result in this matrix. Armor receiver adjustment and
 `+0x264/+0x268` writers remain unresolved.
 
+## Static spatial-cell construction before geometry (October 19)
+
+New exact-build Ghidra exports:
+
+- `ANfl-spatial-list-upstream-01/`
+- `ANfl-spatial-query-materialize-01/`
+- `ANfl-spatial-cell-iterator-01/`
+- `ANfl-spatial-prefilter-01/`
+
+These are static-only. The type-B shape path computes a bounded cell rectangle,
+materializes the per-query entry array through `0x00808FC0`, and calls
+`0x008092A0` to visit intersecting cells. That routine invokes
+`0x00809170` for each cell. The cell iterator follows linked node indices
+through a node table and uses an entry stamp to suppress repeats. Before the
+shape loop at `0x008073C0`, the iterator handles packed kinds and wrapper
+fields. A cell-list wrapper's `+0x30` points to the spatial entry later used by
+shape geometry. Packed kind `0x02000000` branches around stamp and append
+processing. For other kinds, stamp checks run; kinds besides `0x01000000`
+update wrapper `+0x38` but do not append. For kind `0x01000000`, it calls
+`0x00809030(wrapper)` and combines the returned 64-bit mask with query words
+`+0x48/+0x4C` and a bit
+from wrapper `+0x44`; the wrapper is appended only if the combined value is
+zero. The exact meanings of these fields and packed kinds remain unresolved.
+
+This identifies actual pregeometry branches where an otherwise live unit
+could be omitted. Packed kind `0x02000000` is skipped before stamp handling;
+for other kinds, equality with any of the three compared stamp values bypasses
+the remaining work.
+Kinds other than `0x01000000` update the entry stamp but do not append to the
+query array. Kind `0x01000000` reaches the mask test and appends only when the
+combined mask is zero, then updates the stamp. It does not establish that
+Player 1 or Player 15 reaches the cell iterator, which packed kind its entry
+would carry, or which branch it takes. The prior runtime snapshot's null
+spatial-entry value means the trace did not recover an entry pointer; it does
+not prove there is no registered entry. A new bounded Frida trace attached
+successfully, but the prepared Retail process raised an access violation during
+startup, before any query or candidate event. The trace contains only
+`agent-ready` and is incomplete. The crash log and exact map/script hashes are preserved in
+`ANfl-spatial-query-registration-01/`; do not use this run as absence evidence.
+
+Updated static pseudocode for the proven portion:
+
+```text
+for each type-B shape query:
+    derive the grid-cell bounds for its expanded spatial bounds
+    for each intersecting grid cell:
+        walk the cell's packed linked-entry list
+        skip packed kind 0x02000000
+        continue if wrapper[+0x38] equals either active stamp or sentinel -1
+        if packed kind != 0x01000000:
+            update wrapper[+0x38] visit stamp
+            continue
+        bits = FUN_00809030(wrapper)  # static 64-bit return
+        reject_bits = (bits.low & query[+0x48]) |
+                      (bits.high & query[+0x4C]) |
+                      ((wrapper[+0x44] >> 28) & 1)
+        if reject_bits != 0:
+            update wrapper[+0x38] visit stamp
+            continue
+        append wrapper to the query-local shape array
+        update wrapper[+0x38] visit stamp
+    for wrapper in the query-local array:
+        entry = wrapper[+0x30]
+        if not final_geometry(entry, query):
+            continue
+        apply the already documented query and ANfl callback filters
+```
+
+The pseudocode preserves raw mask construction; it does not encode owner-slot
+or alliance rules. Player 1/Player 15 branch outcomes, direct spatial
+registration writers, live same-owner return `0x84`, spell-reduction receiver
+adjustment, and CUnit `+0x264/+0x268` writers remain unresolved.
+
+## Authored spell-reduction candidate (October 19)
+
+The exact-build `AIdd` row resolved through rawcode `Aegr` identifies Elune's
+Grace. Authored data gives `DataE=0.800000012`; the rank-one tooltip says spell
+and Magic attack damage are taken at that percentage. This makes `Aegr` a
+well-supported candidate treatment for a receiver experiment, but does not
+establish that it is active when added to a Footman, that ANfl's payload is
+affected, or that its addition preserves query eligibility. The exact-build
+lookup is preserved at
+`ANfl-spatial-query-registration-01/results/Aegr-lookup.json`. No cast or
+receiver observation was made for this treatment.
+
 ## October 19 same-owner armor receiver comparison
 
 `build-re/ability-re/ANfl-armor-mitigation-02/` supplies a matched rank-one
