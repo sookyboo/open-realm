@@ -1027,3 +1027,28 @@ A matched normal/Amim post-call capture in
 accepted, but Frida recorded only agent readiness and no candidate events.
 The corrected same-cast comparison is now in `postcall-07/`; see its
 candidate-level identities and provenance notes above.
+
+### ANfl owner matrix candidate-entry trace (October 19, 2026)
+
+The accepted rank-one owner matrix in
+`build-re/ability-re/ANfl-owner-filter-matrix-02/` hooks the shape-entry
+iteration at VA `0x008073C0` (RVA `0x004073C0`), after loading an entry and
+before final geometry operands at `0x0080740A`. It correlates each observed
+spatial-entry pointer to a CUnit and JASS handle in the same process.
+
+Player 12 Neutral Hostile and ordinary hostile Player 2 candidates were
+observed at the iteration site and passed target-mask function
+`0x006ADA20` (return 0) and owner/relation function `0x006AD670` (return 0)
+on accepted geometry queries. Their callback gates passed and validators
+returned zero. Both reached worker/receiver dispatch with raw 85. The Player 2
+case had passive alliance false in both directions with Player 0.
+
+Mutually allied Player 1 and Player 15 Neutral Passive had valid CUnit
+identities and normal `+0x20` bit-3 state, but were absent from the entry
+iteration site in all four queries. Their first observed divergence is before
+the final geometry predicate. This evidence does not distinguish spatial
+registration/list membership from earlier shape-list construction or filtering
+and supplies no rejection code. Do not label this as a verified owner/relation
+predicate. The Player 0 reference was not established to lie in relevant query
+coverage and is not a same-owner result. See the comparison JSON and README in
+the experiment directory for candidate identities and caveats.

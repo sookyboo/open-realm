@@ -1546,3 +1546,26 @@ Do not use those events to infer armor or receiver adjustment. The smallest
 useful mitigation follow-up is an otherwise identical normal and armor-raised
 Footman pair, with both candidates verified through selection, worker, and
 receiver before comparing applied life change.
+
+### ANfl owner eligibility and receiver-mitigation follow-up (October 19, 2026)
+
+The corrected owner matrix at
+`build-re/ability-re/ANfl-owner-filter-matrix-02/` shows that the Player 12
+control and one ordinary non-neutral hostile Player 2 candidate passed target
+mask and owner/relation filtering, callback gates and the shared validator,
+then reached worker and CUnit receiver VA `0x006677C0` with raw payload 85.
+Player 2 had passive alliance false in both directions with caster Player 0.
+Player 1 mutually allied and Player 15 Neutral Passive did not appear at
+shape-entry iteration VA `0x008073C0`; neither reached geometry or the receiver
+in this trace. This is an early-candidate-list observation, not mitigation.
+
+A matched same-owner test is now recorded at
+`build-re/ability-re/ANfl-armor-mitigation-02/`. `BlzSetUnitArmor` changed the
+primary Player 12 Footman from armor 2 to 12 and `BlzGetUnitArmor` read back 12;
+untreated Player 12 controls remained at armor 2. All three candidates passed
+query/callback validation, were selected, and reached receiver VA `0x006677C0`
+with raw 85. JASS damage events reported 85 and each target had the same sampled
+life decrease (84.940 over 250ms, with stable no-cast life). No measurable
+armor mitigation was observed for this tested payload. This does not resolve
+spell-reduction modifiers or all damage categories. Word `+0x14=0x400` remains
+unnamed.

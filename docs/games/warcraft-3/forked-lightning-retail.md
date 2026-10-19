@@ -723,7 +723,7 @@ sound. Presentation evidence remains authored/static only.
 | Factory registration points at the ANfl class factory; that factory installs `CAbilityForkedLightning`'s table | Exact-build static relationship | No runtime receiver identity claim. |
 | Order ID `0xD026B`; order string `forkedlightning` | Static getter plus authored data; order path also observed by Frida | None for this build's order identity. |
 | Candidate filtering, repeated query deduplication, full-set sort, then DataB-bounded worker prefix | Exact-build static control flow; corroborated by three live casts with five distinct callback pointers and three workers each | Decode every query parameter and target gate to name each gameplay predicate; isolate creation-order effects from placement. |
-| Rank-one through rank-three amounts | Runtime receiver payloads 85, 160, and 250; static row accessors read DataA; rank-one/two JASS samples show matching damage events | Receiver-adjusted amount under an eligible defensive treatment remains untested; rank-three life loss was overkill-limited. |
+| Rank-one through rank-three amounts | Runtime receiver payloads 85, 160, and 250; static row accessors read DataA; rank-one/two JASS samples show matching damage events | A same-owner +10 armor comparison showed no measurable reduction at rank one; spell-reduction and other receiver modifiers remain untested; rank-three life loss was overkill-limited. |
 | Shared receiver and selected targets | Runtime worker target equals receiver ECX; cases 19 and 21 correlate all five native candidate coordinates one-to-one with JASS targets and match the predicted three damage recipients | Correlation uses exact live coordinates, owner, and type; a handle-registry mapping and individual gate outcomes for non-selected targets remain open. |
 | DataB target limit | Static DataB row accessor and post-sort `min(candidate_count, DataB)` worker bound; live cases produced three workers at ranks 1 and 2 | DataB is 3 at all authored ranks, so rank-varying limit behavior is not tested. |
 | Mana/cast timing | Direct JASS samples, 250ms resolution | Finer timing only if exact ordering matters after static path inspection. |
@@ -1292,3 +1292,40 @@ zero, and `+0x20C=0`, reaching validator return `0x36`. Static branch
 `0x006822C3` confirms the zero `+0x20C` condition. Candidate field semantics
 and writer remain unresolved. The older `postcall-05` mismatch and Stalker
 errors are preserved in the comparison report.
+
+### Owner matrix follow-up (October 19, 2026)
+
+The corrected accepted-cast matrix at
+`build-re/ability-re/ANfl-owner-filter-matrix-02/` correlates live JASS
+handles, CUnits and spatial entries. Its Frida trace observes shape-entry
+iteration at VA `0x008073C0` (RVA `0x004073C0`), before final geometry at
+`0x0080740A`. Player 12 and an ordinary non-neutral hostile Player 2 entered
+this loop. Both passed geometry on applicable queries, target-mask filtering
+(return 0), owner/relation filtering (return 0), callback relationship gate
+(return 1), and shared validator (return 0); both reached the ANfl worker and
+CUnit receiver with raw payload 85. Player 2 was explicitly non-allied to
+Player 0 in both passive-alliance directions in this scenario.
+
+Player 1 (mutually passive allied with Player 0 in both directions) and Player
+15 Neutral Passive had valid live CUnits, expected positions, and bit-3-clear
+`+0x20=0x1646`, but neither appeared at the shape-entry iteration site in any
+of four queries. They therefore diverged before final geometry in this trace.
+The trace does not distinguish missing spatial registration/list membership
+from an earlier shape-candidate-list construction filter; no target-mask or
+owner/relation return code was captured for them. Their different CUnit
+`+0x164` values are correlation only. The Player 0 reference also was not
+observed at this site, but its position was not established as inside the
+query coverage, so this run does not test same-owner rejection. See
+`results/owner-matrix.json` for identities, per-query evidence, hashes and
+limits. No new Player 1/Player 15 owner predicate is specified from these
+observations.
+
+Retail's exact-build native registry lists `BlzGetUnitArmor` at VA
+`0x00497280` (RVA `0x00097280`) and `BlzSetUnitArmor` at VA `0x004AB130`
+(RVA `0x000AB130`). The exact-build registration is used in the matched test at
+`build-re/ability-re/ANfl-armor-mitigation-02/`: Player 12 Footman armor rose
+from 2 to 12 and was read back. The treated target and untreated same-owner
+controls all passed targeting and reached the receiver with raw 85; JASS events
+reported 85 and paired life samples showed identical loss. No measurable armor
+mitigation was found for this payload/configuration. Other defensive modifiers
+and payload categories remain unresolved.

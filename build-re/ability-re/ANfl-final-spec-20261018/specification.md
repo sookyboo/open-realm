@@ -15,11 +15,11 @@ Executable SHA-256: `3f2ed0120d80578bf07e4423296dade1adfb959d59a2d20a75842245595
 
 **Verified static:** query builder VA `0x0068EA00` parses the type-`0xB` radial query and installs predicate VA `0x00696BE0`; predicate chain is `0x00696BE0 → 0x006ADB90 → 0x006ADA20 → 0x006AD670`, prior to ANfl callback. ANfl authored mask `0x04010006` normalizes through `0x006AEA70` to `0xF5D10006`. In `0x006AD670`, equal source/candidate owner indices reject with code `0x84` when normalized mask bit `0x2000` is clear.
 
-**Verified runtime:** in the same-owner case, a Player 0 `hfoo` was not delivered to callback while four Player 12 `hfoo` candidates were. The four delivered candidates passed callback relationship gate (`0x0027FB80` return 1) and shared validator (`0x00282180` return 0). **Corroborated inference:** the absent same-owner candidate was excluded by the static equal-owner `0x84` branch. Candidate-specific `0x84` has not been captured live. Player 12 is Neutral Hostile; this evidence does not establish ordinary player-owner enemy behavior.
+**Verified runtime:** in the same-owner case, a Player 0 `hfoo` was not delivered to callback while four Player 12 `hfoo` candidates were. The four delivered candidates passed callback relationship gate (`0x0027FB80` return 1) and shared validator (`0x00282180` return 0). **Corroborated inference:** the absent same-owner candidate was excluded by the static equal-owner `0x84` branch. Candidate-specific `0x84` has not been captured live. Player 12 is Neutral Hostile; that experiment alone did not establish ordinary player-owner enemy behavior. The October 19 owner matrix below subsequently tested one non-neutral hostile owner.
 
 **Verified runtime:** the Amim level-one secondary Footman reached the callback, passed its relationship gate, and received validator code `0x36`; it was not sent to a worker or receiver. The older invulnerability case recorded the same callback/validator outcome after a setter call, but had no state readback. A later getter-false case passed final geometry without observed callback/owner-filter events. The new reversible native-correlated experiment established the setter state and ordinary-damage effect; a fresh accepted ANfl cast with that active state did not select the treated target, but its callback path was not instrumented. Preserve each result and do not collapse them into a single exclusion stage.
 
-**Verified runtime (new alliance case):** a Player 1 Footman at the same secondary position, with mutual Player 0/Player 1 `ALLIANCE_PASSIVE=true`, did not appear in the ANfl callback and received no worker. The cast still selected three Player 12 Footmen. This differs from the same-owner case (statically rejected by the owner relation function) and does not establish that all different-owner allies behave alike. The target-specific pointer was not observed at the final geometry comparator or filtered `0x006AD670` hook, so the exact earliest exclusion stage remains unresolved: spatial enumeration/broadphase or an earlier query predicate are still possible.
+**Verified runtime (new alliance case):** a Player 1 Footman at the same secondary position, with mutual Player 0/Player 1 `ALLIANCE_PASSIVE=true`, did not appear in the ANfl callback and received no worker. The cast still selected three Player 12 Footmen. This differs from the same-owner case (statically rejected by the owner relation function) and does not establish that all different-owner allies behave alike. The target-specific pointer was not observed at the final geometry comparator or filtered `0x006AD670` hook, so the exact earliest exclusion stage was unresolved in that run. The corrected October 19 entry-loop trace below places the first observed divergence before final geometry, while leaving spatial registration versus candidate-list construction unresolved.
 
 **Verified runtime (Neutral Passive, new):** a Player 15 Footman (`hfoo`) at `(-720,-6160)` was alive, stationary, and at 210 life after the five-second setup. It was absent from the final geometry operand observations and from the target-specific owner-relation, callback, worker, and receiver observations. A matched Player 12 Footman at the same position was present in the geometry/callback trace. The cast selected the other three Player 12 targets. This narrows Neutral Passive exclusion to broadphase enumeration or a predicate at/before the final geometry operands; it does not identify which one. Player 12 is Neutral Hostile, so the observation must not be generalized to ordinary enemy owners.
 
@@ -42,7 +42,7 @@ The candidate/source field ownership is established from the call frame: `+0x164
 
 **Verified runtime gameplay effect:** in `ANfl-invulnerability-reversible-02`, ordinary `UnitDamageTarget` requested 20 normal damage against the same 210-life Footman before, during, and after the reversible setter sequence. Before: getter true, receiver/JASS event amount 17.857, life `210 → 192.143`; after setter true: getter false, event amount 0, life unchanged; after setter false: getter true, amount 17.857, life `192.143 → 174.286`. Thus in this tested configuration getter false plus bit 3 set corresponds to damage immunity, while getter true plus bit clear is damageable. `UnitDamageTarget` returned true in each phase and therefore did not itself distinguish applied damage. This is independent gameplay confirmation for this ordinary-damage case, not proof that every damage category is blocked.
 
-**Unresolved:** exact first query-stage exclusion for Player 1 allied and Player 15 Neutral Passive candidates; ordinary separately owned enemy behavior; why the old setter-without-readback invulnerability case reached the callback; `+0x264/+0x268` native writer and meaning; source ability `+0x1F0` implementation; flying, mechanical, structure, dead, hidden, and ethereal eligibility; and immunity behavior under other configuration. The matched normal/Amim selected operand and executed branch path are now verified; do not generalize the Player 1 or Player 15 results to all owner relationships.
+**Unresolved:** exact first query-stage exclusion for Player 1 allied and Player 15 Neutral Passive candidates; why the old setter-without-readback invulnerability case reached the callback; `+0x264/+0x268` native writer and meaning; source ability `+0x1F0` implementation; flying, mechanical, structure, dead, hidden, and ethereal eligibility; and immunity behavior under other configuration. The matched normal/Amim selected operand and executed branch path are now verified; do not generalize the Player 1 or Player 15 results to all owner relationships.
 
 **Verified runtime operand observation (Amim follow-up):** in
 `ANfl-invulnerability-readback-01`, the level-one Amim target at
@@ -92,10 +92,10 @@ The immutable prediction and corrected comparison are both retained at
 | Neutral Hostile Player 12 living Footman | Yes | Accepted in tested setup | relation 1; validator 0 | selected according to sorted prefix | Runtime cases 19/21 and clean control |
 | Same-owner Player 0 Footman | No callback delivery | Static same-owner rejection `0x84` when mask bit `0x2000` clear | Not reached | No worker | Callback absence runtime; exact return static |
 | Magic-immune Player 12 Footman (`Amim` level 1) | Yes | Geometry passed | Relationship 1; shared validator `0x36` | No worker or receiver; no spell damage | `ANfl-state-alliance-ranks-01`, case 2 |
-| Active invulnerability state on Player 12 Footman | Fresh accepted cast; active state independently confirmed in matched reversible run | Not captured in the same trace | Callback/validator path not instrumented in fresh cast; older unconfirmed setter case reached validator `0x36` | No worker/receiver for treated target; other three got 85 | `ANfl-invulnerability-reversible-02/` plus historical cases |
-| Mutually passive Player 1 Footman | No ANfl callback observed | Not narrowed; target absent at final-geometry and `0x006AD670` observations | No callback gates | No worker; other three selected targets received 85 | `ANfl-state-alliance-ranks-01`, case 4 |
-| Neutral Passive Player 15 Footman | No callback observed | Absent at/before final geometry operands; broadphase vs earlier predicate unresolved | Not reached/observed | No worker; other three selected targets received 85 | `ANfl-neutral-passive-rank3-01`, case 5 |
-| Separate ordinary enemy player | Untested | Unresolved | Unresolved | Unresolved | — |
+| Confirmed active invulnerability on Player 12 Footman | Entry appeared and passed geometry | Target-mask function returned `0x96` with bit-3-set category; query predicate rejected | Owner/relation and callback not reached | No worker/receiver for treated target; other three got 85 | `ANfl-invulnerability-candidate-trace-02/` |
+| Mutually passive Player 1 Footman | Not present at pregeometry shape-entry iteration VA `0x008073C0` in any query | First observed divergence before geometry; spatial registration/list membership versus candidate-list construction unresolved | Not reached | No worker; other targets selected | `ANfl-owner-filter-matrix-02/` |
+| Neutral Passive Player 15 Footman | Not present at pregeometry shape-entry iteration VA `0x008073C0` in any query | First observed divergence before geometry; spatial registration/list membership versus candidate-list construction unresolved | Not reached | No worker; other targets selected | `ANfl-owner-filter-matrix-02/` |
+| Ordinary hostile Player 2 Footman | Present at shape-entry iteration; passed geometry on applicable queries | Target-mask and owner/relation returns 0; query accepted | Relationship 1; validator 0 | Selected; worker/receiver raw 85 | `ANfl-owner-filter-matrix-02/` |
 | Other unit classes/states | Untested in controlled ANfl matrix | Unresolved | Unresolved | Unresolved | — |
 
 Callback return `1` is continuation, not an eligibility result. A callback-level validator nonzero is a rejection code; zero continues candidate recording.
@@ -146,7 +146,7 @@ Native flow: per-target worker → `CMissileForkedLightning` callback → shared
 
 **Verified runtime clean baseline:** `ANfl-clean-combat-01` zeroed ordinary attack base damage and dice on the caster and five targets, cleared nearby local units, held targets, and captured a five-second no-cast interval. All targets stayed at 210 life across 21 samples. A rank-one cast matched prediction `[0,1,2]`, reached three receivers with raw 85, emitted three matching JASS damage events, and reduced selected targets to about 125; nonselected targets remained at 210. Caster health changed during the run and is excluded as a clean measurement. This validates baseline attribution only.
 
-**Verified runtime:** the Amim treatment was rejected by the callback validator and did not reach damage dispatch. The same accepted cast in `ANfl-validator-operands-postcall-07/` also recorded an ordinary candidate's selected-field early zero return; its JASS case-2 damage events were not a clean combat isolation. The earlier invulnerability case had the same observed callback/validator outcome without state readback, while the later confirmed active-state case was filtered earlier by query target mask. Neither run tests receiver mitigation. **Unresolved:** receiver-side behavior for an eligible defensive target; armor/defense category, spell reduction, ethereal, absorption, `MagicImmunesResistDamage` variation, adjusted amounts, and selected-but-suppressed damage. Do not describe the observed validator result as damage mitigation.
+**Verified runtime:** the Amim treatment was rejected by the callback validator and did not reach damage dispatch. The same accepted cast in `ANfl-validator-operands-postcall-07/` also recorded an ordinary candidate's selected-field early zero return; its JASS case-2 damage events were not a clean combat isolation. The earlier invulnerability case had the same observed callback/validator outcome without state readback, while the later confirmed active-state case was filtered earlier by query target mask. Neither run tests receiver mitigation. The matched same-owner test in `ANfl-armor-mitigation-02/` raised one Player 12 Footman from armor 2 to 12, verified the getter readback, and traced it with two untreated same-owner controls through query, callback, worker, and receiver. All three receiver payloads and JASS damage events were 85; all three had the same 84.940 sampled life loss over 250ms with stable no-cast controls. Thus +10 armor produced no measurable reduction for this tested payload/configuration. **Unresolved:** other defense categories, spell reduction, ethereal, absorption, `MagicImmunesResistDamage` variation, receiver-internal adjusted locals, and selected-but-suppressed damage. Do not describe the validator result as damage mitigation.
 
 **Verified runtime rank three:** case 7 logged rank 3 and three receiver calls each carrying raw 250. Those targets had 210 maximum/current life and died; use the receiver payload, not life deltas, as the raw-damage result. Rank-three query values match the common progression. **Verified runtime rank two (new):** a fresh single-case accepted cast logged rank 2, four query centers/radii matching the `p + Area` progression, three workers, and three receiver calls carrying raw 160. Three JASS damage events also recorded 160. The targets remained alive; the native payload confirms raw damage. The immutable pre-cast prediction is `build-re/ability-re/ANfl-rank2-geometry-03/predictions/case-6-precast.json`; it predicted the older `p + DataD/4` center offset, so query centers did not match that part of the written prediction. `results/geometry-comparison.json` records the mismatch and comparison against the corrected center model.
 
@@ -192,9 +192,11 @@ selected `+0x264`. The field's broader semantics and writer remain unresolved.
 - Repaired geometry fixture, preflight, fresh JASS output, acquisition/query trace, and native comparison operands: `build-re/ability-re/ANfl-geometry-boundary-01/` (prepared-v3 map SHA-256 `9082fe582d52e7e4625a340f531ac77990b6bf4d74a98e45ebd139352bc54c1e`). The earlier failed distance fixture remains preserved at `build-re/ability-re/ANfl-geometry-distance-02/` and is not evidence.
 - Query predicate Ghidra exports: `build-re/ability-re/ANfl-spatial-query-predicate-detail-03/`, `ANfl-spatial-query-shapes-detail-01/`, `ANfl-spatial-query-math-detail-01/`.
 - Relation-filter evidence and prior same-owner observation: `build-re/ability-re/ANfl-target-eligibility-ally-01/`.
+- Corrected owner matrix with candidate entry trace and raw identities: `build-re/ability-re/ANfl-owner-filter-matrix-02/` (`results/owner-matrix.json`).
+- Same-owner armor treatment, accepted map/JASS identities, fresh outputs, and receiver trace: `build-re/ability-re/ANfl-armor-mitigation-02/` (`results/armor-comparison.json`).
 - Updated docs: `docs/games/warcraft-3/forked-lightning-retail.md`, `docs/games/warcraft-3/ability-probes/targeting.md`, `docs/games/warcraft-3/ability-probes/combat.md`.
 
-Smallest useful next experiments: (1) capture the active invulnerability target from spatial enumeration through query predicates, callback, validator, and retained-list insertion in one accepted cast; (2) use instruction-local validator post-call captures for matched normal and Amim candidates; (3) trace same-position Player 1, Player 12, Player 15, and ordinary hostile owner candidates from broadphase entry/shape dispatch; (4) choose one verified defensive modifier that remains callback-eligible and capture receiver-adjusted amount; (5) test an ordinary non-neutral enemy owner. Rank-one through rank-three query geometry and raw damage are complete. An exact comparator tie requires equal native metric bits and remains lower priority.
+Smallest useful next experiments: (1) inspect spatial registration and pregeometry candidate-list construction to determine why Player 1 and Player 15 do not reach VA `0x008073C0`; (2) trace a same-owner candidate placed inside proven query coverage to capture its live `0x84` return; (3) test another ordinary hostile owner/alliance configuration; (4) test a spell-damage-reduction treatment through the receiver; (5) identify CUnit `+0x264/+0x268` writers and the source `+0x1F0` selector. Rank-one through rank-three geometry and raw damage, confirmed active-invulnerability filtering, ordinary hostile Player 2 eligibility, and the +10 armor no-mitigation result are now covered. An exact comparator tie remains lower priority.
 
 ## Controlled immunity and startup follow-up (October 18, 2026)
 
@@ -323,3 +325,117 @@ filtering still use the existing callback relationship gate and shared
 validator. `0x36` operand semantics, allied/Neutral Passive rejection stage,
 and receiver mitigation remain unresolved and must not be inferred from this
 case.
+
+## October 19 owner matrix 02
+
+A corrected candidate-correlated owner matrix is recorded at
+`build-re/ability-re/ANfl-owner-filter-matrix-02/`. Retail 1.29.2.9231 hash,
+prepared-map and embedded-script hashes, pre-cast prediction, fresh setup/cast
+outputs, native trace, candidate snapshot and machine-readable comparison are
+linked from its README and `results/owner-matrix.json`.
+
+The accepted rank-one trace hooked shape-entry iteration at VA `0x008073C0`
+(RVA `0x004073C0`), after loading the spatial entry and before final geometry
+operands at VA `0x0080740A`. Player 12 control and ordinary hostile Player 2
+were observed at this site. Both passed geometry on applicable queries,
+`0x006ADA20` (target-mask return 0), `0x006AD670` (owner/relation return 0),
+the enclosing query predicate, callback relationship gate (return 1), and
+shared validator (return 0). Each reached the worker and receiver with raw
+payload 85. Player 2 therefore was eligible in this tested non-neutral hostile
+configuration, matching Player 12.
+
+The Player 1 mutually allied and Player 15 Neutral Passive CUnits were each
+correlated to JASS handles, were alive at the expected positions, and had
+normal invulnerability state (`+0x20=0x1646`, bit 3 clear). Neither appeared
+at the pregeometry entry iteration site during any of the four queries. No
+geometry, target-mask, owner/relation, callback, validator, worker or receiver
+observation exists for either. The earliest observed divergence is before
+final geometry, but the trace cannot distinguish absent spatial registration
+or shape-list membership from an earlier candidate-list construction/filter.
+No rejection code or specific alliance predicate is established. Their
+`+0x164` values differed from the two candidates that were enumerated; this is
+only a correlation and is not assigned semantic meaning.
+
+The same-owner Player 0 candidate also did not appear at the entry site, but
+this run did not show it inside a relevant query's coverage. Do not use this
+run to establish the known static `0x84` same-owner branch. The implementation
+must not infer a new owner rule for Player 1 or Player 15 from missing
+geometry/callback events; reproduce the observed exclusion only after the
+responsible candidate-list stage is identified. Detailed per-candidate stage
+results are in `results/owner-matrix.json`.
+
+## Receiver-side mitigation and field writers remain unresolved
+
+No callback-eligible armor or other defensive treatment was cast in this
+continuation. The exact-build native registry export confirms Retail registers
+`BlzGetUnitArmor (Hunit;)R` at VA `0x00497280` (RVA `0x00097280`) and
+`BlzSetUnitArmor (Hunit;R)V` at VA `0x004AB130` (RVA `0x000AB130`), but
+registration alone is not evidence of an ANfl receiver result. The smallest
+next mitigation experiment is to set and read back armor on one Footman in the
+existing clean-combat fixture, then confirm query acceptance, callback,
+selection, worker, receiver payload, and actual life change against a normal
+Footman. Candidate `+0x264/+0x268` writer and semantics also remain unresolved.
+
+### Implementation boundary from owner matrix
+
+The candidate-list stage before the observed entry loop is not yet resolved for allied and Neutral Passive units. The verified pseudocode therefore keeps that stage abstract rather than substituting owner-number or alliance tests:
+
+```text
+for each native spatial entry actually yielded to the ANfl shape evaluator:
+    if final_geometry(entry, query):
+        if query_target_mask(candidate, raw_mask, source) != 0:
+            continue
+        if owner_relation_filter(candidate, normalized_mask, source_owner) != 0:
+            continue
+        deliver candidate to ANfl callback
+        if callback_relationship_gate(candidate) == 0:
+            continue
+        if shared_target_validator(candidate, source_ability) != 0:
+            continue
+        retain unique candidate
+
+# For the tested Player 1 allied and Player 15 Neutral Passive units,
+# no entry reached the observed shape-entry iteration site. The native stage
+# creating/yielding that list is unresolved; do not encode an inferred rule.
+```
+
+For one tested ordinary hostile Player 2 candidate, the entry was yielded and
+all observed query/callback predicates passed, and it reached an 85-point
+receiver payload. This confirms that tested configuration only. Player 1 and
+Player 15 first diverged before final geometry, with no rejection code. The
+Player 0 candidate was outside demonstrated query coverage and supplies no
+same-owner runtime result in this matrix. Armor receiver adjustment and
+`+0x264/+0x268` writers remain unresolved.
+
+## October 19 same-owner armor receiver comparison
+
+`build-re/ability-re/ANfl-armor-mitigation-02/` supplies a matched rank-one
+receiver test. The target and controls were all Player 12 `hfoo` units. JASS
+read armor as 2.0, raised target 0 from 2.0 to 12.0 with `BlzSetUnitArmor`, and
+read 12.0 back before casting. The untreated selected Player 12 control had
+armor 2.0. No-cast life for targets 0, 2 and 3 remained 210 over the one-second
+placement interval.
+
+In the accepted cast, the treated target and untreated controls passed query
+mask filtering (return 0), owner/relation filtering (return 0), callback
+relationship gate (return 1), and shared validator (return 0). All three were
+selected and reached worker and receiver VA `0x006677C0`. Each receiver entry
+carried amount 85 and word `+0x14=0x400`; each JASS damage event reported 85.
+At 0.75 s each had 210 life; at 1.00 s each had 125.060 (84.940 sampled loss
+within the 250ms interval). The same-owner treatment therefore caused no
+measurable armor reduction for this ANfl payload/configuration. The receiver
+hook did not expose a post-mitigation local amount, so the conclusion relies on
+the JASS damage event and paired life samples, not only the raw entry payload.
+The `0x400` word remains unnamed.
+
+The saved prediction expected workers `[0,2,3]`; actual worker order was
+`[0,3,2]`. This prediction is preserved and reviewed at
+`results/selection-prediction-review.json`: target 3 is about 177.1 units from
+the explicit target, while target 2 is about 224.3 units away. All three were
+selected, so the order error does not affect the mitigation comparison.
+
+**Implementation boundary:** for the tested rank-one ANfl damage path, do not
+apply an armor reduction to the 85-point payload based only on this treatment;
+the measured result did not change at +10 armor. This does not establish
+behavior for spell-damage-reduction modifiers, other defense states, ranks, or
+other payload categories.
