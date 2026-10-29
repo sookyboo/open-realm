@@ -17,7 +17,7 @@ by residual damage.
 The related `HumanAbilityFunc.txt` rows author these visuals:
 
 - `AHfs.EffectArt`: `FlameStrikeTarget.mdl`, the warning art at the selected
-  point during the cast delay.
+  point after the cast projectile arrives.
 - `AHfs.SpecialArt`: `FlameStrike1.mdl`, `FlameStrike2.mdl`, and
   `FlameStrike.mdl`, selected by rank for the landing effect.
 - `BHfs.TargetArt`: `FlameStrikeDamageTarget.mdl`, emitted on units hit by a
@@ -25,14 +25,21 @@ The related `HumanAbilityFunc.txt` rows author these visuals:
 - `XHfs.EffectArt`: `FlameStrikeEmbers.mdl`, the persistent ground field. The
   `XHfs` row also authors its looped fire sound.
 
+The ability row has no `MissileArt`. The Blood Mage's `[Hblm]` entry in
+`HumanUnitFunc.txt` authors `BloodElfMissile.mdl` and its speed. Flame Strike
+uses that attack-profile missile for a presentation-only flight to the point;
+its arrival starts the warning art. Casters without a configured attack missile
+show the warning immediately.
+
 RoC 1.0 has no `AHfs` `AbilityData` row, so Flame Strike has no RoC-only
 fallback. The TFT `EfctID` field resolves the fire-field object without a
 compatibility workaround.
 
 ## Runtime ownership
 
-The warning and rank-specific impact use temporary effect entities so their
-authored animations finish naturally. The ember field is owned by the Flame
+The point projectile uses the caster's authored ranged attack model and speed;
+it does not cause attack damage. The warning and rank-specific impact use
+temporary effect entities so their authored animations finish naturally. The ember field is owned by the Flame
 Strike damage thinker; the thinker starts it at the cast-delay deadline and
 destroys the owned field when the damage lifetime ends. Each successful pulse
 emits the buff row's target art on affected units.

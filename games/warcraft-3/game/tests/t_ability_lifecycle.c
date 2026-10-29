@@ -333,12 +333,25 @@ TEST(wc3_ability_lifecycle, flame_strike_plays_warning_impact_field_and_damage_a
     int (*old_model_index)(cstring_t) = gi.ModelIndex;
     edict_t *thinker, *field = NULL;
     uint32_t owned_fields = 0;
+    edict_t *missile = NULL;
 
     flame_strike_model_count = 0;
     gi.ModelIndex = flame_strike_capture_model;
+    caster->unit_state->attack1.projectile.model = 99;
+    caster->unit_state->attack1.projectile.speed = 1000.0f;
     T_ASSERT(S_CastPointTargetSpell(caster, FS_SLKKey("AHfs"), &enemy->s.origin2));
     thinker = review_thinker(caster);
     T_NOT_NULL(thinker);
+    FILTER_EDICTS(candidate, candidate->owner == caster && candidate->movetype == MOVETYPE_FLYMISSILE)
+        missile = candidate;
+    T_NOT_NULL(missile);
+    T_EQ(missile->s.model, 99);
+    T_EQ(flame_strike_model_count, 0);
+    FOR_LOOP(i, 20) {
+        if (!missile->inuse) break;
+        G_RunEntity(missile);
+    }
+    T_ASSERT(!missile->inuse);
     T_EQ(flame_strike_model_count, 1);
     T_STREQ(flame_strike_models[0], "TestUI\\Models\\flame-strike-warning.mdx");
 
