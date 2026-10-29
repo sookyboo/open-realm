@@ -211,12 +211,12 @@ static void whirlwind_execute(edict_t *caster, spellTarget_t st, abilityitem_t c
 void morph_end(edict_t *thinker) {
     edict_t *owner = S_SpellChannelOwner(thinker);
     if (G_Time() < thinker->spawn_time) return;
-    if (owner && thinker->class_id == MAKEFOURCC('A','E','m','e')) {
+    if (owner && G_AbilityCode(thinker->class_id) == MAKEFOURCC('A','E','m','e')) {
         heroabilitystatus_t *status = unit_findstatus(owner, MAKEFOURCC('B','E','m','e'));
         if (status) unit_removestatus(owner, status, STATUS_REMOVE_EXPIRE);
     }
     if (owner && G_TransformUnitType(owner, thinker->resources) &&
-        thinker->class_id == MAKEFOURCC('A','E','m','e') && thinker->velocity > 0.0f)
+        G_AbilityCode(thinker->class_id) == MAKEFOURCC('A','E','m','e') && thinker->velocity > 0.0f)
         G_ApplyTemporaryMaxHealthBonus(owner, -thinker->velocity);
     G_FreeEdict(thinker);
 }
@@ -893,6 +893,10 @@ static void bear_form_morph_end(edict_t *unit) { unit_stand(unit); }
 static umove_t bear_form_morph = { "morph", NULL, bear_form_morph_end, CAbilityMetamorphosis };
 static umove_t bear_form_morph_alternate = { "morph alternate", NULL, bear_form_morph_end, CAbilityMetamorphosis };
 
+static bool metamorphosis_ability(uint32_t code) {
+    return G_AbilityCode(code) == MAKEFOURCC('A','E','m','e');
+}
+
 static void AbilityMetamorphosis_Execute(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
     (void)st;
     if (spell->code == ID_BEAR_FORM_ABILITY) {
@@ -910,7 +914,7 @@ static void AbilityMetamorphosis_Execute(edict_t *caster, spellTarget_t st, abil
     float bonus_health = 0.0f;
     heroability_t saved_rank = { .code = spell->code, .level = level };
     if (!form || duration <= 0.0f) return;
-    if (spell->code == MAKEFOURCC('A','E','m','e')) {
+    if (metamorphosis_ability(spell->code)) {
         G_InitUnitState(caster);
         FOR_LOOP(i, MAX_HERO_ABILITIES) {
             if (caster->unit_state->ranks[i].code == spell->code && caster->unit_state->ranks[i].level) {
@@ -922,7 +926,7 @@ static void AbilityMetamorphosis_Execute(edict_t *caster, spellTarget_t st, abil
         bonus_health = S_SpellData(spell->code, level, 5);
     }
     if (!G_TransformUnitType(caster, form)) return;
-    if (spell->code == MAKEFOURCC('A','E','m','e')) {
+    if (metamorphosis_ability(spell->code)) {
         cstring_t buff = S_SpellBuffId(spell->code, level);
         if (!buff || strlen(buff) < 4) buff = "BEme";
         if (!S_SpellApplyTimedStatus(caster, buff, level, duration)) {
@@ -954,7 +958,7 @@ static void AbilityMetamorphosis_Execute(edict_t *caster, spellTarget_t st, abil
     edict_t *thinker = G_Spawn();
     thinker->owner = caster; thinker->resources = original;
     if (bonus_health > 0.0f) {
-        thinker->class_id = spell->code;
+        thinker->class_id = G_AbilityCode(spell->code);
         thinker->velocity = bonus_health;
     }
     G_AddChannel(thinker);
@@ -965,7 +969,7 @@ static void AbilityMetamorphosis_Execute(edict_t *caster, spellTarget_t st, abil
 BZ_ABILITY_PROC(CAbilityMetamorphosis) {
     if (msg == A_TOGGLE_ON && call && call->item && call->item->code == ID_BEAR_FORM_ABILITY)
         return ent && ent->class_id == ID_BEAR_FORM_BEAR;
-    if (msg == A_VALIDATE && call && call->item && call->item->code == MAKEFOURCC('A','E','m','e')) {
+    if (msg == A_VALIDATE && call && call->item && metamorphosis_ability(call->item->code)) {
         uint32_t level = S_SpellLevel(ent, call->item->code);
         cstring_t buff = S_SpellBuffId(call->item->code, level);
         wc3_status_apply_check_t check;

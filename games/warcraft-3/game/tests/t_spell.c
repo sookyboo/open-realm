@@ -6558,19 +6558,20 @@ TEST(wc3_spell, roar_damage_bonus_is_shown_as_green_flat_damage_in_status_panel)
     free_slk_rows(rows);
 }
 
-TEST(wc3_spell, metamorphosis_keeps_abilities_adds_ranged_attack_and_reverts_bonus_health) {
+TEST(wc3_spell, metamorphosis_alias_applies_timer_and_reverts_bonus_health) {
     char const ability_data[] =
-        "ID;PWXL;N;EBB;Y5;X7\n"
+        "ID;PWXL;N;EBB;Y6;X7\n"
         "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
         "C;Y1;X4;K\"UnitID1\"\nC;Y1;X5;K\"DataE1\"\nC;Y1;X6;K\"HeroDur1\"\n"
         "C;Y1;X7;K\"BuffID1\"\n"
         "C;Y2;X1;K\"AEme\"\nC;Y2;X2;K\"AEme\"\nC;Y2;X3;K1\nC;Y2;X4;K\"Edmm\"\nC;Y2;X5;K500\nC;Y2;X6;K30\nC;Y2;X7;K\"BEme\"\n"
         "C;Y3;X1;K\"AEmb\"\nC;Y3;X2;K\"AEmb\"\nC;Y3;X3;K1\n"
         "C;Y4;X1;K\"AEim\"\nC;Y4;X2;K\"AEim\"\nC;Y4;X3;K1\n"
-        "C;Y5;X1;K\"AEev\"\nC;Y5;X2;K\"AEev\"\nC;Y5;X3;K1\nE\n";
+        "C;Y5;X1;K\"AEev\"\nC;Y5;X2;K\"AEev\"\nC;Y5;X3;K1\n"
+        "C;Y6;X1;K\"AEvi\"\nC;Y6;X2;K\"AEme\"\nC;Y6;X3;K1\nC;Y6;X4;K\"Edmm\"\nC;Y6;X5;K500\nC;Y6;X6;K30\nC;Y6;X7;K\"BEme\"\nE\n";
     char const unit_abilities[] =
         "ID;PWXL;N;EBB;Y3;X2\nC;Y1;X1;K\"unitAbilID\"\nC;Y1;X2;K\"abilList\"\n"
-        "C;Y2;X1;K\"Edem\"\nC;Y2;X2;K\"AEme\"\nC;Y3;X1;K\"Edmm\"\nC;Y3;X2;K\"AEme\"\nE\n";
+        "C;Y2;X1;K\"Edem\"\nC;Y2;X2;K\"AEvi\"\nC;Y3;X1;K\"Edmm\"\nC;Y3;X2;K\"AEvi\"\nE\n";
     char const unit_ui[] =
         "ID;PWXL;N;EBB;Y3;X3\nC;Y1;X1;K\"unitUIID\"\nC;Y1;X2;K\"file\"\nC;Y1;X3;K\"modelScale\"\n"
         "C;Y2;X1;K\"Edem\"\nC;Y2;X2;K\"Units\\NightElf\\DemonHunter\\DemonHunter.mdx\"\nC;Y2;X3;K1\n"
@@ -6604,8 +6605,8 @@ TEST(wc3_spell, metamorphosis_keeps_abilities_adds_ranged_attack_and_reverts_bon
     G_HeroApplyLevel(demon, 10);
     demon->health.max_value = demon->health.value = 1100.0f;
     T_EQ(demon->unit_state->hero.level, 10u);
-    demon->unit_state->ranks[0] = MAKE(heroability_t, .code = MAKEFOURCC('A','E','m','e'), .level = 1);
-    abilityitem_t const spell = S_AbilityItem(MAKEFOURCC('A','E','m','e'));
+    demon->unit_state->ranks[0] = MAKE(heroability_t, .code = MAKEFOURCC('A','E','v','i'), .level = 1);
+    abilityitem_t const spell = S_AbilityItem(MAKEFOURCC('A','E','v','i'));
     spellTarget_t const target = MAKE(spellTarget_t, .type = SPELL_TARGET_NONE);
     abilityCall_t const call = MAKE(abilityCall_t, .item = &spell, .target = &target);
     T_ASSERT(S_AbilityMessage(demon, A_EXECUTE, &call));
