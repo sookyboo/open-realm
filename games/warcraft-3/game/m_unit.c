@@ -470,7 +470,7 @@ void unit_die(edict_t *self, edict_t *attacker) {
     mineOverlay_t *ovl = G_GetMineOverlay(self);
     gameClient_t *owner;
     uint32_t selected_mask;
-    bool summon_explodes, script_explodes;
+    bool summon_explodes, script_explodes, phoenix_to_egg;
 
     if (!self || (self->svflags & SVF_DEADMONSTER)) return;
 #ifdef WC3_SC2API
@@ -480,6 +480,8 @@ void unit_die(edict_t *self, edict_t *attacker) {
     selected_mask = self->selected;
     summon_explodes = (self->aiflags & AI_SUMMON_EXPLODES_ON_DEATH) != 0;
     script_explodes = (self->aiflags & AI_SCRIPT_EXPLODED) != 0;
+    phoenix_to_egg = !script_explodes && self->class_id == MAKEFOURCC('h','p','h','x') &&
+                     G_UnitAbilityLevel(self, MAKEFOURCC('A','p','h','x')) != 0;
 
     S_AvatarExpire(self);
     /* A dead polymorphed unit must not later restore as a living unit when its
@@ -516,7 +518,7 @@ void unit_die(edict_t *self, edict_t *attacker) {
     self->selected = 0;
     self->s.flags |= EF_NOT_SELECTABLE;
     self->aiflags &= ~AI_HOLD_FRAME;
-    unit_setmove(self, (summon_explodes || script_explodes) ? &unit_move_decay_remove : &unit_move_death);
+    unit_setmove(self, (summon_explodes || script_explodes || phoenix_to_egg) ? &unit_move_decay_remove : &unit_move_death);
     /* Warsmash advances the render Death animation after KillUnit even when
      * the simulation unit is paused by a cinematic. Keep the explicit frame
      * override active until the death move reaches its decay transition. */

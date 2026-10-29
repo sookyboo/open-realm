@@ -153,7 +153,8 @@ static uint32_t const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
 /* Version 120 introduced trained Hero names; version 121 writes nested pool strings. */
 /* Version 121 persists F_ANIMSTRING values in component pools. */
 /* Version 122 rosters Possession impact callbacks and fixes Immolation substep semantics. */
-static uint32_t const save_version = 122;
+/* Version 123 persists Phoenix Fire cooldowns and Phoenix Egg hatch deadlines. */
+static uint32_t const save_version = 123;
 #define SAVE_STREAM_BUFFER (1u << 20) // bytes; save files are several MB of field writes, so a large stdio buffer avoids per-4 KB syscalls
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
@@ -1016,6 +1017,8 @@ static field_t const sound_fields[] = {
 
 field_t edict_fields[] = {
     F(edict_s, summon_ability, F_INT),
+    F(edict_s, phoenix_fire_next_ms, F_INT),
+    F(edict_s, phoenix_hatch_ms, F_INT),
     F(edict_s, components, F_IGNORE, 0, FIELD_RUNTIME),
     F(edict_s, unit_state, F_IGNORE, 0, FIELD_RUNTIME),
     F(edict_s, sound, F_IGNORE, 0, FIELD_RUNTIME),

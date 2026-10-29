@@ -5093,6 +5093,8 @@ SAVE_INT_FIELD_TEST(field_waypoint_generation_round_trip, route->serial, 43)
 SAVE_PTR_FIELD_TEST(field_wander_goal_round_trip, "wander->goal", wander->goal, 0)
 SAVE_PTR_FIELD_TEST(field_wander_waypoint_round_trip, "wander->waypoint", wander->waypoint, 0)
 SAVE_INT_FIELD_TEST(field_summon_ability_round_trip, summon_ability, MAKEFOURCC('A', 'O', 's', 'f'))
+SAVE_INT_FIELD_TEST(field_phoenix_fire_cooldown_round_trip, phoenix_fire_next_ms, 8300)
+SAVE_INT_FIELD_TEST(field_phoenix_egg_hatching_round_trip, phoenix_hatch_ms, 12400)
 
 TEST(wc3_save, ability_owned_timed_summon_round_trip) {
     cstring_t filename = Test_TempPath("wc3-save-ability-owned-timed-summon.bin");

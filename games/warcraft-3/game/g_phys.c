@@ -247,7 +247,9 @@ void G_RunEntity(edict_t *ent) {
      * the unit's 'uhrt' regenType: "always" any time, "night" only at night
      * (night elves), "blight" only on the authoritative Blight pathing field,
      * "none" never.  Living, wounded units only. */
-    if (ent->health.max_value > 0 && ent->health.value > 0 && ent->health.value < ent->health.max_value) {
+    if (ent->data.UnitBalance && ent->health.max_value > 0 && ent->health.value > 0 &&
+        (ent->health.value < ent->health.max_value ||
+         (G_UnitRegeneratesHP(ent) && ent->data.UnitBalance->healthRegen < 0.0f))) {
         float const aura = S_RegenerationHealthAura(ent);
         float const rejuv = S_RejuvHealRate(ent);
         float rate = aura + rejuv;
@@ -255,7 +257,13 @@ void G_RunEntity(edict_t *ent) {
         if (natural)
             rate += ent->data.UnitBalance->healthRegen +
                     (float)(ent->unit_state ? ent->unit_state->hero.str : 0) * STR_REGEN_BONUS + S_UnholyHealthRegen(ent);
-        if (rate != 0.0f) G_AddHealth(ent, rate * (FRAMETIME / 1000.0f));
+        if (rate != 0.0f) {
+            G_AddHealth(ent, rate * (FRAMETIME / 1000.0f));
+            /* Negative authored regen (Phoenix: -25 HP/sec) must be lethal;
+             * G_AddHealth intentionally has no generic death side effects. */
+            if (ent->health.value <= 0.0f && ent->die && !(ent->svflags & SVF_DEADMONSTER))
+                ent->die(ent, NULL);
+        }
     }
     /* Unholy Frenzy drains HP at DataB HP/sec regardless of current health. */
     { float const drain = S_UnholyFrenzyLifeDrain(ent); if (drain > 0.0f && ent->health.value > 0) G_AddHealth(ent, -drain * (FRAMETIME / 1000.0f)); }

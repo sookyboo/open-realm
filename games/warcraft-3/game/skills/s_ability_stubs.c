@@ -267,10 +267,6 @@ BZ_SIMPLE_SPELL_PROC(AbilityDivineShield) {
  * Ubertip="Gives a chance that an attack will deal bonus damage and stun the target."
  * TODO: no command handler; the attack-resolution path must consume this passive.
  */
-/* Name=Phoenix Fire
- * Ubertip="Automatically attacks nearby enemy units with flaming projectiles."
- * TODO: passive attack-resolution behavior is not implemented here.
- */
 /* Name=Invulnerable
  * Ubertip="This unit cannot be damaged."
  */

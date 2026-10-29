@@ -2316,6 +2316,8 @@ struct edict_s {
     uint32_t class_id;
     uint32_t variation;
     uint32_t summon_ability; /* creating ability identity for summoned units and owned visual effects */
+    uint32_t phoenix_fire_next_ms; /* Apxf next automatic attack; save-safe game clock */
+    uint32_t phoenix_hatch_ms; /* Aphx egg rebirth deadline; zero if not a rebirth egg */
     uint32_t status_effect_code; /* presentation-only ownership identity; saved so removal can find effects after load */
     auraEffectRole_t aura_effect_role; /* stable source/recipient identity; independent of alias and current art */
     uint32_t spawn_time;

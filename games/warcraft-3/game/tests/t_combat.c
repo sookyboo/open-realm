@@ -5070,4 +5070,35 @@ TEST(wc3_combat, status_invulnerability_blocks_damage_without_mutating_base_flag
     T_Damage(target, source, 10);
     T_FEQ(target->health.value, before, 0.001f);
 }
+
+/* Phoenix-style negative UnitBalance regen drains even at full health, and
+ * reaches normal death handling instead of leaving a living zero-HP unit. */
+static unsigned negative_regen_death_calls;
+static void negative_regen_death(edict_t *unit, edict_t *attacker) {
+    (void)attacker;
+    negative_regen_death_calls++;
+    unit->svflags |= SVF_DEADMONSTER;
+}
+TEST(wc3_combat, negative_natural_regeneration_from_full_health_is_lethal) {
+    edict_t *unit;
+    UnitBalance_t balance;
+    setup_test_world();
+    unit = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    balance = *unit->data.UnitBalance;
+    balance.healthRegenType = "always";
+    balance.healthRegen = -25.0f;
+    unit->data.UnitBalance = &balance;
+    unit->health.max_value = 100.0f;
+    unit->health.value = 100.0f;
+    unit->movetype = MOVETYPE_NONE;
+    unit->die = negative_regen_death;
+    negative_regen_death_calls = 0;
+    G_RunEntity(unit);
+    T_ASSERT(unit->health.value < 100.0f);
+    unit->health.value = 0.01f;
+    G_RunEntity(unit);
+    T_EQ(negative_regen_death_calls, 1u);
+    T_ASSERT(unit->svflags & SVF_DEADMONSTER);
+}
+
 #endif

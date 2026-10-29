@@ -640,7 +640,7 @@ BZ_SIMPLE_SPELL_PROC(AbilityBanish) { target_status_execute(caster, st, spell); 
 /* Name=Phoenix
  * Ubertip="Summons a Phoenix to fight for the caster."
  */
-BZ_SIMPLE_SPELL_PROC(AbilitySummonPhoenix) { S_SummonAbilityUnits(caster, spell->code, NULL); }
+BZ_SIMPLE_SPELL_PROC(AbilitySummonPhoenix) { S_SummonPhoenix(caster, spell->code); }
 /* Name=Carrion Beetles
  * Ubertip="Raises carrion beetles from a nearby corpse."
  */

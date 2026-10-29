@@ -8784,4 +8784,20 @@ TEST(wc3_spell, earthquake_retail_mask_is_enemy_only_and_reaches_invisible_units
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+/* Phoenix ability registration must route to simulation handlers, not the
+ * old passive placeholders. The spell handler still reads authored UnitID. */
+TEST(wc3_spell, phoenix_registered_ability_contracts) {
+    abilityitem_t summon = S_AbilityItem(MAKEFOURCC('A','H','p','x'));
+    abilityitem_t morph = S_AbilityItem(MAKEFOURCC('A','p','h','x'));
+    abilityitem_t fire = S_AbilityItem(MAKEFOURCC('A','p','x','f'));
+    T_NOT_NULL(summon.ability); T_NOT_NULL(morph.ability); T_NOT_NULL(fire.ability);
+    T_ASSERT(summon.ability->flags & AB_SPELL);
+    T_ASSERT(morph.ability->flags & AB_UPDATE);
+    T_ASSERT(fire.ability->flags & AB_UPDATE);
+    T_ASSERT(morph.ability->flags & AB_PASSIVE);
+    T_ASSERT(fire.ability->flags & AB_PASSIVE);
+    T_ASSERT(morph.ability->proc == CAbilityPhoenixMorphing);
+    T_ASSERT(fire.ability->proc == CAbilityPhoenixFire);
+}
+
 #endif /* BZ_TESTS */

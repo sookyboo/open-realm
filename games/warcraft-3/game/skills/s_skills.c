@@ -123,8 +123,8 @@ static ability_t abilitylist[] = {
     { "AHfs", CAbilityFlameStrike, AB_SPELL, SPELL_TARGET_POINT },  /* Flame Strike */
     { "AHbn", CAbilityBanish, AB_SPELL, SPELL_TARGET_UNIT },  /* Banish */
     { "AHpx", CAbilitySummonPhoenix, AB_SPELL },  /* Phoenix */
-    { "Aphx", CAbilityPassive, AB_PASSIVE },  /* Phoenix Morphing (Egg Related) */
-    { "Apxf", CAbilityPassive, AB_PASSIVE },  /* Phoenix Fire */
+    { "Aphx", CAbilityPhoenixMorphing, AB_PASSIVE | AB_UPDATE },  /* Phoenix Morphing (Egg Related) */
+    { "Apxf", CAbilityPhoenixFire, AB_PASSIVE | AB_UPDATE },  /* Phoenix Fire */
     { "Agyb", CAbilityPassive, AB_PASSIVE },  /* Flying Machine Bombs */
     { "Asth", CAbilityPassive, AB_PASSIVE },  /* Storm Hammers */
     { "Agyv", CAbilityTrueSight, AB_PASSIVE },  /* True Sight */
@@ -847,6 +847,12 @@ void S_RunAbilityUpdates(edict_t *ent) {
             continue;
         } else if (proc == CAbilityExhumeCorpses &&
                    !update_may_have_ability(ent, MAKEFOURCC('A','e','x','h'))) {
+            continue;
+        } else if (proc == CAbilityPhoenixMorphing &&
+                   (!ent || ent->class_id != MAKEFOURCC('h','p','x','e') || !ent->phoenix_hatch_ms)) {
+            continue;
+        } else if (proc == CAbilityPhoenixFire &&
+                   !update_may_have_ability(ent, MAKEFOURCC('A','p','x','f'))) {
             continue;
         }
         proc(ent, A_UPDATE, NULL);
