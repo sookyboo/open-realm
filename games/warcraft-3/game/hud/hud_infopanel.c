@@ -462,6 +462,92 @@ static void SetHeroPrimaryAttributeIcon(cstring_t primary) {
     UI_SetTexture(hud.simple.InfoPanelIconHeroIcon, texture, false);
 }
 
+static cstring_t InfoPanelString(cstring_t key, cstring_t fallback);
+
+static float InfoPanelHeroAttributeValue(cstring_t key, float fallback) {
+    cstring_t value = Stb_IniCacheFind(&game.config.misc, "Misc", key);
+    return value && *value ? (float)atof(value) : fallback;
+}
+
+static void AppendHeroAttributeLine(char *body, size_t body_size, cstring_t line) {
+    size_t const used = strlen(body);
+    if (!line || !*line || used >= body_size) return;
+    snprintf(body + used, body_size - used, "%s - %s", used ? "\n" : "", line);
+}
+
+static void AppendHeroBonusLine(char *body, size_t body_size, cstring_t line) {
+    size_t const used = strlen(body);
+    if (!line || !*line || used >= body_size) return;
+    snprintf(body + used, body_size - used, "%s%s", used ? "\n" : "", line);
+}
+
+static void FormatHeroAttributesTooltip(char *tip, size_t tip_size, char *body,
+                                        size_t body_size, cstring_t primary) {
+    static cstring_t const labels[3] = { "COLON_STRENGTH", "COLON_AGILITY", "COLON_INTELLECT" };
+    static cstring_t const fallbacks[3] = { "Strength:", "Agility:", "Intelligence:" };
+    float const hp_per_strength = InfoPanelHeroAttributeValue("StrHitPointBonus", 25.0f);
+    float const armor_per_agility = game.constants.combatConstantsLoaded
+        ? game.constants.agiDefenseBonus : InfoPanelHeroAttributeValue("AgiDefenseBonus", 0.3f);
+    float const damage_per_primary = game.constants.combatConstantsLoaded
+        ? game.constants.strAttackBonus : InfoPanelHeroAttributeValue("StrAttackBonus", 1.0f);
+    float const mana_per_intelligence = InfoPanelHeroAttributeValue("IntManaBonus", 15.0f);
+    size_t used;
+
+    if (!tip || !tip_size || !body || !body_size) return;
+    snprintf(tip, tip_size, "%s", InfoPanelString("COLON_HERO_ATTRIBUTES", "Hero Attributes:"));
+    body[0] = '\0';
+    FOR_LOOP(i, 3) {
+        cstring_t const attribute = i == 0 ? "STR" : i == 1 ? "AGI" : "INT";
+        bool const is_primary = primary && !strcmp(primary, attribute);
+        used = strlen(body);
+        if (used < body_size)
+            snprintf(body + used, body_size - used, "%s%s", used ? "\n" : "",
+                     InfoPanelString(labels[i], fallbacks[i]));
+        if (is_primary) {
+            char line[256];
+            AppendHeroAttributeLine(body, body_size,
+                InfoPanelString("PRIMARY_ATTRIBUTE", "Primary Attribute"));
+            snprintf(line, sizeof(line), InfoPanelString("BONUS_DAMAGE",
+                     " - Each point increases damage by %d"), (int)(damage_per_primary + 0.5f));
+            AppendHeroBonusLine(body, body_size, line);
+        }
+        if (i == 0) {
+            char line[256];
+            snprintf(line, sizeof(line), InfoPanelString("BONUS_HITPOINTS",
+                     " - Each point increases hit points by %d"), (int)(hp_per_strength + 0.5f));
+            AppendHeroBonusLine(body, body_size, line);
+            AppendHeroBonusLine(body, body_size,
+                InfoPanelString("BONUS_HPREGEN", " - Each point increases hit point regeneration"));
+        } else if (i == 1) {
+            char line[256];
+            uint32_t const agility_per_armor = armor_per_agility > 0.0f
+                ? MAX(1u, (uint32_t)(1.0f / armor_per_agility)) : 0;
+            snprintf(line, sizeof(line), InfoPanelString("BONUS_DEFENSE_FIXED",
+                     " - Every %d points increase armor by 1"), (int)agility_per_armor);
+            AppendHeroBonusLine(body, body_size, line);
+            AppendHeroBonusLine(body, body_size,
+                InfoPanelString("BONUS_ATTACK_SPEED", " - Each point increases attack speed"));
+        } else {
+            char line[256];
+            snprintf(line, sizeof(line), InfoPanelString("BONUS_MANA",
+                     " - Each point increases mana by %d"), (int)(mana_per_intelligence + 0.5f));
+            AppendHeroBonusLine(body, body_size, line);
+            AppendHeroBonusLine(body, body_size,
+                InfoPanelString("BONUS_MANAREGEN", " - Each point increases mana regeneration"));
+        }
+    }
+}
+
+static void SetHeroAttributesTooltip(frameDef_t *icon, cstring_t primary) {
+    static char tip[128];
+    static char body[1536];
+
+    if (!icon) return;
+    FormatHeroAttributesTooltip(tip, sizeof(tip), body, sizeof(body), primary);
+    icon->Tip = tip;
+    icon->Ubertip = body;
+}
+
 static void RefreshSimpleInfoPanelStrings(void) {
     if (!hud.simple.SimpleInfoPanelUnitDetail) return;
     UI_SetText(hud.simple.InfoPanelIconLabel, "%s", UI_GetString("COLON_DAMAGE"));
@@ -737,6 +823,10 @@ void UI_TestSetArmorTooltip(frameDef_t *icon, edict_t *ent, uint32_t type,
                             float armor, float move_speed, uint32_t upgrade) {
     SetArmorTooltip(icon, ent, type, armor, move_speed, upgrade);
 }
+
+void UI_TestSetHeroAttributesTooltip(frameDef_t *icon, cstring_t primary) {
+    SetHeroAttributesTooltip(icon, primary);
+}
 #endif
 
 static void SetUpgradeLevel(frameDef_t *frame, uint32_t upgrade, edict_t *ent) {
@@ -969,6 +1059,8 @@ static void WriteSelectedUnitStatusFrames(edict_t *ent, UnitWeapons_t const *wea
 
     if (is_hero) {
         SetHeroPrimaryAttributeIcon(ent->data.UnitBalance->primaryAttribute);
+        SetHeroAttributesTooltip(hud.simple.InfoPanelIconHeroIcon,
+                                 ent->data.UnitBalance->primaryAttribute);
         UI_SetText(hud.simple.InfoPanelIconHeroStrengthValue, "%lu", (unsigned long)ent->unit_state->hero.str);
         UI_SetText(hud.simple.InfoPanelIconHeroAgilityValue, "%lu", (unsigned long)ent->unit_state->hero.agi);
         UI_SetText(hud.simple.InfoPanelIconHeroIntellectValue, "%lu", (unsigned long)ent->unit_state->hero.intel);

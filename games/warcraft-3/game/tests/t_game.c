@@ -40,6 +40,7 @@ void UI_TestFormatArmorTooltip(char *tip, size_t tip_size, char *body, size_t bo
                                cstring_t upgrade_name, uint32_t upgrade_level);
 void UI_TestSetArmorTooltip(frameDef_t *icon, edict_t *ent, uint32_t type,
                             float armor, float move_speed, uint32_t upgrade);
+void UI_TestSetHeroAttributesTooltip(frameDef_t *icon, cstring_t primary);
 
 
 #include "../game/hud/hud_utils.h"
@@ -1666,6 +1667,23 @@ TEST(wc3_game, armor_icon_tooltip_shows_rifleman_defense_details) {
     T_ASSERT(strstr(body, "Move Speed: Average") != NULL);
     T_ASSERT(strstr(body, "Upgrade: Dragonhide Armor - Level 3") != NULL);
     T_ASSERT(strstr(body, "Medium armor takes extra damage from Normal attacks") != NULL);
+}
+
+TEST(wc3_game, hero_primary_attribute_icon_shows_attribute_bonuses) {
+    frameDef_t icon = { 0 };
+
+    UI_TestSetHeroAttributesTooltip(&icon, "INT");
+
+    T_STREQ(icon.Tip, "Hero Attributes:");
+    T_ASSERT(icon.Ubertip && strstr(icon.Ubertip, "Strength:\n - Each point increases hit points by 25") != NULL);
+    T_ASSERT(strstr(icon.Ubertip, " - Each point increases hit point regeneration") != NULL);
+    T_ASSERT(strstr(icon.Ubertip, "Agility:\n - Every 3 points increase armor by 1") != NULL);
+    T_ASSERT(strstr(icon.Ubertip, " - Each point increases attack speed") != NULL);
+    T_ASSERT(strstr(icon.Ubertip, "Intelligence:") != NULL);
+    T_ASSERT(strstr(icon.Ubertip, " - Primary Attribute") != NULL);
+    T_ASSERT(strstr(icon.Ubertip, " - Each point increases damage by 1") != NULL);
+    T_ASSERT(strstr(icon.Ubertip, " - Each point increases mana by 15") != NULL);
+    T_ASSERT(strstr(icon.Ubertip, " - Each point increases mana regeneration") != NULL);
 }
 
 static uint32_t status_icon_read_count;
