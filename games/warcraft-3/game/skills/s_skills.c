@@ -40,7 +40,7 @@ static ability_t abilitylist[] = {
     /* CampaignAbilityStrings.txt */
     { "Aamk", CAbilityAttributeModSkill, AB_SPELL },  /* Attribute Bonus */
     { "ACtn", CAbilitySpawnTentacle, AB_SPELL, SPELL_TARGET_POINT },  /* Spawn Tentacle */
-    { "ACs7", CAbilityFeralSpiritCampaign, AB_SPELL },  /* Feral Spirit */
+    { "ACs7", CAbilitySpiritWolf, AB_SPELL },  /* Feral Spirit (Akama) */
     { "ANav", CAbilityAvatarCampaign, AB_SPELL },  /* Avatar */
     { "ANdc", CAbilityDarkConversion, AB_SPELL, SPELL_TARGET_UNIT },  /* Malganis - Dark Conversion */
     { "SNdc", CAbilityDarkConversion, AB_SPELL, SPELL_TARGET_UNIT },  /* Dark Conversion (Fast) */

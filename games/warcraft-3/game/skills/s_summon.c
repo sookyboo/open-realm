@@ -4,6 +4,7 @@
  * Keep ordinary summoned units on their existing death path. */
 static bool summon_magical_death(uint32_t code) {
     return code == MAKEFOURCC('A','O','s','f') || /* Feral Spirit */
+           code == MAKEFOURCC('A','C','s','7') || /* Akama Feral Spirit */
            code == MAKEFOURCC('A','N','s','g') || /* Summon Grizzly */
            code == MAKEFOURCC('A','N','s','q') || /* Summon Quilbeast */
            code == MAKEFOURCC('A','N','s','w') || /* Summon Hawk */
