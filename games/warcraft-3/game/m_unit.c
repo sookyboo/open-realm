@@ -265,7 +265,9 @@ void G_ApplyTemporaryMaxManaBonus(edict_t *ent, float amount) {
     fraction = ent->mana.value / old_max;
     ent->unit_state->temporary_mana_bonus += amount;
     ent->mana.max_value = MAX(0.0f, ent->mana.max_value + amount);
-    ent->mana.value = ent->mana.max_value * fraction;
+    /* A mana-cap modifier must preserve a Siphon overcharge ratio, rather
+     * than converting the excess into a permanent maximum. */
+    ent->mana.value = ent->mana.max_value * MIN(WC3_MANA_OVERCHARGE_LIMIT, MAX(0.0f, fraction));
     G_InvalidateUnitInfoPanel(ent);
 }
 
@@ -1492,7 +1494,9 @@ bool G_TransformUnitType(edict_t *unit, uint32_t type) {
     G_ApplyTemporaryMaxHealthBonus(unit, temporary_health);
     G_ApplyTemporaryMaxManaBonus(unit, temporary_mana);
     G_SetHealth(unit, MIN(unit->health.max_value, MAX(0.0f, unit->health.max_value * health_ratio)));
-    unit->mana.value = MIN(unit->mana.max_value, MAX(0.0f, unit->mana.max_value * mana_ratio));
+    /* A transform retains current mana proportion, including temporary
+     * overcharge; ordinary mana regeneration will remove the excess. */
+    unit->mana.value = MIN(WC3_MANA_OVERCHARGE_LIMIT * unit->mana.max_value, MAX(0.0f, unit->mana.max_value * mana_ratio));
     G_ApplyTemporaryArmorBonus(unit, temporary_armor);
     unit->unit_state->attack1.temporaryDamageBonus = temporary_attack1;
     unit->unit_state->attack2.temporaryDamageBonus = temporary_attack2;
@@ -2673,9 +2677,12 @@ void G_RecomputeHeroStats(edict_t *ent) {
         G_SetHealth(ent, 1.0f);
     }
 
-    float const dMana = newMaxMana - ent->mana.max_value;
+    float const oldMaxMana = ent->mana.max_value;
+    float const dMana = newMaxMana - oldMaxMana;
     ent->mana.max_value = MAX(0.0f, newMaxMana);
-    ent->mana.value = MAX(0.0f, MIN(ent->mana.max_value, ent->mana.value + dMana));
+    /* Attribute/level changes must not erase Siphon Mana's temporary excess. */
+    float const manaCap = ent->mana.value > oldMaxMana ? WC3_MANA_OVERCHARGE_LIMIT * ent->mana.max_value : ent->mana.max_value;
+    ent->mana.value = MAX(0.0f, MIN(manaCap, ent->mana.value + dMana));
 
     ent->unit_state->armor_value = newArmor + ent->unit_state->permanent_armor_bonus + ent->unit_state->temporary_armor_bonus;
 

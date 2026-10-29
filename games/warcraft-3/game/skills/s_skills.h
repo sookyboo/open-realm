@@ -644,6 +644,7 @@ void S_SpellEndChannel(edict_t *thinker);
  * receive validation and execution messages through the registry row. */
 void spell_cmd(edict_t *clent);
 void spell_run_frame(edict_t *ent);
+float S_ManaExcessDecayRate(edict_t *ent);
 
 void possession_projectile_death_think(edict_t *missile);
 

@@ -229,7 +229,12 @@ void G_RunEntity(edict_t *ent) {
     /* Mana regeneration (WC3 'umpr', mana/second), plus a hero's Intelligence
      * regen bonus (MiscGame IntRegenBonus = 0.05 mana/sec per Intelligence;
      * hero.intel is 0 for non-heroes). */
-    if (ent->mana.max_value > 0 && ent->mana.value < ent->mana.max_value) {
+    if (ent->mana.max_value > 0 && ent->mana.value > ent->mana.max_value) {
+        /* Excess from Siphon Mana decays until the ordinary maximum, but the
+         * active Siphon channel temporarily suspends that decay. */
+        float const rate = S_ManaExcessDecayRate(ent);
+        ent->mana.value = MAX(ent->mana.max_value, ent->mana.value - rate * (FRAMETIME / 1000.0f));
+    } else if (ent->mana.max_value > 0 && ent->mana.value < ent->mana.max_value) {
         float const natural = !S_UnitAbilityEvent(ent, A_NATURAL_MANA_REGEN_BLOCKED) ?
             ent->data.UnitBalance->manaRegen : 0.0f;
         float const rate = natural + (ent->unit_state ? ent->unit_state->mana_regen_bonus : 0)

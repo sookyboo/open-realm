@@ -1,5 +1,22 @@
 #include "s_skills.h"
 
+#define SIPHON_MANA_EXCESS_DECAY 3.0f // mana/sec; approximate excess decay, pending retail timing measurement
+
+/* The special cap belongs to Siphon Mana, not Life Drain, even when both
+ * share a channel thinker. Look up the concrete ability procedure so custom
+ * aliases and creep Siphon Mana inherit the correct behavior. */
+static bool siphon_mana_is_siphon(uint32_t code) {
+    abilityitem_t item = S_AbilityItem(code);
+    return item.ability && item.ability->proc == CAbilityDrain;
+}
+
+/* General mana regeneration only asks for a decay rate when overcharged.
+ * The ability owns the pause policy, including cancel/recast and aliases. */
+float S_ManaExcessDecayRate(edict_t *ent) {
+    channel_t const *cast = G_GetChannel(ent);
+    return cast && cast->code && siphon_mana_is_siphon(cast->code) ? 0.0f : SIPHON_MANA_EXCESS_DECAY;
+}
+
 /* Drain's Ndr1/Ndr2 select health/mana independently; allied transfer uses Ndr4/Ndr5 instead. */
 static bool siphon_mana_validate(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
     edict_t *target = st.entity;
@@ -40,9 +57,14 @@ void siphon_mana_think(edict_t *ent) {
             S_SpellEndChannel(ent);
             return;
         }
-        amount = MIN(target->mana.value, S_SpellData(code, rank, 2) * ent->velocity);
+        /* Siphon Mana transfers to a temporary 200% cap. Only transfer what
+         * the receiver can keep; the old max-mana clamp discarded the excess
+         * while still removing the full amount from the target. */
+        float const cap = caster->mana.max_value * (siphon_mana_is_siphon(code) ? WC3_MANA_OVERCHARGE_LIMIT : 1.0f);
+        amount = MIN(MAX(0.0f, target->mana.value), S_SpellData(code, rank, 2) * ent->velocity);
+        amount = MAX(0.0f, MIN(amount, cap - caster->mana.value));
         target->mana.value -= amount;
-        caster->mana.value = MIN(caster->mana.max_value, caster->mana.value + amount);
+        caster->mana.value += amount;
     }
     if (now >= ent->spawn_time || !S_SpellIsAliveTarget(target)) { S_SpellEndChannel(ent); return; }
     ent->freetime = now + (uint32_t)MAX(FRAMETIME, ent->velocity * 1000.0f);

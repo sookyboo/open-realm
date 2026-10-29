@@ -517,8 +517,11 @@ static void G_ApplyUpgradeLevelDelta(edict_t *unit, UpgradeData_t const *upgrade
             if (delta != 0.0f) {
                 if (G_UnitIsHero(unit)) G_RecomputeHeroStats(unit);
                 else {
+                    bool const excess = unit->mana.value > unit->mana.max_value;
                     unit->mana.max_value = MAX(0.0f, unit->mana.max_value + delta);
-                    unit->mana.value = MAX(0.0f, MIN(unit->mana.max_value, unit->mana.value + delta));
+                    /* Research that changes the cap retains a prior Siphon overcharge. */
+                    float const cap = unit->mana.max_value * (excess ? WC3_MANA_OVERCHARGE_LIMIT : 1.0f);
+                    unit->mana.value = MAX(0.0f, MIN(cap, unit->mana.value + delta));
                 }
                 changed = true;
             }

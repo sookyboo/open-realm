@@ -3619,6 +3619,13 @@ TEST(wc3_game, compress_stat_zero_max_is_0) {
     T_EQ((int)compress_stat(&s), 0);
 }
 
+TEST(wc3_game, compress_stat_overcharged_mana_is_full_not_wrapped) {
+    edictStat_s s = { 180.0f, 100.0f };
+    T_EQ((int)compress_stat(&s), 255);
+    s.value = -5.0f;
+    T_EQ((int)compress_stat(&s), 0);
+}
+
 /* =========================================================================
  * FindEnumValue
  * ========================================================================= */

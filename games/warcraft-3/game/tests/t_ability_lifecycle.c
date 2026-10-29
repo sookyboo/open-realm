@@ -939,6 +939,89 @@ TEST(wc3_ability_lifecycle, siphon_mana_stops_after_movement_cancel) {
     T_ASSERT(cast); T_EQ(channel, 0); T_FEQ(mana, 100, .001f);
 }
 
+/* Casting through the real channel thinker must transfer over the ordinary
+ * max, rather than silently destroying enemy mana at the normal cap. */
+TEST(wc3_ability_lifecycle, siphon_mana_overcharges_from_enemy) {
+    char slk[sizeof(review_slk)];
+    memcpy(slk, review_slk, sizeof(slk));
+    char *cell = strstr(slk, "C;Y4;X10;K\"15\"\n");
+    T_NOT_NULL(cell);
+    if (cell) cell[strlen("C;Y4;X10;K\"") + 1] = '7'; /* Non-stock DataB = 17 mana/sec. */
+    edict_t *caster = review_setup(), *enemy = review_unit(1, 100);
+    slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+    caster->mana.value = caster->mana.max_value = 100;
+    T_ASSERT(S_CastUnitTargetSpell(caster, FS_SLKKey("AHdr"), enemy));
+    edict_t *thinker = review_thinker(caster);
+    T_NOT_NULL(thinker);
+    level.time += 1000; G_RunEntity(thinker);
+    T_FEQ(caster->mana.max_value, 100.0f, .001f);
+    T_FEQ(caster->mana.value, 117.0f, .001f);
+    T_FEQ(enemy->mana.value, 83.0f, .001f);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* A channel at the 200% limit cannot remove mana that the caster cannot hold. */
+TEST(wc3_ability_lifecycle, siphon_mana_caps_at_200_percent_without_wasting_target_mana) {
+    edict_t *caster = review_setup(), *enemy = review_unit(1, 100);
+    slkTestData_t *rows = parse_slk_string(review_slk), *old = G_SetSLKRows("AbilityData", rows);
+    caster->mana.max_value = 100; caster->mana.value = 195;
+    T_ASSERT(S_CastUnitTargetSpell(caster, FS_SLKKey("AHdr"), enemy));
+    edict_t *thinker = review_thinker(caster);
+    T_NOT_NULL(thinker);
+    level.time += 1000; G_RunEntity(thinker);
+    T_FEQ(caster->mana.value, 200.0f, .001f);
+    T_FEQ(enemy->mana.value, 95.0f, .001f);
+    level.time += 1000; G_RunEntity(thinker);
+    T_FEQ(caster->mana.value, 200.0f, .001f);
+    T_FEQ(enemy->mana.value, 95.0f, .001f);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* Excess mana does not leak while actively channeling; a real Stop order
+ * releases the lock and starts decay, which ends exactly at normal max. */
+TEST(wc3_ability_lifecycle, siphon_mana_overcharge_decays_after_stop) {
+    edict_t *caster = review_setup(), *enemy = review_unit(1, 100);
+    slkTestData_t *rows = parse_slk_string(review_slk), *old = G_SetSLKRows("AbilityData", rows);
+    caster->mana.max_value = 100; caster->mana.value = 101;
+    T_ASSERT(S_CastUnitTargetSpell(caster, FS_SLKKey("AHdr"), enemy));
+    T_ASSERT(S_SpellIsChanneling(caster));
+    G_RunEntity(caster);
+    T_FEQ(caster->mana.value, 101.0f, .001f);
+    T_ASSERT(unit_issueimmediateorder(caster, "stop"));
+    T_ASSERT(!S_SpellIsChanneling(caster));
+    G_RunEntity(caster);
+    T_FEQ(caster->mana.value, 100.7f, .001f);
+    FOR_LOOP(i, 3) G_RunEntity(caster);
+    T_FEQ(caster->mana.value, 100.0f, .001f);
+    T_EQ(caster->s.stats[ENT_MANA], 255);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* Other channelled spells, including Life Drain, must not suspend decay. */
+TEST(wc3_ability_lifecycle, life_drain_channel_does_not_freeze_siphon_overcharge) {
+    edict_t *caster = review_setup(), *enemy = review_unit(1, 100);
+    slkTestData_t *rows = parse_slk_string(review_slk), *old = G_SetSLKRows("AbilityData", rows);
+    caster->mana.max_value = 100; caster->mana.value = 105;
+    T_ASSERT(S_CastUnitTargetSpell(caster, FS_SLKKey("ANdr"), enemy));
+    T_ASSERT(S_SpellIsChanneling(caster));
+    G_RunEntity(caster);
+    T_FEQ(caster->mana.value, 104.7f, .001f);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* Cap modifiers preserve the overcharge fraction across equip/unequip rather
+ * than clamping the 150/100 state to 100 on the first stat recalculation. */
+TEST(wc3_ability_lifecycle, siphon_overcharge_survives_temporary_mana_cap_change) {
+    edict_t *caster = review_setup();
+    caster->mana.max_value = 100; caster->mana.value = 150;
+    G_ApplyTemporaryMaxManaBonus(caster, 50);
+    T_FEQ(caster->mana.max_value, 150, .001f);
+    T_FEQ(caster->mana.value, 225, .001f);
+    G_ApplyTemporaryMaxManaBonus(caster, -50);
+    T_FEQ(caster->mana.max_value, 100, .001f);
+    T_FEQ(caster->mana.value, 150, .001f);
+}
+
 /* ANdr's authored DataA drains life even when the target has no mana pool. */
 TEST(wc3_ability_lifecycle, life_drain_transfers_health_from_manaless_target) {
     edict_t *caster = review_setup(), *enemy = review_unit(1, 100);
@@ -1425,6 +1508,22 @@ TEST(wc3_ability_lifecycle, live_drain_continues_once_after_save_load) {
     T_FEQ(enemy->mana.value, 85, .001f); T_EQ(G_GetChannel(caster)->code, FS_SLKKey("AHdr"));
     G_RunEntity(thinker); T_FEQ(enemy->mana.value, 85, .001f);
     remove(path); G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* Overcharge uses the existing serialized current mana, without a new
+ * field or thinker; loading a saved surplus must allow decay to resume. */
+TEST(wc3_ability_lifecycle, siphon_overcharge_survives_save_load_and_decays) {
+    cstring_t path = Test_TempPath("skill-siphon-overcharge-save.bin");
+    edict_t *caster = review_setup();
+    caster->mana.max_value = 100; caster->mana.value = 145;
+    T_ASSERT(WriteGame(path));
+    caster->mana.value = 0;
+    T_ASSERT(ReadGame(path));
+    T_FEQ(caster->mana.max_value, 100, .001f);
+    T_FEQ(caster->mana.value, 145, .001f);
+    G_RunEntity(caster);
+    T_FEQ(caster->mana.value, 144.7f, .001f);
+    remove(path);
 }
 
 /* The ROC Data11/Data12 spell schema and TFT DataA1/DataB1 schema must produce the same stock six waves. */

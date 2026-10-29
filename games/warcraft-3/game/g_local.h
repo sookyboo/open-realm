@@ -84,6 +84,7 @@ typedef struct {
 #define MAX_ABILITIES 16 // slots; extra ability codes granted or stripped at runtime
 #define MAX_UNIT_COOLDOWNS 16 // independent per-unit ability cooldown records; does not consume buff/status capacity
 #define MAX_UNIT_STATUSES 16
+#define WC3_MANA_OVERCHARGE_LIMIT 2.0f // multiplier; Siphon Mana may reach twice normal max (patch 1.17)
 #define PLAYER_TEXT_BACKUP 16
 #define PLAYER_TEXT_MASK (PLAYER_TEXT_BACKUP - 1)
 #define MAX_START_PRIO 16 // slots; one possible priority entry per WC3 player start location

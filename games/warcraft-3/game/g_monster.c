@@ -642,6 +642,8 @@ uint8_t compress_stat(edictStat_s const *stat) {
     if (stat->max_value <= 0) {
         return 0;
     } else {
-        return 255 * stat->value / stat->max_value;
+        /* An overcharged Siphon Mana unit still has a full, not wrapped,
+         * 8-bit HUD bar. Keep the actual value/max separately for unit info. */
+        return (uint8_t)(255.0f * MIN(1.0f, MAX(0.0f, stat->value / stat->max_value)));
     }
 }
