@@ -1645,6 +1645,17 @@ TEST(wc3_slk, required_animation_names_combine_order_tags_with_unit_tags) {
     if (selected) T_STREQ(selected->name, "Stand Ready Alternate");
 }
 
+TEST(wc3_slk, building_attack_keeps_the_units_upgrade_tier) {
+    animation_t animations[] = {
+        { .name = "Stand Upgrade First Ready Attack" },
+        { .name = "Attack Stand Ready Upgrade Second" },
+    };
+    animation_t const *selected = G_SelectAnimationForProperties(animations, 2, "attack range", "upgrade,first");
+
+    T_NOT_NULL(selected);
+    if (selected) T_STREQ(selected->name, "Stand Upgrade First Ready Attack");
+}
+
 TEST(wc3_slk, decay_secondary_tag_falls_back_within_decay_family) {
     animation_t animations[] = {
         { .name = "Stand" },
