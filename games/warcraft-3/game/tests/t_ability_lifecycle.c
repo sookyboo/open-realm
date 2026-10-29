@@ -17,6 +17,15 @@ static int review_capture_model(cstring_t model) {
     return 77;
 }
 
+static char flame_strike_models[8][MAX_PATHLEN];
+static uint32_t flame_strike_model_count;
+static int flame_strike_capture_model(cstring_t model) {
+    if (flame_strike_model_count < sizeof(flame_strike_models) / sizeof(flame_strike_models[0]))
+        strlcpy(flame_strike_models[flame_strike_model_count], model ? model : "", MAX_PATHLEN);
+    flame_strike_model_count++;
+    return 77;
+}
+
 static char blizzard_sound_path[MAX_PATHLEN];
 static uint32_t blizzard_sound_calls;
 static int blizzard_sound_index;
@@ -73,6 +82,7 @@ static char const review_slk[] =
     "C;Y2;X12;K\"1\"\n"
     "C;Y2;X13;K\"0.75\"\n"
     "C;Y2;X14;K\"BHfs\"\n"
+    "C;Y2;X17;K\"XHfs\"\n"
     "C;Y3;X1;K\"AHbz\"\n"
     "C;Y3;X2;K\"AHbz\"\n"
     "C;Y3;X3;K\"ground,structure,enemy\"\n"
@@ -315,6 +325,40 @@ TEST(wc3_ability_lifecycle, flame_strike_stock_data_burns_within_two_seconds) {
     float hp = enemy->health.value;
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
     T_ASSERT(cast); T_NOT_NULL(thinker); T_ASSERT(hp < 1000);
+}
+
+TEST(wc3_ability_lifecycle, flame_strike_plays_warning_impact_field_and_damage_art) {
+    edict_t *caster = review_setup(), *enemy = review_unit(1, 100);
+    slkTestData_t *rows = parse_slk_string(review_slk), *old = G_SetSLKRows("AbilityData", rows);
+    int (*old_model_index)(cstring_t) = gi.ModelIndex;
+    edict_t *thinker, *field = NULL;
+    uint32_t owned_fields = 0;
+
+    flame_strike_model_count = 0;
+    gi.ModelIndex = flame_strike_capture_model;
+    T_ASSERT(S_CastPointTargetSpell(caster, FS_SLKKey("AHfs"), &enemy->s.origin2));
+    thinker = review_thinker(caster);
+    T_NOT_NULL(thinker);
+    T_EQ(flame_strike_model_count, 1);
+    T_STREQ(flame_strike_models[0], "TestUI\\Models\\flame-strike-warning.mdx");
+
+    level.time = thinker->freetime;
+    G_RunEntity(thinker);
+    T_EQ(flame_strike_model_count, 4);
+    T_STREQ(flame_strike_models[1], "TestUI\\Models\\flame-strike-impact-1.mdx");
+    T_STREQ(flame_strike_models[2], "TestUI\\Models\\flame-strike-embers.mdx");
+    T_STREQ(flame_strike_models[3], "TestUI\\Models\\flame-strike-damage.mdx");
+    FILTER_EDICTS(effect, effect->owner == thinker && effect->s.model) {
+        owned_fields++;
+        field = effect;
+    }
+    T_EQ(owned_fields, 1);
+    T_NOT_NULL(field);
+
+    G_DestroyOwnedEffects(thinker);
+    gi.ModelIndex = old_model_index;
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
 }
 
 /* Once a flame pulse runs, another server frame must not count as another full burn tick. */

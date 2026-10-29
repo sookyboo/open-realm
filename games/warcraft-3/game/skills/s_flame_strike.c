@@ -9,14 +9,25 @@ void flame_strike_tick(edict_t *ent) {
     float duration = S_SpellDuration(code, rank, false);
     float limit = S_SpellData(code, rank, 6);
 
-    if (age > duration) { G_FreeEdict(ent); return; }
+    if (age > duration) { G_DestroyOwnedEffects(ent); G_FreeEdict(ent); return; }
+    /* AHfs owns the warning circle and rank-specific impact art. XHfs owns
+     * the persistent ember field and its looped sound. Keep the latter tied
+     * to this damage thinker so expiry releases both together. */
+    if (age >= 0.0f && ent->wait == 0.0f) {
+        uint32_t effect_code = G_AbilityEffectCode(code, rank);
+        G_SpawnAbilityEffectAtPoint(code, WC3_EFFECT_SPECIAL, rank ? rank - 1 : 0,
+                                    &ent->s.origin2, true);
+        if (effect_code && effect_code != code)
+            (void)S_SpellBeginAreaPresentation(ent, effect_code, rank, &ent->s.origin2);
+        ent->wait = 1.0f;
+    }
     while (ent->freetime <= now) {
         bool full = (ent->freetime - ent->spawn_time) / 1000.0f - delay <= S_SpellDuration(code, rank, true);
         float damage = S_SpellData(code, rank, full ? 1 : 3), total = 0;
         uint32_t step = (uint32_t)(S_SpellData(code, rank, full ? 2 : 4) * 1000.0f);
         if (!step) {
             fprintf(stderr, "WC3 Flame Strike: damage interval became zero for %.4s\n", (cstring_t)&code);
-            G_FreeEdict(ent); return;
+            G_DestroyOwnedEffects(ent); G_FreeEdict(ent); return;
         }
 #define BZ_FLAME_HITS(t) (S_SpellAllowsTarget(code, ent->owner, t) && \
     Vector2_distance(&(t)->s.origin2, &ent->s.origin2) <= ent->collision)
@@ -26,6 +37,12 @@ void flame_strike_tick(edict_t *ent) {
             float hit = damage * (G_UnitIsStructure(target) ? S_SpellData(code, rank, 5) : 1);
             if (limit > 0 && total > limit) hit *= limit / total;
             S_SpellDamage(target, ent->owner, (int)hit);
+            {
+                cstring_t buff = S_SpellBuffId(code, rank);
+                if (buff && *buff)
+                    G_SpawnAbilityEffectTarget(FS_SLKKey(buff), WC3_EFFECT_TARGET, 0,
+                                               target, NULL, true);
+            }
         }
 #undef BZ_FLAME_HITS
         ent->freetime += step;
@@ -51,6 +68,9 @@ static void flame_strike_execute(edict_t *caster, spellTarget_t st, abilityitem_
     ent->spawn_time = G_Time();
     ent->freetime = G_Time() + (uint32_t)(S_SpellNumber(spell->code, ABILITY_NUMBER_CAST, rank) * 1000.0f);
     ent->think = flame_strike_tick;
+    /* FlameStrikeTarget is the authored warning/beware art played during the
+     * cast delay. It is transient and owns its model animation. */
+    G_SpawnAbilityEffectAtPoint(spell->code, WC3_EFFECT_EFFECT, 0, &st.point, true);
 }
 
 BZ_VALIDATED_SPELL_PROC(AbilityFlameStrikeNeutral, flame_strike_validate, flame_strike_execute)
