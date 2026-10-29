@@ -41,6 +41,9 @@ void UI_TestFormatArmorTooltip(char *tip, size_t tip_size, char *body, size_t bo
 void UI_TestSetArmorTooltip(frameDef_t *icon, edict_t *ent, uint32_t type,
                             float armor, float move_speed, uint32_t upgrade);
 void UI_TestSetHeroAttributesTooltip(frameDef_t *icon, cstring_t primary);
+void UI_TestSetCasterRankTooltip(frameDef_t *icon, cstring_t rank_names,
+                                 cstring_t rank_spells, cstring_t upgrade_names,
+                                 uint32_t rank);
 
 
 #include "../game/hud/hud_utils.h"
@@ -1684,6 +1687,24 @@ TEST(wc3_game, hero_primary_attribute_icon_shows_attribute_bonuses) {
     T_ASSERT(strstr(icon.Ubertip, " - Each point increases damage by 1") != NULL);
     T_ASSERT(strstr(icon.Ubertip, " - Each point increases mana by 15") != NULL);
     T_ASSERT(strstr(icon.Ubertip, " - Each point increases mana regeneration") != NULL);
+}
+
+TEST(wc3_game, caster_rank_icon_shows_training_level_and_spells) {
+    frameDef_t icon = { 0 };
+
+    UI_TestSetCasterRankTooltip(&icon, "Initiate, Adept, Master",
+        "\"- Slow\",\"- Slow|n- Invisibility\",\"- Slow|n- Invisibility|n- Polymorph\"",
+        "Sorceress Adept Training,Sorceress Master Training", 0);
+    T_STREQ(icon.Tip, "Rank:");
+    T_ASSERT(strstr(icon.Ubertip, "Name: Initiate") != NULL);
+    T_ASSERT(strstr(icon.Ubertip, "Upgrade: Sorceress Adept Training - Level 0") != NULL);
+    T_ASSERT(strstr(icon.Ubertip, "Spells:\n- Slow") != NULL);
+
+    UI_TestSetCasterRankTooltip(&icon, "Initiate, Adept, Master",
+        "\"- Heal\",\"- Heal|n- Dispel Magic\",\"- Heal|n- Dispel Magic|n- Inner Fire\"",
+        "Priest Adept Training,Priest Master Training", 0);
+    T_ASSERT(strstr(icon.Ubertip, "Upgrade: Priest Adept Training - Level 0") != NULL);
+    T_ASSERT(strstr(icon.Ubertip, "Spells:\n- Heal") != NULL);
 }
 
 static uint32_t status_icon_read_count;

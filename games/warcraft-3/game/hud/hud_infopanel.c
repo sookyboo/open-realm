@@ -135,6 +135,7 @@ void UI_LoadHudInfoPanel(void) {
         InitStatusWrapper(&hud.attack1, 0.000f, -0.04000f, 0.100f, 0.030125f);
         InitStatusWrapper(&hud.attack2, 0.100f, -0.03925f, 0.100f, 0.030125f);
         InitStatusWrapper(&hud.armor,   0.000f, -0.07050f, 0.100f, 0.030125f);
+        InitStatusWrapper(&hud.rank,    0.100f, -0.07050f, 0.100f, 0.030125f);
         InitStatusWrapper(&hud.hero,    0.100f, -0.03700f, 0.100f, 0.062500f);
         InitStatusWrapper(&hud.food,    0.100f, -0.03925f, 0.100f, 0.030125f);
         InitStatusWrapper(&hud.gold,    0.100f, -0.03925f, 0.100f, 0.030125f);
@@ -582,6 +583,93 @@ static cstring_t InfoPanelString(cstring_t key, cstring_t fallback) {
     return value && *value && strcmp(value, key) ? value : fallback;
 }
 
+static bool InfoPanelCsvToken(cstring_t list, uint32_t index, char *out, size_t out_size) {
+    uint32_t current = 0;
+    bool quoted = false;
+    size_t written = 0;
+    cstring_t p = list;
+
+    if (!out || !out_size) return false;
+    out[0] = '\0';
+    if (!list) return false;
+    while (true) {
+        char const ch = *p;
+        if (!ch || (ch == ',' && !quoted)) {
+            if (current == index) {
+                while (written && (out[written - 1] == ' ' || out[written - 1] == '\t')) written--;
+                out[written] = '\0';
+                return written > 0;
+            }
+            current++;
+            written = 0;
+            if (!ch) return false;
+            p++;
+            while (*p == ' ' || *p == '\t') p++;
+            continue;
+        }
+        if (ch == '"') quoted = !quoted;
+        else if (current == index && written + 1 < out_size) out[written++] = ch;
+        p++;
+    }
+}
+
+static void InfoPanelDecodeNewlines(char *text) {
+    char *read = text;
+    char *write = text;
+    if (!text) return;
+    while (*read) {
+        if (read[0] == '|' && read[1] == 'n') {
+            *write++ = '\n';
+            read += 2;
+        } else *write++ = *read++;
+    }
+    *write = '\0';
+}
+
+static void FormatCasterRankTooltip(char *tip, size_t tip_size, char *body,
+                                    size_t body_size, cstring_t rank_names,
+                                    cstring_t rank_spells, cstring_t upgrade_names,
+                                    uint32_t rank) {
+    char rank_name[128] = "Initiate";
+    char upgrade_name[256] = "";
+    char spells[768] = "";
+    char upgrade[384] = "";
+    cstring_t upgrade_format;
+
+    if (!tip || !tip_size || !body || !body_size) return;
+    InfoPanelCsvToken(rank_names, rank, rank_name, sizeof(rank_name));
+    InfoPanelCsvToken(upgrade_names, rank, upgrade_name, sizeof(upgrade_name));
+    InfoPanelCsvToken(rank_spells, rank, spells, sizeof(spells));
+    InfoPanelDecodeNewlines(spells);
+    if (*upgrade_name) {
+        upgrade_format = InfoPanelString("UPGRADE_TOOLTIP", "%s - Level %d");
+        snprintf(upgrade, sizeof(upgrade), upgrade_format, G_LevelString(upgrade_name), (int)rank);
+    }
+    snprintf(tip, tip_size, "%s", InfoPanelString("COLON_RANK", "Rank:"));
+    snprintf(body, body_size, "%s %s\n%s %s",
+             InfoPanelString("COLON_NAME", "Name:"), G_LevelString(rank_name),
+             InfoPanelString("COLON_UPGRADE", "Upgrade:"), upgrade);
+    if (*spells) {
+        size_t const used = strlen(body);
+        if (used < body_size)
+            snprintf(body + used, body_size - used, "\n\n%s\n%s",
+                     InfoPanelString("COLON_SPELLS", "Spells:"), spells);
+    }
+}
+
+static void SetCasterRankTooltip(frameDef_t *icon, UnitProfile_t const *profile,
+                                 cstring_t upgrade_names, uint32_t rank) {
+    static char tip[128];
+    static char body[1536];
+
+    if (!icon || !profile) return;
+    FormatCasterRankTooltip(tip, sizeof(tip), body, sizeof(body),
+                            profile->casterUpgradeName, profile->casterUpgradeTip,
+                            upgrade_names, rank);
+    icon->Tip = tip;
+    icon->Ubertip = body;
+}
+
 static float InfoPanelThreshold(cstring_t key, float fallback) {
     cstring_t value = Stb_IniCacheFind(&game.config.misc, "InfoPanel", key);
     return value && *value ? (float)atof(value) : fallback;
@@ -827,6 +915,15 @@ void UI_TestSetArmorTooltip(frameDef_t *icon, edict_t *ent, uint32_t type,
 void UI_TestSetHeroAttributesTooltip(frameDef_t *icon, cstring_t primary) {
     SetHeroAttributesTooltip(icon, primary);
 }
+
+void UI_TestSetCasterRankTooltip(frameDef_t *icon, cstring_t rank_names,
+                                 cstring_t rank_spells, cstring_t upgrade_names,
+                                 uint32_t rank) {
+    UnitProfile_t profile = { 0 };
+    profile.casterUpgradeName = rank_names;
+    profile.casterUpgradeTip = rank_spells;
+    SetCasterRankTooltip(icon, &profile, upgrade_names, rank);
+}
 #endif
 
 static void SetUpgradeLevel(frameDef_t *frame, uint32_t upgrade, edict_t *ent) {
@@ -840,6 +937,38 @@ static void SetUpgradeLevel(frameDef_t *frame, uint32_t upgrade, edict_t *ent) {
     }
     UI_SetHidden(frame, false);
     UI_SetText(frame, "%ld", (long)G_GetPlayerTechResearchedLevel(owner, upgrade));
+}
+
+static void WriteCasterRankStatusFrame(edict_t *ent) {
+    UnitProfile_t const *profile;
+    gameClient_t *owner;
+    uint32_t upgrade;
+    uint32_t rank;
+    char upgrade_code[5] = { 0 };
+    cstring_t upgrade_names;
+    char rank_name[128] = "Initiate";
+
+    if (!ent || !ent->data.UnitProfile || !hud.simple.SimpleInfoPanelIconRank) return;
+    profile = ent->data.UnitProfile;
+    if (!profile->casterUpgradeName || !*profile->casterUpgradeName) return;
+    upgrade = G_GetUnitUpgradeForClass(ent, "caster");
+    if (!upgrade) return;
+
+    owner = G_GetPlayerClientByNumber(ent->s.player);
+    rank = owner ? (uint32_t)G_GetPlayerTechResearchedLevel(owner, upgrade) : 0;
+    memcpy(upgrade_code, &upgrade, 4);
+    upgrade_names = FindConfigValue(upgrade_code, "Name");
+    if (!upgrade_names || !*upgrade_names) upgrade_names = G_ObjectName(upgrade);
+    InfoPanelCsvToken(profile->casterUpgradeName, rank, rank_name, sizeof(rank_name));
+
+    if (profile->casterUpgradeArt && *profile->casterUpgradeArt)
+        UI_SetTexture(hud.simple.InfoPanelIconBackdrop_3, profile->casterUpgradeArt, false);
+    UI_SetText(hud.simple.InfoPanelIconLabel_3, "%s", UI_GetString("COLON_RANK"));
+    UI_SetText(hud.simple.InfoPanelIconValue_3, "%s", G_LevelString(rank_name));
+    SetUpgradeLevel(hud.simple.InfoPanelIconLevel_3, upgrade, ent);
+    SetCasterRankTooltip(hud.simple.InfoPanelIconBackdrop_3, profile, upgrade_names, rank);
+    UI_WriteFrame(&hud.rank);
+    UI_WriteFrameWithChildren(hud.simple.SimpleInfoPanelIconRank, &hud.rank);
 }
 
 static cstring_t StatusBuffField(uint32_t code, cstring_t field) {
@@ -984,6 +1113,8 @@ static void WriteSelectedUnitStatusFrames(edict_t *ent, UnitWeapons_t const *wea
 
     UI_SetPoint(&hud.armor, FRAMEPOINT_TOPLEFT, hud.simple.SimpleInfoPanelUnitDetail,
                 FRAMEPOINT_TOPLEFT, 0.0f, has_attack1 ? -0.0705f : -0.0400f);
+    UI_SetPoint(&hud.rank, FRAMEPOINT_TOPLEFT, hud.simple.SimpleInfoPanelUnitDetail,
+                FRAMEPOINT_TOPLEFT, 0.100f, has_attack1 ? -0.0705f : -0.0400f);
     hud.simple.InfoPanelIconBackdrop->Tip = hud.simple.InfoPanelIconBackdrop->Ubertip = NULL;
     if (hud.attack2_icon_backdrop)
         hud.attack2_icon_backdrop->Tip = hud.attack2_icon_backdrop->Ubertip = NULL;
@@ -1030,6 +1161,7 @@ static void WriteSelectedUnitStatusFrames(edict_t *ent, UnitWeapons_t const *wea
     SetUpgradeLevel(hud.simple.InfoPanelIconLevel_2, armor_upgrade, ent);
     UI_WriteFrame(&hud.armor);
     UI_WriteFrameWithChildren(hud.simple.SimpleInfoPanelIconArmor, &hud.armor);
+    WriteCasterRankStatusFrame(ent);
 
     if (ent->resources > 0) {
         cstring_t const gold_art = "InfoPanelIconGold";
