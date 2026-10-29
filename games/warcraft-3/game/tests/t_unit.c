@@ -749,6 +749,34 @@ static int test_explode_special_model_index(cstring_t path) {
     return 77;
 }
 
+static char phoenix_spawn_model[MAX_PATHLEN];
+static int phoenix_spawn_model_index(cstring_t path) {
+    strlcpy(phoenix_spawn_model, path ? path : "", sizeof(phoenix_spawn_model));
+    return 77;
+}
+
+TEST(wc3_unit, phoenix_egg_uses_egg_model_without_overriding_custom_model) {
+    struct game_import old = gi;
+    UnitUI_t ui = { .modelFile = "units\\human\\phoenix\\phoenix", .modelScale = 1.0f, .selectionScale = 1.0f };
+    edict_t *egg;
+
+    reset_test_entities();
+    setup_test_world();
+    egg = make_unit(64.0f, 96.0f);
+    egg->class_id = MAKEFOURCC('h','p','x','e');
+    egg->data.UnitUI = &ui;
+    gi.ModelIndex = phoenix_spawn_model_index;
+    phoenix_spawn_model[0] = '\0';
+    SP_SpawnUnit(egg);
+    T_STREQ(phoenix_spawn_model, "Units\\Human\\Phoenix\\PhoenixEgg.mdx");
+
+    ui.modelFile = "Custom\\Phoenix\\Egg.mdx";
+    phoenix_spawn_model[0] = '\0';
+    SP_SpawnUnit(egg);
+    T_STREQ(phoenix_spawn_model, "Custom\\Phoenix\\Egg.mdx");
+    gi = old;
+}
+
 TEST(wc3_unit, scripted_explosion_selects_unit_special_art) {
     struct game_import old = gi;
     UnitProfile_t profile = { .specialArt = "Abilities\\Spells\\Other\\TestExplosion.mdl" };

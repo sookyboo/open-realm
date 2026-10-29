@@ -423,6 +423,13 @@ void SP_SpawnUnit(edict_t *self) {
     if (S_UnitTypeReturnsGold(self->class_id)) self->s.flags |= EF_RESOURCE_RETURN;
     if (!d->moveTypeName || strcmp(d->moveTypeName, "float")) self->s.flags |= EF_GROUND_CONFORM;
     G_NormalizeModelFilename(ui->modelFile, model_filename, sizeof(model_filename));
+    /* 1.29's stock UnitUI row mistakenly assigns Phoenix.mdx to the Phoenix
+     * Egg (hpxe). Use the authored Egg asset for that stock row, while leaving
+     * map/custom hpxe models untouched. */
+    if (self->class_id == MAKEFOURCC('h','p','x','e') &&
+        !strcasecmp(model_filename, "Units\\Human\\Phoenix\\Phoenix.mdx")) {
+        strlcpy(model_filename, "Units\\Human\\Phoenix\\PhoenixEgg.mdx", sizeof(model_filename));
+    }
     self->s.model = G_RegisterModel(model_filename);
     G_ResetUnitAnimationProperties(self);
     self->s.splat = M_LoadUberSplat(uber_splat);

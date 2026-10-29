@@ -32,6 +32,9 @@ authoritative for altered maps; no retail damage numbers are in C.
   rebirth, a separate egg is spawned, and the old corpse is retired. Eggs use
   a game-time ten-second deadline; `G_TransformUnitType` turns a surviving egg
   back into a full-health Phoenix (same egg entity/handle).
+- `g_monster.c`: 1.29 `UnitUI.slk` assigns `Phoenix.mdx` to both `hphx` and
+  `hpxe`, despite the separate `PhoenixEgg.mdx` asset. Unit spawn corrects this
+  path only for stock `hpxe` rows; map/custom Egg model overrides are retained.
 - `skills/s_phoenix.c`: `Apxf` uses the common homing spell missile, owns its
   cooldown per Phoenix, reads target flags and visibility policy, and applies
   independent per-source timed burns via the shared status scheduler. Refresh
