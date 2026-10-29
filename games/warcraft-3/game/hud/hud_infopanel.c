@@ -12,6 +12,8 @@
 #include "../skills/s_skills.h"
 
 #define INVENTORY_CHARGE_FONT_SIZE 10
+#define DAMAGE_TOOLTIP_TIP_SIZE 256
+#define DAMAGE_TOOLTIP_BODY_SIZE 1536
 /* Warsmash anchors its 0.180 x 0.120 simple info panel at the bottom-centre
  * of the 0.800 x 0.600 UI. Cargo icons are TOPLEFT-relative to that panel at
  * y = -0.75 * frontQueueIconWidth. Convert that bottom-origin geometry to
@@ -489,6 +491,145 @@ static uint32_t UnitArmorUpgrade(edict_t *ent) {
     return G_GetUnitUpgradeForClass(ent, "armor");
 }
 
+static cstring_t InfoPanelString(cstring_t key, cstring_t fallback) {
+    cstring_t value = key ? UI_GetString(key) : NULL;
+    return value && *value && strcmp(value, key) ? value : fallback;
+}
+
+static float InfoPanelAttackSpeedThreshold(cstring_t key, float fallback) {
+    cstring_t value = Stb_IniCacheFind(&game.config.misc, "Misc", key);
+    return value && *value ? (float)atof(value) : fallback;
+}
+
+static cstring_t InfoPanelAttackSpeed(float cooldown) {
+    float const very_slow = InfoPanelAttackSpeedThreshold("AttackVerySlow", 3.0f);
+    float const slow = InfoPanelAttackSpeedThreshold("AttackSlow", 2.0f);
+    float const average = InfoPanelAttackSpeedThreshold("AttackAverage", 1.5f);
+    float const fast = InfoPanelAttackSpeedThreshold("AttackFast", 1.0f);
+
+    if (cooldown > very_slow) return InfoPanelString("MOVESPEEDVERYSLOW", "Very Slow");
+    if (cooldown > slow) return InfoPanelString("MOVESPEEDSLOW", "Slow");
+    if (cooldown >= average) return InfoPanelString("MOVESPEEDAVERAGE", "Average");
+    if (cooldown >= fast) return InfoPanelString("MOVESPEEDFAST", "Fast");
+    return InfoPanelString("MOVESPEEDVERYFAST", "Very Fast");
+}
+
+static void InfoPanelDamageTypeStrings(attackType_t type, cstring_t *label_key,
+                                       cstring_t *label_fallback, cstring_t *tip_key,
+                                       cstring_t *tip_fallback) {
+    switch (type) {
+    case ATK_NORMAL:
+        *label_key = "DAMAGE_NORMAL"; *label_fallback = "Type: Normal";
+        *tip_key = "DAMAGETIP_NORMAL";
+        *tip_fallback = "Normal attacks do extra damage against Medium armor, and reduced damage to Fortified armor.";
+        break;
+    case ATK_PIERCE:
+        *label_key = "DAMAGE_PIERCE"; *label_fallback = "Type: Piercing";
+        *tip_key = "DAMAGETIP_PIERCE";
+        *tip_fallback = "Piercing attacks do extra damage to Unarmored units and Light armor, and reduced damage to Fortified, Medium armor and Heroes.";
+        break;
+    case ATK_SIEGE:
+        *label_key = "DAMAGE_SIEGE"; *label_fallback = "Type: Siege";
+        *tip_key = "DAMAGETIP_SIEGE";
+        *tip_fallback = "Siege attacks do extra damage to Fortified armor and Unarmored units, and reduced damage to Medium armor and Heroes.";
+        break;
+    case ATK_MAGIC:
+        *label_key = "DAMAGE_MAGIC"; *label_fallback = "Type: Magic";
+        *tip_key = "DAMAGETIP_MAGIC";
+        *tip_fallback = "Magic attacks do extra damage against Heavy armor and Light armor, and reduced damage to Medium armor, Fortified armor and Heroes.";
+        break;
+    case ATK_CHAOS:
+        *label_key = "DAMAGE_CHAOS"; *label_fallback = "Type: Chaos";
+        *tip_key = "DAMAGETIP_CHAOS";
+        *tip_fallback = "Chaos attacks do full damage to all armor types.";
+        break;
+    case ATK_HERO:
+        *label_key = "DAMAGE_HERO"; *label_fallback = "Type: Hero";
+        *tip_key = "DAMAGETIP_HERO";
+        *tip_fallback = "Hero attacks do reduced damage to Fortified armor.";
+        break;
+    case ATK_SPELLS:
+        *label_key = NULL; *label_fallback = "Type: Spells";
+        *tip_key = NULL; *tip_fallback = NULL;
+        break;
+    default:
+        *label_key = "DAMAGE_UNKNOWN"; *label_fallback = "Type: Unknown";
+        *tip_key = "DAMAGETIP_UNKNOWN";
+        *tip_fallback = "Unknown damage does reduced damage against unknown armor types.";
+        break;
+    }
+}
+
+static void FormatDamageTooltip(char *tip, size_t tip_size, char *body, size_t body_size,
+                                attackType_t type, int32_t min_damage, int32_t max_damage,
+                                float range, float cooldown, cstring_t upgrade_name,
+                                uint32_t upgrade_level) {
+    cstring_t type_key, type_fallback, damage_tip_key, damage_tip_fallback;
+    cstring_t damage_label = InfoPanelString("COLON_DAMAGE", "Damage:");
+    cstring_t range_label = InfoPanelString("COLON_RANGE", "Range:");
+    cstring_t speed_label = InfoPanelString("COLON_SPEED", "Speed:");
+    size_t used;
+
+    if (!tip || !tip_size || !body || !body_size) return;
+    snprintf(tip, tip_size, "%s %ld - %ld", damage_label, (long)min_damage, (long)max_damage);
+    body[0] = '\0';
+    InfoPanelDamageTypeStrings(type, &type_key, &type_fallback, &damage_tip_key, &damage_tip_fallback);
+    snprintf(body, body_size, "%s\n%s %d\n%s %s", InfoPanelString(type_key, type_fallback),
+             range_label, (int)(range + 0.5f), speed_label, InfoPanelAttackSpeed(cooldown));
+    used = strlen(body);
+    if (upgrade_name && *upgrade_name && used < body_size) {
+        cstring_t format = InfoPanelString("UPGRADE_TOOLTIP", "%s - Level %d");
+        char upgrade[256];
+        snprintf(upgrade, sizeof(upgrade), format, upgrade_name, (int)upgrade_level);
+        snprintf(body + used, body_size - used, "\n%s %s",
+                 InfoPanelString("COLON_UPGRADE", "Upgrade:"), upgrade);
+        used = strlen(body);
+    }
+    if (damage_tip_fallback && *damage_tip_fallback && used < body_size)
+        snprintf(body + used, body_size - used, "\n\n%s",
+                 InfoPanelString(damage_tip_key, damage_tip_fallback));
+}
+
+static void SetDamageTooltip(frameDef_t *icon, edict_t *ent, attackType_t type,
+                             int32_t min_damage, int32_t max_damage, float range,
+                             float cooldown, uint32_t upgrade) {
+    static char tips[2][DAMAGE_TOOLTIP_TIP_SIZE];
+    static char bodies[2][DAMAGE_TOOLTIP_BODY_SIZE];
+    static uint32_t slot;
+    uint32_t const current = slot++ & 1u;
+    gameClient_t *owner = ent ? G_GetPlayerClientByNumber(ent->s.player) : NULL;
+    uint32_t const upgrade_level = upgrade && owner && owner->ps.number == ent->s.player
+        ? G_GetPlayerTechResearchedLevel(owner, upgrade) : 0;
+    cstring_t const upgrade_name = upgrade ? G_ObjectName(upgrade) : NULL;
+
+    if (!icon) return;
+    if (!ent || !ent->unit_state) {
+        icon->Tip = icon->Ubertip = NULL;
+        return;
+    }
+    FormatDamageTooltip(tips[current], sizeof(tips[current]), bodies[current], sizeof(bodies[current]),
+                        type, min_damage, max_damage, range, cooldown,
+                        upgrade_name, upgrade_level);
+    icon->Tip = tips[current];
+    icon->Ubertip = bodies[current];
+}
+
+#ifdef BZ_TESTS
+void UI_TestFormatDamageTooltip(char *tip, size_t tip_size, char *body, size_t body_size,
+                                attackType_t type, int32_t min_damage, int32_t max_damage,
+                                float range, float cooldown, cstring_t upgrade_name,
+                                uint32_t upgrade_level) {
+    FormatDamageTooltip(tip, tip_size, body, body_size, type, min_damage, max_damage,
+                        range, cooldown, upgrade_name, upgrade_level);
+}
+
+void UI_TestSetDamageTooltip(frameDef_t *icon, edict_t *ent, attackType_t type,
+                             int32_t min_damage, int32_t max_damage, float range,
+                             float cooldown, uint32_t upgrade) {
+    SetDamageTooltip(icon, ent, type, min_damage, max_damage, range, cooldown, upgrade);
+}
+#endif
+
 static void SetUpgradeLevel(frameDef_t *frame, uint32_t upgrade, edict_t *ent) {
     gameClient_t *owner;
 
@@ -644,10 +785,16 @@ static void WriteSelectedUnitStatusFrames(edict_t *ent, UnitWeapons_t const *wea
 
     UI_SetPoint(&hud.armor, FRAMEPOINT_TOPLEFT, hud.simple.SimpleInfoPanelUnitDetail,
                 FRAMEPOINT_TOPLEFT, 0.0f, has_attack1 ? -0.0705f : -0.0400f);
+    hud.simple.InfoPanelIconBackdrop->Tip = hud.simple.InfoPanelIconBackdrop->Ubertip = NULL;
+    if (hud.attack2_icon_backdrop)
+        hud.attack2_icon_backdrop->Tip = hud.attack2_icon_backdrop->Ubertip = NULL;
 
     if (has_attack1) {
         SetTypedInfoPanelIcon(hud.simple.InfoPanelIconBackdrop, "Damage", weapons->attack1.attackType,
                               weapon_upgrade != 0);
+        SetDamageTooltip(hud.simple.InfoPanelIconBackdrop, ent, ent->unit_state->attack1.type,
+                         min_damage, max_damage, ent->unit_state->attack1.range,
+                         ent->unit_state->attack1.cooldown, weapon_upgrade);
         FormatAttackDamageWithStatus(value, sizeof(value), ent, min_damage, max_damage,
                                 ent->unit_state->attack1.temporaryDamageBonus,
                                 ent->unit_state->attack1.damageBase);
@@ -659,6 +806,9 @@ static void WriteSelectedUnitStatusFrames(edict_t *ent, UnitWeapons_t const *wea
     if (has_attack2) {
         SetTypedInfoPanelIcon(hud.attack2_icon_backdrop, "Damage", weapons->attack2.attackType,
                               weapon_upgrade != 0);
+        SetDamageTooltip(hud.attack2_icon_backdrop, ent, ent->unit_state->attack2.type,
+                         min_damage2, max_damage2, ent->unit_state->attack2.range,
+                         ent->unit_state->attack2.cooldown, weapon_upgrade);
         FormatAttackDamageWithStatus(value, sizeof(value), ent, min_damage2, max_damage2,
                                 ent->unit_state->attack2.temporaryDamageBonus,
                                 ent->unit_state->attack2.damageBase);

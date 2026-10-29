@@ -28,6 +28,13 @@ void G_ResetTestSelectionChecks(void);
 uint32_t G_GetTestSelectionChecks(void);
 bool run_test_jass(cstring_t src);
 void CM_SetupTestWorldBounds(box2_t const *bounds);
+void UI_TestFormatDamageTooltip(char *tip, size_t tip_size, char *body, size_t body_size,
+                                attackType_t type, int32_t min_damage, int32_t max_damage,
+                                float range, float cooldown, cstring_t upgrade_name,
+                                uint32_t upgrade_level);
+void UI_TestSetDamageTooltip(frameDef_t *icon, edict_t *ent, attackType_t type,
+                             int32_t min_damage, int32_t max_damage, float range,
+                             float cooldown, uint32_t upgrade);
 
 
 #include "../game/hud/hud_utils.h"
@@ -1602,6 +1609,31 @@ TEST(wc3_game, hud_status_icon_keys_follow_upgrade_and_neutral_families) {
     T_STREQ(key, "InfoPanelIconDamageUnknownNeutral");
     UI_InfoPanelIconSkinKey("Armor", NULL, false, key, sizeof(key));
     T_STREQ(key, "InfoPanelIconArmorSmallNeutral");
+}
+
+TEST(wc3_game, damage_icon_tooltip_shows_rifleman_attack_details) {
+    char tip[256], body[1536];
+    frameDef_t icon = { 0 };
+    edict_t *rifleman;
+
+    reset_entities();
+    setup_test_world();
+    rifleman = alloc_test_unit(MAKEFOURCC('h','r','i','f'), 64.0f, 64.0f);
+    UI_TestSetDamageTooltip(&icon, rifleman, ATK_PIERCE, 21, 36,
+                            600.0f, 1.5f, 0);
+    T_STREQ(icon.Tip, "Damage: 21 - 36");
+    T_ASSERT(icon.Ubertip && strstr(icon.Ubertip, "Range: 600"));
+
+    UI_TestFormatDamageTooltip(tip, sizeof(tip), body, sizeof(body), ATK_PIERCE,
+                               21, 36, 600.0f, 1.5f, "Imbued Gunpowder", 3);
+
+    T_STREQ(tip, "Damage: 21 - 36");
+    T_ASSERT(strstr(body, "Type:") != NULL);
+    T_ASSERT(strstr(body, "Piercing") != NULL);
+    T_ASSERT(strstr(body, "Range: 600") != NULL);
+    T_ASSERT(strstr(body, "Speed: Average") != NULL);
+    T_ASSERT(strstr(body, "Upgrade: Imbued Gunpowder - Level 3") != NULL);
+    T_ASSERT(strstr(body, "Piercing attacks do extra damage to Unarmored units and Light armor") != NULL);
 }
 
 static uint32_t status_icon_read_count;
