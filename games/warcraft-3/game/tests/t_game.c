@@ -35,6 +35,11 @@ void UI_TestFormatDamageTooltip(char *tip, size_t tip_size, char *body, size_t b
 void UI_TestSetDamageTooltip(frameDef_t *icon, edict_t *ent, attackType_t type,
                              int32_t min_damage, int32_t max_damage, float range,
                              float cooldown, uint32_t upgrade);
+void UI_TestFormatArmorTooltip(char *tip, size_t tip_size, char *body, size_t body_size,
+                               uint32_t type, float armor, float move_speed,
+                               cstring_t upgrade_name, uint32_t upgrade_level);
+void UI_TestSetArmorTooltip(frameDef_t *icon, edict_t *ent, uint32_t type,
+                            float armor, float move_speed, uint32_t upgrade);
 
 
 #include "../game/hud/hud_utils.h"
@@ -1634,6 +1639,33 @@ TEST(wc3_game, damage_icon_tooltip_shows_rifleman_attack_details) {
     T_ASSERT(strstr(body, "Speed: Average") != NULL);
     T_ASSERT(strstr(body, "Upgrade: Imbued Gunpowder - Level 3") != NULL);
     T_ASSERT(strstr(body, "Piercing attacks do extra damage to Unarmored units and Light armor") != NULL);
+}
+
+TEST(wc3_game, armor_icon_tooltip_shows_rifleman_defense_details) {
+    char tip[256], body[1536];
+    frameDef_t icon = { 0 };
+    edict_t *rifleman;
+
+    reset_entities();
+    setup_test_world();
+    rifleman = alloc_test_unit(MAKEFOURCC('h','r','i','f'), 64.0f, 64.0f);
+    rifleman->unit_state->defense_type = 1;
+    rifleman->unit_state->armor_value = 6.0f;
+    rifleman->unitinfo.MoveSpeed = 270.0f;
+    UI_TestSetArmorTooltip(&icon, rifleman, rifleman->unit_state->defense_type,
+                           G_UnitArmorValue(rifleman), rifleman->unitinfo.MoveSpeed, 0);
+    T_STREQ(icon.Tip, "Armor: 6");
+    T_ASSERT(icon.Ubertip && strstr(icon.Ubertip, "Damage Reduction: 26%"));
+
+    UI_TestFormatArmorTooltip(tip, sizeof(tip), body, sizeof(body), 1, 6.0f,
+                              270.0f, "Dragonhide Armor", 3);
+    T_STREQ(tip, "Armor: 6");
+    T_ASSERT(strstr(body, "Type: ") != NULL);
+    T_ASSERT(strstr(body, "Medium") != NULL);
+    T_ASSERT(strstr(body, "Damage Reduction: 26%") != NULL);
+    T_ASSERT(strstr(body, "Move Speed: Average") != NULL);
+    T_ASSERT(strstr(body, "Upgrade: Dragonhide Armor - Level 3") != NULL);
+    T_ASSERT(strstr(body, "Medium armor takes extra damage from Normal attacks") != NULL);
 }
 
 static uint32_t status_icon_read_count;

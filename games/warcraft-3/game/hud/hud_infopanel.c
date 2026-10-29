@@ -496,22 +496,119 @@ static cstring_t InfoPanelString(cstring_t key, cstring_t fallback) {
     return value && *value && strcmp(value, key) ? value : fallback;
 }
 
-static float InfoPanelAttackSpeedThreshold(cstring_t key, float fallback) {
-    cstring_t value = Stb_IniCacheFind(&game.config.misc, "Misc", key);
+static float InfoPanelThreshold(cstring_t key, float fallback) {
+    cstring_t value = Stb_IniCacheFind(&game.config.misc, "InfoPanel", key);
     return value && *value ? (float)atof(value) : fallback;
 }
 
 static cstring_t InfoPanelAttackSpeed(float cooldown) {
-    float const very_slow = InfoPanelAttackSpeedThreshold("AttackVerySlow", 3.0f);
-    float const slow = InfoPanelAttackSpeedThreshold("AttackSlow", 2.0f);
-    float const average = InfoPanelAttackSpeedThreshold("AttackAverage", 1.5f);
-    float const fast = InfoPanelAttackSpeedThreshold("AttackFast", 1.0f);
+    float const very_slow = InfoPanelThreshold("AttackVerySlow", 3.0f);
+    float const slow = InfoPanelThreshold("AttackSlow", 2.0f);
+    float const average = InfoPanelThreshold("AttackAverage", 1.5f);
+    float const fast = InfoPanelThreshold("AttackFast", 1.0f);
 
     if (cooldown > very_slow) return InfoPanelString("MOVESPEEDVERYSLOW", "Very Slow");
     if (cooldown > slow) return InfoPanelString("MOVESPEEDSLOW", "Slow");
     if (cooldown >= average) return InfoPanelString("MOVESPEEDAVERAGE", "Average");
     if (cooldown >= fast) return InfoPanelString("MOVESPEEDFAST", "Fast");
     return InfoPanelString("MOVESPEEDVERYFAST", "Very Fast");
+}
+
+static cstring_t InfoPanelMoveSpeed(float speed) {
+    float const very_slow = InfoPanelThreshold("SpeedVerySlow", 175.0f);
+    float const slow = InfoPanelThreshold("SpeedSlow", 220.0f);
+    float const average = InfoPanelThreshold("SpeedAverage", 280.0f);
+    float const fast = InfoPanelThreshold("SpeedFast", 350.0f);
+
+    if (speed < very_slow) return InfoPanelString("MOVESPEEDVERYSLOW", "Very Slow");
+    if (speed < slow) return InfoPanelString("MOVESPEEDSLOW", "Slow");
+    if (speed < average) return InfoPanelString("MOVESPEEDAVERAGE", "Average");
+    if (speed < fast) return InfoPanelString("MOVESPEEDFAST", "Fast");
+    return InfoPanelString("MOVESPEEDVERYFAST", "Very Fast");
+}
+
+static void InfoPanelArmorTypeStrings(uint32_t type, cstring_t *type_key,
+                                      cstring_t *type_fallback, cstring_t *tip_key,
+                                      cstring_t *tip_fallback) {
+    switch (type) {
+    case 0: *type_key = "ARMOR_SMALL"; *type_fallback = "Type: Light";
+            *tip_key = "ARMORTIP_SMALL"; *tip_fallback = "Light armor takes extra damage from Piercing and Magic attacks."; break;
+    case 1: *type_key = "ARMOR_MEDIUM"; *type_fallback = "Type: Medium";
+            *tip_key = "ARMORTIP_MEDIUM"; *tip_fallback = "Medium armor takes extra damage from Normal attacks, and reduces damage from Piercing, Magic, and Siege attacks."; break;
+    case 2: *type_key = "ARMOR_LARGE"; *type_fallback = "Type: Heavy";
+            *tip_key = "ARMORTIP_LARGE"; *tip_fallback = "Heavy armor takes extra damage from Magic attacks."; break;
+    case 3: *type_key = "ARMOR_FORT"; *type_fallback = "Type: Fortified";
+            *tip_key = "ARMORTIP_FORT"; *tip_fallback = "Fortified armor greatly reduces Piercing, Magic, Normal and Hero attacks, but takes extra damage from Siege attacks."; break;
+    case 4: *type_key = "ARMOR_NORMAL"; *type_fallback = "Type: Normal";
+            *tip_key = "ARMORTIP_NORMAL"; *tip_fallback = "Medium armor takes extra damage from Normal attacks, and reduces damage from Piercing, Magic, and Siege attacks."; break;
+    case 5: *type_key = "ARMOR_HERO"; *type_fallback = "Type: Hero";
+            *tip_key = "ARMORTIP_HERO"; *tip_fallback = "Heroes take reduced damage from Piercing, Magic, Siege attacks, and Spells."; break;
+    case 6: *type_key = "ARMOR_DIVINE"; *type_fallback = "Type: Divine";
+            *tip_key = "ARMORTIP_DIVINE"; *tip_fallback = "Divine beings only take damage from Chaos attacks."; break;
+    case 7: *type_key = "ARMOR_NONE"; *type_fallback = "Type: Unarmored";
+            *tip_key = "ARMORTIP_NONE"; *tip_fallback = "Unarmored takes extra damage from Piercing, and Siege attacks."; break;
+    default: *type_key = "ARMOR_UNKNOWN"; *type_fallback = "Type: Unknown";
+             *tip_key = "ARMORTIP_UNKNOWN"; *tip_fallback = "Unknown armor applies an unknown reduction to all attacks."; break;
+    }
+}
+
+static int32_t InfoPanelDamageReduction(float armor) {
+    float const coefficient = game.constants.combatConstantsLoaded
+        ? game.constants.defenseArmor : 0.06f;
+    float reduction;
+
+    if (armor >= 0.0f) reduction = 1.0f - 1.0f / (1.0f + armor * coefficient);
+    else reduction = 1.0f - (2.0f - powf(1.0f - coefficient, -armor));
+    return (int32_t)(reduction * 100.0f + (reduction >= 0.0f ? 0.5f : -0.5f));
+}
+
+static void FormatArmorTooltip(char *tip, size_t tip_size, char *body, size_t body_size,
+                               uint32_t type, float armor, float move_speed,
+                               cstring_t upgrade_name, uint32_t upgrade_level) {
+    cstring_t type_key, type_fallback, armor_tip_key, armor_tip_fallback;
+    cstring_t armor_label = InfoPanelString("COLON_ARMOR", "Armor:");
+    cstring_t reduction_label = InfoPanelString("COLON_DAMAGE_REDUCTION", "Damage Reduction:");
+    cstring_t speed_label = InfoPanelString("COLON_MOVE_SPEED", "Move Speed:");
+    size_t used;
+
+    if (!tip || !tip_size || !body || !body_size) return;
+    snprintf(tip, tip_size, "%s %d", armor_label, (int)(armor + 0.5f));
+    InfoPanelArmorTypeStrings(type, &type_key, &type_fallback, &armor_tip_key, &armor_tip_fallback);
+    snprintf(body, body_size, "%s\n%s %d%%\n%s %s",
+             InfoPanelString(type_key, type_fallback), reduction_label,
+             InfoPanelDamageReduction(armor), speed_label, InfoPanelMoveSpeed(move_speed));
+    used = strlen(body);
+    if (upgrade_name && *upgrade_name && used < body_size) {
+        cstring_t format = InfoPanelString("UPGRADE_TOOLTIP", "%s - Level %d");
+        char upgrade[256];
+        snprintf(upgrade, sizeof(upgrade), format, upgrade_name, (int)upgrade_level);
+        snprintf(body + used, body_size - used, "\n%s %s",
+                 InfoPanelString("COLON_UPGRADE", "Upgrade:"), upgrade);
+        used = strlen(body);
+    }
+    if (armor_tip_fallback && *armor_tip_fallback && used < body_size)
+        snprintf(body + used, body_size - used, "\n\n%s",
+                 InfoPanelString(armor_tip_key, armor_tip_fallback));
+}
+
+static void SetArmorTooltip(frameDef_t *icon, edict_t *ent, uint32_t armor_type,
+                            float armor, float move_speed, uint32_t upgrade) {
+    static char tip[256];
+    static char body[1536];
+    gameClient_t *owner = ent ? G_GetPlayerClientByNumber(ent->s.player) : NULL;
+    uint32_t const upgrade_level = upgrade && owner && owner->ps.number == ent->s.player
+        ? G_GetPlayerTechResearchedLevel(owner, upgrade) : 0;
+    cstring_t const upgrade_name = upgrade ? G_ObjectName(upgrade) : NULL;
+
+    if (!icon) return;
+    if (!ent || !ent->unit_state) {
+        icon->Tip = icon->Ubertip = NULL;
+        return;
+    }
+    FormatArmorTooltip(tip, sizeof(tip), body, sizeof(body), armor_type, armor,
+                       move_speed, upgrade_name, upgrade_level);
+    icon->Tip = tip;
+    icon->Ubertip = body;
 }
 
 static void InfoPanelDamageTypeStrings(attackType_t type, cstring_t *label_key,
@@ -627,6 +724,18 @@ void UI_TestSetDamageTooltip(frameDef_t *icon, edict_t *ent, attackType_t type,
                              int32_t min_damage, int32_t max_damage, float range,
                              float cooldown, uint32_t upgrade) {
     SetDamageTooltip(icon, ent, type, min_damage, max_damage, range, cooldown, upgrade);
+}
+
+void UI_TestFormatArmorTooltip(char *tip, size_t tip_size, char *body, size_t body_size,
+                               uint32_t type, float armor, float move_speed,
+                               cstring_t upgrade_name, uint32_t upgrade_level) {
+    FormatArmorTooltip(tip, tip_size, body, body_size, type, armor, move_speed,
+                       upgrade_name, upgrade_level);
+}
+
+void UI_TestSetArmorTooltip(frameDef_t *icon, edict_t *ent, uint32_t type,
+                            float armor, float move_speed, uint32_t upgrade) {
+    SetArmorTooltip(icon, ent, type, armor, move_speed, upgrade);
 }
 #endif
 
@@ -820,6 +929,9 @@ static void WriteSelectedUnitStatusFrames(edict_t *ent, UnitWeapons_t const *wea
 
     SetTypedInfoPanelIcon(hud.simple.InfoPanelIconBackdrop_2, "Armor", ent->data.UnitBalance->defenseType,
                           armor_upgrade != 0);
+    SetArmorTooltip(hud.simple.InfoPanelIconBackdrop_2, ent,
+                    ent->unit_state->defense_type, G_UnitArmorValue(ent),
+                    ent->unitinfo.MoveSpeed, armor_upgrade);
     if (G_UnitHasFlag(ent, UNIT_FLAG_INVULNERABLE)) UI_SetText(hud.simple.InfoPanelIconValue_2, "%s", "|cffff0000Invulnerable|r");
     else {
         FormatArmorValue(value, sizeof(value), ent);
