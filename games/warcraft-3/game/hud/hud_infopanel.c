@@ -769,6 +769,7 @@ static void SetArmorTooltip(frameDef_t *icon, edict_t *ent, uint32_t armor_type,
                             float armor, float move_speed, uint32_t upgrade) {
     static char tip[256];
     static char body[1536];
+    char armor_value[64];
     gameClient_t *owner = ent ? G_GetPlayerClientByNumber(ent->s.player) : NULL;
     uint32_t const upgrade_level = upgrade && owner && owner->ps.number == ent->s.player
         ? G_GetPlayerTechResearchedLevel(owner, upgrade) : 0;
@@ -781,6 +782,8 @@ static void SetArmorTooltip(frameDef_t *icon, edict_t *ent, uint32_t armor_type,
     }
     FormatArmorTooltip(tip, sizeof(tip), body, sizeof(body), armor_type, armor,
                        move_speed, upgrade_name, upgrade_level);
+    FormatArmorValue(armor_value, sizeof(armor_value), ent);
+    snprintf(tip, sizeof(tip), "%s %s", InfoPanelString("COLON_ARMOR", "Armor:"), armor_value);
     icon->Tip = tip;
     icon->Ubertip = body;
 }
@@ -863,10 +866,12 @@ static void FormatDamageTooltip(char *tip, size_t tip_size, char *body, size_t b
 
 static void SetDamageTooltip(frameDef_t *icon, edict_t *ent, attackType_t type,
                              int32_t min_damage, int32_t max_damage, float range,
-                             float cooldown, uint32_t upgrade) {
+                             float cooldown, uint32_t upgrade,
+                             float temporary_damage_bonus, float damage_base) {
     static char tips[2][DAMAGE_TOOLTIP_TIP_SIZE];
     static char bodies[2][DAMAGE_TOOLTIP_BODY_SIZE];
     static uint32_t slot;
+    char damage_value[128];
     uint32_t const current = slot++ & 1u;
     gameClient_t *owner = ent ? G_GetPlayerClientByNumber(ent->s.player) : NULL;
     uint32_t const upgrade_level = upgrade && owner && owner->ps.number == ent->s.player
@@ -881,6 +886,10 @@ static void SetDamageTooltip(frameDef_t *icon, edict_t *ent, attackType_t type,
     FormatDamageTooltip(tips[current], sizeof(tips[current]), bodies[current], sizeof(bodies[current]),
                         type, min_damage, max_damage, range, cooldown,
                         upgrade_name, upgrade_level);
+    FormatAttackDamageWithStatus(damage_value, sizeof(damage_value), ent, min_damage,
+                                 max_damage, temporary_damage_bonus, damage_base);
+    snprintf(tips[current], sizeof(tips[current]), "%s %s",
+             InfoPanelString("COLON_DAMAGE", "Damage:"), damage_value);
     icon->Tip = tips[current];
     icon->Ubertip = bodies[current];
 }
@@ -896,8 +905,10 @@ void UI_TestFormatDamageTooltip(char *tip, size_t tip_size, char *body, size_t b
 
 void UI_TestSetDamageTooltip(frameDef_t *icon, edict_t *ent, attackType_t type,
                              int32_t min_damage, int32_t max_damage, float range,
-                             float cooldown, uint32_t upgrade) {
-    SetDamageTooltip(icon, ent, type, min_damage, max_damage, range, cooldown, upgrade);
+                             float cooldown, uint32_t upgrade,
+                             float temporary_damage_bonus, float damage_base) {
+    SetDamageTooltip(icon, ent, type, min_damage, max_damage, range, cooldown, upgrade,
+                     temporary_damage_bonus, damage_base);
 }
 
 void UI_TestFormatArmorTooltip(char *tip, size_t tip_size, char *body, size_t body_size,
@@ -1124,7 +1135,9 @@ static void WriteSelectedUnitStatusFrames(edict_t *ent, UnitWeapons_t const *wea
                               weapon_upgrade != 0);
         SetDamageTooltip(hud.simple.InfoPanelIconBackdrop, ent, ent->unit_state->attack1.type,
                          min_damage, max_damage, ent->unit_state->attack1.range,
-                         ent->unit_state->attack1.cooldown, weapon_upgrade);
+                         ent->unit_state->attack1.cooldown, weapon_upgrade,
+                         ent->unit_state->attack1.temporaryDamageBonus,
+                         ent->unit_state->attack1.damageBase);
         FormatAttackDamageWithStatus(value, sizeof(value), ent, min_damage, max_damage,
                                 ent->unit_state->attack1.temporaryDamageBonus,
                                 ent->unit_state->attack1.damageBase);
@@ -1138,7 +1151,9 @@ static void WriteSelectedUnitStatusFrames(edict_t *ent, UnitWeapons_t const *wea
                               weapon_upgrade != 0);
         SetDamageTooltip(hud.attack2_icon_backdrop, ent, ent->unit_state->attack2.type,
                          min_damage2, max_damage2, ent->unit_state->attack2.range,
-                         ent->unit_state->attack2.cooldown, weapon_upgrade);
+                         ent->unit_state->attack2.cooldown, weapon_upgrade,
+                         ent->unit_state->attack2.temporaryDamageBonus,
+                         ent->unit_state->attack2.damageBase);
         FormatAttackDamageWithStatus(value, sizeof(value), ent, min_damage2, max_damage2,
                                 ent->unit_state->attack2.temporaryDamageBonus,
                                 ent->unit_state->attack2.damageBase);

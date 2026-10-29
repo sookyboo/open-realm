@@ -34,7 +34,8 @@ void UI_TestFormatDamageTooltip(char *tip, size_t tip_size, char *body, size_t b
                                 uint32_t upgrade_level);
 void UI_TestSetDamageTooltip(frameDef_t *icon, edict_t *ent, attackType_t type,
                              int32_t min_damage, int32_t max_damage, float range,
-                             float cooldown, uint32_t upgrade);
+                             float cooldown, uint32_t upgrade,
+                             float temporary_damage_bonus, float damage_base);
 void UI_TestFormatArmorTooltip(char *tip, size_t tip_size, char *body, size_t body_size,
                                uint32_t type, float armor, float move_speed,
                                cstring_t upgrade_name, uint32_t upgrade_level);
@@ -1629,9 +1630,13 @@ TEST(wc3_game, damage_icon_tooltip_shows_rifleman_attack_details) {
     setup_test_world();
     rifleman = alloc_test_unit(MAKEFOURCC('h','r','i','f'), 64.0f, 64.0f);
     UI_TestSetDamageTooltip(&icon, rifleman, ATK_PIERCE, 21, 36,
-                            600.0f, 1.5f, 0);
+                            600.0f, 1.5f, 0, 0.0f, 0.0f);
     T_STREQ(icon.Tip, "Damage: 21 - 36");
     T_ASSERT(icon.Ubertip && strstr(icon.Ubertip, "Range: 600"));
+
+    UI_TestSetDamageTooltip(&icon, rifleman, ATK_PIERCE, 37, 59,
+                            600.0f, 1.5f, 0, 6.0f, 0.0f);
+    T_STREQ(icon.Tip, "Damage: 37 - 59 |cff00ff00+6|r");
 
     UI_TestFormatDamageTooltip(tip, sizeof(tip), body, sizeof(body), ATK_PIERCE,
                                21, 36, 600.0f, 1.5f, "Imbued Gunpowder", 3);
@@ -1670,6 +1675,12 @@ TEST(wc3_game, armor_icon_tooltip_shows_rifleman_defense_details) {
     T_ASSERT(strstr(body, "Move Speed: Average") != NULL);
     T_ASSERT(strstr(body, "Upgrade: Dragonhide Armor - Level 3") != NULL);
     T_ASSERT(strstr(body, "Medium armor takes extra damage from Normal attacks") != NULL);
+
+    rifleman->unit_state->armor_value = 11.0f;
+    rifleman->unit_state->temporary_armor_bonus = 5.0f;
+    UI_TestSetArmorTooltip(&icon, rifleman, rifleman->unit_state->defense_type,
+                           G_UnitArmorValue(rifleman), rifleman->unitinfo.MoveSpeed, 0);
+    T_STREQ(icon.Tip, "Armor: 6 |cff00ff00+5|r");
 }
 
 TEST(wc3_game, hero_primary_attribute_icon_shows_attribute_bonuses) {
