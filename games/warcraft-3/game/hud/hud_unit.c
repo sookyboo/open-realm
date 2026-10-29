@@ -784,6 +784,20 @@ uint8_t G_GetCommandButtons(edict_t *ent, gameCommandButton_t *buttons, uint8_t 
         if (G_IsImplementedAbility(abil) && G_ActorHasSkill(ent, abil))
             G_AddAbilityCommandButtons(ent, buttons, max_buttons, &count, abil);
     }
+    /* TFT uses AEvi for Illidan's Metamorphosis command and keeps that code
+     * on Eevm. Preserve the learned command while the timed BEme morph is
+     * active even if the transformed form's ability list lookup misses the
+     * aliased rawcode. G_AddAbilityCommandButtons deduplicates it when the
+     * authored ability-list path already added it. */
+    if (ent->unit_state && unit_findstatus(ent, MAKEFOURCC('B','E','m','e'))) {
+        FOR_LOOP(i, MAX_HERO_ABILITIES) {
+            heroability_t const *rank = ent->unit_state->ranks + i;
+            if (rank->level && G_AbilityCode(rank->code) == MAKEFOURCC('A','E','m','e')) {
+                G_AddAbilityCommandButtons(ent, buttons, max_buttons, &count, GetClassName(rank->code));
+                break;
+            }
+        }
+    }
     G_AddMagicSentryIndicator(ent, buttons, max_buttons, &count);
     G_AddPillageIndicator(ent, buttons, max_buttons, &count);
     G_AddDiseaseCloudIndicator(ent, buttons, max_buttons, &count);
@@ -791,7 +805,8 @@ uint8_t G_GetCommandButtons(edict_t *ent, gameCommandButton_t *buttons, uint8_t 
     FOR_LOOP(i, ent->unit_state ? MAX_HERO_ABILITIES : 0) {
         heroability_t const *ha = ent->unit_state->ranks + i;
         if (ha->level > 0 && G_IsUnitAbilityAvailable(ent, ha->code) &&
-            G_UnitAbilityResearchVisible(ent, ha->code)) {
+            G_UnitAbilityResearchVisible(ent, ha->code) &&
+            !G_HasCommandRawcode(buttons, count, ha->code)) {
             uint8_t const idx = count;
             G_AddCommandButton(ent, buttons, max_buttons, &count, GetClassName(ha->code), false, ha->level);
             if (count > idx) {
