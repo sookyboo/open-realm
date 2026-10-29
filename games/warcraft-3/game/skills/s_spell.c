@@ -584,6 +584,9 @@ void S_SpellHeal(edict_t *target, float amount) {
     if (!target || amount <= 0) {
         return;
     }
+    /* Ethereal units take 66% more spell damage and receive 66% more spell
+     * healing, matching the retail Banish interaction with Holy Light. */
+    if (unit_hasstatusstate(target, WC3_STATUS_STATE_ETHEREAL)) amount *= 1.66f;
     G_AddHealth(target, amount);
 }
 

@@ -5669,6 +5669,216 @@ TEST(wc3_spell, holy_light_flag_dispatch_validates_and_heals) {
     free_slk_rows(rows);
 }
 
+TEST(wc3_spell, banish_accepts_self_friendly_and_enemy_command_targets) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y4;X14\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\n"
+        "C;Y1;X4;K\"Cost1\"\nC;Y1;X5;K\"Cool1\"\nC;Y1;X6;K\"Rng1\"\n"
+        "C;Y1;X7;K\"Dur1\"\nC;Y1;X8;K\"HeroDur1\"\nC;Y1;X9;K\"DataA1\"\n"
+        "C;Y1;X13;K\"DataE1\"\n"
+        "C;Y1;X14;K\"BuffID1\"\n"
+        "C;Y2;X1;K\"AHbn\"\nC;Y2;X2;K\"AHbn\"\n"
+        "C;Y2;X3;K\"air,ground,nonsapper,organic\"\nC;Y2;X4;K\"75\"\n"
+        "C;Y2;X6;K\"800\"\nC;Y2;X7;K\"12\"\nC;Y2;X8;K\"4\"\n"
+        "C;Y2;X9;K\"0.5\"\nC;Y2;X14;K\"BHbn\"\n"
+        "C;Y3;X1;K\"AHdr\"\nC;Y3;X2;K\"AHdr\"\n"
+        "C;Y3;X3;K\"air,ground,organic,notself\"\nC;Y3;X4;K\"10\"\n"
+        "C;Y3;X5;K\"0\"\nC;Y3;X6;K\"600\"\nC;Y3;X7;K\"6\"\n"
+        "C;Y3;X8;K\"6\"\nC;Y3;X9;K\"800\"\nC;Y3;X11;K\"15\"\n"
+        "C;Y3;X12;K\"1\"\nC;Y3;X13;K\"30\"\nE\n";
+    UnitAbilities_t abilities = { .abilList = "AHbn,AHdr" };
+    slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+    edict_t *caster = make_hero(MAKEFOURCC('H','b','l','m'), 500, 200, 0, 0);
+    edict_t *clent = &g_edicts[0], *ally = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 50, 0);
+    edict_t *enemy = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 75, 0);
+    gameClient_t *client = &game.clients[0];
+    char target_number[16];
+    cstring_t button[] = { "button", "AHbn" }, siphon_button[] = { "button", "AHdr" };
+    cstring_t select_target[] = { "select", target_number };
+
+    clent->client = client;
+    caster->data.UnitAbilities = &abilities;
+    caster->s.player = ally->s.player = 0;
+    caster->targtype = TARG_GROUND;
+    caster->mana.value = caster->mana.max_value = 500;
+    enemy->s.player = 1;
+    ally->svflags |= SVF_MONSTER; enemy->svflags |= SVF_MONSTER;
+    ally->targtype = enemy->targtype = TARG_GROUND;
+    ally->health.value = ally->health.max_value = 500;
+    enemy->health.value = enemy->health.max_value = 500;
+    ally->mana.value = 50; ally->mana.max_value = 100;
+    enemy->mana.value = enemy->mana.max_value = 100;
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    G_SelectEntity(client, caster);
+
+    snprintf(target_number, sizeof(target_number), "%u", (unsigned)caster->s.number);
+    G_ClientCommand(clent, 2, button);
+    T_NOT_NULL(client->menu.on_entity_selected);
+    G_ClientCommand(clent, 2, select_target);
+    T_ASSERT(S_UnitHasStatus(caster, MAKEFOURCC('B','H','b','n')));
+
+    snprintf(target_number, sizeof(target_number), "%u", (unsigned)ally->s.number);
+    G_ClientCommand(clent, 2, button);
+    T_NOT_NULL(client->menu.on_entity_selected);
+    G_ClientCommand(clent, 2, select_target);
+    T_ASSERT(S_UnitHasStatus(ally, MAKEFOURCC('B','H','b','n')));
+
+    snprintf(target_number, sizeof(target_number), "%u", (unsigned)enemy->s.number);
+    G_ClientCommand(clent, 2, button);
+    T_NOT_NULL(client->menu.on_entity_selected);
+    G_ClientCommand(clent, 2, select_target);
+    T_ASSERT(S_UnitHasStatus(enemy, MAKEFOURCC('B','H','b','n')));
+
+    snprintf(target_number, sizeof(target_number), "%u", (unsigned)caster->s.number);
+    G_ClientCommand(clent, 2, siphon_button);
+    T_NOT_NULL(client->menu.on_entity_selected);
+    G_ClientCommand(clent, 2, select_target);
+    T_ASSERT(client->menu.on_entity_selected); /* Siphon Mana cannot target self. */
+    T_ASSERT(!G_GetChannel(caster) || G_GetChannel(caster)->code != MAKEFOURCC('A','H','d','r'));
+
+    snprintf(target_number, sizeof(target_number), "%u", (unsigned)ally->s.number);
+    G_ClientCommand(clent, 2, select_target);
+    T_NULL(client->menu.on_entity_selected);
+    T_NOT_NULL(G_GetChannel(caster));
+    if (!G_GetChannel(caster)) goto cleanup_banish_targets;
+    T_EQ(G_GetChannel(caster)->code, MAKEFOURCC('A','H','d','r'));
+    S_SpellCancelChannel(caster);
+
+    snprintf(target_number, sizeof(target_number), "%u", (unsigned)enemy->s.number);
+    G_ClientCommand(clent, 2, siphon_button);
+    T_NOT_NULL(client->menu.on_entity_selected);
+    G_ClientCommand(clent, 2, select_target);
+    T_NOT_NULL(G_GetChannel(caster));
+    if (!G_GetChannel(caster)) goto cleanup_banish_targets;
+    T_EQ(G_GetChannel(caster)->code, MAKEFOURCC('A','H','d','r'));
+
+cleanup_banish_targets:
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
+}
+
+TEST(wc3_spell, banish_matches_ethereal_combat_healing_and_movement_rules) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X14\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\n"
+        "C;Y1;X4;K\"Dur1\"\nC;Y1;X5;K\"HeroDur1\"\nC;Y1;X14;K\"BuffID1\"\n"
+        "C;Y2;X1;K\"AHbn\"\nC;Y2;X2;K\"AHbn\"\nC;Y2;X3;K\"air,ground,organic\"\n"
+        "C;Y2;X4;K\"12\"\nC;Y2;X5;K\"4\"\nC;Y2;X14;K\"BHbn\"\nE\n";
+    slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+    edict_t *caster = make_hero(MAKEFOURCC('H','b','l','m'), 500, 200, 0, 0);
+    edict_t *banished = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 50, 0);
+    edict_t *physical = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 75, 0);
+    edict_t *magic = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 100, 0);
+    edict_t *enemy = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 125, 0);
+    float normal_distance;
+
+    caster->s.player = banished->s.player = 0;
+    physical->s.player = magic->s.player = enemy->s.player = 1;
+    physical->unit_state->attack1.type = ATK_NORMAL;
+    physical->unit_state->attack1.targetsAllowed = G_TargetFlagForType(TARG_GROUND);
+    magic->unit_state->attack1.type = ATK_MAGIC;
+    magic->unit_state->attack1.targetsAllowed = G_TargetFlagForType(TARG_GROUND);
+    edict_t *units[] = { banished, physical, magic, enemy };
+    FOR_LOOP(i, 4) {
+        units[i]->svflags |= SVF_MONSTER;
+        units[i]->targtype = TARG_GROUND;
+        units[i]->health.value = 500;
+        units[i]->health.max_value = 1000;
+    }
+
+    /* Apply the actual Banish callback to the allied target. */
+    test_execute_code(caster, "AHbn", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = banished));
+    T_ASSERT(S_UnitHasStatus(banished, MAKEFOURCC('B','H','b','n')));
+    T_ASSERT(unit_hasstatusstate(banished, WC3_STATUS_STATE_ETHEREAL));
+
+    /* Physical weapons cannot hit an ethereal unit; magic weapons can. */
+    T_ASSERT(!S_AttackCanTarget(physical, banished));
+    T_ASSERT(S_AttackCanTarget(magic, banished));
+    S_ResolveAttackHit(physical, banished, 100);
+    T_FEQ(banished->health.value, 500, 0.001f);
+    int magic_base_damage = G_AttackDamageWithType(magic, enemy, 100, ATK_MAGIC);
+    int magic_ethereal_damage = G_AttackDamageWithType(magic, banished, 100, ATK_MAGIC);
+    T_EQ(magic_ethereal_damage, (int)((float)magic_base_damage * 1.66f));
+    T_ASSERT(S_SpellDamage(banished, enemy, 100));
+    T_FEQ(banished->health.value, 334, 0.001f);
+
+    /* A banished unit cannot attack, but can still deal spell damage. */
+    T_ASSERT(!S_AttackCanTarget(banished, enemy));
+    T_ASSERT(S_SpellDamage(enemy, banished, 25));
+    T_FEQ(enemy->health.value, 475, 0.001f);
+
+    /* Spell healing on an ethereal unit gets the same 66% amplification. */
+    banished->health.value = 100;
+    S_SpellHeal(banished, 100);
+    T_FEQ(banished->health.value, 266, 0.001f);
+
+    /* Movement step is halved for the duration of Banish. */
+    unit_removestatus(banished, unit_findstatus(banished, MAKEFOURCC('B','H','b','n')), STATUS_REMOVE_SCRIPT);
+    normal_distance = unit_movedistance(banished);
+    test_execute_code(caster, "AHbn", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = banished));
+    T_FEQ(unit_movedistance(banished), normal_distance * 0.5f, 0.001f);
+
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
+}
+
+TEST(wc3_spell, banish_uses_classic_rank_costs_and_unit_durations) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X17\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\nC;Y1;X4;K\"levels\"\n"
+        "C;Y1;X5;K\"Cost1\"\nC;Y1;X6;K\"Cost2\"\nC;Y1;X7;K\"Cost3\"\n"
+        "C;Y1;X8;K\"Dur1\"\nC;Y1;X9;K\"Dur2\"\nC;Y1;X10;K\"Dur3\"\n"
+        "C;Y1;X11;K\"HeroDur1\"\nC;Y1;X12;K\"HeroDur2\"\nC;Y1;X13;K\"HeroDur3\"\n"
+        "C;Y1;X17;K\"BuffID1\"\nC;Y1;X18;K\"BuffID2\"\nC;Y1;X19;K\"BuffID3\"\n"
+        "C;Y2;X1;K\"AHbn\"\nC;Y2;X2;K\"AHbn\"\nC;Y2;X3;K\"air,ground,organic\"\nC;Y2;X4;K\"3\"\n"
+        "C;Y2;X5;K\"75\"\nC;Y2;X6;K\"60\"\nC;Y2;X7;K\"50\"\n"
+        "C;Y2;X8;K\"12\"\nC;Y2;X9;K\"15\"\nC;Y2;X10;K\"18\"\n"
+        "C;Y2;X11;K\"4\"\nC;Y2;X12;K\"5\"\nC;Y2;X13;K\"6\"\n"
+        "C;Y2;X17;K\"BHbn\"\nC;Y2;X18;K\"BHbn\"\nC;Y2;X19;K\"BHbn\"\nE\n";
+    UnitAbilities_t abilities = { .abilList = "AHbn" };
+    uint32_t const banish = MAKEFOURCC('A','H','b','n');
+    float const costs[] = { 75, 60, 50 };
+    float const durations[] = { 12, 15, 18 };
+    float const hero_durations[] = { 4, 5, 6 };
+    float expected_mana = 300.0f;
+    slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+    edict_t *caster = make_hero(MAKEFOURCC('H','b','l','m'), 500, 300, 0, 0);
+    caster->data.UnitAbilities = &abilities;
+    caster->s.player = 0;
+
+    FOR_LOOP(i, 3) {
+        edict_t *target = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 50 + i * 25, 0);
+        caster->unit_state->ranks[0] = MAKE(heroability_t, .code = banish, .level = i + 1);
+        target->s.player = 1;
+        target->svflags |= SVF_MONSTER;
+        target->targtype = TARG_GROUND;
+        target->health.value = target->health.max_value = 500;
+        T_ASSERT(S_CastUnitTargetSpell(caster, banish, target));
+        expected_mana -= costs[i];
+        T_FEQ(caster->mana.value, expected_mana, 0.001f);
+        heroabilitystatus_t *status = unit_findstatus(target, MAKEFOURCC('B','H','b','n'));
+        T_NOT_NULL(status);
+        if (!status) break;
+        T_EQ(status->timestamp, (uint32_t)(level.time + durations[i] * 1000.0f));
+        S_SpellEndCooldown(caster, banish);
+    }
+
+    {
+        edict_t *hero = make_hero(MAKEFOURCC('H','p','a','l'), 200, 0, 100, 0);
+        caster->unit_state->ranks[0] = MAKE(heroability_t, .code = banish, .level = 1);
+        hero->s.player = 1;
+        test_execute_code(caster, "AHbn", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = hero));
+        heroabilitystatus_t *status = unit_findstatus(hero, MAKEFOURCC('B','H','b','n'));
+        T_NOT_NULL(status);
+        T_EQ(status->timestamp, (uint32_t)(level.time + hero_durations[0] * 1000.0f));
+    }
+
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
+}
+
 /* A command-card cast bypasses G_IssueUnitTargetOrder; it must still retire a Stop guard point. */
 TEST(wc3_spell, command_card_cast_clears_stop_guard) {
     const char slk[] =
