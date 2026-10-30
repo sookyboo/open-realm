@@ -230,7 +230,8 @@ void carrion_wave_think(edict_t *wave) {
         carrion_wave_finish(wave); return;
     }
     start = state->previous_position;
-    step = MIN(state->speed * FRAMETIME / 1000.0f, state->travel_distance - state->travelled);
+    step = MIN(Vector2_distance(&wave->s.origin2, &start), state->travel_distance - state->travelled);
+    if (step <= 0.001f) return;
     /* Markers allocated for hits are edicts too; keep this collision pass
      * bounded to the world that existed when the frame began. */
     target_count = globals.num_edicts;
@@ -239,17 +240,29 @@ void carrion_wave_think(edict_t *wave) {
         if (S_SpellIsAliveTarget(target)) carrion_wave_hit(wave, caster, state, target, &start, step);
     }
     state->travelled += step;
-    state->previous_position.x += state->direction.x * step;
-    state->previous_position.y += state->direction.y * step;
-    wave->s.origin2 = state->previous_position;
-    wave->s.origin.x = state->previous_position.x;
-    wave->s.origin.y = state->previous_position.y;
-    wave->s.origin.z = CM_GetHeightAtPoint(wave->s.origin.x, wave->s.origin.y);
-    wave->s.angle = atan2f(state->direction.y, state->direction.x);
-    G_AdvanceProjectilePresentation(wave);
+    state->previous_position = wave->s.origin2;
     wave->think = carrion_wave_think;
     if (state->travelled >= state->travel_distance) carrion_wave_finish(wave);
 }
+
+/* The shared physics projectile path keeps Crushing Wave presentation moving
+ * and interpolated like other Warcraft missiles. Land exactly at the authored
+ * DataC endpoint on the final physics step; carrion_wave_think then processes
+ * the final swept segment before retiring the projectile. */
+static void carrion_wave_arrive(edict_t *wave) {
+    channel_t *cast = G_GetChannel(wave);
+    if (!cast) return;
+    wave->s.origin2 = cast->origin;
+    wave->s.origin.x = cast->origin.x;
+    wave->s.origin.y = cast->origin.y;
+    wave->s.origin.z = CM_GetHeightAtPoint(cast->origin.x, cast->origin.y);
+    gi.LinkEntity(wave);
+}
+
+static umove_t carrion_wave_visual_move = {
+    .animation = "Stand",
+    .endfunc = carrion_wave_arrive
+};
 
 static umove_t shockwave_visual_move = {
     .animation = "Stand",
@@ -270,6 +283,7 @@ static void carrion_swarm_spawn_missile(edict_t *caster, uint32_t code, uint32_t
     vec2_t direction;
     edict_t *missile;
     carrionWave_t *state;
+    channel_t *cast;
 
 #if BZ_COMPAT_WORKAROUNDS
     /* RoC 1.0 omits AUcs MissileArt and Missilespeed; the 1.29 row authors
@@ -290,6 +304,12 @@ static void carrion_swarm_spawn_missile(edict_t *caster, uint32_t code, uint32_t
     missile->s.angle = atan2f(direction.y, direction.x);
     missile->s.model = G_RegisterModel(art);
     if (!missile->s.model) { G_FreeEdict(missile); return; }
+    /* The authored Crushing Wave missile needs about 3x its default size in
+     * game. Scale proportionally from stock DataD=300 so customized aliases
+     * keep the same visual relationship to their final wave area. */
+    if (code == MAKEFOURCC('A','C','c','v') || code == MAKEFOURCC('A','C','c','2') ||
+        code == MAKEFOURCC('A','C','c','3'))
+        missile->s.scale = MAX(1.0f, final_width / 100.0f);
     G_InheritUnitTeamColor(missile, caster);
     state = G_AddCarrionWave(missile);
     if (!state) { G_FreeEdict(missile); return; }
@@ -307,8 +327,14 @@ static void carrion_swarm_spawn_missile(edict_t *caster, uint32_t code, uint32_t
     state->damage_per_target = MAX(0.0f, S_SpellData(code, level, 1));
     state->remaining_damage = MAX(0.0f, S_SpellData(code, level, 2));
     state->capped = state->remaining_damage > 0.0f;
+    cast = G_AddChannel(missile);
+    if (!cast) { G_FreeEdict(missile); return; }
+    cast->owner_spawn_time = caster->spawn_time;
+    cast->origin = Vector2_mad(&caster->s.origin2, travel, &direction);
     missile->velocity = speed / 1000.0f;
-    missile->movetype = MOVETYPE_NONE;
+    missile->movetype = MOVETYPE_FLYMISSILE;
+    missile->aiflags |= AI_PROJECTILE_FIXED_TARGET;
+    missile->currentmove = &carrion_wave_visual_move;
     missile->think = carrion_wave_think;
     G_StartProjectilePresentation(missile);
 }
