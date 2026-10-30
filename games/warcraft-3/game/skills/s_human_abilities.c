@@ -54,8 +54,11 @@ static heroabilitystatus_t *human_status_execute(edict_t *caster, spellTarget_t 
     uint32_t level = S_SpellLevel(caster, spell->code);
     cstring_t buff = human_buff(spell, level);
     if (!st.entity || !buff) return NULL;
+    float duration = spell->ability && spell->ability->proc == CAbilitySlow
+        ? S_SpellResistantDuration(spell->code, level, st.entity)
+        : S_SpellHeroDuration(spell->code, level, st.entity);
     heroabilitystatus_t *status = S_SpellApplyTimedTargetStatus(st.entity, spell->code, level, buff,
-                                         S_SpellHeroDuration(spell->code, level, st.entity));
+                                         duration);
     /* First verified transfer family: Inner Fire.  Other buffs remain legacy
      * dispellable but are not transferable until their cleanup is audited. */
     if (status && status->code == MAKEFOURCC('B','i','n','f')) {
@@ -177,7 +180,8 @@ static bool aerial_shackles_validate(edict_t *caster, spellTarget_t st, abilityi
     uint32_t level, buff;
     wc3_status_apply_check_t check;
     if (!caster || !spell || !st.entity || !S_SpellIsAliveTarget(st.entity) ||
-        st.entity->targtype != TARG_AIR || !S_SpellIsEnemy(caster, st.entity)) return false;
+        S_UnitIsResistant(st.entity) || st.entity->targtype != TARG_AIR ||
+        !S_SpellIsEnemy(caster, st.entity)) return false;
     level = S_SpellLevel(caster, spell->code);
     buff = shackles_buff(spell->code, level);
     if (!buff) return false;
@@ -311,7 +315,7 @@ static bool polymorph_validate(edict_t *caster, spellTarget_t st, abilityitem_t 
     UnitBalance_t const *balance;
     wc3_status_apply_check_t check;
 
-    if (!st.entity || !S_SpellIsEnemy(caster, st.entity) || G_UnitIsHero(st.entity) ||
+    if (!st.entity || !S_SpellIsEnemy(caster, st.entity) || S_UnitIsResistant(st.entity) ||
         st.entity->summon_ability || (st.entity->aiflags & AI_ILLUSION) ||
         st.entity->targtype == TARG_MECHANICAL) return false;
     level = S_SpellLevel(caster, spell->code);
@@ -443,7 +447,7 @@ static void aerial_shackles_execute(edict_t *caster, spellTarget_t st, abilityit
     edict_t *thinker;
     heroabilitystatus_t *slot;
     if (!st.entity || !buff) return;
-    duration = S_SpellHeroDuration(spell->code, level, st.entity);
+    duration = S_SpellResistantDuration(spell->code, level, st.entity);
     /* Reserve the thinker before status mutation; if status insertion fails,
      * discard it before it can begin a channel or deal its first damage tick. */
     thinker = S_SpellChannelTargetThinker(caster, spell->code, st.entity);

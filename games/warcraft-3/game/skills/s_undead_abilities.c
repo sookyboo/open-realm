@@ -650,7 +650,7 @@ static bool possession_validate(edict_t *caster, spellTarget_t st, abilityitem_t
     uint32_t level = S_SpellLevel(caster, spell->code);
     uint32_t max_level = (uint32_t)S_SpellData(spell->code, level, 1);
     if (!target || !target->data.UnitBalance) return false;
-    if (G_UnitIsHero(target)) return false;
+    if (S_UnitIsResistant(target)) return false;
     if (!S_SpellIsEnemy(caster, target) && !possession_is_neutral(target)) return false;
     if (max_level && (uint32_t)target->data.UnitBalance->level > max_level) return false;
     return true;

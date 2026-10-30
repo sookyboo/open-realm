@@ -2198,7 +2198,7 @@ TEST(wc3_spell, unholy_aura_custom_art_is_removed_while_another_source_keeps_glo
 
 TEST(wc3_spell, unholy_aura_percent_regen_and_recipient_presentation) {
     const char slk[] =
-        "ID;PWXL;N;EBB;Y3;X9\n"
+        "ID;PWXL;N;EBB;Y4;X9\n"
         "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\n"
         "C;Y1;X4;K\"Area1\"\nC;Y1;X5;K\"DataA1\"\nC;Y1;X6;K\"DataB1\"\n"
         "C;Y1;X7;K\"DataC1\"\nC;Y1;X8;K\"BuffID1\"\nC;Y1;X9;K\"levels\"\n"
@@ -4462,8 +4462,12 @@ TEST(wc3_spell, human_support_spells_use_authored_status_and_heal_values) {
 	float const normal_move_distance = unit_movedistance(enemy);
 	attack_melee(enemy);
 	T_FEQ(enemy->wait, 0.3f, 0.001f);
+	enemy->unit_state->ranks[0] = MAKE(heroability_t,
+		.code = MAKEFOURCC('A','C','s','k'), .level = 1);
+	T_ASSERT(S_UnitIsResistant(enemy));
 	test_execute_code(caster, "Aslo", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = enemy));
 	T_ASSERT(S_UnitHasStatus(enemy, MAKEFOURCC('B','s','l','o')));
+	T_EQ(unit_findstatus(enemy, MAKEFOURCC('B','s','l','o'))->duration_ms, 10000u);
 	T_FEQ(S_HumanMoveFactor(enemy), 0.4f, 0.001f);
 	T_FEQ(unit_movedistance(enemy), normal_move_distance * 0.4f, 0.01f);
 	T_FEQ(unit_status_modifier_total(enemy, WC3_STATUS_MOD_ATTACK_SPEED_PERCENT), -0.25f, 0.001f);
@@ -5727,6 +5731,7 @@ TEST(wc3_spell, entangling_roots_alias_uses_own_data_and_hero_duration) {
     slkTestData_t *rows = parse_slk_string(slk), *old;
     edict_t *caster = make_hero(MAKEFOURCC('E','k','e','e'), 500, 200, 0, 0);
     edict_t *target = make_hero(MAKEFOURCC('H','p','a','l'), 500, 200, 64, 0);
+    edict_t *resistant = alloc_test_unit(MAKEFOURCC('n','n','r','g'), 96, 0);
     heroabilitystatus_t *slot;
 
     old = G_SetSLKRows("AbilityData", rows);
@@ -5734,6 +5739,10 @@ TEST(wc3_spell, entangling_roots_alias_uses_own_data_and_hero_duration) {
     G_InitUnitOrders(target);
     target->svflags |= SVF_MONSTER; target->targtype = TARG_GROUND;
     target->health.value = target->health.max_value = 100.0f;
+    resistant->svflags |= SVF_MONSTER; resistant->targtype = TARG_GROUND;
+    resistant->unit_state->ranks[0] = MAKE(heroability_t,
+        .code = MAKEFOURCC('A','C','s','k'), .level = 1);
+    resistant->health.value = resistant->health.max_value = 100.0f;
     T_ASSERT(test_execute_code(caster, "Aenr", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = target)));
     slot = unit_findstatus(target, MAKEFOURCC('B','E','e','r'));
     T_NOT_NULL(slot);
@@ -5742,6 +5751,13 @@ TEST(wc3_spell, entangling_roots_alias_uses_own_data_and_hero_duration) {
     T_EQ(slot->duration_ms, 2000);
     level.time += 1000; unit_updatestatuses(target);
     T_FEQ(target->health.value, 81.0f, 0.001f);
+
+    T_ASSERT(S_UnitIsResistant(resistant));
+    T_ASSERT(test_execute_code(caster, "Aenr",
+        MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = resistant)));
+    slot = unit_findstatus(resistant, MAKEFOURCC('B','E','e','r'));
+    T_NOT_NULL(slot);
+    if (slot) T_EQ(slot->duration_ms, 2000);
 
     G_SetSLKRows("AbilityData", old);
     free_slk_rows(rows);
@@ -7057,6 +7073,12 @@ TEST(wc3_spell, polymorph_validates_creep_limit_summons_and_restores_runtime_sta
     T_ASSERT(!test_ability_message(caster, A_VALIDATE, &ability_item, &st));
     G_SetPlayerAbilityAvailable(&game.clients[0], FS_SLKKey("Aply"), true);
     T_ASSERT(test_ability_message(caster, A_VALIDATE, &ability_item, &st));
+    target->unit_state->ranks[0] = MAKE(heroability_t,
+        .code = MAKEFOURCC('A','C','s','k'), .level = 1);
+    T_ASSERT(S_UnitIsResistant(target));
+    T_ASSERT(!test_ability_message(caster, A_VALIDATE, &ability_item, &st));
+    memset(target->unit_state->ranks, 0, sizeof(target->unit_state->ranks));
+    T_ASSERT(test_ability_message(caster, A_VALIDATE, &ability_item, &st));
     creep.level = 6; T_ASSERT(!test_ability_message(caster, A_VALIDATE, &ability_item, &st));
     creep.level = 5; target->summon_ability = MAKEFOURCC('A','O','s','f');
     T_ASSERT(!test_ability_message(caster, A_VALIDATE, &ability_item, &st));
@@ -7080,6 +7102,65 @@ TEST(wc3_spell, polymorph_validates_creep_limit_summons_and_restores_runtime_sta
     T_STREQ(G_OrderId2String(WC3_ORDER_ID_POLYMORPH), "polymorph");
 
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* Resistant Skin gives a non-Hero the Hero targeting class and Hero duration
+ * for hostile control effects. */
+TEST(wc3_spell, resistant_skin_uses_hero_targeting_and_ensnare_duration) {
+    static cstring_t const slk =
+        "ID;PWXL;N;EBB;Y3;X9\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+        "C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Dur1\"\nC;Y1;X6;K\"HeroDur1\"\n"
+        "C;Y1;X7;K\"Cost1\"\nC;Y1;X8;K\"BuffID1\"\nC;Y1;X9;K\"Rng1\"\n"
+        "C;Y2;X1;K\"Aens\"\nC;Y2;X2;K\"Aens\"\nC;Y2;X3;K\"1\"\n"
+        "C;Y2;X4;K\"ground,air,enemy,neutral\"\nC;Y2;X5;K\"9\"\n"
+        "C;Y2;X6;K\"3\"\nC;Y2;X7;K\"0\"\nC;Y2;X8;K\"Bens\"\nC;Y2;X9;K\"500\"\n"
+        "C;Y3;X1;K\"Adev\"\nC;Y3;X2;K\"Adev\"\nC;Y3;X3;K\"1\"\n"
+        "C;Y3;X4;K\"ground,enemy,nonhero\"\nC;Y3;X5;K\"9\"\n"
+        "C;Y3;X6;K\"3\"\nC;Y3;X7;K\"0\"\nC;Y3;X8;K\"\"\nC;Y3;X9;K\"500\"\n"
+        "C;Y4;X1;K\"ANdo\"\nC;Y4;X2;K\"ANdo\"\nC;Y4;X3;K\"1\"\n"
+        "C;Y4;X4;K\"ground,enemy\"\nC;Y4;X5;K\"9\"\nC;Y4;X6;K\"3\"\n"
+        "C;Y4;X7;K\"0\"\nC;Y4;X8;K\"BDom\"\nC;Y4;X9;K\"500\"\nE\n";
+    slkTestData_t *rows = parse_slk_string(slk), *old;
+    edict_t *caster, *ordinary, *guard;
+
+    reset_entities(); setup_test_world(); level.time = 1000;
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    old = G_SetSLKRows("AbilityData", rows);
+    caster = alloc_test_unit(MAKEFOURCC('o','r','a','i'), 0, 0);
+    ordinary = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64, 0);
+    guard = alloc_test_unit(MAKEFOURCC('n','n','r','g'), 96, 0);
+    caster->s.player = 0; ordinary->s.player = guard->s.player = 1;
+    caster->svflags |= SVF_MONSTER; ordinary->svflags |= SVF_MONSTER; guard->svflags |= SVF_MONSTER;
+    caster->targtype = ordinary->targtype = guard->targtype = TARG_GROUND;
+    caster->unit_state->ranks[0] = MAKE(heroability_t,
+        .code = MAKEFOURCC('A','e','n','s'), .level = 1);
+    caster->unit_state->ranks[1] = MAKE(heroability_t,
+        .code = MAKEFOURCC('A','d','e','v'), .level = 1);
+    caster->unit_state->ranks[2] = MAKE(heroability_t,
+        .code = MAKEFOURCC('A','N','d','o'), .level = 1);
+    guard->unit_state->ranks[0] = MAKE(heroability_t,
+        .code = MAKEFOURCC('A','C','s','k'), .level = 1);
+    caster->mana.value = caster->mana.max_value = 100;
+    ordinary->health.value = guard->health.value = 500;
+
+    T_ASSERT(!G_UnitIsHero(guard));
+    T_ASSERT(S_UnitIsResistant(guard));
+    T_ASSERT(!S_UnitIsResistant(ordinary));
+    T_ASSERT(S_SpellAllowsTarget(MAKEFOURCC('A','d','e','v'), caster, ordinary));
+    T_ASSERT(!S_SpellAllowsTarget(MAKEFOURCC('A','d','e','v'), caster, guard));
+    T_ASSERT(!S_CastUnitTargetSpell(caster, MAKEFOURCC('A','N','d','o'), guard));
+    T_FEQ(S_SpellResistantDuration(MAKEFOURCC('A','e','n','s'), 1, ordinary), 9.0f, 0.001f);
+    T_FEQ(S_SpellResistantDuration(MAKEFOURCC('A','e','n','s'), 1, guard), 3.0f, 0.001f);
+    T_ASSERT(S_CastUnitTargetSpell(caster, MAKEFOURCC('A','e','n','s'), guard));
+    heroabilitystatus_t *status = unit_findstatus(guard, MAKEFOURCC('B','e','n','s'));
+    T_NOT_NULL(status);
+    if (status) T_EQ(status->duration_ms, 3000u);
+
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
 }
 
 /* Roar is one area cast, not an all-or-nothing status transaction.

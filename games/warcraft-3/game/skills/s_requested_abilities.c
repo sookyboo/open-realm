@@ -1177,7 +1177,11 @@ BZ_SIMPLE_SPELL_PROC(AbilityDrunkenHaze) { target_status_execute(caster, st, spe
 /* Name=Doom
  * Ubertip="Curses a target enemy unit, preventing it from casting spells and damaging it over time."
  */
-BZ_SIMPLE_SPELL_PROC(AbilityDoom) { target_status_execute(caster, st, spell); }
+static bool doom_validate(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
+    return spell && st.entity && S_SpellIsAliveTarget(st.entity) &&
+        S_SpellIsEnemy(caster, st.entity) && !S_UnitIsResistant(st.entity);
+}
+BZ_VALIDATED_SPELL_PROC(AbilityDoom, doom_validate, target_status_execute)
 /* Name=Healing Wave
  * Ubertip="Heals a target friendly unit and bounces to nearby friendlies, healing less each jump."
  */

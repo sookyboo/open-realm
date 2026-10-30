@@ -462,7 +462,7 @@ bool S_SpellAllowsAreaTarget(uint32_t code, edict_t *caster, edict_t *target) {
         bool const allows_hero = S_SpellTargetHasToken(targets, "hero", NULL);
         bool const allows_nonhero = S_SpellTargetHasToken(targets, "nonhero", "nonh");
         if ((allows_hero || allows_nonhero) &&
-            !(G_UnitIsHero(target) ? allows_hero : allows_nonhero)) return false;
+            (S_UnitIsResistant(target) ? !allows_hero : !allows_nonhero)) return false;
     }
     if (strstr(targets, "notself") && target == caster) return false;
     if ((strstr(targets, "air") || strstr(targets, "ground") || strstr(targets, "structure")) &&
