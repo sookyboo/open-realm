@@ -9106,4 +9106,88 @@ TEST(wc3_spell, phoenix_registered_ability_contracts) {
     T_ASSERT(fire.ability->proc == CAbilityPhoenixFire);
 }
 
+/* Drive Flame Strike through normal spell dispatch and its scheduled thinker.
+ * The non-stock damage/radius values ensure the test observes authored data,
+ * not a retail constant hidden in the implementation. */
+TEST(wc3_spell, flame_strike_uses_authored_point_and_pulse_data) {
+    static cstring_t const slk =
+        "ID;PWXL;N;EBB;Y2;X16\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+        "C;Y1;X4;K\"targs1\"\nC;Y1;X5;K\"Cast1\"\nC;Y1;X6;K\"Dur1\"\n"
+        "C;Y1;X7;K\"HeroDur1\"\nC;Y1;X8;K\"Area1\"\n"
+        "C;Y1;X9;K\"DataA1\"\nC;Y1;X10;K\"DataB1\"\n"
+        "C;Y1;X11;K\"DataC1\"\nC;Y1;X12;K\"DataD1\"\n"
+        "C;Y1;X13;K\"DataE1\"\nC;Y1;X14;K\"DataF1\"\n"
+        "C;Y1;X15;K\"BuffID1\"\nC;Y1;X16;K\"EfctID1\"\n"
+        "C;Y2;X1;K\"AHfs\"\nC;Y2;X2;K\"AHfs\"\nC;Y2;X3;K1\n"
+        "C;Y2;X4;K\"ground,enemy\"\nC;Y2;X5;K1\nC;Y2;X6;K8\n"
+        "C;Y2;X7;K2\nC;Y2;X8;K180\nC;Y2;X9;K37\n"
+        "C;Y2;X10;K1\nC;Y2;X11;K11\nC;Y2;X12;K2\n"
+        "C;Y2;X13;K1\nC;Y2;X14;K1000\nC;Y2;X15;K\"BHfs\"\n"
+        "C;Y2;X16;K\"XHfs\"\nE\n";
+    static UnitAbilities_t const abilities = { .abilList = "AHfs" };
+    slkTestData_t *rows, *old;
+    edict_t *caster, *target, *thinker = NULL;
+    vec2_t point = { 64.0f, 0.0f };
+
+    reset_entities(); setup_test_world();
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    caster = alloc_test_unit(MAKEFOURCC('H','b','l','m'), 0.0f, 0.0f);
+    target = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64.0f, 0.0f);
+    caster->data.UnitAbilities = &abilities;
+    caster->s.player = 0; caster->svflags |= SVF_MONSTER;
+    target->s.player = 1; target->svflags |= SVF_MONSTER;
+    target->targtype = TARG_GROUND;
+    target->health.value = target->health.max_value = 500.0f;
+    target->unit_state->armor_value = 0.0f;
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+
+    level.time = 0;
+    T_STREQ(G_AbilityEffectArt(MAKEFOURCC('A','H','f','s'), WC3_EFFECT_EFFECT, 0),
+            "TestUI\\Models\\flame-strike-warning.mdx");
+    T_STREQ(G_AbilityEffectArt(MAKEFOURCC('A','H','f','s'), WC3_EFFECT_SPECIAL, 0),
+            "TestUI\\Models\\flame-strike-impact-1.mdx");
+    T_STREQ(G_AbilityEffectArt(MAKEFOURCC('X','H','f','s'), WC3_EFFECT_EFFECT, 0),
+            "TestUI\\Models\\flame-strike-embers.mdx");
+    T_STREQ(G_AbilityEffectArt(MAKEFOURCC('B','H','f','s'), WC3_EFFECT_TARGET, 0),
+            "TestUI\\Models\\flame-strike-damage.mdx");
+    T_ASSERT(S_CastPointTargetSpell(caster, MAKEFOURCC('A','H','f','s'), &point));
+    T_NOT_NULL(G_AbilityEffectArt(MAKEFOURCC('A','H','f','s'), WC3_EFFECT_EFFECT, 0));
+    {
+        bool warning_spawned = false;
+        int const warning_model = G_RegisterModel("TestUI\\Models\\flame-strike-warning.mdx");
+        FILTER_EDICTS(effect, effect->inuse && effect->s.model == warning_model &&
+                      effect->s.origin2.x == point.x && effect->s.origin2.y == point.y)
+            warning_spawned = true;
+        T_ASSERT(warning_spawned);
+    }
+    FILTER_EDICTS(ent, ent->inuse && ent->owner == caster && ent->class_id == MAKEFOURCC('A','H','f','s') && ent->think) {
+        thinker = ent; break;
+    }
+    T_NOT_NULL(thinker);
+    if (thinker) {
+        float const before = target->health.value;
+        level.time = 999; G_RunEntity(thinker);
+        T_FEQ(target->health.value, before, 0.001f);
+        level.time = 1000; G_RunEntity(thinker);
+        T_FEQ(before - target->health.value, 37.0f, 0.001f);
+        {
+            bool impact_spawned = false, field_spawned = false, target_art_spawned = false;
+            int const impact_model = G_RegisterModel("TestUI\\Models\\flame-strike-impact-1.mdx");
+            int const field_model = G_RegisterModel("TestUI\\Models\\flame-strike-embers.mdx");
+            int const target_model = G_RegisterModel("TestUI\\Models\\flame-strike-damage.mdx");
+            FILTER_EDICTS(effect, effect->inuse && effect->s.model == impact_model) impact_spawned = true;
+            FILTER_EDICTS(effect, effect->inuse && effect->s.model == field_model) field_spawned = true;
+            FILTER_EDICTS(effect, effect->inuse && effect->s.model == target_model && effect->goalentity == target)
+                target_art_spawned = true;
+            T_ASSERT(impact_spawned);
+            T_ASSERT(field_spawned);
+            T_ASSERT(target_art_spawned);
+        }
+    }
+
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 #endif /* BZ_TESTS */
