@@ -146,22 +146,33 @@ void tornado_think(edict_t *thinker) {
 BZ_ABILITY_PROC(CAbilityTornado) {
     edict_t *summon, *thinker;
     uint32_t unit_id, level;
-    vec2_t location;
-    float angle, duration;
+    vec2_t location, clear_location;
+    float duration;
     animation_t const *birth;
     if (msg != A_EXECUTE) return CAbilitySimpleSpell(ent, msg, call);
-    if (!ent || !call || !call->item) return false;
+    if (!ent || !call || !call->item || !call->target ||
+        call->target->type != SPELL_TARGET_POINT) return false;
     level = S_SpellLevel(ent, call->item->code);
     unit_id = S_SpellUnitId(call->item->code, level);
     duration = S_SpellDuration(call->item->code, level, false);
     if (!unit_id || duration <= 0.0f) return false;
-    location = ent->s.origin2;
-    angle = ent->s.angle;
-    location.x += cosf(angle) * MAX(64.0f, ent->collision + 32.0f);
-    location.y += sinf(angle) * MAX(64.0f, ent->collision + 32.0f);
-    SP_FindEmptySpaceAround(ent, unit_id, &location, &angle);
+    location = call->target->point;
     summon = S_SummonAbilityAt(ent, call->item->code, unit_id, &location, duration);
     if (!summon) return false;
+    /* Spawn at the chosen point, nudging only when pathing or another unit
+     * blocks it. Unlike SP_FindEmptySpaceAround, which searches around its
+     * unit argument, this keeps the requested target as the placement origin. */
+    (void)G_FindUnitUnstuckPosition(summon, &location, &clear_location);
+    if (clear_location.x != summon->s.origin2.x || clear_location.y != summon->s.origin2.y) {
+        vec2_t const old_location = summon->s.origin2;
+        summon->s.origin2 = clear_location;
+        summon->s.origin.x = clear_location.x;
+        summon->s.origin.y = clear_location.y;
+        M_CheckGround(summon);
+        if (summon->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
+        gi.LinkEntity(summon);
+        G_UnitPositionChanged(summon, &old_location);
+    }
     /* BNto is the authored summon buff, independent of the BTLF lifetime
      * marker. Respect custom BuffID aliases instead of hardcoding icon art. */
     {

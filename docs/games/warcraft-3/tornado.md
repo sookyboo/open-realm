@@ -3,7 +3,9 @@
 ## Authored TFT contract
 
 `ANto` is the **tornado** order; it costs 200 mana, has 120 seconds cooldown,
-700 cast range, `UnitID=ntor`, `BuffID=BNto`, and both Dur/HeroDur = 40 seconds.
+700 cast range, targets a selected point, `UnitID=ntor`, `BuffID=BNto`, and
+both Dur/HeroDur = 40 seconds. The summon appears at the selected point (or the
+nearest clear position when that point is blocked).
 Its caster animation is `spell,channel`, with empty CasterArt and no EffectID.
 `ntor` owns `Atdg`, `Atsp`, `Atwa`, and `Aasl` (UnitAbilities.slk).
 

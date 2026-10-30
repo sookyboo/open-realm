@@ -208,7 +208,7 @@ static ability_t abilitylist[] = {
     { "ANsi", CAbilitySilence, AB_SPELL, SPELL_TARGET_POINT },  /* Silence */
     { "ANba", CAbilityBlackArrow, AB_SPELL | AB_TOGGLE | AB_AUTOCAST },  /* Black Arrow */
     { "ANch", CAbilityCharm, AB_SPELL, SPELL_TARGET_UNIT },  /* Charm */
-    { "ANto", CAbilityTornado, AB_SPELL | AB_CHANNEL },  /* Tornado */
+    { "ANto", CAbilityTornado, AB_SPELL | AB_CHANNEL, SPELL_TARGET_POINT },  /* Tornado */
     { "Abgm", CAbilityBlightedGoldMine, 0 },  /* Blighted Gold Mine Ability */
     { "Aegm", CAbilityEntangledGoldMine, AB_PASSIVE | AB_UPDATE },  /* Entangled Gold Mine Ability */
     { "Aloa", CAbilityCargoLoad, AB_COMMAND },  /* Load */

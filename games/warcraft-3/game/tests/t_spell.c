@@ -3961,7 +3961,7 @@ TEST(wc3_spell, tornado_has_separate_summon_and_unit_passive_handlers) {
     T_ASSERT(cast.ability->proc == CAbilityTornado);
     T_ASSERT(cast.ability->flags & AB_CHANNEL);
     T_ASSERT(cast.ability->flags & AB_SPELL);
-    T_EQ(cast.ability->target_type, SPELL_TARGET_NONE);
+    T_EQ(cast.ability->target_type, SPELL_TARGET_POINT);
     T_ASSERT(damage.ability->proc == CAbilityTornadoDamage);
     T_ASSERT(damage.ability->flags & AB_PASSIVE);
     T_ASSERT(spin.ability->proc == CAbilityTornadoSpin);
@@ -3969,6 +3969,62 @@ TEST(wc3_spell, tornado_has_separate_summon_and_unit_passive_handlers) {
     T_ASSERT(!(spin.ability->flags & AB_CHANNEL));
     T_ASSERT(wander.ability->proc == CAbilityWander);
     T_ASSERT(wander.ability->flags & AB_PASSIVE);
+}
+
+TEST(wc3_spell, tornado_summons_at_selected_point) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X9\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
+        "C;Y1;X3;K\"targs\"\nC;Y1;X4;K\"Cost1\"\n"
+        "C;Y1;X5;K\"Cool1\"\nC;Y1;X6;K\"Rng1\"\n"
+        "C;Y1;X7;K\"Dur1\"\nC;Y1;X8;K\"HeroDur1\"\n"
+        "C;Y1;X9;K\"UnitID1\"\n"
+        "C;Y2;X1;K\"ANto\"\nC;Y2;X2;K\"ANto\"\n"
+        "C;Y2;X3;K\"ground\"\nC;Y2;X4;K\"0\"\n"
+        "C;Y2;X5;K\"0\"\nC;Y2;X6;K\"700\"\n"
+        "C;Y2;X7;K\"40\"\nC;Y2;X8;K\"40\"\n"
+        "C;Y2;X9;K\"hfoo\"\nE\n";
+    static UnitAbilities_t const abilities = { .abilList = "ANto" };
+    vec2_t const target = { 320.0f, 192.0f };
+    slkTestData_t *rows = parse_slk_string(slk), *old;
+    edict_t *caster, *summon = NULL;
+    edict_t *clent;
+    void (*old_write)(pfWriteType_t, void const *) = gi.Write;
+
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    caster = make_hero(MAKEFOURCC('H','p','a','l'), 500.0f, 200.0f, 0.0f, 0.0f);
+    caster->data.UnitAbilities = &abilities;
+    clent = &g_edicts[0];
+    clent->client = &game.clients[0];
+    clent->inuse = true;
+    clent->client->connected = true;
+    clent->client->ps.number = 0;
+    clent->client->menu.ability_code = FS_SLKKey("ANto");
+    caster->s.player = 0;
+    G_SelectEntity(clent->client, caster);
+    spell_cursor_capture_radius = 0.0f;
+    spell_cursor_splat_seen = false;
+    spell_cursor_image_clear = false;
+    gi.Write = spell_cursor_capture_write;
+    spell_cmd(clent);
+    gi.Write = old_write;
+    T_NOT_NULL(clent->client->menu.on_location_selected);
+    T_ASSERT(spell_cursor_capture_radius > 0.0f);
+
+    T_ASSERT(S_CastPointTargetSpell(caster, FS_SLKKey("ANto"), &target));
+    FILTER_EDICTS(unit, unit->owner == caster && unit->summon_ability == FS_SLKKey("ANto")) {
+        summon = unit;
+        break;
+    }
+    T_NOT_NULL(summon);
+    if (summon) {
+        T_FEQ(summon->s.origin2.x, target.x, 0.001f);
+        T_FEQ(summon->s.origin2.y, target.y, 0.001f);
+    }
+
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
 }
 
 TEST(wc3_spell, tornado_damage_uses_three_authored_building_bands_only) {
