@@ -50,13 +50,13 @@ static void spell_cursor_capture_write(pfWriteType_t type, void const *data) {
 }
 
 static char const spell_cursor_test_slk[] =
-    "ID;PWXL;N;EBB;Y2;X8\n"
+    "ID;PWXL;N;EBB;Y2;X9\n"
     "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"Cost1\"\n"
     "C;Y1;X4;K\"Cool1\"\nC;Y1;X5;K\"Rng1\"\nC;Y1;X6;K\"DataA1\"\n"
-    "C;Y1;X7;K\"DataB1\"\nC;Y1;X8;K\"levels\"\n"
+    "C;Y1;X7;K\"DataB1\"\nC;Y1;X8;K\"levels\"\nC;Y1;X9;K\"Area1\"\n"
     "C;Y2;X1;K\"AEbl\"\nC;Y2;X2;K\"AEbl\"\nC;Y2;X3;K\"10\"\n"
     "C;Y2;X4;K\"1\"\nC;Y2;X5;K\"1000\"\nC;Y2;X6;K\"1000\"\n"
-    "C;Y2;X7;K\"0\"\nC;Y2;X8;K\"1\"\nE\n";
+    "C;Y2;X7;K\"0\"\nC;Y2;X8;K\"1\"\nC;Y2;X9;K\"200\"\nE\n";
 
 static edict_t *spell_cursor_test_begin(slkTestData_t **rows, slkTestData_t **old) {
     static UnitAbilities_t abilities;
@@ -3976,17 +3976,17 @@ TEST(wc3_spell, tornado_has_separate_summon_and_unit_passive_handlers) {
 
 TEST(wc3_spell, tornado_summons_at_selected_point) {
     const char slk[] =
-        "ID;PWXL;N;EBB;Y2;X9\n"
+        "ID;PWXL;N;EBB;Y2;X10\n"
         "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
         "C;Y1;X3;K\"targs\"\nC;Y1;X4;K\"Cost1\"\n"
         "C;Y1;X5;K\"Cool1\"\nC;Y1;X6;K\"Rng1\"\n"
         "C;Y1;X7;K\"Dur1\"\nC;Y1;X8;K\"HeroDur1\"\n"
-        "C;Y1;X9;K\"UnitID1\"\n"
+        "C;Y1;X9;K\"UnitID1\"\nC;Y1;X10;K\"Area1\"\n"
         "C;Y2;X1;K\"ANto\"\nC;Y2;X2;K\"ANto\"\n"
         "C;Y2;X3;K\"ground\"\nC;Y2;X4;K\"0\"\n"
         "C;Y2;X5;K\"0\"\nC;Y2;X6;K\"700\"\n"
         "C;Y2;X7;K\"40\"\nC;Y2;X8;K\"40\"\n"
-        "C;Y2;X9;K\"hfoo\"\nE\n";
+        "C;Y2;X9;K\"hfoo\"\nC;Y2;X10;K\"200\"\nE\n";
     static UnitAbilities_t const abilities = { .abilList = "ANto" };
     vec2_t const target = { 320.0f, 192.0f };
     slkTestData_t *rows = parse_slk_string(slk), *old;

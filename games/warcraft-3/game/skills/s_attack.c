@@ -1417,7 +1417,7 @@ static bool attack_ground_selectlocation(edict_t *clent, vec2_t const *location)
 
 static float attack_ground_cursor_radius(gameClient_t *client) {
     float radius = 0.0f;
-    if (!client) return 200.0f;
+    if (!client) return 0.0f;
     FOR_CONTROLLABLE_SELECTED_UNITS(client, ent) {
         unitAttack_t const *attacks[] = { &ent->unit_state->attack1, &ent->unit_state->attack2 };
         FOR_LOOP(i, 2) {
@@ -1427,9 +1427,9 @@ static float attack_ground_cursor_radius(gameClient_t *client) {
             radius = MAX(radius, MAX(attack->areaFull, MAX(attack->areaMedium, attack->areaSmall)));
         }
     }
-    /* Some custom artillery rows omit splash bands but still use the standard
-     * Attack Ground placement preview size. */
-    return radius > 0.0f ? radius : 200.0f;
+    /* Use the authored splash bands; do not invent a visual area for
+     * custom artillery weapons with no area data. */
+    return radius;
 }
 
 BZ_COMMAND_PROC(AbilityAttackGround) {

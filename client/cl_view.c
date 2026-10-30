@@ -1,4 +1,5 @@
 #include <stdlib.h> // atoi()
+#include <math.h> // isfinite()
 
 #include "client.h"
 #include "sound/s_local.h"
@@ -444,7 +445,11 @@ static void V_AddClientEntity(centity_t const *ent, bool debug_entities) {
     }
 }
 
+static int32_t cursor_decal_slot = -1;
+
 static void V_ClearScene(void) {
+    cursor_decal_slot = -1;
+    cl.viewDef.cursor_area_radius = 0.0f;
     view_state.num_entities = 0;
     view_state.num_decals = 0;
     view_state.num_splat_rects = 0;
@@ -587,27 +592,33 @@ static void CL_AddBuilding(void) {
     view_state.entities[view_state.num_entities++] = ent;
 }
 
+/* Keep one reusable generic cursor decal in each scene, and refresh its
+ * position at presentation rate even when gameplay simulation is paused. */
 static void CL_AddCursorSplat(void) {
-    renderDecal_t decal;
-    vec3_t point;
-
-    if (!cl.cursor_splat.image || cl.cursor_splat.image >= MAX_IMAGES ||
-        cl.cursor_splat.radius <= 0.0f) {
-        return;
-    }
-    if (CL_MouseOverGameplayUI()) {
-        return;
-    }
-    if (!re.TraceLocation(&cl.viewDef, mouse.origin.x, mouse.origin.y, &point)) {
-        return;
-    }
-
-    memset(&decal, 0, sizeof(decal));
-    decal.origin = (vec2_t){ point.x, point.y };
-    decal.radius = cl.cursor_splat.radius;
-    decal.texture = cl.pics[cl.cursor_splat.image];
-    decal.color = (color32_t){ 255, 255, 255, 180 };
+    renderDecal_t decal = { 0 };
+    if (view_state.num_decals >= MAX_RENDER_DECALS) return;
+    cursor_decal_slot = (int32_t)view_state.num_decals;
     V_AddDecal(&decal);
+}
+
+static void CL_RefreshCursorSplat(void) {
+    vec3_t point;
+    renderDecal_t *decal;
+    cl.viewDef.cursor_area_radius = 0.0f;
+    if (cursor_decal_slot < 0 || (uint32_t)cursor_decal_slot >= view_state.num_decals) return;
+    decal = &view_state.decals[cursor_decal_slot];
+    decal->radius = 0.0f;
+    if (!cl.cursor_splat.image || cl.cursor_splat.image >= MAX_IMAGES ||
+        !cl.pics[cl.cursor_splat.image] || !isfinite(cl.cursor_splat.radius) ||
+        cl.cursor_splat.radius <= 0.0f || CL_MouseOverGameplayUI() ||
+        !re.TraceLocation(&cl.viewDef, mouse.origin.x, mouse.origin.y, &point)) return;
+
+    decal->origin = (vec2_t){ point.x, point.y };
+    decal->radius = cl.cursor_splat.radius;
+    decal->texture = cl.pics[cl.cursor_splat.image];
+    decal->color = (color32_t){ 255, 255, 255, 180 };
+    cl.viewDef.cursor_area_origin = decal->origin;
+    cl.viewDef.cursor_area_radius = decal->radius;
 }
 
 static void CL_AddEntities(void) {
@@ -854,6 +865,7 @@ void V_RenderView(void) {
         CL_AddEntities();
     }
 
+    CL_RefreshCursorSplat();
     V_UpdateEnvironmentLighting(&cl.viewDef, true);
     SCR_SetupViewBlend(&cl.viewDef, &cl.playerstate, cl.pics);
     re.RenderFrame(&cl.viewDef);
@@ -898,6 +910,29 @@ void V_Shutdown(void) {
 
 #ifdef BZ_TESTS
 #include "shared/test.h"
+TEST(client_cursor, clearing_scene_disables_cursor_area) {
+    float const old_radius = cl.viewDef.cursor_area_radius;
+    int32_t const old_slot = cursor_decal_slot;
+    int const old_entities = view_state.num_entities;
+    int const old_decals = view_state.num_decals;
+    int const old_rects = view_state.num_splat_rects;
+    uint32_t const old_view_entities = cl.viewDef.num_entities;
+    uint32_t const old_view_decals = cl.viewDef.num_decals;
+    uint32_t const old_view_rects = cl.viewDef.num_splat_rects;
+    cl.viewDef.cursor_area_radius = 150.0f;
+    cursor_decal_slot = 7;
+    V_ClearScene();
+    T_FEQ(cl.viewDef.cursor_area_radius, 0.0f, 0.0001f);
+    T_EQ(cursor_decal_slot, -1);
+    cursor_decal_slot = old_slot;
+    cl.viewDef.cursor_area_radius = old_radius;
+    view_state.num_entities = old_entities;
+    view_state.num_decals = old_decals;
+    view_state.num_splat_rects = old_rects;
+    cl.viewDef.num_entities = old_view_entities;
+    cl.viewDef.num_decals = old_view_decals;
+    cl.viewDef.num_splat_rects = old_view_rects;
+}
 TEST(client_loading, acknowledgement_rejects_stale_input_and_sends_begin_once) {
     sizeBuf_t old_message = cls.netchan.message;
     int old_state = cls.state;

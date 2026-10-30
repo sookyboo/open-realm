@@ -3766,6 +3766,7 @@ frameDef_t *UI_FindChildFrameType(frameDef_t *, FRAMETYPE);
 
 cstring_t Theme_String(cstring_t, cstring_t);
 cstring_t Theme_PlayerString(gameClient_t *, cstring_t, cstring_t);
+cstring_t Theme_UnitString(cstring_t unit_race, cstring_t key, cstring_t def);
 void UI_UpdateCursorPresentation(gameClient_t *client);
 bool G_SignalCommand(edict_t *ent, uint32_t argc, cstring_t argv[]);
 uint32_t G_SignalColorImage(gameClient_t *client);

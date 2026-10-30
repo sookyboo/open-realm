@@ -38,15 +38,6 @@ typedef struct {
  *   - WoW: data-driven spell table + cast state machine (Wow_RunSpellCast)
  *   - Quake2: flat flags and callbacks around a shared processor */
 
-static cstring_t S_SpellThemeString(cstring_t key, cstring_t def) {
-    cstring_t value = NULL;
-
-    if (key && !strstr(key, "\\") && game.config.theme.source) {
-        value = Stb_IniCacheFind(&game.config.theme, "Default", key);
-    }
-    return value ? value : def;
-}
-
 /* Build the borrowed typed payload used by the synchronous spell messages. */
 static intptr_t spell_message(edict_t *ent, abilityMsg_t msg, abilityitem_t const *item, spellTarget_t const *target) {
     abilityCall_t call = MAKE(abilityCall_t, .item = item, .target = target);
@@ -596,8 +587,10 @@ void S_SpellCursorSplat(edict_t *clent, float radius) {
     if (!clent || !clent->client) {
         return;
     }
-    if (radius > 0.0f) {
-        image = gi.ImageIndex(S_SpellThemeString("PlacementCursor", DEFAULT_SPELL_AREA_CURSOR));
+    if (isfinite(radius) && radius > 0.0f) {
+        edict_t const *caster = G_GetMainSelectedUnit(clent->client);
+        cstring_t const race = caster && caster->data.UnitData ? caster->data.UnitData->race : NULL;
+        image = gi.ImageIndex(Theme_UnitString(race, "PlacementCursor", DEFAULT_SPELL_AREA_CURSOR));
     } else {
         radius = 0.0f;
     }
@@ -1893,7 +1886,7 @@ void spell_cmd(edict_t *clent) {
             clent->client->menu.on_entity_selected = spell_ability_entity_target_selected;
         } else if (!spell_is_tiny_structure(spell)) {
             float area = S_SpellNumber(code, ABILITY_NUMBER_AREA, S_SpellLevel(caster, code));
-            S_SpellCursorSplat(clent, area > 0 ? area : 200.0f);
+            S_SpellCursorSplat(clent, area);
         }
         if (!entity_target)
             clent->client->menu.on_location_selected = spell_point_target_selected;

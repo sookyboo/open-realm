@@ -17,6 +17,9 @@ Item abilities whose state spans an inventory item and another unit have a
 second lifecycle contract in [Inventory And World Items](inventory-and-items.md),
 including the `AIso`/`Asou` Soul Trap relationship used by Orc08.
 
+Point-target ability UI follows the [Area-Targeting Preview](area-targeting-preview.md)
+contract for caster-race artwork, authored area and render-local green highlights.
+
 ## Mechanical Workflow
 
 Do these steps in order. Do not skip the poll. Do not write a Python SLK parser.

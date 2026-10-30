@@ -49,6 +49,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | WC3 Phoenix summon, Phoenix Fire, self-damage, Egg rebirth and verification | [docs/games/warcraft-3/phoenix.md](docs/games/warcraft-3/phoenix.md) |
 | WC3 Naga Sea Witch Tornado summon, damage/slow/spin/wander and lifecycle | [docs/games/warcraft-3/tornado.md](docs/games/warcraft-3/tornado.md) |
 | WC3 MDX material filter ordering, layered composition and HumanX03Secret portal | [docs/games/warcraft-3/mdx-materials.md](docs/games/warcraft-3/mdx-materials.md) |
+| WC3 race-specific area targeting decal and transient green object preview | [docs/games/warcraft-3/area-targeting-preview.md](docs/games/warcraft-3/area-targeting-preview.md) |
 | WC3 MDX `EVTS` presentation events, `SND` sounds, `SPN` child models, `SPL`/`FPT` SplatData decals, `UBR` UberSplats, transient lifetimes | [docs/games/warcraft-3/mdx-event-objects.md](docs/games/warcraft-3/mdx-event-objects.md) |
 | WC3 custom doodad `.w3d` models, animation ownership and Rexxar Forcewall presentation | [docs/games/warcraft-3/doodad-animation.md](docs/games/warcraft-3/doodad-animation.md) |
 | WC3 data model (SLK, unit stats, combat) | [docs/wc3-data-model.md](docs/wc3-data-model.md) |
