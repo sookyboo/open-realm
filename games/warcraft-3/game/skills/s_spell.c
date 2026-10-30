@@ -453,7 +453,11 @@ bool S_SpellAllowsAreaTarget(uint32_t code, edict_t *caster, edict_t *target) {
     }
     /* Devour is a physical swallowing ability, not a magic projectile. */
     { ability_t const *ability = S_SpellAbilityForCode(code);
-      if ((!ability || ability->proc != CAbilityDevour) && S_UnitSpellImmune(target)) return false; }
+      /* Taunt changes the target's attack order rather than applying a
+       * hostile magical effect. Spell immunity alone does not make a unit
+       * ineligible for its authored enemy target mask. */
+      if ((!ability || (ability->proc != CAbilityDevour && ability->proc != CAbilityTaunt)) &&
+          S_UnitSpellImmune(target)) return false; }
     ability_level = S_SpellLevel(caster, code);
     targets = G_AbilityLevel(code, ability_level)->targs;
     if (!targets) {

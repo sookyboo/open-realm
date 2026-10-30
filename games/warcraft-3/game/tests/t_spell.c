@@ -8300,7 +8300,8 @@ TEST(wc3_spell, mountain_giant_taunt_orders_ten_closest_enemies_in_authored_area
 		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs1\"\n"
 		"C;Y1;X4;K\"Area1\"\nC;Y1;X5;K\"DataA1\"\nC;Y1;X6;K\"levels\"\n"
 		"C;Y2;X1;K\"Atau\"\nC;Y2;X2;K\"Atau\"\nC;Y2;X3;K\"air,ground,enemy,vuln,invu\"\n"
-		"C;Y2;X4;K\"450\"\nC;Y2;X5;K\"10\"\nC;Y2;X6;K\"1\"\nE\n";
+		"C;Y2;X4;K\"450\"\nC;Y2;X5;K\"99\"\nC;Y2;X6;K\"1\"\nE\n";
+	static UnitAbilities_t const spell_immunity = { .abilList = "Amim" };
 	slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
 	static UnitWeapons_t const weapons = { .attacksEnabled = 1 };
 	edict_t *caster, *enemy[12], *friendly, *outside;
@@ -8325,6 +8326,9 @@ TEST(wc3_spell, mountain_giant_taunt_orders_ten_closest_enemies_in_authored_area
 			enemy[i]->unit_state->attack1.targetsAllowed = G_TargetFlagForType(TARG_GROUND);
 		}
 	}
+	/* Taunt redirects attack orders, so spell immunity by itself is not an
+	 * exclusion from its authored enemy target mask. */
+	enemy[1]->data.UnitAbilities = &spell_immunity;
 	friendly = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 20, 0);
 	friendly->s.player = 0;
 	friendly->svflags |= SVF_MONSTER;
@@ -8343,9 +8347,11 @@ TEST(wc3_spell, mountain_giant_taunt_orders_ten_closest_enemies_in_authored_area
 	outside->unit_state->attack1.targetsAllowed = G_TargetFlagForType(TARG_GROUND);
 
 	T_EQ((int)S_SpellNumber(MAKEFOURCC('A','t','a','u'), ABILITY_NUMBER_AREA, 1), 450);
-	T_EQ((int)S_SpellData(MAKEFOURCC('A','t','a','u'), 1, 1), 10);
+	T_EQ((int)S_SpellData(MAKEFOURCC('A','t','a','u'), 1, 1), 99);
 	T_ASSERT(S_SpellIsEnemy(caster, enemy[0]));
 	T_ASSERT(S_SpellAllowsAreaTarget(MAKEFOURCC('A','t','a','u'), caster, enemy[0]));
+	T_ASSERT(S_UnitSpellImmune(enemy[1]));
+	T_ASSERT(S_SpellAllowsAreaTarget(MAKEFOURCC('A','t','a','u'), caster, enemy[1]));
 	T_ASSERT(!S_AttackCanTarget(enemy[0], caster));
 	T_ASSERT(S_AttackCanTarget(enemy[1], caster));
 	T_ASSERT(test_execute_code(caster, "Atau", MAKE(spellTarget_t, .type = SPELL_TARGET_NONE)));
@@ -8354,6 +8360,56 @@ TEST(wc3_spell, mountain_giant_taunt_orders_ten_closest_enemies_in_authored_area
 	T_ASSERT(enemy[11]->goalentity != caster);
 	T_ASSERT(friendly->goalentity != caster);
 	T_ASSERT(outside->goalentity != caster);
+
+	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, mountain_giant_taunt_preserves_channel_and_repair_orders) {
+	const char slk[] =
+		"ID;PWXL;N;EBB;Y2;X5\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs1\"\n"
+		"C;Y1;X4;K\"Area1\"\nC;Y1;X5;K\"levels\"\n"
+		"C;Y2;X1;K\"Atau\"\nC;Y2;X2;K\"Atau\"\nC;Y2;X3;K\"air,ground,enemy,vuln,invu\"\n"
+		"C;Y2;X4;K\"450\"\nC;Y2;X5;K\"1\"\nE\n";
+	slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+	static UnitWeapons_t const weapons = { .attacksEnabled = 1 };
+	edict_t *caster, *channeling, *repairing, *manual_target;
+	buildwork_t *work;
+
+	reset_entities(); setup_test_world();
+	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+	caster = alloc_test_unit(MAKEFOURCC('n','t','r','d'), 0, 0);
+	channeling = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 50, 0);
+	repairing = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 75, 0);
+	manual_target = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 100, 0);
+	caster->s.player = 0; caster->svflags |= SVF_MONSTER; caster->targtype = TARG_GROUND;
+	caster->health.value = caster->health.max_value = 1000;
+	channeling->s.player = repairing->s.player = manual_target->s.player = 1;
+	channeling->svflags |= repairing->svflags |= manual_target->svflags |= SVF_MONSTER;
+	channeling->targtype = repairing->targtype = manual_target->targtype = TARG_GROUND;
+	channeling->health.value = repairing->health.value = manual_target->health.value = 500;
+	channeling->health.max_value = repairing->health.max_value = manual_target->health.max_value = 500;
+	channeling->data.UnitWeapons = repairing->data.UnitWeapons = manual_target->data.UnitWeapons = &weapons;
+	channeling->unit_state->attack1.type = repairing->unit_state->attack1.type = manual_target->unit_state->attack1.type = ATK_NORMAL;
+	channeling->unit_state->attack1.weapon = repairing->unit_state->attack1.weapon = manual_target->unit_state->attack1.weapon = WPN_NORMAL;
+	channeling->unit_state->attack1.targetsAllowed = repairing->unit_state->attack1.targetsAllowed =
+		manual_target->unit_state->attack1.targetsAllowed = G_TargetFlagForType(TARG_GROUND);
+	G_AddChannel(channeling);
+	G_GetChannel(channeling)->code = MAKEFOURCC('A','H','b','z');
+	work = G_AddBuildwork(repairing);
+	T_NOT_NULL(work);
+	if (work) work->ability = MAKEFOURCC('A','r','e','p');
+
+	T_ASSERT(S_SpellAllowsAreaTarget(MAKEFOURCC('A','t','a','u'), caster, manual_target));
+	T_ASSERT(S_AttackCanTarget(manual_target, caster));
+	T_ASSERT(test_execute_code(caster, "Atau", MAKE(spellTarget_t, .type = SPELL_TARGET_NONE)));
+	T_ASSERT(channeling->goalentity != caster);
+	T_ASSERT(repairing->goalentity != caster);
+	T_ASSERT(manual_target->goalentity == caster);
+	/* Taunt is not a persistent lock; a fresh player order can replace it. */
+	order_attack(manual_target, channeling);
+	T_ASSERT(manual_target->goalentity == channeling);
 
 	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
