@@ -471,6 +471,7 @@ animation_t const *G_SelectAnimationForProperties(animation_t const *animations,
     animation_t const *property_match = NULL;
     animation_t const *overlap = NULL;
     animation_t const *primary_fallback = NULL;
+    uint32_t primary_fallback_extras = UINT32_MAX;
     uint32_t contains_extras = UINT32_MAX;
     uint32_t property_match_extras = UINT32_MAX;
     uint32_t overlap_matches = 0;
@@ -490,9 +491,12 @@ animation_t const *G_SelectAnimationForProperties(animation_t const *animations,
         AnimationParseRequest(animations[i].name, sequence_primary, &sequence_tags);
         if (strcasecmp(primary, sequence_primary) &&
             !AnimationTagSetContains(&sequence_tags, primary)) continue;
-        if (!primary_fallback && !strcasecmp(primary, sequence_primary)) primary_fallback = animations + i;
         matches = AnimationTagSetMatchCount(&required, &sequence_tags);
         extras = sequence_tags.count > matches ? sequence_tags.count - matches : 0;
+        if (!strcasecmp(primary, sequence_primary) && extras < primary_fallback_extras) {
+            primary_fallback = animations + i;
+            primary_fallback_extras = extras;
+        }
 
         /* Some authored sequences append the animation family after their
          * building/form tags (for example "Stand Upgrade First Ready Attack").
