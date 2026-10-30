@@ -9190,4 +9190,80 @@ TEST(wc3_spell, flame_strike_uses_authored_point_and_pulse_data) {
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+TEST(wc3_spell, phoenix_death_creates_egg_that_hatches_on_authored_deadline) {
+    static cstring_t const ui_slk =
+        "ID;PWXL;N;EBB;Y3;X3\nC;Y1;X1;K\"unitUIID\"\nC;Y1;X2;K\"file\"\nC;Y1;X3;K\"modelScale\"\n"
+        "C;Y2;X1;K\"hphx\"\nC;Y2;X2;K\"TestUI\\Models\\anim_pulse.mdx\"\nC;Y2;X3;K1\n"
+        "C;Y3;X1;K\"hpxe\"\nC;Y3;X2;K\"TestUI\\Models\\anim_pulse.mdx\"\nC;Y3;X3;K1\nE\n";
+    static cstring_t const balance_slk =
+        "ID;PWXL;N;EBB;Y3;X4\nC;Y1;X1;K\"unitBalanceID\"\nC;Y1;X2;K\"realHP\"\n"
+        "C;Y1;X3;K\"regenHP\"\nC;Y1;X4;K\"regenType\"\n"
+        "C;Y2;X1;K\"hphx\"\nC;Y2;X2;K1250\nC;Y2;X3;K-25\nC;Y2;X4;K\"always\"\n"
+        "C;Y3;X1;K\"hpxe\"\nC;Y3;X2;K200\nC;Y3;X3;K0\nC;Y3;X4;K\"none\"\nE\n";
+    static cstring_t const data_slk =
+        "ID;PWXL;N;EBB;Y3;X3\nC;Y1;X1;K\"unitID\"\nC;Y1;X2;K\"movetp\"\nC;Y1;X3;K\"propWin\"\n"
+        "C;Y2;X1;K\"hphx\"\nC;Y2;X2;K\"fly\"\nC;Y2;X3;K60\n"
+        "C;Y3;X1;K\"hpxe\"\nC;Y3;X2;K\"foot\"\nC;Y3;X3;K60\nE\n";
+    static cstring_t const abilities_slk =
+        "ID;PWXL;N;EBB;Y3;X2\nC;Y1;X1;K\"unitID\"\nC;Y1;X2;K\"abilList\"\n"
+        "C;Y2;X1;K\"hphx\"\nC;Y2;X2;K\"Aphx\"\n"
+        "C;Y3;X1;K\"hpxe\"\nC;Y3;X2;K\"Aphx\"\nE\n";
+    slkTestData_t *ui, *old_ui, *balance, *old_balance, *data, *old_data, *abilities, *old_abilities;
+    edict_t *phoenix, *egg = NULL, *phoenix_after_rebirth, *killed_egg = NULL;
+
+    reset_entities(); setup_test_world();
+    ui = parse_slk_string(ui_slk); old_ui = G_SetSLKRows("UnitUI", ui);
+    balance = parse_slk_string(balance_slk); old_balance = G_SetSLKRows("UnitBalance", balance);
+    data = parse_slk_string(data_slk); old_data = G_SetSLKRows("UnitData", data);
+    abilities = parse_slk_string(abilities_slk); old_abilities = G_SetSLKRows("UnitAbilities", abilities);
+    phoenix = alloc_test_unit(MAKEFOURCC('h','p','h','x'), 96.0f, 64.0f);
+    phoenix->s.player = 0; phoenix->svflags |= SVF_MONSTER; phoenix->die = unit_die;
+    T_EQ(G_UnitAbilityLevel(phoenix, MAKEFOURCC('A','p','h','x')), 1u);
+
+    unit_die(phoenix, NULL);
+    FILTER_EDICTS(ent, ent->inuse && ent->class_id == MAKEFOURCC('h','p','x','e') &&
+                  ent->phoenix_hatch_ms) { egg = ent; break; }
+    T_NOT_NULL(egg);
+    if (egg) {
+        T_EQ(egg->phoenix_hatch_ms, 10000u);
+        T_FEQ(egg->health.value, 200.0f, 0.001f);
+        T_ASSERT(phoenix->aiflags & AI_CORPSE_UNRAISABLE);
+        T_ASSERT(phoenix->s.renderfx & RF_HIDDEN);
+        level.time = 9999; S_RunAbilityUpdates(egg);
+        T_EQ(egg->class_id, MAKEFOURCC('h','p','x','e'));
+        level.time = 10000; S_RunAbilityUpdates(egg);
+        T_STREQ(G_UnitUI(MAKEFOURCC('h','p','h','x'))->modelFile, "TestUI\\Models\\anim_pulse.mdx");
+        T_EQ(G_UnitBalance(MAKEFOURCC('h','p','h','x'))->maxHealth, 1250.0f);
+        T_EQ(egg->class_id, MAKEFOURCC('h','p','h','x'));
+        T_EQ(egg->phoenix_hatch_ms, 0u);
+        T_FEQ(egg->health.value, egg->health.max_value, 0.001f);
+    }
+
+    /* A second life cycle verifies the inverse: a killed egg cannot hatch at
+     * its deadline even though its saved hatch timestamp has not elapsed. */
+    level.time = 0;
+    phoenix_after_rebirth = alloc_test_unit(MAKEFOURCC('h','p','h','x'), 160.0f, 64.0f);
+    phoenix_after_rebirth->s.player = 0;
+    phoenix_after_rebirth->svflags |= SVF_MONSTER;
+    phoenix_after_rebirth->die = unit_die;
+    unit_die(phoenix_after_rebirth, NULL);
+    FILTER_EDICTS(ent, ent->inuse && ent != egg && ent->class_id == MAKEFOURCC('h','p','x','e') &&
+                  ent->phoenix_hatch_ms) { killed_egg = ent; break; }
+    T_NOT_NULL(killed_egg);
+    if (killed_egg) {
+        T_EQ(killed_egg->phoenix_hatch_ms, 10000u);
+        level.time = 9900; unit_die(killed_egg, NULL);
+        level.time = 10000; S_RunAbilityUpdates(killed_egg);
+        T_EQ(killed_egg->class_id, MAKEFOURCC('h','p','x','e'));
+        T_EQ(killed_egg->phoenix_hatch_ms, 10000u);
+        T_ASSERT(M_IsDead(killed_egg));
+    }
+
+    reset_entities();
+    G_SetSLKRows("UnitAbilities", old_abilities); free_slk_rows(abilities);
+    G_SetSLKRows("UnitData", old_data); free_slk_rows(data);
+    G_SetSLKRows("UnitBalance", old_balance); free_slk_rows(balance);
+    G_SetSLKRows("UnitUI", old_ui); free_slk_rows(ui);
+}
+
 #endif /* BZ_TESTS */

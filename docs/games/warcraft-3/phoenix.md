@@ -54,25 +54,24 @@ recognizes `ACmi`, and `S_UnitIsResistant` recognizes `ACrk` through its
 ## Test coverage and remaining validation
 
 Source regression tests check handler registration, negative full-health regen
-with lethal transition, and persistence of the new timer fields. These tests
-do not yet exercise Phoenix creation, Fire target acquisition, the complete
-death-to-egg-to-Phoenix cycle, or authored presentation in a running game. The
-following end-to-end behaviours need confirmation:
+with lethal transition, persistence of the new timer fields, and the production
+death-to-egg-to-Phoenix scheduler path. They also verify that killing an egg
+before its deadline prevents rebirth. Phoenix Fire acquisition and impact are
+not yet covered by a behavior test. The following end-to-end behaviours need
+coverage:
 
 1. Cast Phoenix from Blood Mage; verify authored UnitID, flying motion, HP
    drain at full health, normal healing, and no generic summoned classification.
-2. Allow HP to reach zero; check normal kill event, prompt egg creation at same
-   location, no harvestable corpse, and 10-second rebirth with full HP.
-3. Kill egg at 9.9 seconds; no hatch. Test healing/negative effects on the egg
-   and the loaded `Amim`/`Arsk` passives.
-4. Recast during Phoenix life and while egg is incubating; the prior form
+2. Test healing/negative effects on the egg and the loaded `Amim`/`Arsk`
+   passives.
+3. Recast during Phoenix life and while egg is incubating; the prior form
    should not hatch and the new Phoenix should be controllable.
-5. Place two valid enemy units, a friendly unit, an immune unit and a Hero
+4. Place two valid enemy units, a friendly unit, an immune unit and a Hero
    near the Phoenix. Check target mask, projectile art, DataA initial damage,
    DataB one-second ticks, HeroDur, buff refresh, multiple sources and
    interrupted or destroyed source. Repeat using ROC-style Data11/Data12
    columns and custom non-stock damage/cooldown values.
-6. Save and load with an egg incubating and a Fire missile/burn active. Ensure
+5. Save and load with an egg incubating and a Fire missile/burn active. Ensure
    only one hatch happens, no repeated instant damage, and timers resume.
 
 **Data cross-check (1.29):** `AHpx` UnitID1 is `hphx`; `Aphx` UnitID1 is
