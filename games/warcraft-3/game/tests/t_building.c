@@ -1796,6 +1796,27 @@ TEST(wc3_building, draenei_elite_assassin_critical_strike_shows_disabled_passive
     T_ASSERT(found);
 }
 
+TEST(wc3_building, draenei_saboteur_liquid_fire_shows_disabled_passive_indicator) {
+    static UnitAbilities_t const saboteur_abilities = { .abilList = "Aliq" };
+    gameCommandButton_t buttons[16];
+    edict_t *saboteur;
+    uint8_t count;
+    bool found = false;
+
+    reset_entities();
+    setup_test_world();
+    saboteur = alloc_test_unit(MAKEFOURCC('n','d','s','a'), 0, 0);
+    saboteur->data.UnitAbilities = (UnitAbilities_t *)&saboteur_abilities;
+    count = G_GetCommandButtons(saboteur, buttons, sizeof(buttons) / sizeof(buttons[0]));
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Aliq")) {
+        found = true;
+        T_ASSERT(buttons[i].disabled);
+        T_STREQ(buttons[i].art, "ReplaceableTextures\\CommandButtons\\BTNLiquidFire.blp");
+        T_STREQ(buttons[i].tooltip, "Liquid Fire");
+    }
+    T_ASSERT(found);
+}
+
 TEST(wc3_building, naga_production_buttons_have_distinct_command_card_cells) {
     static uint32_t const producers[] = {
         MAKEFOURCC('n','n','t','t'), MAKEFOURCC('n','n','s','g'), MAKEFOURCC('n','n','s','a')
