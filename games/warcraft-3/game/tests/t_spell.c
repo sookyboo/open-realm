@@ -7990,9 +7990,9 @@ TEST(wc3_spell, control_magic_can_target_enemy_wards) {
 	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
-/* Afae vision is unit-scoped, follows movement, and ends with Bfae; it must
- * not grant terrain sight or leak the target to unrelated players. */
-TEST(wc3_spell, faerie_fire_reveals_only_marked_unit_for_buff_lifetime) {
+/* Afae lends the marked unit's sight to its caster, follows movement, and
+ * ends with Bfae without leaking vision to unrelated players. */
+TEST(wc3_spell, faerie_fire_shares_target_sight_for_buff_lifetime) {
     const char slk[] =
         "ID;PWXL;N;EBB;Y2;X7\n"
         "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"Dur1\"\n"
@@ -8032,19 +8032,27 @@ TEST(wc3_spell, faerie_fire_reveals_only_marked_unit_for_buff_lifetime) {
     T_ASSERT(G_FowPlayerCanHoverEntity(0, target));
     T_ASSERT(G_FowPlayerCanSeeEntity(2, target)); /* caster shares vision outward */
     T_ASSERT(!G_FowPlayerCanSeeEntity(3, target));
-    T_ASSERT(!G_FowPointIsVisible(0, &target->s.origin2));
+    G_FowUpdate();
+    T_ASSERT(G_FowPointIsVisible(0, &target->s.origin2));
+    T_ASSERT(G_FowPointIsVisible(2, &target->s.origin2));
+    T_ASSERT(!G_FowPointIsVisible(3, &target->s.origin2));
     target->s.origin2.x = target->s.origin.x = 768.0f;
     G_FowUpdate();
     T_ASSERT(G_FowPlayerCanSeeEntity(0, target));
-    T_ASSERT(!G_FowPointIsVisible(0, &target->s.origin2));
+    T_ASSERT(G_FowPointIsVisible(0, &target->s.origin2));
 
     /* A new caster owns a refreshed mark, not the previous player's reveal. */
     T_ASSERT(test_execute_code(second_caster, "Afae", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = target)));
     T_EQ(unit_findstatus(target, MAKEFOURCC('B','f','a','e'))->data, 3);
     T_ASSERT(!G_FowPlayerCanSeeEntity(0, target));
     T_ASSERT(G_FowPlayerCanSeeEntity(2, target));
+    G_FowUpdate();
+    T_ASSERT(!G_FowPointIsVisible(0, &target->s.origin2));
+    T_ASSERT(G_FowPointIsVisible(2, &target->s.origin2));
     unit_removestatus(target, unit_findstatus(target, MAKEFOURCC('B','f','a','e')), STATUS_REMOVE_DISPEL);
     T_ASSERT(!G_FowPlayerCanSeeEntity(2, target));
+    G_FowUpdate();
+    T_ASSERT(!G_FowPointIsVisible(2, &target->s.origin2));
 
     T_ASSERT(test_execute_code(caster, "Afae", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = target)));
     caster->health.value = 0; /* the target's mark survives the caster's death */
