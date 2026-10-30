@@ -7479,6 +7479,129 @@ TEST(wc3_spell, spell_steal_autocast_requires_transferable_buff_and_recipient) {
 	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+TEST(wc3_spell, control_magic_costs_current_health_and_transfers_summon) {
+	static UnitAbilities_t const abilities = { .abilList = "Acmg" };
+	const char slk[] =
+		"ID;PWXL;N;EBB;Y2;X9\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+		"C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Cost1\"\nC;Y1;X6;K\"Cool1\"\n"
+		"C;Y1;X7;K\"Rng1\"\nC;Y1;X8;K\"Dur1\"\nC;Y1;X9;K\"DataB1\"\n"
+		"C;Y2;X1;K\"Acmg\"\nC;Y2;X2;K\"Acmg\"\nC;Y2;X3;K\"1\"\n"
+		"C;Y2;X4;K\"air,ground,friend,enemy,neutral,summoned,ward\"\n"
+		"C;Y2;X5;K\"0\"\nC;Y2;X6;K\"5\"\nC;Y2;X7;K\"70\"\n"
+		"C;Y2;X8;K\"60\"\nC;Y2;X9;K\"0.45\"\nE\n";
+	slkTestData_t *rows = parse_slk_string(slk), *old;
+	edict_t *caster, *enemy_summoner, *summon, *second_summon;
+	uint32_t const code = MAKEFOURCC('A','c','m','g');
+
+	reset_entities(); setup_test_world(); level.time = 1000;
+	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+	old = G_SetSLKRows("AbilityData", rows);
+	caster = alloc_test_unit(MAKEFOURCC('h','b','l','m'), 0, 0);
+	enemy_summoner = alloc_test_unit(MAKEFOURCC('o','sh','m',' '), 256, 0);
+	summon = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64, 0);
+	second_summon = alloc_test_unit(MAKEFOURCC('o','g','r','u'), 32, 0);
+	caster->data.UnitAbilities = &abilities;
+	caster->svflags |= SVF_MONSTER;
+	enemy_summoner->svflags |= SVF_MONSTER;
+	summon->svflags |= SVF_MONSTER; second_summon->svflags |= SVF_MONSTER;
+	caster->s.player = 0;
+	enemy_summoner->s.player = summon->s.player = second_summon->s.player = 1;
+	caster->targtype = summon->targtype = second_summon->targtype = TARG_GROUND;
+	caster->unit_state->ranks[0] = MAKE(heroability_t, .code = code, .level = 1);
+	caster->mana.value = caster->mana.max_value = 100.0f;
+	summon->health.max_value = 500.0f;
+	summon->health.value = 200.0f; /* Cost follows current HP, not max HP: 200 x 0.45 = 90. */
+	summon->summon_ability = MAKEFOURCC('A','s','u','m');
+	summon->owner = enemy_summoner;
+	summon->combatentity = enemy_summoner;
+	second_summon->summon_ability = MAKEFOURCC('A','s','u','m');
+	second_summon->owner = enemy_summoner;
+	second_summon->health.value = 100.0f;
+
+	T_FEQ(S_SpellData(code, 1, 2), 0.45f, 0.001f);
+	T_FEQ(S_SpellRange(code, 1), 70.0f, 0.001f);
+	T_FEQ(S_SpellNumber(code, ABILITY_NUMBER_COOLDOWN, 1), 5.0f, 0.001f);
+	T_FEQ(S_SpellDuration(code, 1, false), 60.0f, 0.001f);
+	/* Without a summoner owner, an ordinary enemy unit is not controllable. */
+	summon->owner = NULL;
+	T_ASSERT(!S_CastUnitTargetSpell(caster, code, summon));
+	T_FEQ(caster->mana.value, 100.0f, 0.001f);
+	T_EQ(summon->s.player, 1u);
+	summon->owner = enemy_summoner;
+
+	/* Insufficient mana and out-of-range attempts must be side-effect-free. */
+	caster->mana.value = 89.0f;
+	T_ASSERT(!S_CastUnitTargetSpell(caster, code, summon));
+	T_FEQ(caster->mana.value, 89.0f, 0.001f);
+	caster->mana.value = 100.0f;
+	summon->s.origin.x = summon->s.origin2.x = 71.0f;
+	T_ASSERT(!S_CastUnitTargetSpell(caster, code, summon));
+	T_FEQ(caster->mana.value, 100.0f, 0.001f);
+	summon->s.origin.x = summon->s.origin2.x = 64.0f;
+
+	T_ASSERT(S_CastUnitTargetSpell(caster, code, summon));
+	T_FEQ(caster->mana.value, 10.0f, 0.001f);
+	T_EQ(summon->s.player, 0u);
+	T_EQ(summon->owner, caster);
+	T_EQ(summon->combatentity, NULL);
+	T_ASSERT(!S_SpellCooldownReady(caster, code));
+	T_FEQ(S_SpellCooldownRemaining(caster, code), 5.0f, 0.001f);
+
+	/* The cooldown blocks a second eligible summon even with enough mana. */
+	caster->mana.value = 100.0f;
+	T_ASSERT(!S_CastUnitTargetSpell(caster, code, second_summon));
+	T_FEQ(caster->mana.value, 100.0f, 0.001f);
+	T_EQ(second_summon->s.player, 1u);
+	level.time += 5000;
+	T_ASSERT(S_CastUnitTargetSpell(caster, code, second_summon));
+	T_FEQ(caster->mana.value, 55.0f, 0.001f); /* 100 HP x 0.45 mana. */
+	T_EQ(second_summon->s.player, 0u);
+
+	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, control_magic_can_target_enemy_wards) {
+	static UnitAbilities_t const abilities = { .abilList = "Acmg" };
+	const char slk[] =
+		"ID;PWXL;N;EBB;Y2;X8\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+		"C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Cost1\"\nC;Y1;X6;K\"Cool1\"\n"
+		"C;Y1;X7;K\"Rng1\"\nC;Y1;X8;K\"DataB1\"\n"
+		"C;Y2;X1;K\"Acmg\"\nC;Y2;X2;K\"Acmg\"\nC;Y2;X3;K\"1\"\n"
+		"C;Y2;X4;K\"air,ground,friend,enemy,neutral,summoned,ward\"\n"
+		"C;Y2;X5;K\"0\"\nC;Y2;X6;K\"5\"\nC;Y2;X7;K\"70\"\n"
+		"C;Y2;X8;K\"0.45\"\nE\n";
+	slkTestData_t *rows = parse_slk_string(slk), *old;
+	edict_t *caster, *summoner, *ward;
+	uint32_t const code = MAKEFOURCC('A','c','m','g');
+
+	reset_entities(); setup_test_world(); level.time = 1000;
+	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+	old = G_SetSLKRows("AbilityData", rows);
+	caster = alloc_test_unit(MAKEFOURCC('h','b','l','m'), 0, 0);
+	summoner = alloc_test_unit(MAKEFOURCC('o','sh','m',' '), 128, 0);
+	ward = alloc_test_unit(MAKEFOURCC('o','w','a','r'), 64, 0);
+	caster->data.UnitAbilities = &abilities;
+	caster->svflags |= SVF_MONSTER; summoner->svflags |= SVF_MONSTER; ward->svflags |= SVF_MONSTER;
+	caster->s.player = 0; summoner->s.player = ward->s.player = 1;
+	caster->targtype = TARG_GROUND; ward->targtype = TARG_WARD;
+	caster->mana.value = caster->mana.max_value = 100.0f;
+	caster->unit_state->ranks[0] = MAKE(heroability_t, .code = code, .level = 1);
+	ward->health.value = 100.0f;
+	ward->owner = summoner;
+	ward->summon_ability = MAKEFOURCC('A','s','u','m');
+	T_ASSERT(S_SpellAllowsTarget(code, caster, ward));
+	T_ASSERT(S_CastUnitTargetSpell(caster, code, ward));
+	T_EQ(ward->s.player, 0u);
+	T_EQ(ward->owner, caster);
+	T_FEQ(caster->mana.value, 55.0f, 0.001f);
+
+	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_spell, bloodlust_autocast_waits_for_spell_cooldown) {
 	const char slk[] =
 		"ID;PWXL;N;EBB;Y2;X9\n"
