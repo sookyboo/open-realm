@@ -390,6 +390,27 @@ static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
     bool available = false;
 
     if (visible) *visible = true;
+    /* Mark of the Claw is a TFT-only permission for Bear Form to retain
+     * Roar. The transformed edcm row does not list Reeb in UnitBalance, and
+     * gating Aroa globally would incorrectly remove the Druid's normal-form
+     * starting spell. */
+    if (unit && unit->class_id == MAKEFOURCC('e','d','c','m') &&
+        ability_id == MAKEFOURCC('A','r','o','a')) {
+        bool const expansion = gi.CvarString && atoi(gi.CvarString("fs_expansion", "0")) != 0;
+        gameClient_t *bear_owner;
+        int32_t maximum;
+        if (!expansion) {
+            if (visible) *visible = false;
+            return false;
+        }
+        bear_owner = G_GetPlayerClientByNumber(unit->s.player);
+        if (!bear_owner || bear_owner->ps.number != unit->s.player) return false;
+        maximum = G_GetPlayerTechMaxAllowed(bear_owner, MAKEFOURCC('R','e','e','b'));
+        researchable = maximum < 0 || maximum >= 1;
+        if (visible) *visible = researchable;
+        return researchable && G_GetPlayerTechResearchedLevel(
+            bear_owner, MAKEFOURCC('R','e','e','b')) >= 1;
+    }
     if (!unit || !ability_id || !unit->data.UnitBalance) return true;
     ability = G_AbilityData(ability_id);
     if (!ability || ability->id != ability_id) return true;

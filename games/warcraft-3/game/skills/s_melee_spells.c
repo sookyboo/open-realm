@@ -178,7 +178,8 @@ BZ_SIMPLE_SPELL_PROC(AbilityRoar) {
     float area = S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level);
     cstring_t buff = melee_buff(spell, level);
     float duration = S_SpellDuration(spell->code, level, false);
-    if (melee_unit_is_bear_form(caster) || !buff) return;
+    if ((melee_unit_is_bear_form(caster) &&
+         !G_UnitAbilityResearchAvailable(caster, spell->code)) || !buff) return;
     FILTER_EDICTS(target, S_SpellIsAliveTarget(target) && S_SpellIsFriend(caster, target) &&
                   Vector2_distance(&target->s.origin2, &caster->s.origin2) <= area) {
         heroabilitystatus_t *status = S_SpellApplyTimedTargetStatus(target, spell->code, level, buff, duration);

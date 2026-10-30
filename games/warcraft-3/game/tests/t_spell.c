@@ -7476,13 +7476,29 @@ TEST(wc3_spell, bear_form_hides_normal_form_spells_and_uses_reverse_button_art) 
         "C;Y2;X3;K1\nC;Y2;X4;K1\n"
         "C;Y3;X1;K\"edcm\"\nC;Y3;X2;K\"Units\\Creeps\\Medivh\\Medivh.mdx\"\n"
         "C;Y3;X3;K1\nC;Y3;X4;K1\nE\n";
+    char const roar_data[] =
+        "ID;PWXL;N;EBB;Y2;X8\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+        "C;Y1;X4;K\"targs1\"\nC;Y1;X5;K\"Area1\"\nC;Y1;X6;K\"Dur1\"\n"
+        "C;Y1;X7;K\"DataA1\"\nC;Y1;X8;K\"BuffID1\"\n"
+        "C;Y2;X1;K\"Aroa\"\nC;Y2;X2;K\"Aroa\"\nC;Y2;X3;K1\n"
+        "C;Y2;X4;K\"air,ground,friend,self\"\nC;Y2;X5;K300\nC;Y2;X6;K30\n"
+        "C;Y2;X7;K0.25\nC;Y2;X8;K\"Broa\"\nE\n";
+    char const roar_art[] =
+        "[Aroa]\nArt=ReplaceableTextures\\CommandButtons\\BTNRoar.blp\n"
+        "Buttonpos=0,2\nTip=Roar\n";
     slkTestData_t *ui_rows, *old_ui;
-    static UnitAbilities_t const bear_abilities = { .abilList = "Abrf,Ara2,Arej,Aroa" };
+    slkTestData_t *roar_rows = parse_slk_string(roar_data), *old_roar = G_SetSLKRows("AbilityData", roar_rows);
+    /* Stock Bear Form omits Roar; TFT exposes it through Mark of the Claw. */
+    static UnitAbilities_t const bear_abilities = { .abilList = "Abrf,Ara2,Arej" };
     static UnitBalance_t const bear_balance = { .speed = 270.0f };
     edict_t *bear;
     gameCommandButton_t buttons[16];
     uint8_t count;
     bool bear_form_button = false;
+    bool roar_button = false;
+    bool const expansion = gi.CvarString && atoi(gi.CvarString("fs_expansion", "0")) != 0;
+    gameClient_t *client;
     abilityitem_t bear_form = S_AbilityItem(FS_SLKKey("Abrf"));
     abilityitem_t rejuv = S_AbilityItem(FS_SLKKey("Arej"));
     abilityCall_t toggle_call = MAKE(abilityCall_t, .item = &bear_form);
@@ -7490,11 +7506,21 @@ TEST(wc3_spell, bear_form_hides_normal_form_spells_and_uses_reverse_button_art) 
     spellTarget_t ally_target;
 
     setup_test_world();
+    T_ASSERT(G_TestPushAbilityConfig(roar_art));
     ui_rows = parse_slk_string(unit_ui_slk);
     old_ui = G_SetSLKRows("UnitUI", ui_rows);
     bear = alloc_test_unit(MAKEFOURCC('e','d','c','m'), 0, 0);
+    bear->s.player = 0;
+    bear->svflags |= SVF_MONSTER;
+    bear->targtype = TARG_GROUND;
+    bear->health.value = bear->health.max_value = 500;
+    bear->mana.value = bear->mana.max_value = 500;
     bear->data.UnitAbilities = &bear_abilities;
     bear->data.UnitBalance = &bear_balance;
+    client = &game.clients[0];
+    client->ps.number = 0;
+    memset(client->tech, 0, sizeof(client->tech));
+    G_SetPlayerTechMaxAllowed(client, MAKEFOURCC('R','e','e','b'), 1);
     count = G_GetCommandButtons(bear, buttons, (uint8_t)(sizeof(buttons) / sizeof(buttons[0])));
     FOR_LOOP(i, count) {
         if (!strcmp(buttons[i].command, "Abrf")) {
@@ -7503,17 +7529,47 @@ TEST(wc3_spell, bear_form_hides_normal_form_spells_and_uses_reverse_button_art) 
         }
         T_ASSERT(strcmp(buttons[i].command, "Ara2") != 0);
         T_ASSERT(strcmp(buttons[i].command, "Arej") != 0);
-        T_ASSERT(strcmp(buttons[i].command, "Aroa") != 0);
+        if (!strcmp(buttons[i].command, "Aroa")) {
+            roar_button = true;
+            T_EQ(buttons[i].disabled, expansion ? 1 : 0);
+        }
     }
     T_ASSERT(bear_form_button);
+    T_EQ(roar_button, expansion);
+    T_ASSERT(!S_CastNoTargetSpell(bear, FS_SLKKey("Aroa")));
+    T_EQ(G_UnitStatusLevel(bear, MAKEFOURCC('B','r','o','a')), 0);
+    if (expansion) {
+        uint32_t const roar_code = FS_SLKKey("Aroa");
+        abilityitem_t roar_item = S_AbilityItem(roar_code);
+        spellTarget_t roar_target = MAKE(spellTarget_t, .type = SPELL_TARGET_NONE);
+        abilityCall_t roar_call = MAKE(abilityCall_t, .item = &roar_item, .target = &roar_target);
+        G_SetPlayerTechResearched(client, MAKEFOURCC('R','e','e','b'), 1);
+        T_ASSERT(G_UnitAbilityResearchAvailable(bear, roar_code));
+        T_EQ(G_UnitAbilityLevel(bear, roar_code), 1u);
+        T_NOT_NULL(roar_item.ability);
+        T_ASSERT(S_SpellIsAliveTarget(bear));
+        T_ASSERT(!S_UnitPolymorphed(bear));
+        T_ASSERT(!S_UnitIsCycloned(bear));
+        T_ASSERT(!S_UnitIsSilenced(bear));
+        T_ASSERT(S_SpellCooldownReady(bear, roar_code));
+        T_ASSERT(S_SpellCanPay(bear, roar_code, 1));
+        T_ASSERT(S_SpellCanActivate(bear, roar_code, 1, false));
+        T_ASSERT(S_AbilityMessage(bear, A_VALIDATE, &roar_call));
+        count = G_GetCommandButtons(bear, buttons, (uint8_t)(sizeof(buttons) / sizeof(buttons[0])));
+        roar_button = false;
+        FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Aroa")) {
+            roar_button = true;
+            T_ASSERT(!buttons[i].disabled);
+        }
+        T_ASSERT(roar_button);
+        T_ASSERT(S_CastNoTargetSpell(bear, roar_code));
+        T_EQ(G_UnitStatusLevel(bear, MAKEFOURCC('B','r','o','a')), 1);
+    }
     T_ASSERT(S_AbilityMessage(bear, A_TOGGLE_ON, &toggle_call));
 
     ally = alloc_test_unit(MAKEFOURCC('e','d','o','c'), 64.0f, 0.0f);
     ally_target = MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = ally);
     T_ASSERT(!test_ability_message(bear, A_VALIDATE, &rejuv, &ally_target));
-
-    test_execute_code(bear, "Aroa", MAKE(spellTarget_t, .type = SPELL_TARGET_NONE));
-    T_EQ(G_UnitStatusLevel(bear, MAKEFOURCC('B','r','o','a')), 0);
 
     /* The query drives the command button's Unart while the normal form is
      * active. Keep the fixture ability list attached to exercise HUD art. */
@@ -7537,6 +7593,9 @@ TEST(wc3_spell, bear_form_hides_normal_form_spells_and_uses_reverse_button_art) 
     T_STREQ(bear->animation_request, "morph alternate");
     G_SetSLKRows("UnitUI", old_ui);
     free_slk_rows(ui_rows);
+    G_SetSLKRows("AbilityData", old_roar);
+    free_slk_rows(roar_rows);
+    G_TestPopAbilityConfig();
 }
 
 TEST(wc3_spell, melee_spells_use_authored_status_and_bonus_values) {

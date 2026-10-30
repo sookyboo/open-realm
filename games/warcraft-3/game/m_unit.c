@@ -2511,6 +2511,12 @@ uint32_t G_UnitAbilityLevel(edict_t const *ent, uint32_t abilcode) {
         return hero_level;
     }
     if (!ent || !abilcode) return 0;
+    /* The TFT Bear Form unit row omits Roar even though Mark of the Claw
+     * exposes it as a command. Treat the synthesized command as level one;
+     * G_UnitAbilityResearchAvailable remains the authoritative cast gate. */
+    if (ent->class_id == MAKEFOURCC('e','d','c','m') &&
+        abilcode == MAKEFOURCC('A','r','o','a') && gi.CvarString &&
+        atoi(gi.CvarString("fs_expansion", "0")) != 0) return 1;
     memcpy(id, &abilcode, 4);
     return G_ActorHasSkill(ent, id) ? 1 : 0;
 }
