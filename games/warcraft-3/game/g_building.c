@@ -391,6 +391,26 @@ static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
     bool available = false;
 
     if (visible) *visible = true;
+    /* The Storm Crow morph (edtm) has its own Faerie Fire alias (Afa2),
+     * gated by the TFT Enchanted Crows/Mark of the Talon research (Reec).
+     * Keep that form-only command hidden in RoC. */
+    if (unit && unit->class_id == MAKEFOURCC('e','d','t','m') &&
+        ability_id == MAKEFOURCC('A','f','a','2')) {
+        bool const expansion = gi.CvarString && atoi(gi.CvarString("fs_expansion", "0")) != 0;
+        gameClient_t *crow_owner;
+        int32_t maximum;
+        if (!expansion) {
+            if (visible) *visible = false;
+            return false;
+        }
+        crow_owner = G_GetPlayerClientByNumber(unit->s.player);
+        if (!crow_owner || crow_owner->ps.number != unit->s.player) return false;
+        maximum = G_GetPlayerTechMaxAllowed(crow_owner, MAKEFOURCC('R','e','e','c'));
+        researchable = maximum < 0 || maximum >= 1;
+        if (visible) *visible = researchable;
+        return researchable && G_GetPlayerTechResearchedLevel(
+            crow_owner, MAKEFOURCC('R','e','e','c')) >= 1;
+    }
     /* Mark of the Claw is a TFT-only permission for Bear Form to retain
      * Roar. The transformed edcm row does not list Reeb in UnitBalance, and
      * gating Aroa globally would incorrectly remove the Druid's normal-form

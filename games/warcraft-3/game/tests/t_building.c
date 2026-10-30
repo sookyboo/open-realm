@@ -7847,8 +7847,79 @@ static cstring_t building_spikes_modern_cvar(cstring_t name, cstring_t fallback)
     return !strcmp(name, "wc3_spiked_barricades_modern") ? "1" : fallback;
 }
 
+static cstring_t building_tft_cvar(cstring_t name, cstring_t fallback) {
+    return !strcmp(name, "fs_expansion") ? "1" : fallback;
+}
+
+static cstring_t building_roc_cvar(cstring_t name, cstring_t fallback) {
+    return !strcmp(name, "fs_expansion") ? "0" : fallback;
+}
+
 static cstring_t building_spikes_classic_cvar(cstring_t name, cstring_t fallback) {
     return !strcmp(name, "wc3_spiked_barricades_modern") ? "0" : fallback;
+}
+
+TEST(wc3_building, enchanted_crows_gates_faerie_fire_in_storm_crow_form) {
+    static UnitAbilities_t const crow_abilities = { .abilList = "Afa2" };
+    static UnitAbilities_t const talon_abilities = { .abilList = "Afae" };
+    static cstring_t const ability_config =
+        "[Afa2]\nArt=ReplaceableTextures\\CommandButtons\\BTNFaerieFire.blp\n"
+        "Buttonpos=0,2\nTip=Faerie Fire\n";
+    cstring_t (*previous_cvar)(cstring_t, cstring_t) = gi.CvarString;
+    gameClient_t *owner;
+    edict_t *crow, *druid;
+    gameCommandButton_t buttons[16];
+    uint32_t const mark = MAKEFOURCC('R','e','e','c');
+    uint8_t count;
+    bool found;
+
+    reset_entities();
+    setup_test_world();
+    owner = &game.clients[0];
+    owner->ps.number = 0;
+    memset(owner->tech, 0, sizeof(owner->tech));
+    G_SetPlayerTechMaxAllowed(owner, mark, 1);
+    crow = alloc_test_unit(MAKEFOURCC('e','d','t','m'), 0, 0);
+    crow->s.player = owner->ps.number;
+    crow->data.UnitAbilities = &crow_abilities;
+    druid = alloc_test_unit(MAKEFOURCC('e','d','o','t'), 64, 0);
+    druid->s.player = owner->ps.number;
+    druid->data.UnitAbilities = &talon_abilities;
+
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
+    gi.CvarString = building_roc_cvar;
+    T_ASSERT(!G_UnitAbilityResearchVisible(crow, MAKEFOURCC('A','f','a','2')));
+    count = G_GetCommandButtons(crow, buttons, 16);
+    found = false;
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Afa2")) found = true;
+    T_ASSERT(!found);
+
+    gi.CvarString = building_tft_cvar;
+    T_ASSERT(G_UnitAbilityResearchVisible(crow, MAKEFOURCC('A','f','a','2')));
+    T_ASSERT(!G_UnitAbilityResearchAvailable(crow, MAKEFOURCC('A','f','a','2')));
+    count = G_GetCommandButtons(crow, buttons, 16);
+    found = false;
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Afa2")) {
+        found = true;
+        T_ASSERT(buttons[i].disabled);
+    }
+    T_ASSERT(found);
+
+    G_SetPlayerTechResearched(owner, mark, 1);
+    T_ASSERT(G_UnitAbilityResearchAvailable(crow, MAKEFOURCC('A','f','a','2')));
+    count = G_GetCommandButtons(crow, buttons, 16);
+    found = false;
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Afa2")) {
+        found = true;
+        T_ASSERT(!buttons[i].disabled);
+    }
+    T_ASSERT(found);
+    T_ASSERT(G_UnitAbilityResearchAvailable(druid, MAKEFOURCC('A','f','a','e')));
+
+    G_SetPlayerTechResearched(owner, mark, 0);
+    G_SetPlayerTechMaxAllowed(owner, mark, -1);
+    G_TestPopAbilityConfig();
+    gi.CvarString = previous_cvar;
 }
 
 TEST(wc3_building, spiked_barricades_research_uses_owner_tech_and_classic_upgrade_data) {
