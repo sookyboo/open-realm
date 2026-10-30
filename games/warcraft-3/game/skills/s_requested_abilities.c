@@ -462,6 +462,21 @@ static edict_t *reincarnation_spawn_tombstone(vec2_t const *point) {
     return tombstone;
 }
 
+static umove_t reincarnation_return_effect_move = { "death", NULL, G_FreeEdict };
+
+static void reincarnation_spawn_return_effect(edict_t *hero) {
+    edict_t *effect;
+
+    if (!hero) return;
+    effect = G_SpawnModelEffect("Abilities\\Spells\\Orc\\Reincarnation\\ReincarnationTarget.mdx",
+                                NULL, hero, "origin", false);
+    if (!effect) return;
+    /* The authored Birth/Stand sequences are only a thin marker beam; the
+     * bright gold return flare is the model's Death sequence. */
+    unit_setmove(effect, &reincarnation_return_effect_move);
+    if (!effect->animation) G_FreeEdict(effect);
+}
+
 void reincarnation_think(edict_t *thinker) {
     edict_t *owner = S_SpellChannelOwner(thinker);
     if (!owner) {
@@ -474,8 +489,7 @@ void reincarnation_think(edict_t *thinker) {
     thinker->goalentity = NULL;
     if (M_IsDead(owner)) {
         G_ReviveHero(owner, thinker->s.origin2.x, thinker->s.origin2.y);
-        G_SpawnModelEffect("Abilities\\Spells\\Orc\\Reincarnation\\ReincarnationTarget.mdx",
-                           &owner->s.origin2, NULL, NULL, true);
+        reincarnation_spawn_return_effect(owner);
     }
     G_FreeEdict(thinker);
 }
