@@ -63,31 +63,48 @@ The TFT archive has two distinct animated models under
   its name does not imply independent simulated projectile entities.
 
 Both models have `Birth - 1`, `Birth - 2`, `Birth - 3` (each 1600
-model-time units) and `Death`. Each includes two ribbons. Render them through
-`G_SpawnModelEffect` as *temporary* non-selectable edicts at the caster's
-cast-position snapshot. Each model handles its own ribbons and material slots:
-no hand-built knife particles, new texture remappings, network fields,
-per-victim impact projectiles, or renderer-specific spell checks are needed.
-The 4 inspected textures belong to the shared `Textures\` archive namespace;
-the MDX runtime continues to resolve its own material paths. The supplied
-asset report did not expose those slots' actual reference strings.
+model-time units) and `Death`, and include ribbon emitters. Their four
+inspected shared textures remain resolved by the generic MDX renderer.
 
-`G_AbilityEffectArt` honours the ability alias's `CasterArt` and `MissileArt`
-fields and inherited base row first. When no field exists for `AEfk`, the
-original TFT model paths are fallbacks; an explicit `-` / `_` remains disabled.
-If both slots resolve to the same model path, only one transient is created.
+**Retail screenshot evidence (classic TFT level 3):** the Warden produces
+many outward-travelling knives with extended green ribbons, including when
+no enemy unit is nearby. The number of visual blades must not follow the
+maximum damage target count or the actual list of damaged enemies. The supplied
+screenshots show level 3 only; they do **not** establish exact counts for levels
+1 or 2, nor whether numbered Birth animations are selected by rank.
 
-The present sequence selection uses the learned ability rank (clamped to 1–3)
-to request `Birth - N`. If an effect model lacks that sequence, it retains its
-generic `Birth` behavior. **This rank-to-Birth mapping is a provisional visual
-policy, not a claim about confirmed retail selection.** One-shot effect
-lifetime is owned by the model's Birth sequence, independently of the instant
-combat effect. Ability `Effectsound`, when authored, is played once at the
-cast point using the standard sound path. The three inspected `FanOfKnivesMissileHit{1,2,3}.wav`
-files are not automatically played per target: their selection and impact
-trigger rules remain unknown. If an MDX `SND` event owns sound, the existing
-model event system handles it. Compare both visual variants and audio against
-retail in-game before declaring exact cosmetic parity.
+`G_AbilityEffectArt` honours custom ability `CasterArt` and `MissileArt` and
+inherits the base ability row. When a stock AEfk art field is absent, the
+original models provide fallbacks (explicit `-`/`_` disables them). The caster
+burst remains one ordinary transient at the cast-position snapshot.
+
+Each visual knife is a temporary, server-authored **fixed-point presentation
+projectile** with a unique outward bearing, a snapshot destination at the
+ability's authored Area radius, and no gameplay damage or homing target.
+`G_SpawnModelEffect` supplies temporary MDX lifecycle and ribbon rendering;
+`MOVETYPE_FLYMISSILE`, `G_AddChannel` and `G_StartProjectilePresentation`
+reuse existing game-side movement and network presentation (no new renderer,
+wire fields, or per-target game missiles). Its normal endfunc frees it on
+arrival. Visuals continue whether or not any enemies are present.
+
+A **provisional** level-to-knife density (8/12/16 for levels 1/2/3) gives
+visibly fuller higher-ranked casts. Emission is deterministic and radial;
+small speed offsets spread the ribbons across the area instead of piling all
+knives onto a single ring. The same numbered `Birth - N` is provisionally
+selected according to rank, with the default animation fallback for custom
+models. Exact counts, trajectory speed, birth-variant selection, and the MDX's
+own keyframe displacements still need comparison with level 1/2/3 retail
+captures; these settings are not claimed as recovered retail constants.
+
+The actual Fan of Knives hit and enhanced-physical damage are still committed
+immediately and independently in `CAbilityFanOfKnives`; reaching a visual
+flight destination must never damage a unit, consume DataB or fire another
+spell event. The authored `Effectsound` plays once per cast. The three
+inspected `FanOfKnivesMissileHit{1,2,3}.wav` files are not automatically
+played per target: no reliable selection/timing contract was established.
+
+A map that intentionally sets the same CasterArt and MissileArt is shown once,
+so custom caster-only art is not accidentally cloned into many moving objects.
 
 ## Verification
 
@@ -99,8 +116,8 @@ Ethereal and spell-immune exclusion, `Bam2` survival, and a changed
 `DamageBonusSpells` gameplay constant.
 
 Run `make test-wc3-engine WC3_PATTERN='wc3_spell.fan_of_knives*'` after building.
-Visual sequence selection, MDX texture slot references, audio event policy, and
-retail over-cap victim order still need an in-game comparison. The authored
+Visual knife counts and travel, numbered Birth selection, MDX texture slot references,
+audio event policy, and retail over-cap victim order still need an in-game comparison. The authored
 model/animation lifecycle and custom-alias presentation have isolated tests.
 
 See also [Attack Damage](attack-damage.md), [Anti-Magic Shell](anti-magic-shell.md)

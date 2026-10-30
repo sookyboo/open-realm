@@ -67,28 +67,75 @@ static void fan_of_knives_set_visual_rank(edict_t *effect, uint32_t rank) {
     }
 }
 
-/* AEfk inflicts immediate area damage. Its MissileArt is presentation only:
- * the source MDX has a self-animated burst and ribbons, not a proven impact
- * travel time. Snapshot both models at the cast point; never spawn a gameplay
- * missile or effects on each individual victim. Missing art safely does
- * nothing. Stock paths are resolved in G_AbilityEffectArt, with overrides
- * retaining precedence for custom abilities. */
-static void fan_of_knives_play_visuals(edict_t *caster, uint32_t code, uint32_t rank) {
+/* Fan of Knives throws a *visual* circle of knives whether enemies are
+ * nearby or not. The stock MissileArt is one animated knife/ribbon model;
+ * placing a single copy at the caster produced a stationary, one-sided fan.
+ * Spawn fixed-point, non-damaging projectiles on evenly spaced bearings.
+ * Their radial destinations are NOT the selected gameplay victims. */
+static uint32_t fan_of_knives_visual_count(uint32_t rank) {
+    /* Provisional visual density pending a controlled level 1/2/3 retail
+     * comparison.  Do not use DataB's gameplay target cap: empty casts still
+     * throw knives. Bounded to the three authored Birth variants. */
+    return 4u + 4u * MIN(MAX(rank, 1u), 3u); /* 8 / 12 / 16 */
+}
+
+static void fan_of_knives_spawn_knife(edict_t *caster, cstring_t art,
+                                      vec2_t const *origin, float angle,
+                                      float travel, uint32_t rank,
+                                      uint32_t knife_index) {
+    vec2_t const direction = { cosf(angle), sinf(angle) };
+    vec2_t const destination = Vector2_mad(origin, travel, &direction);
+    edict_t *effect = G_SpawnModelEffect(art, origin, NULL, NULL, true);
+    channel_t *cast;
+
+    if (!effect) return;
+    cast = G_AddChannel(effect);
+    /* This fixed destination is purely presentation. Its impact handler is
+     * the temporary effect's ordinary G_FreeEdict endfunc, never combat. */
+    cast->origin = destination;
+    cast->owner_spawn_time = caster->spawn_time;
+    effect->owner = caster;
+    effect->s.player = caster->s.player;
+    G_InheritUnitTeamColor(effect, caster);
+    effect->s.angle = angle;
+    effect->s.origin.z = caster->s.origin.z + 24.0f;
+    effect->movetype = MOVETYPE_FLYMISSILE;
+    effect->aiflags |= AI_PROJECTILE_FIXED_TARGET;
+    /* Stagger flight speeds slightly so the trails occupy the whole radius,
+     * rather than a single geometrically perfect ring.  Both 1600-ms Birth
+     * animations and the radial flight end independently without gameplay
+     * damage or waiting for a target. */
+    effect->velocity = (travel / 1050.0f) *
+                       (0.85f + 0.15f * (float)(knife_index % 3u));
+    G_StartProjectilePresentation(effect);
+    fan_of_knives_set_visual_rank(effect, rank);
+}
+
+static void fan_of_knives_play_visuals(edict_t *caster, uint32_t code,
+                                       uint32_t rank, float radius) {
     vec2_t const origin = caster->s.origin2;
     cstring_t const caster_art = G_AbilityEffectArt(code, WC3_EFFECT_CASTER, 0);
     cstring_t const knife_art = G_AbilityEffectArt(code, WC3_EFFECT_MISSILE, 0);
+    uint32_t const knife_count = fan_of_knives_visual_count(rank);
+    float const distance = radius > 0.0f ? radius : 400.0f;
     edict_t *effect;
 
     if (caster_art && *caster_art) {
         effect = G_SpawnModelEffect(caster_art, &origin, NULL, NULL, true);
         fan_of_knives_set_visual_rank(effect, rank);
     }
+    /* A map using the same CasterArt and MissileArt is intentionally shown
+     * just once; do not multiply a custom caster-only model into 16 objects. */
     if (knife_art && *knife_art && (!caster_art || strcasecmp(knife_art, caster_art))) {
-        effect = G_SpawnModelEffect(knife_art, &origin, NULL, NULL, true);
-        fan_of_knives_set_visual_rank(effect, rank);
+        for (uint32_t i = 0; i < knife_count; i++) {
+            float const angle = caster->s.angle + (2.0f * (float)M_PI * (float)i) /
+                                                     (float)knife_count;
+            fan_of_knives_spawn_knife(caster, knife_art, &origin, angle,
+                                      distance, rank, i);
+        }
     }
-    /* Use only the authored one-shot ability sound. The three inspected hit
-     * WAVs do not by themselves establish a per-target playback contract. */
+    /* The inspected Hit1/2/3 WAVs do not prove per-target or per-knife sound
+     * playback. The authored one-shot ability sound is played exactly once. */
     G_PlayAbilityEffectSound(code, &origin);
 }
 
@@ -102,7 +149,7 @@ BZ_SIMPLE_SPELL_PROC(AbilityFanOfKnives) {
     float remaining = maxtotal;
     if (radius <= 0.0f) radius = 400.0f;
     /* An empty or zero-damage cast still has its normal spell presentation. */
-    fan_of_knives_play_visuals(caster, spell->code, level);
+    fan_of_knives_play_visuals(caster, spell->code, level, radius);
     if (damage <= 0) return;
 
     /* Maximum damage is a budget for full-strength victims, NOT an amount to

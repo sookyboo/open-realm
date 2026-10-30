@@ -10,20 +10,33 @@ void reset_entities(void);
 void setup_test_world(void);
 slkTestData_t *parse_slk_string(char const *text);
 void free_slk_rows(slkTestData_t *rows);
+void SV_Physics_Toss(edict_t *ent);
 
 /* Stock-shaped 1.36.2 row and an intentionally non-stock alias: the cap must
  * derive from each row's DataA/DataB rather than a fixed target count. */
 static char const fok_slk[] =
-    "ID;PWXL;N;EBB;Y3;X9\n"
+    "ID;PWXL;N;EBB;Y3;X19\n"
     "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
     "C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Cost1\"\nC;Y1;X6;K\"Cool1\"\n"
     "C;Y1;X7;K\"Area1\"\nC;Y1;X8;K\"DataA1\"\nC;Y1;X9;K\"DataB1\"\n"
-    "C;Y2;X1;K\"AEfk\"\nC;Y2;X2;K\"AEfk\"\nC;Y2;X3;K\"1\"\n"
+    "C;Y1;X10;K\"Cost2\"\nC;Y1;X11;K\"Cool2\"\nC;Y1;X12;K\"Area2\"\n"
+    "C;Y1;X13;K\"DataA2\"\nC;Y1;X14;K\"DataB2\"\n"
+    "C;Y1;X15;K\"Cost3\"\nC;Y1;X16;K\"Cool3\"\nC;Y1;X17;K\"Area3\"\n"
+    "C;Y1;X18;K\"DataA3\"\nC;Y1;X19;K\"DataB3\"\n"
+    "C;Y2;X1;K\"AEfk\"\nC;Y2;X2;K\"AEfk\"\nC;Y2;X3;K\"3\"\n"
     "C;Y2;X4;K\"air,ground,enemy,organic\"\nC;Y2;X5;K\"100\"\n"
     "C;Y2;X6;K\"9\"\nC;Y2;X7;K\"400\"\nC;Y2;X8;K\"70\"\nC;Y2;X9;K\"420\"\n"
-    "C;Y3;X1;K\"A0fk\"\nC;Y3;X2;K\"AEfk\"\nC;Y3;X3;K\"1\"\n"
+    "C;Y2;X10;K\"100\"\nC;Y2;X11;K\"9\"\nC;Y2;X12;K\"450\"\n"
+    "C;Y2;X13;K\"130\"\nC;Y2;X14;K\"780\"\n"
+    "C;Y2;X15;K\"100\"\nC;Y2;X16;K\"9\"\nC;Y2;X17;K\"475\"\n"
+    "C;Y2;X18;K\"200\"\nC;Y2;X19;K\"1200\"\n"
+    "C;Y3;X1;K\"A0fk\"\nC;Y3;X2;K\"AEfk\"\nC;Y3;X3;K\"3\"\n"
     "C;Y3;X4;K\"air,ground,enemy,organic\"\nC;Y3;X5;K\"0\"\n"
-    "C;Y3;X6;K\"0\"\nC;Y3;X7;K\"250\"\nC;Y3;X8;K\"51\"\nC;Y3;X9;K\"110\"\nE\n";
+    "C;Y3;X6;K\"0\"\nC;Y3;X7;K\"250\"\nC;Y3;X8;K\"51\"\nC;Y3;X9;K\"110\"\n"
+    "C;Y3;X10;K\"0\"\nC;Y3;X11;K\"0\"\nC;Y3;X12;K\"350\"\n"
+    "C;Y3;X13;K\"53\"\nC;Y3;X14;K\"110\"\n"
+    "C;Y3;X15;K\"100\"\nC;Y3;X16;K\"9\"\nC;Y3;X17;K\"475\"\n"
+    "C;Y3;X18;K\"55\"\nC;Y3;X19;K\"110\"\nE\n";
 
 typedef struct {
     slkTestData_t *rows, *old;
@@ -83,11 +96,12 @@ TEST(wc3_spell, fan_of_knives_stock_models_are_presented_from_archive_paths) {
             "Abilities\\Spells\\NightElf\\FanOfKnives\\FanOfKnivesMissile.mdx");
 }
 
-TEST(wc3_spell, fan_of_knives_custom_art_spawns_one_burst_per_slot) {
+TEST(wc3_spell, fan_of_knives_custom_art_spawns_radial_missiles) {
     fokFixture_t f = fok_setup(CUSTOM_FAN);
     uint32_t caster_model = G_RegisterModel("TestUI\\Models\\anim_oneshot.mdx");
     uint32_t knife_model = G_RegisterModel("TestUI\\Models\\anim_pulse.mdx");
     int caster_count = 0, knife_count = 0;
+    edict_t *first_knife = NULL;
     T_STREQ(G_AbilityEffectArt(CUSTOM_FAN, WC3_EFFECT_CASTER, 0),
             "TestUI\\Models\\anim_oneshot.mdx");
     T_STREQ(G_AbilityEffectArt(CUSTOM_FAN, WC3_EFFECT_MISSILE, 0),
@@ -99,14 +113,91 @@ TEST(wc3_spell, fan_of_knives_custom_art_spawns_one_burst_per_slot) {
         if (ent->s.model == caster_model) caster_count++;
         if (ent->s.model == knife_model) knife_count++;
         if (ent->s.model == caster_model || ent->s.model == knife_model) {
-            T_NULL(ent->goalentity); /* cast-centred, not one per damaged unit */
+            T_NULL(ent->goalentity); /* no enemy-tracking visuals */
             T_FEQ(ent->s.origin2.x, f.caster->s.origin2.x, 0.001f);
             T_FEQ(ent->s.origin2.y, f.caster->s.origin2.y, 0.001f);
             T_NOT_NULL(ent->animation);
+            if (ent->s.model == knife_model) {
+                channel_t const *flight = G_GetChannel(ent);
+                if (!first_knife) first_knife = ent;
+                T_EQ(ent->movetype, MOVETYPE_FLYMISSILE);
+                T_ASSERT(ent->aiflags & AI_PROJECTILE_FIXED_TARGET);
+                T_EQ(ent->owner, f.caster);
+                T_ASSERT(ent->velocity > 0.0f);
+                T_NOT_NULL(flight);
+                T_FEQ(Vector2_distance(&flight->origin, &f.caster->s.origin2),
+                       250.0f, 0.01f); /* custom Area1, not DataB cap */
+            }
         }
     }
     T_EQ(caster_count, 1);
-    T_EQ(knife_count, 1);
+    T_EQ(knife_count, 8);
+    T_NOT_NULL(first_knife);
+    {
+        float const initial_health = f.enemy[0]->health.value;
+        float const initial_x = first_knife->s.origin.x;
+        float const initial_y = first_knife->s.origin.y;
+        SV_Physics_Toss(first_knife);
+        T_ASSERT(first_knife->inuse);
+        T_ASSERT(fabsf(first_knife->s.origin.x - initial_x) > 0.01f ||
+                 fabsf(first_knife->s.origin.y - initial_y) > 0.01f);
+        /* Moving and arriving at the visual endpoint must not reapply damage. */
+        for (int tick = 0; tick < 30 && first_knife->inuse; tick++)
+            SV_Physics_Toss(first_knife);
+        T_ASSERT(!first_knife->inuse);
+        T_FEQ(f.enemy[0]->health.value, initial_health, .001f);
+    }
+    fok_done(f);
+}
+
+
+TEST(wc3_spell, fan_of_knives_level_two_increases_visual_density) {
+    fokFixture_t f = fok_setup(CUSTOM_FAN);
+    uint32_t const knife_model = G_RegisterModel("TestUI\\Models\\anim_pulse.mdx");
+    int knife_count = 0;
+    FOR_LOOP(i, 8) G_FreeEdict(f.enemy[i]);
+    G_FreeEdict(f.ally);
+    f.caster->unit_state->ranks[0].level = 2;
+    T_ASSERT(S_CastNoTargetSpell(f.caster, CUSTOM_FAN));
+    FOR_LOOP(i, globals.num_edicts) {
+        edict_t *ent = globals.edicts + i;
+        if (!ent->inuse || ent->s.model != knife_model ||
+            !(ent->s.flags & EF_NOT_SELECTABLE)) continue;
+        channel_t const *flight = G_GetChannel(ent);
+        knife_count++;
+        T_NOT_NULL(flight);
+        T_FEQ(Vector2_distance(&flight->origin, &f.caster->s.origin2),
+               350.0f, 0.01f);
+    }
+    T_EQ(knife_count, 12);
+    fok_done(f);
+}
+
+TEST(wc3_spell, fan_of_knives_level_three_visuals_do_not_require_enemies) {
+    fokFixture_t f = fok_setup(CUSTOM_FAN);
+    uint32_t const knife_model = G_RegisterModel("TestUI\\Models\\anim_pulse.mdx");
+    uint32_t const caster_model = G_RegisterModel("TestUI\\Models\\anim_oneshot.mdx");
+    int knife_count = 0, caster_count = 0;
+    FOR_LOOP(i, 8) G_FreeEdict(f.enemy[i]);
+    G_FreeEdict(f.ally);
+    f.caster->unit_state->ranks[0].level = 3;
+    T_ASSERT(S_CastNoTargetSpell(f.caster, CUSTOM_FAN));
+    FOR_LOOP(i, globals.num_edicts) {
+        edict_t *ent = globals.edicts + i;
+        if (!ent->inuse || !(ent->s.flags & EF_NOT_SELECTABLE)) continue;
+        if (ent->s.model == caster_model) caster_count++;
+        if (ent->s.model == knife_model) {
+            channel_t const *flight = G_GetChannel(ent);
+            knife_count++;
+            T_EQ(ent->movetype, MOVETYPE_FLYMISSILE);
+            T_NOT_NULL(flight);
+            T_FEQ(Vector2_distance(&flight->origin, &f.caster->s.origin2),
+                   475.0f, 0.01f); /* custom third-level Area3 */
+        }
+    }
+    T_EQ(caster_count, 1);
+    T_EQ(knife_count, 16); /* visual density, independent of number of victims */
+    T_FEQ(f.caster->mana.value, 400.0f, .001f);
     fok_done(f);
 }
 
