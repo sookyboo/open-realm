@@ -245,6 +245,30 @@ static void FormatAttackDamageWithStatus(char *buffer, size_t buffer_size,
     FormatAttackDamageValue(buffer, buffer_size, min_damage, max_damage, temporary_bonus);
 }
 
+static void AppendInfoPanelBonus(char *body, size_t body_size, cstring_t label, float bonus) {
+    size_t const used = body ? strlen(body) : 0;
+    int const value = (int)bonus;
+    if (!body || !label || !body_size || used >= body_size || !value) return;
+    snprintf(body + used, body_size - used, "\n%s: %s%d|r", label,
+             value > 0 ? "|cff00ff00+" : "|cffff0000", value);
+}
+
+static void AppendDamageBonusTooltip(char *body, size_t body_size, edict_t const *ent,
+                                     float temporary_bonus, float damage_base) {
+    float const roar = S_RoarDamageBonus(ent);
+    float const percent = unit_status_modifier_total(ent, WC3_STATUS_MOD_ATTACK_DAMAGE_PERCENT);
+    float bonus = temporary_bonus;
+    if (roar != 0.0f) bonus = damage_base * roar;
+    else if (percent != 0.0f) {
+        size_t const used = body ? strlen(body) : 0;
+        int const value = (int)(percent * 100.0f + 0.5f);
+        if (body && used < body_size)
+            snprintf(body + used, body_size - used, "\nBonus Damage: |cff00ff00+%d%%|r", value);
+        return;
+    }
+    AppendInfoPanelBonus(body, body_size, "Bonus Damage", bonus);
+}
+
 #ifdef BZ_TESTS
 void UI_TestFormatAttackDamageWithStatus(char *buffer, size_t buffer_size,
                                          edict_t const *ent, int32_t min_damage,
@@ -782,6 +806,9 @@ static void SetArmorTooltip(frameDef_t *icon, edict_t *ent, uint32_t armor_type,
     }
     FormatArmorTooltip(tip, sizeof(tip), body, sizeof(body), armor_type, armor,
                        move_speed, upgrade_name, upgrade_level);
+    AppendInfoPanelBonus(body, sizeof(body), "Bonus Armor",
+        ent->unit_state->temporary_armor_bonus +
+        unit_status_modifier_total(ent, WC3_STATUS_MOD_ARMOR_FLAT));
     FormatArmorValue(armor_value, sizeof(armor_value), ent);
     snprintf(tip, sizeof(tip), "%s %s", InfoPanelString("COLON_ARMOR", "Armor:"), armor_value);
     icon->Tip = tip;
@@ -886,6 +913,8 @@ static void SetDamageTooltip(frameDef_t *icon, edict_t *ent, attackType_t type,
     FormatDamageTooltip(tips[current], sizeof(tips[current]), bodies[current], sizeof(bodies[current]),
                         type, min_damage, max_damage, range, cooldown,
                         upgrade_name, upgrade_level);
+    AppendDamageBonusTooltip(bodies[current], sizeof(bodies[current]), ent,
+                             temporary_damage_bonus, damage_base);
     FormatAttackDamageWithStatus(damage_value, sizeof(damage_value), ent, min_damage,
                                  max_damage, temporary_damage_bonus, damage_base);
     snprintf(tips[current], sizeof(tips[current]), "%s %s",

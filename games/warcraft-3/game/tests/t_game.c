@@ -1637,6 +1637,7 @@ TEST(wc3_game, damage_icon_tooltip_shows_rifleman_attack_details) {
     UI_TestSetDamageTooltip(&icon, rifleman, ATK_PIERCE, 37, 59,
                             600.0f, 1.5f, 0, 6.0f, 0.0f);
     T_STREQ(icon.Tip, "Damage: 37 - 59 |cff00ff00+6|r");
+    T_ASSERT(icon.Ubertip && strstr(icon.Ubertip, "Bonus Damage: |cff00ff00+6|r") != NULL);
 
     UI_TestFormatDamageTooltip(tip, sizeof(tip), body, sizeof(body), ATK_PIERCE,
                                21, 36, 600.0f, 1.5f, "Imbued Gunpowder", 3);
@@ -1681,6 +1682,7 @@ TEST(wc3_game, armor_icon_tooltip_shows_rifleman_defense_details) {
     UI_TestSetArmorTooltip(&icon, rifleman, rifleman->unit_state->defense_type,
                            G_UnitArmorValue(rifleman), rifleman->unitinfo.MoveSpeed, 0);
     T_STREQ(icon.Tip, "Armor: 6 |cff00ff00+5|r");
+    T_ASSERT(icon.Ubertip && strstr(icon.Ubertip, "Bonus Armor: |cff00ff00+5|r") != NULL);
 }
 
 TEST(wc3_game, hero_primary_attribute_icon_shows_attribute_bonuses) {

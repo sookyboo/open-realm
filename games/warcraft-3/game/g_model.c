@@ -251,12 +251,6 @@ int G_RegisterModel(cstring_t filename) {
     return index;
 }
 
-cstring_t G_ModelFilename(uint32_t modelindex) {
-    if (modelindex == 0 || modelindex >= G_MAX_MODELS || !g_models[modelindex].filename[0])
-        return "(unknown)";
-    return g_models[modelindex].filename;
-}
-
 static uint8_t *ReadModelFile(cstring_t filename, uint32_t *out_size) {
     uint8_t *data;
 
