@@ -1625,7 +1625,7 @@ static void status_apply_authored_modifiers(heroabilitystatus_t *slot, uint32_t 
     /* Only stock families whose modifiers are owned by this resolver may be rebuilt. */
     switch (slot->code) {
     case MAKEFOURCC('B','c','r','i'): case MAKEFOURCC('B','b','l','o'):
-    case MAKEFOURCC('B','s','l','o'):
+    case MAKEFOURCC('B','s','l','o'): case MAKEFOURCC('B','c','s','d'):
     case MAKEFOURCC('B','f','z','y'): case MAKEFOURCC('B','U','h','f'):
     case MAKEFOURCC('B','u','h','f'): case MAKEFOURCC('B','s','p','o'):
     case MAKEFOURCC('B','i','n','f'): case MAKEFOURCC('B','f','a','e'):

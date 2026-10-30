@@ -15,14 +15,6 @@
 void whirlwind_think(edict_t *ent);
 static umove_t whirlwind_blade_storm_move = { "attack walk stand spin", NULL, NULL };
 
-typedef struct {
-    edict_t *caster;
-    spellTarget_t target;
-    abilityitem_t const *spell;
-    float scale;
-    bool random_jumps;
-} bounceParams_t;
-
 bool S_UnitHasStatus(edict_t const *unit, uint32_t code) {
     if (!unit) return false;
     FOR_LOOP(i, unit->unit_state ? MAX_UNIT_STATUSES : 0)
@@ -281,38 +273,6 @@ static void death_coil_execute(edict_t *caster, spellTarget_t st, abilityitem_t 
 
     if (!missile) return;
     missile->damage = (uint32_t)MAX(0.0f, S_SpellData(spell->code, level, 1));
-}
-
-/* Resolve chained damage jumps while keeping target selection separate from spell metadata. */
-static void bounce_execute(bounceParams_t const *params) {
-    edict_t *caster = params->caster;
-    spellTarget_t st = params->target;
-    abilityitem_t const *spell = params->spell;
-    float scale = params->scale;
-    bool random_jumps = params->random_jumps;
-    uint32_t level = S_SpellLevel(caster, spell->code), hits = (uint32_t)S_SpellData(spell->code, level, 2);
-    float damage = S_SpellData(spell->code, level, 1);
-    edict_t *current = st.entity, *visited[32] = {0};
-    uint32_t nvisited = 0;
-    FOR_LOOP(i, MIN(hits, 32)) {
-        edict_t *candidates[MAX_GROUP_SIZE];
-        uint32_t candidate_count = 0;
-        if (!current) break;
-        G_SpawnAbilityLightning(&(abilityLightningParams_t){
-            .ability_id = spell->code, .index = 0,
-            .source = caster, .target = current,
-            .duration_ms = CHAIN_LIGHTNING_BOLT_MS,
-        });
-        S_SpellDamage(current, caster, (int)MAX(1.0f, damage));
-        G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_SPECIAL, 0, current, NULL, true);
-        visited[nvisited++] = current; damage *= scale;
-        FILTER_EDICTS(target, S_SpellBounceTargetAllowed(caster, spell->code, current, target,
-                                                        S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level), false)) {
-            if (!S_SpellTargetVisited(visited, nvisited, target) && candidate_count < MAX_GROUP_SIZE)
-                candidates[candidate_count++] = target;
-        }
-        current = candidate_count ? candidates[random_jumps ? rand() % candidate_count : 0] : NULL;
-    }
 }
 
 /* Chain Lightning is asynchronous in Warcraft/Warsmash: the first target is

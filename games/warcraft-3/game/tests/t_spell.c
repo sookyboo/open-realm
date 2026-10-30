@@ -3608,40 +3608,119 @@ TEST(wc3_spell, spell_fields_belong_to_ability) {
 	T_EQ((int)abil->target_type, (int)SPELL_TARGET_UNIT);
 }
 
-TEST(wc3_spell, forked_lightning_bounces_without_damage_decay) {
+TEST(wc3_spell, forked_lightning_hits_three_units_in_aimed_cone_within_range) {
 	const char slk[] =
-		"ID;PWXL;N;EBB;Y2;X6\n"
+		"ID;PWXL;N;EBB;Y2;X15\n"
 		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"DataA1\"\n"
-		"C;Y1;X4;K\"DataB1\"\nC;Y1;X5;K\"Area1\"\nC;Y1;X6;K\"Dur1\"\n"
-		"C;Y2;X1;K\"ANfl\"\nC;Y2;X2;K\"ANfl\"\nC;Y2;X3;K\"85\"\n"
-		"C;Y2;X4;K\"3\"\nC;Y2;X5;K\"125\"\nC;Y2;X6;K\"0.7\"\nE\n";
+		"C;Y1;X4;K\"DataA2\"\nC;Y1;X5;K\"DataA3\"\nC;Y1;X6;K\"DataB1\"\n"
+		"C;Y1;X7;K\"DataB2\"\nC;Y1;X8;K\"DataB3\"\n"
+		"C;Y1;X9;K\"Rng1\"\nC;Y1;X10;K\"Rng2\"\nC;Y1;X11;K\"Rng3\"\n"
+		"C;Y1;X12;K\"Area1\"\nC;Y1;X13;K\"Cool1\"\nC;Y1;X14;K\"Cost1\"\nC;Y1;X15;K\"Dur1\"\n"
+		"C;Y2;X1;K\"ANfl\"\nC;Y2;X2;K\"ANfl\"\nC;Y2;X3;K85\nC;Y2;X4;K160\nC;Y2;X5;K250\n"
+		"C;Y2;X6;K3\nC;Y2;X7;K3\nC;Y2;X8;K3\n"
+		"C;Y2;X9;K600\nC;Y2;X10;K600\nC;Y2;X11;K600\nC;Y2;X12;K125\nC;Y2;X13;K11\nC;Y2;X14;K110\nC;Y2;X15;K0\nE\n";
 	slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
-	edict_t *caster = make_hero(MAKEFOURCC('h','p','e','a'), 250, 100, 0, 0);
-	edict_t *first = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 100, 0);
-	edict_t *second = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 200, 0);
-	edict_t *third = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 300, 0);
-	edict_t *fourth = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 400, 0);
+	edict_t *caster, *first, *selected, *second, *third, *flank, *out_of_range;
 	abilityitem_t spell_item = S_AbilityItem(FS_SLKKey("ANfl"));
-	spellTarget_t st = { .type = SPELL_TARGET_UNIT, .entity = first };
+	static int const damage[] = { 85, 160, 250 };
+
+	reset_entities(); setup_test_world();
+	caster = make_hero(MAKEFOURCC('n','n','s','s'), 250, 500, 0, 0);
+	first = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 100, 0);
+	selected = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 200, 0);
+	second = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 250, 0);
+	third = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 400, -20);
+	flank = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 300, 180);
+	out_of_range = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 700, 0);
 
 	caster->s.player = 0;
-	caster->unit_state->ranks[0] = MAKE(heroability_t, .code = MAKEFOURCC('A','N','f','l'), .level = 1);
-	first->s.player = second->s.player = third->s.player = fourth->s.player = 1;
-	    first->svflags |= SVF_MONSTER;
-	    second->svflags |= SVF_MONSTER;
-	    third->svflags |= SVF_MONSTER;
-	    fourth->svflags |= SVF_MONSTER;
+	first->s.player = selected->s.player = second->s.player = third->s.player = flank->s.player = out_of_range->s.player = 1;
+	first->svflags |= SVF_MONSTER; selected->svflags |= SVF_MONSTER; second->svflags |= SVF_MONSTER;
+	third->svflags |= SVF_MONSTER; flank->svflags |= SVF_MONSTER; out_of_range->svflags |= SVF_MONSTER;
 	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
 	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
-	first->health.value = second->health.value = third->health.value = fourth->health.value = 100;
-	test_ability_message(caster, A_EXECUTE, &spell_item, &st);
-	T_FEQ(first->health.value, 15.0f, 0.01f);
-	T_FEQ(second->health.value, 15.0f, 0.01f);
-	T_FEQ(third->health.value, 15.0f, 0.01f);
-	T_FEQ(fourth->health.value, 100.0f, 0.01f);
+	T_FEQ(S_SpellNumber(spell_item.code, ABILITY_NUMBER_COOLDOWN, 1), 11.0f, 0.001f);
+	T_FEQ(S_SpellNumber(spell_item.code, ABILITY_NUMBER_COST, 1), 110.0f, 0.001f);
+	T_FEQ(S_SpellRange(spell_item.code, 1), 600.0f, 0.001f);
+	FOR_LOOP(i, 6) {
+		edict_t *unit[] = { first, selected, second, third, flank, out_of_range };
+		unit[i]->health.value = unit[i]->health.max_value = 1000;
+	}
+	FOR_LOOP(i, 3) {
+		edict_t *unit[] = { first, selected, second, third, flank, out_of_range };
+		caster->unit_state->ranks[0] = MAKE(heroability_t, .code = MAKEFOURCC('A','N','f','l'), .level = i + 1);
+		FOR_LOOP(j, 6) unit[j]->health.value = 1000;
+		test_ability_message(caster, A_EXECUTE, &spell_item,
+			&(spellTarget_t){ .type = SPELL_TARGET_UNIT, .entity = selected });
+		T_FEQ(first->health.value, 1000 - damage[i], 0.01f);
+		T_FEQ(selected->health.value, 1000 - damage[i], 0.01f);
+		T_FEQ(second->health.value, 1000 - damage[i], 0.01f);
+		T_FEQ(third->health.value, 1000.0f, 0.01f); /* fourth eligible cone unit exceeds the hit cap */
+		T_FEQ(flank->health.value, 1000.0f, 0.01f);
+		T_FEQ(out_of_range->health.value, 1000.0f, 0.01f);
+	}
 
 	G_SetSLKRows("AbilityData", old);
 	free_slk_rows(rows);
+}
+
+TEST(wc3_spell, frost_arrows_apply_rank_damage_slow_duration_and_mana_cost) {
+	const char slk[] =
+		"ID;PWXL;N;EBB;Y2;X22\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
+		"C;Y1;X3;K\"Cost1\"\nC;Y1;X4;K\"Cost2\"\nC;Y1;X5;K\"Cost3\"\n"
+		"C;Y1;X6;K\"DataA1\"\nC;Y1;X7;K\"DataA2\"\nC;Y1;X8;K\"DataA3\"\n"
+		"C;Y1;X9;K\"DataB1\"\nC;Y1;X10;K\"DataB2\"\nC;Y1;X11;K\"DataB3\"\n"
+		"C;Y1;X12;K\"DataC1\"\nC;Y1;X13;K\"DataC2\"\nC;Y1;X14;K\"DataC3\"\n"
+		"C;Y1;X15;K\"Dur1\"\nC;Y1;X16;K\"Dur2\"\nC;Y1;X17;K\"Dur3\"\n"
+		"C;Y1;X18;K\"HeroDur1\"\nC;Y1;X19;K\"Rng1\"\nC;Y1;X20;K\"BuffID1\"\n"
+		"C;Y1;X21;K\"BuffID2\"\nC;Y1;X22;K\"BuffID3\"\n"
+		"C;Y2;X1;K\"ANfa\"\nC;Y2;X2;K\"AHca\"\n"
+		"C;Y2;X3;K10\nC;Y2;X4;K10\nC;Y2;X5;K10\n"
+		"C;Y2;X6;K5\nC;Y2;X7;K10\nC;Y2;X8;K15\n"
+		"C;Y2;X9;K0.3\nC;Y2;X10;K0.5\nC;Y2;X11;K0.7\n"
+		"C;Y2;X12;K0.3\nC;Y2;X13;K0.5\nC;Y2;X14;K0.7\n"
+		"C;Y2;X15;K5\nC;Y2;X16;K5\nC;Y2;X17;K5\nC;Y2;X18;K1.5\nC;Y2;X19;K70\n"
+		"C;Y2;X20;K\"Bcsd\"\nC;Y2;X21;K\"Bcsd\"\nC;Y2;X22;K\"Bcsd\"\nE\n";
+	slkTestData_t *rows, *old;
+	edict_t *attacker, *target;
+	static float const expected_bonus[] = { 5, 10, 15 };
+	static float const expected_slow[] = { -0.3f, -0.5f, -0.7f };
+
+	reset_entities(); setup_test_world();
+	rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+	attacker = make_hero(MAKEFOURCC('n','n','s','s'), 100, 100, 0, 0);
+	target = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64, 0);
+	attacker->s.player = 0; target->s.player = 1;
+	target->svflags |= SVF_MONSTER; target->targtype = TARG_GROUND;
+	target->health.value = target->health.max_value = 1000;
+	attacker->unit_state->attack1.weapon = WPN_MISSILE;
+	attacker->unit_state->attack1.type = ATK_NORMAL;
+	attacker->unit_state->attack1.targetsAllowed = G_TargetFlagForType(TARG_GROUND);
+	attacker->mana.value = attacker->mana.max_value = 100;
+
+	FOR_LOOP(rank, 3) {
+		uint32_t const level = rank + 1;
+		uint32_t const ability = MAKEFOURCC('A','N','f','a');
+		heroabilitystatus_t *status;
+		attacker->unit_state->ranks[0] = MAKE(heroability_t, .code = ability, .level = level);
+		target->health.value = 1000.0f;
+		attacker->mana.value = 100.0f;
+		T_ASSERT(S_ColdArrowsIssueOrder(attacker, target, ability));
+		S_ResolveAttackHit(attacker, target, 100);
+		T_FEQ(target->health.value, 1000 - (100 + expected_bonus[rank]), 0.01f);
+		T_FEQ(attacker->mana.value, 90.0f, 0.001f);
+		T_ASSERT(S_UnitHasStatus(target, MAKEFOURCC('B','c','s','d')));
+		T_FEQ(unit_status_modifier_total(target, WC3_STATUS_MOD_MOVE_SPEED_PERCENT), expected_slow[rank], 0.001f);
+		T_FEQ(unit_status_modifier_total(target, WC3_STATUS_MOD_ATTACK_SPEED_PERCENT), expected_slow[rank], 0.001f);
+		status = unit_findstatus(target, MAKEFOURCC('B','c','s','d'));
+		T_NOT_NULL(status);
+		T_EQ(status->timestamp, G_Time() + 5000);
+		unit_removestatus(target, status, STATUS_REMOVE_SCRIPT);
+	}
+	T_FEQ(S_SpellNumber(MAKEFOURCC('A','N','f','a'), ABILITY_NUMBER_RANGE, 1), 70.0f, 0.001f);
+	T_FEQ(S_SpellDuration(MAKEFOURCC('A','N','f','a'), 1, true), 1.5f, 0.001f);
+	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
 TEST(wc3_spell, first_new_ability_handlers_are_real_spells) {
@@ -4633,31 +4712,56 @@ TEST(wc3_spell, searing_arrows_adds_authored_damage_and_spends_mana_per_attack) 
     free_slk_rows(rows);
 }
 
-TEST(wc3_spell, mana_shield_toggle_status_controls_authored_damage_absorption) {
+TEST(wc3_spell, mana_shield_rank_ratios_absorb_damage_and_drain_authored_mana) {
 	const char slk[] =
-		"ID;PWXL;N;EBB;Y2;X6\n"
-		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"DataA1\"\nC;Y1;X4;K\"DataB1\"\n"
-		"C;Y1;X5;K\"BuffID1\"\nC;Y1;X6;K\"Area1\"\n"
-		"C;Y2;X1;K\"ANms\"\nC;Y2;X2;K\"ANms\"\nC;Y2;X3;K\"2\"\nC;Y2;X4;K\"0.5\"\n"
-		"C;Y2;X5;K\"BNms\"\nC;Y2;X6;K\"128\"\nE\n";
+		"ID;PWXL;N;EBB;Y2;X14\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
+		"C;Y1;X3;K\"DataA1\"\nC;Y1;X4;K\"DataA2\"\nC;Y1;X5;K\"DataA3\"\n"
+		"C;Y1;X6;K\"DataB1\"\nC;Y1;X7;K\"DataB2\"\nC;Y1;X8;K\"DataB3\"\n"
+		"C;Y1;X9;K\"BuffID1\"\nC;Y1;X10;K\"BuffID2\"\nC;Y1;X11;K\"BuffID3\"\n"
+		"C;Y1;X12;K\"Cost1\"\nC;Y1;X13;K\"Cool1\"\nC;Y1;X14;K\"Area1\"\n"
+		"C;Y2;X1;K\"ANms\"\nC;Y2;X2;K\"ANms\"\n"
+		"C;Y2;X3;K1\nC;Y2;X4;K1.5\nC;Y2;X5;K2\n"
+		"C;Y2;X6;K1\nC;Y2;X7;K1\nC;Y2;X8;K1\n"
+		"C;Y2;X9;K\"BNms\"\nC;Y2;X10;K\"BNms\"\nC;Y2;X11;K\"BNms\"\n"
+		"C;Y2;X12;K25\nC;Y2;X13;K10\nC;Y2;X14;K128\nE\n";
 	slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
 	edict_t *attacker = alloc_test_unit(MAKEFOURCC('o', 'g', 'r', 'u'), 50, 0);
-	edict_t *caster = make_hero(MAKEFOURCC('h', 'p', 'e', 'a'), 100, 3, 0, 0);
+	edict_t *caster = make_hero(MAKEFOURCC('h', 'p', 'e', 'a'), 1000, 200, 0, 0);
+	static float const mana_after_hit[] = { 0.0f, 100.0f - 100.0f / 1.5f, 50.0f };
+	static float const ratio[] = { 1.0f, 1.5f, 2.0f };
 	caster->unit_state->ranks[0] = MAKE(heroability_t, .code = MAKEFOURCC('A', 'N', 'm', 's'), .level = 1);
-	T_Damage(caster, attacker, 10);
-	T_FEQ(caster->health.value, 90.0f, 0.01f); T_FEQ(caster->mana.value, 3.0f, 0.01f);
-	T_ASSERT(test_execute_code(caster, "ANms", MAKE(spellTarget_t, .type = SPELL_TARGET_NONE)));
-	T_ASSERT(S_UnitHasStatus(caster, MAKEFOURCC('B', 'N', 'm', 's')));
-	T_Damage(caster, attacker, 8);
-	T_FEQ(caster->health.value, 86.0f, 0.01f); T_FEQ(caster->mana.value, 1.0f, 0.01f);
-	T_Damage(caster, attacker, 10);
-	T_FEQ(caster->health.value, 78.0f, 0.01f); T_FEQ(caster->mana.value, 0.0f, 0.01f);
+	T_FEQ(S_SpellNumber(MAKEFOURCC('A','N','m','s'), ABILITY_NUMBER_COST, 1), 25.0f, 0.001f);
+	T_FEQ(S_SpellNumber(MAKEFOURCC('A','N','m','s'), ABILITY_NUMBER_COOLDOWN, 1), 10.0f, 0.001f);
+	FOR_LOOP(rank, 3) {
+		caster->unit_state->ranks[0].level = rank + 1;
+		caster->health.value = 1000.0f;
+		caster->mana.value = 100.0f;
+		T_ASSERT(test_execute_code(caster, "ANms", MAKE(spellTarget_t, .type = SPELL_TARGET_NONE)));
+		T_ASSERT(S_UnitHasStatus(caster, MAKEFOURCC('B', 'N', 'm', 's')));
+		T_Damage(caster, attacker, 100);
+		T_FEQ(caster->health.value, 1000.0f, 0.01f);
+		T_FEQ(caster->mana.value, mana_after_hit[rank], 0.01f);
+		if (rank == 0) {
+			T_ASSERT(!S_UnitHasStatus(caster, MAKEFOURCC('B', 'N', 'm', 's')));
+		} else {
+			T_ASSERT(S_UnitHasStatus(caster, MAKEFOURCC('B', 'N', 'm', 's')));
+			T_Damage(caster, attacker, 200);
+			T_FEQ(caster->mana.value, 0.0f, 0.01f);
+			T_FEQ(caster->health.value, 1000.0f - (200.0f - mana_after_hit[rank] * ratio[rank]), 0.01f);
+			T_ASSERT(!S_UnitHasStatus(caster, MAKEFOURCC('B', 'N', 'm', 's')));
+		}
+	}
+	caster->unit_state->ranks[0].level = 1;
+	caster->health.value = 1000.0f;
+	caster->mana.value = 100.0f;
+	T_ASSERT(S_CastNoTargetSpell(caster, MAKEFOURCC('A','N','m','s')));
+	T_FEQ(caster->mana.value, 75.0f, 0.001f);
+	T_ASSERT(!S_SpellCooldownReady(caster, MAKEFOURCC('A','N','m','s')));
+	T_ASSERT(!S_CastNoTargetSpell(caster, MAKEFOURCC('A','N','m','s')));
+	T_ASSERT(unit_issueimmediateorder(caster, "manashieldoff"));
 	T_ASSERT(!S_UnitHasStatus(caster, MAKEFOURCC('B', 'N', 'm', 's')));
-	T_Damage(caster, attacker, 10);
-	T_FEQ(caster->health.value, 68.0f, 0.01f);
-	T_ASSERT(test_execute_code(caster, "ANms", MAKE(spellTarget_t, .type = SPELL_TARGET_NONE)));
-	T_ASSERT(!S_UnitHasStatus(caster, MAKEFOURCC('B', 'N', 'm', 's')));
-	caster->mana.value = 3.0f;
+	caster->mana.value = 100.0f;
 	T_ASSERT(unit_issueimmediateorder(caster, "manashieldon"));
 	T_ASSERT(S_UnitHasStatus(caster, MAKEFOURCC('B', 'N', 'm', 's')));
 	T_ASSERT(unit_issueimmediateorder(caster, "manashieldon"));
