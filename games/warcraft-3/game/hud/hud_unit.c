@@ -299,6 +299,9 @@ static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool researc
     tip = G_CommandButtonValue(
         FindConfigValue(art_code, G_ResearchField(STR_TIP, research && !upgrade_research)),
         toggle_on ? FindConfigValue(art_code, STR_UNTIP) : NULL, toggle_on);
+    if ((!tip || !*tip) && strcmp(code, art_code)) {
+        tip = FindConfigValue(code, G_ResearchField(STR_TIP, research && !upgrade_research));
+    }
     /* Feedback is a passive Spell Breaker ability and some data sets omit
      * its command-card presentation row. Keep the indicator visible with the
      * stock passive icon when no authored art is available. */
@@ -317,11 +320,14 @@ static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool researc
     }
     if ((!art || !*art) && !research && !strcmp(code, "AChv")) {
         art = "ReplaceableTextures\\CommandButtons\\BTNHealingWave.blp";
-        if (!tip || !*tip) tip = "Healing Wave";
     }
     ubertip = G_CommandButtonValue(
         FindConfigValue(art_code, G_ResearchField(STR_UBERTIP, research && !upgrade_research)),
         toggle_on ? FindConfigValue(art_code, STR_UNUBERTIP) : NULL, toggle_on);
+    if ((!ubertip || !*ubertip) && strcmp(code, art_code)) {
+        ubertip = FindConfigValue(code, G_ResearchField(STR_UBERTIP, research && !upgrade_research));
+    }
+    if ((!tip || !*tip) && !research && !strcmp(code, "AChv")) tip = "Healing Wave";
     hotkey = G_CommandButtonValue(
         FindConfigValue(art_code, G_ResearchField(STR_HOTKEY, research && !upgrade_research)),
         toggle_on ? FindConfigValue(art_code, STR_UNHOTKEY) : NULL, toggle_on);

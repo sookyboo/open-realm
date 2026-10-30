@@ -1821,7 +1821,9 @@ TEST(wc3_building, draenei_saboteur_healing_wave_is_an_enabled_command) {
     static UnitAbilities_t const saboteur_abilities = { .abilList = "Aliq,Ashm,AChv" };
     static cstring_t const ability_config =
         "[AChV]\nArt=ReplaceableTextures\\CommandButtons\\BTNHealingWave.blp\n"
-        "Buttonpos=0,2\nTip=Healing Wave\n";
+        "Buttonpos=0,2\n"
+        "[AChv]\nTip=Healing Wave\n"
+        "Ubertip=Calls forth a wave of healing energy that bounces up to <AChv,DataB1> times, healing <AChv,DataA1> damage on the primary target. Each jump heals less damage.\n";
     gameCommandButton_t buttons[16];
     edict_t *saboteur;
     uint8_t count;
@@ -1839,6 +1841,9 @@ TEST(wc3_building, draenei_saboteur_healing_wave_is_an_enabled_command) {
         T_ASSERT(!buttons[i].disabled);
         T_STREQ(buttons[i].art, "ReplaceableTextures\\CommandButtons\\BTNHealingWave.blp");
         T_STREQ(buttons[i].tooltip, "Healing Wave");
+        T_NOT_NULL(strstr(buttons[i].ubertip,
+                          "Calls forth a wave of healing energy that bounces up to "));
+        T_NOT_NULL(strstr(buttons[i].ubertip, "Each jump heals less damage."));
         T_EQ(buttons[i].x, 0);
         T_EQ(buttons[i].y, 2);
     }
