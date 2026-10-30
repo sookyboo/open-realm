@@ -6871,7 +6871,7 @@ TEST(wc3_spell, point_order_name_routes_blink_and_carries_spell_point) {
     free_slk_rows(rows);
 }
 
-TEST(wc3_spell, cancel_point_target_mode_clears_spell_cursor_overlay) {
+TEST(wc3_spell, escape_cancel_command_clears_spell_cursor_overlay) {
     void (*old_write)(pfWriteType_t, void const *) = gi.Write;
     slkTestData_t *rows, *old;
     edict_t *clent = spell_cursor_test_begin(&rows, &old);
@@ -6880,7 +6880,7 @@ TEST(wc3_spell, cancel_point_target_mode_clears_spell_cursor_overlay) {
     T_ASSERT(spell_cursor_capture_radius > 0.0f);
     spell_cursor_clear_seen = false;
     gi.Write = spell_cursor_capture_write;
-    T_ASSERT(G_CancelTargetMode(clent));
+    CMD_CancelCommand(clent);
     gi.Write = old_write;
 
     T_ASSERT(spell_cursor_clear_seen);

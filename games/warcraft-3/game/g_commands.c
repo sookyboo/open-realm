@@ -779,7 +779,7 @@ void CMD_CancelCommand(edict_t *ent) {
             return;
         }
     }
-    if (!G_CancelBuildPlacement(ent)) {
+    if (!G_CancelBuildPlacement(ent) && !G_CancelTargetMode(ent)) {
         Get_Commands_f(ent);
     }
 }
