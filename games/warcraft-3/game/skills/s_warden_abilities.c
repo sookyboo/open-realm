@@ -54,15 +54,41 @@ BZ_SIMPLE_SPELL_PROC(AbilityFanOfKnives) {
 #undef FOK_HITS
 }
 
-/* ---- Shadow Strike (AEsh): single-target nuke ----------------------------- */
+/* ---- Shadow Strike (AEsh): homing missile and initial damage -------------- */
 
-BZ_SIMPLE_SPELL_PROC(AbilityShadowStrike) {
-    edict_t *target = st.entity;
-    uint32_t level = S_SpellLevel(caster, spell->code);
-    uint32_t damage = (uint32_t)MAX(1.0f, S_SpellData(spell->code, level, 5)); /* DataE = Initial Damage */
+static void shadow_strike_projectile_hit(edict_t *missile) {
+    edict_t *target = S_SpellProjectileTarget(missile);
+    edict_t *caster = S_SpellProjectileOwner(missile);
 
-    S_SpellDamage(target, caster, damage);
-    /* TODO(1:1): Shadow Strike also applies a movement slow and a decaying
-     * poison DoT via the BEsh buff.  The status system needs a movement-speed
-     * modifier and a periodic-damage tick first. */
+    if (caster && S_SpellIsAliveTarget(target) &&
+        S_SpellAllowsTarget(missile->class_id, caster, target) &&
+        !S_TryBlockSpellShield(caster, missile->class_id, target)) {
+        S_SpellDamage(target, caster, missile->damage);
+        /* TODO(1:1): Shadow Strike also applies a movement slow and a decaying
+         * poison DoT via the BEsh buff. The status system needs periodic damage
+         * and movement-speed modifiers first. */
+    }
+    G_FreeEdict(missile);
+}
+
+static umove_t shadow_strike_projectile_move = {
+    "stand", NULL, shadow_strike_projectile_hit, CAbilityShadowStrike
+};
+
+BZ_ABILITY_PROC(CAbilityShadowStrike) {
+    if (msg == A_EXECUTE && call && call->item && call->target && call->target->entity) {
+        cstring_t speed_text = S_SpellString(call->item->code, "Missilespeed", 0);
+        float speed = speed_text ? (float)atof(speed_text) : 1200.0f;
+        uint32_t level = S_SpellLevel(ent, call->item->code);
+        edict_t *missile = S_SpawnUnitTargetSpellMissile(ent, call->item->code,
+            call->target->entity, speed, &shadow_strike_projectile_move);
+
+        if (missile)
+            missile->damage = (uint32_t)MAX(1.0f, S_SpellData(call->item->code, level, 5)); /* DataE */
+        else
+            S_SpellDamage(call->target->entity, ent,
+                (int)MAX(1.0f, S_SpellData(call->item->code, level, 5)));
+        return true;
+    }
+    return CAbilitySimpleSpell(ent, msg, call);
 }
