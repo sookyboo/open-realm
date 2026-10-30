@@ -1168,6 +1168,52 @@ TEST(wc3_spell, hero_passives_use_authored_data_and_runtime_consumers) {
 	free_slk_rows(rows);
 }
 
+TEST(wc3_spell, naga_dragon_turtle_spiked_shell_returns_thirty_percent_of_melee_hit_damage) {
+	const char slk[] =
+		"ID;PWXL;N;EBB;Y2;X6\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"DataA1\"\n"
+		"C;Y1;X4;K\"DataB1\"\nC;Y1;X5;K\"DataC1\"\nC;Y1;X6;K\"levels\"\n"
+		"C;Y2;X1;K\"ANt2\"\nC;Y2;X2;K\"AUts\"\nC;Y2;X3;K0.30\n"
+		"C;Y2;X4;K0\nC;Y2;X5;K0\nC;Y2;X6;K1\nE\n";
+	slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+	edict_t *attacker, *defender;
+	UnitAbilities_t const dragon_turtle_abilities = {
+		.abilList = "ACc2,ACdv,Advc,ANt2"
+	};
+	float attacker_health, defender_health;
+
+	reset_entities();
+	setup_test_world();
+	attacker = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+	defender = alloc_test_unit(MAKEFOURCC('n','t','r','d'), 50, 0);
+	defender->data.UnitAbilities = (UnitAbilities_t *)&dragon_turtle_abilities;
+	attacker->health.value = attacker->health.max_value = 500;
+	defender->health.value = defender->health.max_value = 500;
+	attacker->s.player = 0;
+	defender->s.player = 1;
+	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+	memset(level.alliances, 0, sizeof(level.alliances));
+	defender->targtype = TARG_GROUND;
+	attacker->unit_state->attack1.type = ATK_NORMAL;
+	attacker->unit_state->attack1.weapon = WPN_NORMAL;
+	defender->unit_state->attack1.type = ATK_NORMAL;
+	defender->unit_state->attack1.weapon = WPN_NORMAL;
+	attacker->unit_state->armor_value = defender->unit_state->armor_value = 0;
+	T_ASSERT(G_ActorHasSkill(defender, "ANt2"));
+	T_ASSERT(S_SpellIsEnemy(defender, attacker));
+	T_FEQ(S_SpikedCarapaceDamageReturn(defender, 100.0f), 30.0f, 0.001f);
+
+	attacker_health = attacker->health.value;
+	defender_health = defender->health.value;
+	S_ResolveAttackHit(attacker, defender, 100);
+	T_FEQ(defender_health - defender->health.value, 100.0f, 0.001f);
+	T_FEQ(attacker_health - attacker->health.value, 30.0f, 0.001f);
+
+	G_SetSLKRows("AbilityData", old);
+	free_slk_rows(rows);
+}
+
 TEST(wc3_spell, creep_pulverize_and_spiked_aliases_use_authored_data) {
 	const char slk[] =
 		"ID;PWXL;N;EBB;Y3;X8\n"
