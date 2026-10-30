@@ -7990,6 +7990,106 @@ TEST(wc3_spell, control_magic_can_target_enemy_wards) {
 	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+/* Afae vision is unit-scoped, follows movement, and ends with Bfae; it must
+ * not grant terrain sight or leak the target to unrelated players. */
+TEST(wc3_spell, faerie_fire_reveals_only_marked_unit_for_buff_lifetime) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X7\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"Dur1\"\n"
+        "C;Y1;X4;K\"HeroDur1\"\nC;Y1;X5;K\"DataA1\"\n"
+        "C;Y1;X6;K\"BuffID1\"\nC;Y1;X7;K\"levels\"\n"
+        "C;Y2;X1;K\"Afae\"\nC;Y2;X2;K\"Afae\"\n"
+        "C;Y2;X3;K\"5\"\nC;Y2;X4;K\"5\"\n"
+        "C;Y2;X5;K\"6\"\nC;Y2;X6;K\"Bfae\"\nC;Y2;X7;K\"1\"\nE\n";
+    slkTestData_t *rows, *old;
+    edict_t *caster, *second_caster, *target;
+    heroabilitystatus_t *status;
+
+    reset_entities(); setup_test_world(); level.time = 1000;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    G_FowInit(); G_FowConnectPlayer(0); G_FowConnectPlayer(2);
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    caster = alloc_test_unit(MAKEFOURCC('e','d','o','t'), 0, 0);
+    second_caster = alloc_test_unit(MAKEFOURCC('e','d','o','t'), 0, 0);
+    target = alloc_test_unit(MAKEFOURCC('o','g','r','u'), 512, 0);
+    caster->s.player = 0; second_caster->s.player = 2; target->s.player = 1;
+    caster->health.value = second_caster->health.value = target->health.value = 100;
+    caster->health.max_value = second_caster->health.max_value = target->health.max_value = 100;
+    target->unit_state->armor_value = 8.0f;
+    caster->runtime.sight_radius.day = caster->runtime.sight_radius.night = 0.0f;
+    second_caster->runtime.sight_radius.day = second_caster->runtime.sight_radius.night = 0.0f;
+    G_SetPlayerAlliance(G_GetPlayerByNumber(0), G_GetPlayerByNumber(2), ALLIANCE_SHARED_VISION, true);
+    G_FowUpdate();
+    T_ASSERT(!G_FowPointIsVisible(0, &target->s.origin2));
+    T_ASSERT(!G_FowPlayerCanSeeEntity(0, target));
+
+    T_ASSERT(test_execute_code(caster, "Afae", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = target)));
+    status = unit_findstatus(target, MAKEFOURCC('B','f','a','e'));
+    T_NOT_NULL(status);
+    T_EQ(status->data, 1);
+    T_FEQ(G_UnitArmorValue(target), 2.0f, 0.01f); /* fixture base armor 8, DataA=6 */
+    T_ASSERT(G_FowPlayerCanSeeEntity(0, target));
+    T_ASSERT(G_FowPlayerCanHoverEntity(0, target));
+    T_ASSERT(G_FowPlayerCanSeeEntity(2, target)); /* caster shares vision outward */
+    T_ASSERT(!G_FowPlayerCanSeeEntity(3, target));
+    T_ASSERT(!G_FowPointIsVisible(0, &target->s.origin2));
+    target->s.origin2.x = target->s.origin.x = 768.0f;
+    G_FowUpdate();
+    T_ASSERT(G_FowPlayerCanSeeEntity(0, target));
+    T_ASSERT(!G_FowPointIsVisible(0, &target->s.origin2));
+
+    /* A new caster owns a refreshed mark, not the previous player's reveal. */
+    T_ASSERT(test_execute_code(second_caster, "Afae", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = target)));
+    T_EQ(unit_findstatus(target, MAKEFOURCC('B','f','a','e'))->data, 3);
+    T_ASSERT(!G_FowPlayerCanSeeEntity(0, target));
+    T_ASSERT(G_FowPlayerCanSeeEntity(2, target));
+    unit_removestatus(target, unit_findstatus(target, MAKEFOURCC('B','f','a','e')), STATUS_REMOVE_DISPEL);
+    T_ASSERT(!G_FowPlayerCanSeeEntity(2, target));
+
+    T_ASSERT(test_execute_code(caster, "Afae", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = target)));
+    caster->health.value = 0; /* the target's mark survives the caster's death */
+    level.time = 5999;
+    T_ASSERT(G_FowPlayerCanSeeEntity(0, target));
+    level.time = 6000;
+    T_ASSERT(!G_FowPlayerCanSeeEntity(0, target));
+    unit_updatestatuses(target);
+    T_ASSERT(!S_UnitHasStatus(target, MAKEFOURCC('B','f','a','e')));
+
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows); G_FowShutdown();
+}
+
+/* ROC AbilityData lacks BuffID; alternate/crow and creep Faerie Fire still
+ * need Bfae so their casts grant the same unit vision as Afae. */
+TEST(wc3_spell, faerie_fire_roc_fallback_covers_alternate_and_creep) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y3;X5\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"Dur1\"\n"
+        "C;Y1;X4;K\"HeroDur1\"\nC;Y1;X5;K\"DataA1\"\n"
+        "C;Y2;X1;K\"Afa2\"\nC;Y2;X2;K\"Afa2\"\nC;Y2;X3;K\"4\"\nC;Y2;X4;K\"4\"\nC;Y2;X5;K\"5\"\n"
+        "C;Y3;X1;K\"ACff\"\nC;Y3;X2;K\"ACff\"\nC;Y3;X3;K\"3\"\nC;Y3;X4;K\"3\"\nC;Y3;X5;K\"6\"\nE\n";
+    slkTestData_t *rows, *old;
+    edict_t *caster, *target;
+
+    reset_entities(); setup_test_world(); level.time = 1000;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    G_FowInit(); G_FowConnectPlayer(0);
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    caster = alloc_test_unit(MAKEFOURCC('e','d','o','t'), 0, 0);
+    target = alloc_test_unit(MAKEFOURCC('o','g','r','u'), 512, 0);
+    caster->s.player = 0; target->s.player = 1;
+    caster->runtime.sight_radius.day = caster->runtime.sight_radius.night = 0.0f;
+    T_ASSERT(!G_FowPlayerCanSeeEntity(0, target));
+    T_ASSERT(test_execute_code(caster, "Afa2", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = target)));
+    T_ASSERT(S_UnitHasStatus(target, MAKEFOURCC('B','f','a','e')));
+    T_ASSERT(G_FowPlayerCanSeeEntity(0, target));
+    unit_removestatus(target, unit_findstatus(target, MAKEFOURCC('B','f','a','e')), STATUS_REMOVE_DISPEL);
+    T_ASSERT(!G_FowPlayerCanSeeEntity(0, target));
+    T_ASSERT(test_execute_code(caster, "ACff", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = target)));
+    T_ASSERT(S_UnitHasStatus(target, MAKEFOURCC('B','f','a','e')));
+    T_ASSERT(G_FowPlayerCanSeeEntity(0, target));
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows); G_FowShutdown();
+}
+
 TEST(wc3_spell, bloodlust_autocast_waits_for_spell_cooldown) {
 	const char slk[] =
 		"ID;PWXL;N;EBB;Y2;X9\n"

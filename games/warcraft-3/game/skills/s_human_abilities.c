@@ -580,6 +580,11 @@ static void spell_steal_execute(edict_t *caster, spellTarget_t st, abilityitem_t
         .state_mask = snapshot.state_mask, .buff_flags = snapshot.buff_flags,
         .source = caster, .rank = snapshot.rank
     };
+    /* Spell Steal redirects a negative Faerie Fire debuff to an enemy unit.
+     * The redirected unit is now marked for the stealing player, not the
+     * original caster, and the transferred status retains its remaining time. */
+    if (snapshot.code == MAKEFOURCC('B','f','a','e'))
+        app.data = caster->s.player < MAX_PLAYERS ? caster->s.player + 1 : 0;
     destination = unit_applystatus(receiver, &app);
     if (!destination) return;
     destination->modifier_count = MIN(snapshot.modifier_count, WC3_STATUS_MAX_MODIFIERS);
