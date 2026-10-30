@@ -52,6 +52,45 @@ static bool grab_tree_message(edict_t *giant, edict_t *tree, abilityMsg_t msg) {
     return S_AbilityMessage(giant, msg, &call) != 0;
 }
 
+TEST(wc3_war_club, command_cursor_selects_tree_without_generic_unit_targeting) {
+    const char ability_slk[] =
+        "ID;PWXL;N;EBB;Y2;X6\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+        "C;Y1;X4;K\"Rng1\"\nC;Y1;X5;K\"Cost1\"\nC;Y1;X6;K\"Cool1\"\n"
+        "C;Y2;X1;K\"Agra\"\nC;Y2;X2;K\"Agra\"\nC;Y2;X3;K1\n"
+        "C;Y2;X4;K256\nC;Y2;X5;K0\nC;Y2;X6;K0\nE\n";
+    slkTestData_t *rows, *old;
+    edict_t *giant, *tree, *clent = &g_edicts[0];
+    gameClient_t *client = &game.clients[0];
+    char entity_number[16];
+    cstring_t button[] = { "button", "Agra" };
+    cstring_t select[] = { "select", entity_number };
+
+    reset_entities(); setup_test_world();
+    rows = parse_slk_string(ability_slk); old = G_SetSLKRows("AbilityData", rows);
+    giant = make_war_club_giant();
+    giant->s.player = client->ps.number = 0;
+    giant->stand = unit_stand;
+    giant->health.value = giant->health.max_value = 500;
+    giant->mana.value = giant->mana.max_value = 100;
+    clent->client = client; clent->inuse = true;
+    client->connected = true;
+    G_SelectEntity(client, giant);
+    tree = make_war_club_tree();
+
+    G_ClientCommand(clent, 2, button);
+    T_ASSERT(S_SpellEntityTargetMode(clent));
+    T_NOT_NULL(client->menu.on_entity_selected);
+    T_NULL(client->menu.on_location_selected);
+    snprintf(entity_number, sizeof(entity_number), "%u", (unsigned)tree->s.number);
+    G_ClientCommand(clent, 2, select);
+
+    T_ASSERT(G_GetDestructable(tree)->dead);
+    T_ASSERT(S_WarClubActive(giant));
+    T_EQ(giant->unit_state->war_club_attacks_remaining, 15u);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_war_club, grab_consumes_only_a_living_tree_and_switches_attack_mask) {
     edict_t *giant, *tree;
     reset_entities(); setup_test_world();

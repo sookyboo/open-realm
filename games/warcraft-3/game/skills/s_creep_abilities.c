@@ -429,7 +429,8 @@ static bool war_club_tree(edict_t const *tree) {
  * navigation, triggers, loot and the regular tree-fall presentation. */
 BZ_ABILITY_PROC(CAbilityGrabTree) {
     uint32_t code = call && call->item ? call->item->code : 0;
-    edict_t *tree = call && call->target && call->target->type == SPELL_TARGET_UNIT ?
+    bool const has_target = msg == A_VALIDATE || msg == A_EXECUTE;
+    edict_t *tree = has_target && call && call->target && call->target->type == SPELL_TARGET_UNIT ?
                     call->target->entity : NULL;
     if (msg == A_SPELL_TARGET_MODE) {
         if (call) ((abilityCall_t *)call)->spell_entity_target_mode = true;
