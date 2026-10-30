@@ -56,9 +56,10 @@ recognizes `ACmi`, and `S_UnitIsResistant` recognizes `ACrk` through its
 Source regression tests check handler registration, negative full-health regen
 with lethal transition, persistence of the new timer fields, and the production
 death-to-egg-to-Phoenix scheduler path. They also verify that killing an egg
-before its deadline prevents rebirth. Phoenix Fire acquisition and impact are
-not yet covered by a behavior test. The following end-to-end behaviours need
-coverage:
+before its deadline prevents rebirth. Phoenix Fire tests drive target
+acquisition, missile impact, configured art, custom initial and periodic damage,
+and a non-stock cooldown through the ability and status schedulers. The
+following end-to-end behaviours still need coverage:
 
 1. Cast Phoenix from Blood Mage; verify authored UnitID, flying motion, HP
    drain at full health, normal healing, and no generic summoned classification.
@@ -66,11 +67,10 @@ coverage:
    passives.
 3. Recast during Phoenix life and while egg is incubating; the prior form
    should not hatch and the new Phoenix should be controllable.
-4. Place two valid enemy units, a friendly unit, an immune unit and a Hero
-   near the Phoenix. Check target mask, projectile art, DataA initial damage,
-   DataB one-second ticks, HeroDur, buff refresh, multiple sources and
-   interrupted or destroyed source. Repeat using ROC-style Data11/Data12
-   columns and custom non-stock damage/cooldown values.
+4. Place multiple eligible targets plus friendly, immune, out-of-range and
+   Hero targets near the Phoenix. Check selection ordering, HeroDur, buff
+   refresh, multiple sources, and a destroyed source. Repeat using ROC-style
+   Data11/Data12 columns.
 5. Save and load with an egg incubating and a Fire missile/burn active. Ensure
    only one hatch happens, no repeated instant damage, and timers resume.
 

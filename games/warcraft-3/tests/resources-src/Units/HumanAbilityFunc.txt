@@ -28,6 +28,12 @@ TargetArt=TestUI\Models\flame-strike-damage.mdx
 [XHfs]
 EffectArt=TestUI\Models\flame-strike-embers.mdx
 
+[Apxf]
+MissileArt=TestUI\Models\anim_projectile.mdx
+
+[Bpxf]
+TargetArt=TestUI\Models\anim_pulse.mdx
+
 // Ability TargetArt is the ground rune. Buff TargetArt is the recipient glow.
 [AHad]
 TargetArt=TestUI\Models\panel_sprite.mdx

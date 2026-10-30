@@ -9234,6 +9234,83 @@ TEST(wc3_spell, flame_strike_uses_authored_point_and_pulse_data) {
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+TEST(wc3_spell, phoenix_fire_uses_authored_projectile_damage_burn_and_cooldown) {
+    static cstring_t const slk =
+        "ID;PWXL;N;EBB;Y2;X12\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+        "C;Y1;X4;K\"targs1\"\nC;Y1;X5;K\"Area1\"\nC;Y1;X6;K\"Cool1\"\n"
+        "C;Y1;X7;K\"DataA1\"\nC;Y1;X8;K\"DataB1\"\n"
+        "C;Y1;X9;K\"Dur1\"\nC;Y1;X10;K\"HeroDur1\"\n"
+        "C;Y1;X11;K\"BuffID1\"\nC;Y1;X12;K\"Missilespeed\"\n"
+        "C;Y2;X1;K\"Apxf\"\nC;Y2;X2;K\"Apxf\"\nC;Y2;X3;K1\n"
+        "C;Y2;X4;K\"ground,air,enemy\"\nC;Y2;X5;K500\nC;Y2;X6;K2.5\n"
+        "C;Y2;X7;K23\nC;Y2;X8;K7\nC;Y2;X9;K3\nC;Y2;X10;K2\n"
+        "C;Y2;X11;K\"Bpxf\"\nC;Y2;X12;K900\nE\n";
+    static UnitAbilities_t const abilities = { .abilList = "Aphx,Apxf" };
+    slkTestData_t *rows, *old;
+    edict_t *phoenix, *target, *missile = NULL, *second_missile = NULL;
+    float health_after_hit;
+
+    reset_entities(); setup_test_world();
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    phoenix = alloc_test_unit(MAKEFOURCC('h','p','h','x'), 0.0f, 0.0f);
+    target = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 100.0f, 0.0f);
+    phoenix->data.UnitAbilities = &abilities;
+    phoenix->s.player = 0; phoenix->svflags |= SVF_MONSTER;
+    phoenix->health.value = phoenix->health.max_value = 1000.0f;
+    target->s.player = 1; target->svflags |= SVF_MONSTER;
+    target->targtype = TARG_GROUND;
+    target->health.value = target->health.max_value = 500.0f;
+    target->unit_state->armor_value = 0.0f;
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    T_STREQ(G_AbilityEffectArt(MAKEFOURCC('A','p','x','f'), WC3_EFFECT_MISSILE, 0),
+            "TestUI\\Models\\anim_projectile.mdx");
+    T_STREQ(G_AbilityEffectArt(MAKEFOURCC('B','p','x','f'), WC3_EFFECT_TARGET, 0),
+            "TestUI\\Models\\anim_pulse.mdx");
+
+    level.time = 1000;
+    S_RunAbilityUpdates(phoenix);
+    T_EQ(phoenix->phoenix_fire_next_ms, 3500u);
+    FILTER_EDICTS(ent, ent->inuse && ent->owner == phoenix && ent->class_id == MAKEFOURCC('A','p','x','f') &&
+                  ent->goalentity == target && ent->currentmove) { missile = ent; break; }
+    T_NOT_NULL(missile);
+    if (missile) {
+        T_EQ(missile->s.model, G_RegisterModel("TestUI\\Models\\anim_projectile.mdx"));
+        T_FEQ(target->health.value, 500.0f, 0.001f);
+        missile->currentmove->endfunc(missile);
+    }
+    health_after_hit = target->health.value;
+    T_FEQ(health_after_hit, 477.0f, 0.001f);
+    T_NOT_NULL(unit_findstatus(target, MAKEFOURCC('B','p','x','f')));
+    {
+        bool burn_art_spawned = false;
+        int const burn_model = G_RegisterModel("TestUI\\Models\\anim_pulse.mdx");
+        FILTER_EDICTS(effect, effect->inuse && effect->s.model == burn_model && effect->goalentity == target)
+            burn_art_spawned = true;
+        T_ASSERT(burn_art_spawned);
+    }
+
+    level.time = 2000; unit_updatestatuses(target);
+    T_FEQ(health_after_hit - target->health.value, 7.0f, 0.001f);
+    level.time = 3000; unit_updatestatuses(target);
+    T_FEQ(health_after_hit - target->health.value, 14.0f, 0.001f);
+    level.time = 3499; S_RunAbilityUpdates(phoenix);
+    FILTER_EDICTS(ent, ent->inuse && ent->owner == phoenix && ent->class_id == MAKEFOURCC('A','p','x','f'))
+        second_missile = ent;
+    T_NULL(second_missile);
+    level.time = 3500; S_RunAbilityUpdates(phoenix);
+    FILTER_EDICTS(ent, ent->inuse && ent->owner == phoenix && ent->class_id == MAKEFOURCC('A','p','x','f'))
+        second_missile = ent;
+    T_NOT_NULL(second_missile);
+    level.time = 4000; unit_updatestatuses(target);
+    T_FEQ(health_after_hit - target->health.value, 14.0f, 0.001f);
+
+    reset_entities();
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_spell, phoenix_death_creates_egg_that_hatches_on_authored_deadline) {
     static cstring_t const ui_slk =
         "ID;PWXL;N;EBB;Y3;X3\nC;Y1;X1;K\"unitUIID\"\nC;Y1;X2;K\"file\"\nC;Y1;X3;K\"modelScale\"\n"
