@@ -120,6 +120,7 @@ static void capture_dark_ritual_command_error(pfWriteType_t type, void const *da
 
 edict_t *alloc_test_unit(uint32_t class_id, float x, float y);
 void AbilitySummonMisha_Execute(edict_t *caster, spellTarget_t st, abilityitem_t const *spell);
+void AbilityHowlOfTerror_Execute(edict_t *caster, spellTarget_t st, abilityitem_t const *spell);
 void reset_entities(void);
 void setup_test_world(void);
 slkTestData_t *parse_slk_string(char const *slk_text);
@@ -4245,6 +4246,54 @@ TEST(wc3_spell, requested_neutral_hero_abilities_have_contracts) {
 	T_EQ((int)haze->target_type, (int)SPELL_TARGET_UNIT);
 	T_EQ((int)doom->target_type, (int)SPELL_TARGET_UNIT);
 	T_EQ((int)howl->target_type, (int)SPELL_TARGET_NONE);
+}
+
+TEST(wc3_spell, howl_of_terror_reduces_enemy_attack_damage_by_authored_25_percent) {
+	char const slk[] =
+		"ID;PWXL;N;EBB;Y2;X15\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\n"
+		"C;Y1;X4;K\"Dur1\"\nC;Y1;X5;K\"HeroDur1\"\nC;Y1;X6;K\"Area1\"\n"
+		"C;Y1;X7;K\"DataA1\"\nC;Y1;X8;K\"BuffID1\"\n"
+		"C;Y1;X9;K\"DataA2\"\nC;Y1;X10;K\"DataA3\"\nC;Y1;X11;K\"DataA4\"\n"
+		"C;Y1;X12;K\"BuffID2\"\nC;Y1;X13;K\"BuffID3\"\nC;Y1;X14;K\"BuffID4\"\n"
+		"C;Y2;X1;K\"ANht\"\nC;Y2;X2;K\"ANht\"\nC;Y2;X3;K\"ground,enemy\"\n"
+		"C;Y2;X4;K\"10\"\nC;Y2;X5;K\"10\"\nC;Y2;X6;K\"500\"\n"
+		"C;Y2;X7;K\"0.25\"\nC;Y2;X8;K\"BNht\"\nE\n";
+	static UnitAbilities_t const caster_abilities = { .abilList = "ANht" };
+	slkTestData_t *rows = parse_slk_string(slk), *old;
+	edict_t *caster, *enemy, *victim;
+	reset_entities(); setup_test_world();
+	caster = G_Spawn(); caster->class_id = MAKEFOURCC('H','d','r','o'); G_InitUnitState(caster); G_InitUnitOrders(caster);
+	caster->s.origin2 = (vec2_t){0, 0};
+	old = G_SetSLKRows("AbilityData", rows);
+	caster->health.value = caster->health.max_value = 300;
+	caster->mana.value = caster->mana.max_value = 300;
+	caster->data.UnitAbilities = &caster_abilities;
+	enemy = G_Spawn(); enemy->class_id = MAKEFOURCC('H','d','r','o'); G_InitUnitState(enemy); G_InitUnitOrders(enemy);
+	enemy->s.origin2 = (vec2_t){100, 0};
+	victim = G_Spawn(); victim->class_id = MAKEFOURCC('h','f','o','o'); G_InitUnitState(victim); G_InitUnitOrders(victim);
+	victim->s.origin2 = (vec2_t){200, 0};
+	caster->s.player = 0; enemy->s.player = 1; victim->s.player = 1;
+	memset(level.alliances, 0, sizeof(level.alliances));
+	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+	enemy->svflags |= SVF_MONSTER; victim->svflags |= SVF_MONSTER;
+	enemy->health.value = enemy->health.max_value = 500;
+	victim->health.value = victim->health.max_value = 500;
+	enemy->unit_state->attack1.type = ATK_NORMAL;
+	{
+		abilityitem_t const howl = S_AbilityItem(FS_SLKKey("ANht"));
+		spellTarget_t const no_target = MAKE(spellTarget_t, .type = SPELL_TARGET_NONE, .point = { 0, 0 });
+		AbilityHowlOfTerror_Execute(caster, no_target, &howl);
+	}
+	T_ASSERT(S_UnitHasStatus(enemy, MAKEFOURCC('B','N','h','t')));
+	T_FEQ(unit_status_modifier_total(enemy, WC3_STATUS_MOD_ATTACK_DAMAGE_PERCENT), -0.25f, 0.001f);
+	S_ResolveAttackHit(enemy, victim, 100);
+	T_FEQ(victim->health.value, 425.0f, 0.001f);
+	unit_removestatus(enemy, unit_findstatus(enemy, MAKEFOURCC('B','N','h','t')), STATUS_REMOVE_DISPEL);
+	S_ResolveAttackHit(enemy, victim, 100);
+	T_FEQ(victim->health.value, 325.0f, 0.001f);
+	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
 TEST(wc3_spell, selected_hero_ability_contracts_are_registered) {

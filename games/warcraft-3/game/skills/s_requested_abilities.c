@@ -1167,7 +1167,8 @@ BZ_SIMPLE_SPELL_PROC(AbilityHowlOfTerror) {
     cstring_t buff = S_SpellBuffId(spell->code, level);
     FILTER_EDICTS(target, target != caster && S_SpellIsAliveTarget(target) && S_SpellIsEnemy(caster, target) &&
                   Vector2_distance(&target->s.origin2, &caster->s.origin2) <= radius)
-        if (buff && strlen(buff) >= 4) S_SpellApplyTimedStatus(target, buff, level, duration);
+        if (buff && strlen(buff) >= 4) S_SpellApplyTimedStatusFromAbility(target, spell->code, level, buff, duration);
+    G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_CASTER, 0, caster, NULL, true);
 }
 /* Name=Drunken Haze
  * Ubertip="Slows enemy units and gives them a chance to miss on attacks."
