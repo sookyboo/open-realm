@@ -593,6 +593,11 @@ static void G_AddPassiveEffectIndicators(edict_t *ent, gameCommandButton_t *butt
         MAKEFOURCC('A','s','s','k'), /* Hardened Skin */
         MAKEFOURCC('A','n','s','k')  /* Hardened Skin (Naga Turtle) */
     };
+    static uint32_t const resistant_skin[] = {
+        MAKEFOURCC('A','r','s','k'), /* Resistant Skin */
+        MAKEFOURCC('A','C','r','k'), /* Resistant Skin (creep) */
+        MAKEFOURCC('A','C','s','k')  /* Resistant Skin (Naga Royal Guard) */
+    };
     static uint32_t const true_sight[] = {
         MAKEFOURCC('A','g','y','v'), /* Flying Machine True Sight */
         MAKEFOURCC('A','t','r','u')  /* Shade True Sight */
@@ -616,6 +621,8 @@ static void G_AddPassiveEffectIndicators(edict_t *ent, gameCommandButton_t *butt
         G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, spiked_shell[i], spiked_shell[i]);
     FOR_LOOP(i, sizeof(hardened_skin) / sizeof(hardened_skin[0]))
         G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, hardened_skin[i], hardened_skin[i]);
+    FOR_LOOP(i, sizeof(resistant_skin) / sizeof(resistant_skin[0]))
+        G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, resistant_skin[i], resistant_skin[i]);
     FOR_LOOP(i, sizeof(true_sight) / sizeof(true_sight[0]))
         G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, true_sight[i], true_sight[i]);
     /* Adtg aliases Atru but has no authored button art of its own. Show the
