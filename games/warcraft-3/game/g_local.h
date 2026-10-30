@@ -2251,6 +2251,7 @@ typedef struct {
     uint32_t attack_target_spawn_time; /* active Attack target incarnation */
     uint32_t war_club_ability; /* equipped War Club ability alias, zero when unequipped */
     uint32_t war_club_attacks_remaining; /* committed Attack 2 swings left */
+    uint16_t war_club_previous_image; /* entity texture override to restore on unequip */
     unitAttack_t attack1;
     unitAttack_t attack2;
     uint32_t defense_type;   /* WC3 defType index: small/medium/large/fort/normal/hero/divine/none */

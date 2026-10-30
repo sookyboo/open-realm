@@ -395,6 +395,8 @@ void S_WarClubClear(edict_t *unit) {
     if (!unit || !unit->unit_state || !S_WarClubActive(unit)) return;
     unit->unit_state->war_club_ability = 0;
     unit->unit_state->war_club_attacks_remaining = 0;
+    unit->s.image = unit->unit_state->war_club_previous_image;
+    unit->unit_state->war_club_previous_image = 0;
     G_AddUnitAnimationProperties(unit, "upgrade", false);
     G_InvalidateUnitInfoPanel(unit);
 }
@@ -404,6 +406,7 @@ void S_WarClubEquip(edict_t *unit, uint32_t ability) {
         unit->unit_state->attack2.type == ATK_NONE) return;
     unit->unit_state->war_club_ability = ability;
     unit->unit_state->war_club_attacks_remaining = WAR_CLUB_STRIKES;
+    unit->unit_state->war_club_previous_image = unit->s.image;
     G_AddUnitAnimationProperties(unit, "upgrade", true);
     G_InvalidateUnitInfoPanel(unit);
 }
@@ -458,6 +461,9 @@ BZ_ABILITY_PROC(CAbilityGrabTree) {
             ent->unit_state->attack2.type == ATK_NONE || !war_club_tree(tree)) return false;
         if (!G_KillDestructable(tree, ent)) return false;
         S_WarClubEquip(ent, code);
+        if (S_WarClubActive(ent)) {
+            if (tree->s.image) ent->s.image = tree->s.image;
+        }
         return S_WarClubActive(ent);
     }
     if (msg == A_DISABLE || msg == A_DEATH || msg == A_UNIT_REMOVE) {
