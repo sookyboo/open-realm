@@ -269,6 +269,7 @@ BZ_ABILITY_PROC(CAbilityFlamingArrows);
 BZ_ABILITY_PROC(CAbilityHealingWave);
 BZ_ABILITY_PROC(CAbilityHex);
 BZ_ABILITY_PROC(CAbilitySpiritOfVengeance);
+BZ_ABILITY_PROC(CAbilityVengeance);
 BZ_ABILITY_PROC(CAbilityVoodoo);
 BZ_ABILITY_PROC(CAbilityAcidBomb);
 BZ_ABILITY_PROC(CAbilityManaShield);

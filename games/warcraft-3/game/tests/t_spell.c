@@ -8757,6 +8757,80 @@ TEST(wc3_spell, nightelf_passive_abilities_are_registered_with_correct_handlers)
 	T_EQ(slow_poison->proc, CAbilitySlowPoison); T_ASSERT(slow_poison->flags & AB_PASSIVE);
 }
 
+TEST(wc3_spell, avatar_of_vengeance_spirit_raises_invulnerable_spirit_manually_and_autocasts) {
+    const char ability_slk[] =
+        "ID;PWXL;N;EBB;Y2;X11\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+        "C;Y1;X4;K\"targs1\"\nC;Y1;X5;K\"Rng1\"\nC;Y1;X6;K\"Cost1\"\n"
+        "C;Y1;X7;K\"Cool1\"\nC;Y1;X8;K\"Dur1\"\nC;Y1;X9;K\"BuffID1\"\n"
+        "C;Y1;X10;K\"DataC1\"\nC;Y1;X11;K\"DataF1\"\n"
+        "C;Y2;X1;K\"Avng\"\nC;Y2;X2;K\"Avng\"\nC;Y2;X3;K1\n"
+        "C;Y2;X4;K\"air,ground,dead\"\nC;Y2;X5;K600\nC;Y2;X6;K0\n"
+        "C;Y2;X7;K0\nC;Y2;X8;K50\nC;Y2;X9;K\"Bvng\"\n"
+        "C;Y2;X10;K\"even\"\nC;Y2;X11;K1\nE\n";
+    static UnitAbilities_t const spirit_abilities = { .abilList = "Avng" };
+    static UnitData_t corpse_data = { .deathType = 3 };
+    slkTestData_t *rows = parse_slk_string(ability_slk), *old = G_SetSLKRows("AbilityData", rows);
+    edict_t *avatar = alloc_test_unit(MAKEFOURCC('e','s','p','v'), 0, 0);
+    edict_t *first = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64, 0);
+    edict_t *second = alloc_test_unit(MAKEFOURCC('h','g','r','u'), 128, 0);
+    edict_t *raised = NULL;
+    uint32_t raised_count = 0;
+    ability_t const *ability = FindAbilityForCommand("Avng");
+    abilityitem_t item = S_AbilityItem(MAKEFOURCC('A','v','n','g'));
+
+    avatar->s.player = 0; avatar->data.UnitAbilities = &spirit_abilities;
+    avatar->svflags |= SVF_MONSTER; avatar->health.value = avatar->health.max_value = 300;
+    avatar->mana.value = avatar->mana.max_value = 300;
+    first->s.player = second->s.player = 0;
+    first->data.UnitData = second->data.UnitData = &corpse_data;
+    first->svflags |= SVF_MONSTER; second->svflags |= SVF_MONSTER;
+    first->targtype = second->targtype = TARG_GROUND;
+    first->health.value = first->health.max_value = 100; first->die = unit_die;
+    second->health.value = second->health.max_value = 100; second->die = unit_die;
+    first->stand = second->stand = unit_stand;
+    unit_die(first, avatar); unit_die(second, avatar);
+
+    T_NOT_NULL(ability); T_ASSERT(ability->flags & AB_AUTOCAST);
+    T_EQ((int)ability->target_type, (int)SPELL_TARGET_UNIT);
+    T_ASSERT(G_UnitIsRaisableCorpse(first));
+    T_ASSERT(G_UnitAbilityLevel(avatar, item.code) > 0);
+    T_ASSERT(S_SpellAllowsTarget(item.code, avatar, first));
+    T_ASSERT(G_SetUnitAutocast(avatar, item.code, true));
+    T_ASSERT(G_UnitAutocastIsOn(avatar, item.code));
+
+    T_ASSERT(S_CastUnitTargetSpell(avatar, item.code, first));
+    T_ASSERT(!first->inuse);
+    FILTER_EDICTS(unit, unit->inuse && unit->class_id == MAKEFOURCC('e','v','e','n') &&
+                  unit->owner == avatar) { raised = unit; break; }
+    T_NOT_NULL(raised);
+    if (raised) {
+        T_EQ(raised->class_id, MAKEFOURCC('e','v','e','n'));
+        T_ASSERT(G_UnitHasFlag(raised, UNIT_FLAG_INVULNERABLE));
+        T_EQ(raised->owner, avatar); T_EQ(raised->summon_ability, item.code);
+    }
+
+    T_ASSERT(test_ability_message(avatar, A_AUTOCAST_ACQUIRE, &item, NULL));
+    T_ASSERT(!second->inuse);
+    raised = NULL;
+    FILTER_EDICTS(unit, unit->inuse && unit->class_id == MAKEFOURCC('e','v','e','n') &&
+                  unit->owner == avatar && unit->summon_ability == item.code) {
+        if (!raised) raised = unit;
+        raised_count++;
+    }
+    T_NOT_NULL(raised);
+    T_EQ(raised_count, 2u);
+    if (raised) {
+        T_EQ(raised->class_id, MAKEFOURCC('e','v','e','n'));
+        T_ASSERT(G_UnitHasFlag(raised, UNIT_FLAG_INVULNERABLE));
+        T_EQ(raised->owner, avatar); T_EQ(raised->summon_ability, item.code);
+    }
+
+    T_ASSERT(G_SetUnitAutocast(avatar, item.code, false));
+    T_ASSERT(!G_UnitAutocastIsOn(avatar, item.code));
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_spell, slow_poison_on_hit_applies_buff_and_returns_authored_reduction) {
 	const char slk[] =
 		"ID;PWXL;N;EBB;Y2;X6\n"

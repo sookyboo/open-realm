@@ -1211,6 +1211,73 @@ BZ_SIMPLE_SPELL_PROC(AbilityHealingWave) {
  */
 BZ_SIMPLE_SPELL_PROC(AbilityHex) { target_status_execute(caster, st, spell); }
 BZ_SIMPLE_SPELL_PROC(AbilitySpiritOfVengeance) { S_SummonAbilityUnits(caster, spell->code, NULL); }
+
+/* Spirit of Vengeance (Avng) raises a temporary invulnerable spirit from a
+ * corpse. The Avatar of Vengeance (AEsv) summon enables this spell's autocast
+ * on creation, while the same ability remains manually targetable. */
+static bool vengeance_corpse_valid(edict_t *caster, edict_t *corpse, abilityitem_t const *spell) {
+    float range;
+    if (!caster || !corpse || !spell || !G_UnitIsRaisableCorpse(corpse) ||
+        G_UnitIsHero(corpse) || G_UnitIsStructure(corpse) ||
+        !S_SpellAllowsCorpseTarget(spell->code, caster, corpse)) return false;
+    range = S_SpellRange(spell->code, S_SpellLevel(caster, spell->code));
+    return range <= 0.0f || Vector2_distance(&corpse->s.origin2, &caster->s.origin2) <= range;
+}
+
+static bool vengeance_validate(edict_t *caster, spellTarget_t target, abilityitem_t const *spell) {
+    return target.type == SPELL_TARGET_UNIT &&
+        vengeance_corpse_valid(caster, target.entity, spell);
+}
+
+static void vengeance_execute(edict_t *caster, spellTarget_t target, abilityitem_t const *spell) {
+    uint32_t level = S_SpellLevel(caster, spell->code);
+    edict_t *corpse = target.entity;
+    uint32_t spirit_id = S_SpellDataId(spell->code, level, 3); /* DataC */
+    edict_t *spirit;
+    vec2_t position;
+    if (!vengeance_corpse_valid(caster, corpse, spell) || !spirit_id) return;
+    position = corpse->s.origin2;
+    spirit = S_SummonAbilityAt(caster, spell->code, spirit_id, &position,
+                               S_SpellDuration(spell->code, level, false));
+    if (!spirit) return;
+    if (S_SpellData(spell->code, level, 6) != 0.0f) /* DataF: invulnerable */
+        G_SetUnitFlag(spirit, UNIT_FLAG_INVULNERABLE, true);
+    /* The corpse is the source of the summon, not the summoned unit. */
+    G_FreeEdict(corpse);
+    G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_SPECIAL, 0, spirit, NULL, true);
+}
+
+static bool vengeance_autocast_acquire(edict_t *caster, uint32_t code) {
+    abilityitem_t spell = S_AbilityItem(code);
+    edict_t *nearest = NULL;
+    float best = FLT_MAX;
+    if (!caster || !spell.ability) return false;
+    FILTER_EDICTS(corpse, G_UnitIsRaisableCorpse(corpse) && !G_UnitIsHero(corpse) &&
+                  !G_UnitIsStructure(corpse)) {
+        float distance;
+        if (!S_SpellAllowsCorpseTarget(code, caster, corpse)) continue;
+        distance = Vector2_distance(&corpse->s.origin2, &caster->s.origin2);
+        if (distance <= S_SpellRange(code, S_SpellLevel(caster, code)) && distance < best) {
+            nearest = corpse;
+            best = distance;
+        }
+    }
+    return nearest && S_CastUnitTargetSpell(caster, code, nearest);
+}
+
+BZ_ABILITY_PROC(CAbilityVengeance) {
+    spellTarget_t target = (msg == A_VALIDATE || msg == A_EXECUTE) && call && call->target ?
+        *call->target : MAKE(spellTarget_t, .type = SPELL_TARGET_NONE);
+    uint32_t code = call && call->item ? call->item->code : MAKEFOURCC('A','v','n','g');
+    switch (msg) {
+    case A_VALIDATE: return vengeance_validate(ent, target, call ? call->item : NULL);
+    case A_EXECUTE: vengeance_execute(ent, target, call ? call->item : NULL); return true;
+    case A_AUTOCAST_ON: return ent && ent->unit_state && ent->unit_state->autocast == code;
+    case A_AUTOCAST_SET: return true;
+    case A_AUTOCAST_ACQUIRE: return vengeance_autocast_acquire(ent, code);
+    default: return CAbilityModalSpell(ent, msg, call);
+    }
+}
 BZ_SIMPLE_SPELL_PROC(AbilityVoodoo) {
     uint32_t level = S_SpellLevel(caster, spell->code);
     cstring_t buff = spell_buff(spell, level);

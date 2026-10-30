@@ -461,7 +461,7 @@ static ability_t abilitylist[] = {
     { "Asud", CAbilitySellUnit, AB_PASSIVE },  /* Sell Units */
 
     /* NightElfAbilityStrings.txt */
-    { "Avng", CAbilitySpiritOfVengeance, AB_SPELL, SPELL_TARGET_NONE },  /* Spirit of Vengeance */
+    { "Avng", CAbilityVengeance, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Spirit of Vengeance */
     { "Amfl", CAbilityManaFlare, AB_SPELL | AB_CHANNEL | AB_UPDATE, SPELL_TARGET_NONE },  /* Mana Flare */
     { "Apsh", CAbilityDivineShield, AB_SPELL },  /* Phase Shift */
     { "Aetl", CAbilityEthereal, AB_PASSIVE },  /* Ethereal */

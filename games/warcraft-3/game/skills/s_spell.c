@@ -405,6 +405,14 @@ bool S_SpellAllowsTarget(uint32_t code, edict_t *caster, edict_t *target) {
     if (G_AbilityCode(code) == MAKEFOURCC('A','e','s','n'))
         return target && target->targtype == TARG_TREE &&
                G_DestructableIsAttackable(target);
+    /* Unit-target abilities authored with the dead token must pass the same
+     * corpse target rules as their ability procedure during normal orders. */
+    if (target && M_IsDead(target)) {
+        abilityLevel_t const *row = G_AbilityLevel(code, S_SpellLevel(caster, code));
+        return row && S_SpellTargetHasToken(row->targs, "dead", NULL) &&
+               S_SpellAllowsCorpseTarget(code, caster, target) &&
+               !S_UnitIsInvisibleToPlayer(target, caster->s.player);
+    }
     if (!S_SpellAllowsAreaTarget(code, caster, target)) return false;
     return !(caster && caster->s.player < MAX_PLAYERS &&
              S_UnitIsInvisibleToPlayer(target, caster->s.player));
