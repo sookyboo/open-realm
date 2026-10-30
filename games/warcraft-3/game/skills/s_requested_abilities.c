@@ -1074,9 +1074,60 @@ BZ_SIMPLE_SPELL_PROC(AbilityChainLightning) {
  * Ubertip="Strikes multiple enemy units with lightning."
  */
 BZ_SIMPLE_SPELL_PROC(AbilityForkedLightning) {
-    bounceParams_t params = { .caster = caster, .target = st, .spell = spell,
-        .scale = 1.0f, .random_jumps = false };
-    bounce_execute(&params);
+    uint32_t const level = S_SpellLevel(caster, spell->code);
+    uint32_t const max_hits = MIN(MAX_GROUP_SIZE,
+        (uint32_t)MAX(1.0f, S_SpellData(spell->code, level, 2)));
+    float const range = S_SpellRange(spell->code, level);
+    float const width = S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level);
+    if (!caster || !st.entity || range <= 0.0f) return;
+    vec2_t const aim = Vector2_sub(&st.entity->s.origin2, &caster->s.origin2);
+    float const aim_length = Vector2_len(&aim);
+    if (aim_length <= 0.0f) return;
+    vec2_t const direction = Vector2_scale(&aim, 1.0f / aim_length);
+    edict_t *targets[MAX_GROUP_SIZE];
+    float distances[MAX_GROUP_SIZE];
+    uint32_t count = 0;
+
+    /* Forked Lightning spreads from the caster toward the selected target.
+     * Every struck unit must independently fit the authored cast range; the
+     * old bounce handler instead allowed each hop to extend that range. */
+    FILTER_EDICTS(target, S_SpellIsAliveTarget(target) &&
+                  S_SpellIsEnemy(caster, target) &&
+                  S_SpellAllowsTarget(spell->code, caster, target)) {
+        vec2_t const offset = Vector2_sub(&target->s.origin2, &caster->s.origin2);
+        float const along = Vector2_dot(&offset, &direction);
+        float const across = fabsf(offset.x * direction.y - offset.y * direction.x);
+        float const distance = Vector2_len(&offset);
+        if (target == caster || along < 0.0f || distance > range ||
+            along > range || across > width * (along / range)) continue;
+
+        /* Keep the closest eligible units in the cone, up to the authored
+         * target count, so edict iteration order does not decide the victims. */
+        uint32_t insert = count;
+        while (insert > 0 && distances[insert - 1] > distance) {
+            if (insert < max_hits && insert < MAX_GROUP_SIZE) {
+                distances[insert] = distances[insert - 1];
+                targets[insert] = targets[insert - 1];
+            }
+            insert--;
+        }
+        if (insert < max_hits && insert < MAX_GROUP_SIZE) {
+            distances[insert] = distance;
+            targets[insert] = target;
+            if (count < max_hits && count < MAX_GROUP_SIZE) count++;
+        }
+    }
+
+    FOR_LOOP(i, count) {
+        edict_t *target = targets[i];
+        G_SpawnAbilityLightning(&(abilityLightningParams_t){
+            .ability_id = spell->code, .index = 0,
+            .source = caster, .target = target,
+            .duration_ms = CHAIN_LIGHTNING_BOLT_MS,
+        });
+        S_SpellDamage(target, caster, (int)MAX(1.0f, S_SpellData(spell->code, level, 1)));
+        G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_SPECIAL, 0, target, NULL, true);
+    }
 }
 /* Name=Earthquake
  * Ubertip="Causes the earth to shake, damaging enemy buildings and slowing enemy units."
