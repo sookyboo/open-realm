@@ -11,6 +11,7 @@ void reset_entities(void);
 void setup_test_pathmap(uint32_t width, uint32_t height, uint8_t const *cells);
 void repair_build_primary(edict_t *ent, edict_t *building);
 void repair_build_legacy(edict_t *ent, edict_t *building);
+void attack_melee(edict_t *ent);
 void build_build(edict_t *ent);
 void ai_train_build(edict_t *ent);
 bool build_menu_send_builder(edict_t *clent, vec2_t const *location);
@@ -184,6 +185,28 @@ static cstring_t const building_repair_stock_targets =
     "ground,air,structure,mechanical,friend,nonancient,invulnerable,vulnerable";
 static cstring_t const building_renew_stock_targets =
     "ground,air,structure,mechanical,friend,invulnerable,vulnerable";
+
+static const char building_liquid_fire_slk[] =
+    "ID;PWXL;N;EBB;Y3;X8\n"
+    "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+    "C;Y1;X4;K\"Dur1\"\nC;Y1;X5;K\"DataA1\"\nC;Y1;X6;K\"DataC1\"\n"
+    "C;Y1;X7;K\"BuffID1\"\nC;Y1;X8;K\"targs1\"\n"
+    "C;Y2;X1;K\"Aliq\"\nC;Y2;X2;K\"Aliq\"\nC;Y2;X3;K1\n"
+    "C;Y2;X4;K3\nC;Y2;X5;K8\nC;Y2;X6;K0.8\nC;Y2;X7;K\"Bliq\"\n"
+    "C;Y3;X1;K\"Aren\"\nC;Y3;X2;K\"Aren\"\nC;Y3;X3;K1\n"
+    "C;Y3;X8;K\"ground,air,structure,mechanical,friend,nonancient,vulnerable\"\nE\n";
+
+static slkTestData_t *building_install_liquid_fire_slk(slkTestData_t **rows_out) {
+    slkTestData_t *rows = parse_slk_string(building_liquid_fire_slk);
+    slkTestData_t *old = G_SetSLKRows("AbilityData", rows);
+    if (rows_out) *rows_out = rows;
+    return old;
+}
+
+static void building_restore_liquid_fire_slk(slkTestData_t *old, slkTestData_t *rows) {
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
+}
 
 static const char building_upgrade_slk[] =
     "ID;PWXL;N;E\n"
@@ -503,6 +526,82 @@ static slkTestData_t *building_install_repair_data(slkTestData_t **rows_out) {
 static void building_restore_repair_data(slkTestData_t *old, slkTestData_t *rows) {
     G_SetSLKRows("AbilityData", old);
     free_slk_rows(rows);
+}
+
+TEST(wc3_building, draenei_saboteur_liquid_fire_damages_buildings_and_slows_attacks) {
+    static UnitAbilities_t const saboteur_abilities = { .abilList = "Aliq" };
+    slkTestData_t *rows, *old;
+    edict_t *saboteur, *building;
+    float health_after_hit;
+    uint32_t normal_attack_interval, liquid_fire_attack_interval;
+
+    reset_entities();
+    setup_test_world();
+    old = building_install_liquid_fire_slk(&rows);
+    saboteur = alloc_test_unit(MAKEFOURCC('n','d','s','a'), 0, 0);
+    building = alloc_test_unit(MAKEFOURCC('h','b','a','r'), 64, 0);
+    saboteur->data.UnitAbilities = (UnitAbilities_t *)&saboteur_abilities;
+    saboteur->s.player = 0;
+    building->s.player = PLAYER_NEUTRAL_AGGRESSIVE;
+    saboteur->unit_state->attack1.type = ATK_CHAOS;
+    building->health.max_value = 1000.0f;
+    building->health.value = 1000.0f;
+    building->unit_state->attack1.type = ATK_CHAOS;
+    building->unit_state->attack1.cooldown = 2.0f;
+    building->unit_state->attack1.damagePoint = 0.5f;
+    T_EQ(G_UnitAbilityLevel(saboteur, MAKEFOURCC('A','l','i','q')), 1);
+
+    attack_melee(building);
+    normal_attack_interval = building->unit_state->attack_cooldown_end_time - G_Time();
+    S_ResolveAttackHit(saboteur, building, 1);
+
+    T_EQ(G_UnitStatusLevel(building, FS_SLKKey("Bliq")), 1);
+    T_FEQ(S_CreepAttackSpeedReduction(building), 0.8f, 0.001f);
+    attack_melee(building);
+    liquid_fire_attack_interval = building->unit_state->attack_cooldown_end_time - G_Time();
+    T_EQ(normal_attack_interval, 2000);
+    T_ASSERT(liquid_fire_attack_interval >= 10000 && liquid_fire_attack_interval <= 10001);
+    health_after_hit = building->health.value;
+    level.time += 1000;
+    unit_updatestatuses(building);
+    T_FEQ(building->health.value, health_after_hit - 8.0f, 0.01f);
+
+    building_restore_liquid_fire_slk(old, rows);
+}
+
+TEST(wc3_building, liquid_fire_prevents_repairing_affected_buildings) {
+    static UnitAbilities_t const saboteur_abilities = { .abilList = "Aliq" };
+    static UnitAbilities_t const worker_abilities = { .abilList = "Aren" };
+    slkTestData_t *rows, *old;
+    edict_t *saboteur, *worker, *building;
+
+    reset_entities();
+    setup_test_world();
+    old = building_install_liquid_fire_slk(&rows);
+    saboteur = alloc_test_unit(MAKEFOURCC('n','d','s','a'), 0, 0);
+    worker = alloc_test_unit(MAKEFOURCC('h','p','e','a'), 128, 0);
+    building = alloc_test_unit(MAKEFOURCC('h','b','a','r'), 64, 0);
+    saboteur->data.UnitAbilities = (UnitAbilities_t *)&saboteur_abilities;
+    worker->data.UnitAbilities = (UnitAbilities_t *)&worker_abilities;
+    saboteur->s.player = 0;
+    worker->s.player = building->s.player = 1;
+    saboteur->unit_state->attack1.type = ATK_CHAOS;
+    building->health.max_value = 1000.0f;
+    building->health.value = 900.0f;
+
+    building->s.player = PLAYER_NEUTRAL_AGGRESSIVE;
+    S_CreepAttackOnHit(saboteur, building);
+    building->s.player = worker->s.player;
+
+    T_EQ(G_UnitStatusLevel(building, FS_SLKKey("Bliq")), 1);
+    T_ASSERT(!S_RepairSmart(worker, building));
+    T_NULL(worker->build);
+    level.time += 3000;
+    unit_updatestatuses(building);
+    T_EQ(G_UnitStatusLevel(building, FS_SLKKey("Bliq")), 0);
+    T_ASSERT(S_RepairSmart(worker, building));
+
+    building_restore_liquid_fire_slk(old, rows);
 }
 
 TEST(wc3_building, tiny_structure_resolves_stock_endpoints_and_great_hall_by_race) {
@@ -1672,6 +1771,27 @@ TEST(wc3_building, spell_breaker_feedback_shows_disabled_passive_indicator) {
     FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Afbk")) {
         found = true;
         T_ASSERT(buttons[i].disabled);
+    }
+    T_ASSERT(found);
+}
+
+TEST(wc3_building, draenei_elite_assassin_critical_strike_shows_disabled_passive_indicator) {
+    static UnitAbilities_t const assassin_abilities = { .abilList = "ACct" };
+    gameCommandButton_t buttons[16];
+    edict_t *assassin;
+    uint8_t count;
+    bool found = false;
+
+    reset_entities();
+    setup_test_world();
+    assassin = alloc_test_unit(MAKEFOURCC('n','d','e','a'), 0, 0);
+    assassin->data.UnitAbilities = (UnitAbilities_t *)&assassin_abilities;
+    count = G_GetCommandButtons(assassin, buttons, sizeof(buttons) / sizeof(buttons[0]));
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "ACct")) {
+        found = true;
+        T_ASSERT(buttons[i].disabled);
+        T_STREQ(buttons[i].art, "ReplaceableTextures\\CommandButtons\\BTNCriticalStrike.blp");
+        T_STREQ(buttons[i].tooltip, "Critical Strike");
     }
     T_ASSERT(found);
 }

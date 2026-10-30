@@ -12,6 +12,7 @@
 #define ID_HARDENED_SKIN_NAGA MAKEFOURCC('A','n','s','k')
 #define ID_MANA_REGEN_AURA MAKEFOURCC('A','a','r','m')
 #define ID_ORB_ANNIHILATION MAKEFOURCC('A','N','a','k')
+#define LIQUID_FIRE_TICK_MS 1000
 
 
 static bool unit_has_proc_ability(edict_t const *ent, abilityProc_t proc) {
@@ -50,14 +51,35 @@ void S_CreepAttackOnHit(edict_t *attacker, edict_t *target) {
         target->mana.value = MAX(0.0f, target->mana.value - S_SpellData(code, level, 1));
     }
     code = G_UnitAbilityLevel(attacker, ID_LIQUID_FIRE) ? ID_LIQUID_FIRE : 0;
-    if (code) {
+    if (code && G_UnitIsStructure(target)) {
         level = MAX(1u, G_UnitAbilityLevel(attacker, code));
-        S_SpellApplyTimedStatus(target, "Bliq", level, S_SpellHeroDuration(code, level, target));
+        heroabilitystatus_t *status = S_SpellApplyTimedStatusFromAbility(
+            target, code, level, "Bliq", S_SpellDuration(code, level, false));
+        if (status) {
+            status->source = attacker;
+            status->source_spawn_time = attacker->spawn_time;
+            status->next_tick = G_Time() + LIQUID_FIRE_TICK_MS;
+        }
     }
     code = G_UnitAbilityLevel(attacker, ID_CORROSIVE_BREATH) ? ID_CORROSIVE_BREATH : 0;
     if (code) {
         level = MAX(1u, G_UnitAbilityLevel(attacker, code));
         S_SpellApplyTimedStatus(target, "Bcor", level, S_SpellHeroDuration(code, level, target));
+    }
+}
+
+static void liquid_fire_tick(edict_t *target, heroabilitystatus_t *slot) {
+    edict_t *source = S_SpellStatusSource(slot);
+    float damage;
+
+    if (!target || !slot || !source) {
+        if (target && slot) unit_expirestatus(target, slot);
+        return;
+    }
+    damage = MAX(0.0f, S_SpellData(ID_LIQUID_FIRE, slot->rank, 1));
+    while (unit_status_take_due_tick(slot, LIQUID_FIRE_TICK_MS, G_Time())) {
+        if (damage > 0.0f) S_SpellDamage(target, source, (int)damage);
+        if (M_IsDead(target)) break;
     }
 }
 
@@ -190,7 +212,17 @@ BZ_ABILITY_PROC(CAbilityDeathDamageAoe) {
     return CAbilityPassive(ent, msg, call);
 }
 BZ_ABILITY_PROC(CAbilityMindRot) { return CAbilityPassive(ent, msg, call); }
-BZ_ABILITY_PROC(CAbilityLiquidFire) { return CAbilityPassive(ent, msg, call); }
+BZ_ABILITY_PROC(CAbilityLiquidFire) {
+    if (msg == A_STATUS_TICK && call && call->status.slot) {
+        liquid_fire_tick(ent, call->status.slot);
+        return true;
+    }
+    if (msg == A_STATUS_DEATH && call && call->status.slot) {
+        unit_expirestatus(ent, call->status.slot);
+        return true;
+    }
+    return CAbilityPassive(ent, msg, call);
+}
 BZ_ABILITY_PROC(CAbilityCorrosiveBreath) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilityLightningAttack) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilityBash) { return CAbilityPassive(ent, msg, call); }

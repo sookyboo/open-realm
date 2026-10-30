@@ -1255,6 +1255,8 @@ TEST(wc3_spell, creep_attack_passives_and_death_aoe_use_authored_rows) {
     target->svflags |= SVF_MONSTER; nearby->svflags |= SVF_MONSTER;
     target->mana.value = target->mana.max_value = 100;
     target->health.value = target->health.max_value = 100;
+    target->s.flags |= EF_BUILDING;
+    target->targtype = TARG_STRUCTURE;
     nearby->health.value = nearby->health.max_value = 100;
     dead->die = unit_die; nearby->die = unit_die;
     S_CreepAttackOnHit(attacker, target);
