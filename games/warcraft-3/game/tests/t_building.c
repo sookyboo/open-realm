@@ -210,7 +210,7 @@ static void building_restore_liquid_fire_slk(slkTestData_t *old, slkTestData_t *
 
 static const char building_upgrade_slk[] =
     "ID;PWXL;N;E\n"
-    "B;X18;Y12;D0\n"
+    "B;X18;Y13;D0\n"
     "C;X1;Y1;K\"upgradeid\"\n"
     "C;X2;K\"class\"\n"
     "C;X3;K\"maxlevel\"\n"
@@ -317,6 +317,17 @@ static const char building_upgrade_slk[] =
     "C;X3;K1\n"
     "C;X10;K\"_\"\n"
     "C;X18;K\"undead ghoul cannibalize\"\n"
+    "C;X1;Y13;K\"Redt\"\n"
+    "C;X2;K\"caster\"\n"
+    "C;X3;K2\n"
+    "C;X10;K\"rmnx\"\n"
+    "C;X11;K100\n"
+    "C;X12;K100\n"
+    "C;X13;K\"edot\"\n"
+    "C;X14;K\"rmnr\"\n"
+    "C;X15;K0.325\n"
+    "C;X16;K0.325\n"
+    "C;X17;K\"edot\"\n"
     "E\n";
 
 /* Night Elf ranged upgrades use the same generic ratr/ratx path as other
@@ -2500,6 +2511,53 @@ TEST(wc3_building, night_elf_caster_training_gates_druid_and_dryad_spells) {
     G_SetPlayerTechMaxAllowed(client, druid_training, -1);
     G_SetPlayerTechMaxAllowed(client, dryad_training, -1);
     building_restore_caster_data(caster_rows);
+}
+
+TEST(wc3_building, druid_of_talon_adept_training_unlocks_storm_crow_and_mana) {
+    static const char ability_slk[] =
+        "ID;PWXL;N;E\nB;X3;Y2;D0\n"
+        "C;X1;Y1;K\"alias\"\nC;X2;K\"code\"\nC;X3;K\"checkDep\"\n"
+        "C;X1;Y2;K\"Arav\"\nC;X2;K\"Arav\"\nC;X3;K1\nE\n";
+    gameClient_t *client;
+    edict_t *talon;
+    UnitBalance_t balance = { .upgrades = "Redt", .manaRegen = 0.0f };
+    UnitAbilities_t abilities = { .abilList = "Arav" };
+    slkTestData_t *upgrade_rows = NULL, *old_upgrades;
+    slkTestData_t *ability_rows = parse_slk_string(ability_slk), *old_abilities;
+    uint32_t const training = MAKEFOURCC('R','e','d','t');
+    uint32_t const storm_crow = MAKEFOURCC('A','r','a','v');
+
+    setup_test_world();
+    old_upgrades = building_install_upgrade_data(&upgrade_rows);
+    old_abilities = G_SetSLKRows("AbilityData", ability_rows);
+    client = &game.clients[0];
+    client->ps.number = 0;
+    memset(client->tech, 0, sizeof(client->tech));
+    G_SetPlayerTechMaxAllowed(client, training, 2);
+    talon = alloc_test_unit(MAKEFOURCC('e','d','o','t'), 0, 0);
+    talon->s.player = client->ps.number;
+    talon->data.UnitBalance = &balance;
+    talon->data.UnitAbilities = &abilities;
+    talon->mana.max_value = 0.0f;
+    talon->mana.value = 0.0f;
+
+    T_ASSERT(G_UnitAbilityResearchVisible(talon, storm_crow));
+    T_ASSERT(!G_UnitAbilityResearchAvailable(talon, storm_crow));
+
+    G_SetPlayerTechResearched(client, training, 1);
+    T_ASSERT(G_UnitAbilityResearchAvailable(talon, storm_crow));
+    T_FEQ(talon->mana.max_value, 100.0f, 0.001f);
+    T_FEQ(talon->unit_state->mana_regen_bonus, 0.325f, 0.001f);
+
+    G_SetPlayerTechResearched(client, training, 2);
+    T_FEQ(talon->mana.max_value, 200.0f, 0.001f);
+    T_FEQ(talon->unit_state->mana_regen_bonus, 0.65f, 0.001f);
+
+    G_SetPlayerTechResearched(client, training, 0);
+    G_SetPlayerTechMaxAllowed(client, training, -1);
+    G_SetSLKRows("AbilityData", old_abilities);
+    free_slk_rows(ability_rows);
+    building_restore_upgrade_data(old_upgrades, upgrade_rows);
 }
 
 TEST(wc3_building, rlev_dependency_uses_custom_upgrade_and_ability_rawcodes) {
