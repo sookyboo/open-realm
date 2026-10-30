@@ -234,6 +234,9 @@ void G_RunEntity(edict_t *ent) {
                                ent->animation->interval[1] - 1);
         }
     }
+    /* Swallowed units retain their handle and HP but do not move, cast,
+     * regenerate, expire statuses or run ordinary world simulation. */
+    if (ent->aiflags & AI_DEVOURED) return;
     bool const world_active = G_UnitIsWorldActive(ent);
     spell_run_frame(ent);
     /* A validated empty timed-status index cannot expire or tick anything.

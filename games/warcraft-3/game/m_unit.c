@@ -484,6 +484,7 @@ void unit_die(edict_t *self, edict_t *attacker) {
 #ifdef WC3_SC2API
     WC3_SC2API_RecordDeath(self);
 #endif
+    S_DevourUnitExit(self);
     G_ClearActiveUnitOrder(self);
     selected_mask = self->selected;
     summon_explodes = (self->aiflags & AI_SUMMON_EXPLODES_ON_DEATH) != 0;

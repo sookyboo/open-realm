@@ -234,6 +234,8 @@ enum {
     AI_SUMMON_EXPLODES_ON_DEATH = 1 << 13, /* spirit/beast summon magical death effect, no corpse */
     AI_SCRIPT_EXPLODED = 1 << 14, /* SetUnitExploded: SpecialArt death effect instead of corpse */
     AI_PROJECTILE_DEATH_PRESENTATION = 1 << 15, /* projectile is playing its authored impact/death sequence */
+    AI_DEVOURING = 1 << 16, /* owns an active Devour digestion thinker */
+    AI_DEVOURED = 1 << 17, /* swallowed living unit: off-world until release or digestion */
 };
 
 /* Authored damage category indexing combat armor multipliers; values match WC3 table order. */

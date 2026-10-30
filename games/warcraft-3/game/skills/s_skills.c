@@ -442,7 +442,7 @@ static ability_t abilitylist[] = {
     { "ACtc", CAbilityThunderClap, AB_SPELL },  /* Slam */
     { "ACtb", CAbilityThunderBolt, AB_SPELL, SPELL_TARGET_UNIT },  /* Hurl Boulder */
     { "Afzy", CAbilityFrenzy, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Frenzy */
-    { "ACdv", CAbilityCannibalize, AB_SPELL | AB_CHANNEL },  /* Devour */
+    { "ACdv", CAbilityDevour, AB_SPELL, SPELL_TARGET_UNIT },  /* Devour (creep) */
     { "ACsp", CAbilityCreepSleep, AB_PASSIVE | AB_INNATE },  /* Natural creep sleep */
     { "Asod", CAbilityRaiseDead, AB_SPELL },  /* Spawn Skeleton */
     { "Assp", CAbilityForceOfNature, AB_SPELL },  /* Spawn Spiderlings */
@@ -506,7 +506,7 @@ static ability_t abilitylist[] = {
     { "Achl", CAbilityCargoLoad, AB_COMMAND },  /* Chaos Cargo Load */
     { "Awar", CAbilityPulverize, AB_PASSIVE },  /* Pulverize */
     { "Aens", CAbilityEnsnare, AB_SPELL | AB_UPDATE, SPELL_TARGET_UNIT },  /* Ensnare */
-    { "Adev", CAbilityCannibalize, AB_SPELL | AB_CHANNEL },  /* Devour */
+    { "Adev", CAbilityDevour, AB_SPELL, SPELL_TARGET_UNIT },  /* Devour */
     { "Aprg", CAbilityPurge, AB_SPELL, SPELL_TARGET_UNIT },  /* Purge */
     { "Apg2", CAbilityPurge, AB_SPELL, SPELL_TARGET_UNIT },  /* Purge (TFT melee; DataD/DataE pause) */
     { "Alsh", CAbilityLightningShield, AB_SPELL, SPELL_TARGET_UNIT },  /* Lightning Shield */

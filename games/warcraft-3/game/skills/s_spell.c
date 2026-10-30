@@ -417,7 +417,7 @@ bool S_TryBlockSpellShield(edict_t *caster, uint32_t code, edict_t *target) {
     abilityLevel_t const *row;
     heroabilitystatus_t *status;
 
-    if (!caster || !target || !ability ||
+    if (!caster || !target || !ability || ability->proc == CAbilityDevour ||
         (ability->target_type != SPELL_TARGET_UNIT && ability->target_type != SPELL_TARGET_UNIT_OR_POINT) ||
         !S_SpellIsEnemy(caster, target) || !S_SpellIsAliveTarget(target)) return false;
     /* Physical nets and Finger of Death bypass Spell Shield. */
@@ -451,7 +451,9 @@ bool S_SpellAllowsAreaTarget(uint32_t code, edict_t *caster, edict_t *target) {
     if (!G_UnitIsWorldActive(target) || M_IsDead(target) || S_UnitIsCycloned(target)) {
         return false;
     }
-    if (S_UnitSpellImmune(target)) return false;
+    /* Devour is a physical swallowing ability, not a magic projectile. */
+    { ability_t const *ability = S_SpellAbilityForCode(code);
+      if ((!ability || ability->proc != CAbilityDevour) && S_UnitSpellImmune(target)) return false; }
     ability_level = S_SpellLevel(caster, code);
     targets = G_AbilityLevel(code, ability_level)->targs;
     if (!targets) {
