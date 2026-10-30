@@ -171,6 +171,11 @@ void monster_think(edict_t *self) {
         return;
     }
     M_MoveFrame(self);
+    /* The active move's endfunc can retire the entity or clear currentmove.
+     * Recheck after advancing the animation before dispatching the move think
+     * callback; otherwise a completed one-shot move leaves a null dereference. */
+    if (!self->inuse || !self->currentmove)
+        return;
     if (self->currentmove->think) {
         self->currentmove->think(self);
     }

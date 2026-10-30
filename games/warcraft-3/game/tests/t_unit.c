@@ -33,6 +33,19 @@ bool unit_additemtoslot(edict_t *edict, edict_t *item, uint32_t slot);
 slkTestData_t *parse_slk_string(cstring_t slk_text);
 void free_slk_rows(slkTestData_t *rows);
 
+static void unit_test_clear_move(edict_t *ent) {
+    ent->currentmove = NULL;
+}
+
+static umove_t unit_test_single_frame_move = {
+    .animation = "stand",
+    .endfunc = unit_test_clear_move
+};
+static animation_t unit_test_single_frame_animation = {
+    .name = "stand",
+    .interval = { 0, 1 }
+};
+
 static int selection_sound_index_77(cstring_t path) {
     (void)path;
     return 77;
@@ -2314,6 +2327,21 @@ TEST(wc3_unit, ability_updates_leave_ordinary_units_unchanged) {
     monster_think(ent);
     T_FEQ(ent->unitinfo.FlyHeight, 37, 0.001f);
     T_NULL(G_GetRaven(ent));
+}
+
+/* An animation end callback may clear currentmove. monster_think must not
+ * dispatch a move callback through that retired pointer after M_MoveFrame. */
+TEST(wc3_unit, monster_think_rechecks_move_after_animation_end) {
+    reset_test_entities(); setup_test_world();
+    edict_t *ent = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64.0f, 64.0f);
+    ent->animation = &unit_test_single_frame_animation;
+    ent->s.frame = 0;
+    ent->animation_speed = 1.0f;
+    ent->currentmove = &unit_test_single_frame_move;
+
+    monster_think(ent);
+
+    T_NULL(ent->currentmove);
 }
 
 TEST(wc3_unit, ravenForm_takeoff_interpolates_from_ground_to_authored_height) {
