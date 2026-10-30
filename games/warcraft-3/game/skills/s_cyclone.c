@@ -3,6 +3,24 @@
 #define BZ_CYCLONE_BUFF MAKEFOURCC('B','c','y','c') // rawcode; primary Cyclone status; locks actions and targeting
 #define BZ_CYCLONE_BUFF_EXTRA MAKEFOURCC('B','c','y','2') // rawcode; extra Cyclone status; locks actions and targeting
 #define BZ_TIMED_LIFE_BUFF MAKEFOURCC('B','T','L','F') // lifecycle marker; dispel must not make a temporary unit permanent
+#define BZ_CYCLONE_LIFT_HEIGHT 200.0f
+
+static void cyclone_set_fly_height(edict_t *unit, float height) {
+    if (!unit) return;
+    unit->unitinfo.FlyHeight = MAX(0.0f, height);
+    M_CheckGround(unit);
+    if (unit->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
+    gi.LinkEntity(unit);
+}
+
+static bool cyclone_has_other_lift_status(edict_t const *unit, heroabilitystatus_t const *removed) {
+    FOR_LOOP(i, unit && unit->unit_state ? MAX_UNIT_STATUSES : 0) {
+        heroabilitystatus_t const *status = unit->unit_state->statuses + i;
+        if (status == removed || !status->level) continue;
+        if (status->code == BZ_CYCLONE_BUFF || status->code == BZ_CYCLONE_BUFF_EXTRA) return true;
+    }
+    return false;
+}
 
 bool S_UnitIsCycloned(edict_t const *unit) {
     return unit && (G_UnitStatusLevel(unit, BZ_CYCLONE_BUFF) || G_UnitStatusLevel(unit, BZ_CYCLONE_BUFF_EXTRA));
@@ -24,8 +42,18 @@ bool S_StatusIsUndispellable(heroabilitystatus_t const *status) {
 BZ_ABILITY_PROC(CAbilityCyclone) {
     spellTarget_t const *target;
     uint32_t level;
+    uint32_t buff_code;
     cstring_t buff;
     heroabilitystatus_t *slot;
+    union { float height; uint32_t bits; } original_height;
+
+    if (msg == A_STATUS_REMOVE && call && call->status.slot &&
+        call->status.slot->code == BZ_CYCLONE_BUFF &&
+        !cyclone_has_other_lift_status(ent, call->status.slot)) {
+        union { float height; uint32_t bits; } original_height = { .bits = call->status.slot->next_tick };
+        cyclone_set_fly_height(ent, original_height.height);
+        return true;
+    }
 
     if ((msg != A_VALIDATE && msg != A_EXECUTE) || !call || !call->item || !call->target)
         return CAbilitySimpleSpell(ent, msg, call);
@@ -46,12 +74,22 @@ BZ_ABILITY_PROC(CAbilityCyclone) {
     level = S_SpellLevel(ent, call->item->code);
     buff = S_SpellBuffId(call->item->code, level);
     if (!buff || strlen(buff) < 4) buff = "Bcyc";
+    original_height.height = target->entity->unitinfo.FlyHeight;
+    memcpy(&buff_code, buff, sizeof(buff_code));
+    if (buff_code == BZ_CYCLONE_BUFF) {
+        heroabilitystatus_t *existing = unit_findstatus(target->entity, BZ_CYCLONE_BUFF);
+        if (existing) original_height.bits = existing->next_tick;
+    }
     slot = S_SpellApplyTimedStatus(target->entity, buff, level,
                                     S_SpellResistantDuration(call->item->code, level, target->entity));
     /* Timed-status replacement clears payload; restore the applying rawcode. */
     if (slot) {
         slot->data = call->item->code;
         slot->source_ability = call->item->code;
+        if (slot->code == BZ_CYCLONE_BUFF) {
+            slot->next_tick = original_height.bits;
+            cyclone_set_fly_height(target->entity, BZ_CYCLONE_LIFT_HEIGHT);
+        }
         slot->buff_flags |= WC3_STATUS_BUFF_TARGET_ART;
         unit_status_enabletargetart(target->entity, slot, NULL);
     }

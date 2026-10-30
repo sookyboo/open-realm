@@ -234,20 +234,26 @@ TEST(wc3_spell, cyclone_hero_duration_and_expiry_restore) {
     hero->s.player = 1; hero->svflags |= SVF_MONSTER; hero->targtype = TARG_GROUND;
     hero->data.UnitBalance = &hero_bal;
     hero->health.value = hero->health.max_value = 500;
+    hero->unitinfo.FlyHeight = 17.0f;
     hero->stand = unit_stand; unit_stand(hero);
     T_ASSERT(G_UnitIsHero(hero));
     T_ASSERT(!G_UnitIsHero(fix.enemy));
 
     T_ASSERT(S_CastUnitTargetSpell(fix.caster, BZ_ACYC, hero));
     T_ASSERT(S_UnitIsCycloned(hero));
+    T_FEQ(hero->unitinfo.FlyHeight, 200.0f, 0.001f);
     level.time += 4000; unit_updatestatuses(hero);
     T_ASSERT(!S_UnitIsCycloned(hero));
+    T_FEQ(hero->unitinfo.FlyHeight, 17.0f, 0.001f);
 
     fix.caster->mana.value = 200;
+    fix.enemy->unitinfo.FlyHeight = 12.5f;
     T_ASSERT(S_CastUnitTargetSpell(fix.caster, BZ_ACYC, fix.enemy));
     T_ASSERT(S_UnitIsCycloned(fix.enemy));
-    level.time += 11000; unit_updatestatuses(fix.enemy);
+    T_FEQ(fix.enemy->unitinfo.FlyHeight, 200.0f, 0.001f);
+    unit_removestatus(fix.enemy, unit_findstatus(fix.enemy, BZ_BCYC), STATUS_REMOVE_DISPEL);
     T_ASSERT(!S_UnitIsCycloned(fix.enemy));
+    T_FEQ(fix.enemy->unitinfo.FlyHeight, 12.5f, 0.001f);
 
     wp = Waypoint_add(&(vec2_t){220, 0});
     order_move(fix.enemy, wp);
@@ -262,6 +268,10 @@ TEST(wc3_spell, cyclone_hero_duration_and_expiry_restore) {
     fix.caster->mana.value = 200;
     T_ASSERT(S_CastUnitTargetSpell(fix.caster, BZ_ACYC, fix.enemy));
     T_ASSERT(S_UnitIsCycloned(fix.enemy));
+    T_FEQ(fix.enemy->unitinfo.FlyHeight, 200.0f, 0.001f);
+    level.time += 11000; unit_updatestatuses(fix.enemy);
+    T_ASSERT(!S_UnitIsCycloned(fix.enemy));
+    T_FEQ(fix.enemy->unitinfo.FlyHeight, 12.5f, 0.001f);
     cyc_done(fix);
 }
 

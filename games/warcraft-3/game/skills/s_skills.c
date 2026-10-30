@@ -57,7 +57,7 @@ static ability_t abilitylist[] = {
     { "ANen", CAbilityEnsnare, AB_SPELL | AB_UPDATE, SPELL_TARGET_UNIT },  /* Ensnare */
     { "ACfu", CAbilityFrostArmorCampaign, AB_SPELL, SPELL_TARGET_UNIT },  /* Frost Armor */
     { "ANpa", CAbilityParasiteCampaign, AB_SPELL, SPELL_TARGET_UNIT },  /* Parasite */
-    { "Acny", CAbilityCyclone, AB_SPELL, SPELL_TARGET_UNIT },  /* Cyclone (naga; code=Acyc) */
+    { "Acny", CAbilityCyclone, AB_SPELL | AB_STATUS_EVENTS, SPELL_TARGET_UNIT },  /* Cyclone (naga; code=Acyc) */
     { "Ahnl", CAbilitySummoningRitual, AB_SPELL },  /* Summoning Ritual */
     { "ANcl", CAbilityChannel, AB_COMMAND },  /* Channel */
     { "Arsq", CAbilitySummonQuilbeastCampaign, AB_SPELL },  /* Summon Quilbeast */
@@ -486,9 +486,9 @@ static ability_t abilitylist[] = {
     { "Adec", CAbilityDecouple, AB_SPELL, SPELL_TARGET_NONE },  /* Dismount */
     { "Acor", CAbilityCorrosiveBreath, AB_PASSIVE },  /* Corrosive Breath */
     { "AEst", CAbilityScout, AB_SPELL, SPELL_TARGET_NONE },  /* Scout */
-    { "Acyc", CAbilityCyclone, AB_SPELL, SPELL_TARGET_UNIT },  /* Cyclone */
-    { "ACcy", CAbilityCyclone, AB_SPELL, SPELL_TARGET_UNIT },  /* Cyclone (creep) */
-    { "SCc1", CAbilityCyclone, AB_SPELL, SPELL_TARGET_UNIT },  /* Cyclone (Cenarius) */
+    { "Acyc", CAbilityCyclone, AB_SPELL | AB_STATUS_EVENTS, SPELL_TARGET_UNIT },  /* Cyclone */
+    { "ACcy", CAbilityCyclone, AB_SPELL | AB_STATUS_EVENTS, SPELL_TARGET_UNIT },  /* Cyclone (creep) */
+    { "SCc1", CAbilityCyclone, AB_SPELL | AB_STATUS_EVENTS, SPELL_TARGET_UNIT },  /* Cyclone (Cenarius) */
     { "Alit", CAbilityLightningAttack, AB_PASSIVE },  /* Lightning Attack */
 
     /* OrcAbilityStrings.txt */
@@ -722,7 +722,7 @@ static ability_t abilitylist[] = {
     { "Suhf", CAbilityUnholyFrenzy, AB_SPELL, SPELL_TARGET_UNIT },  /* Unholy Frenzy (Warlock) */
     { "Sbtl", CAbilityBattlestations, AB_COMMAND },  /* Battlestations (Chaos) */
     { "Sbsk", CAbilityPassive, AB_PASSIVE },  /* Berserker Upgrade */
-    { "AIcy", CAbilityCyclone, AB_SPELL, SPELL_TARGET_UNIT },  /* Item Cyclone */
+    { "AIcy", CAbilityCyclone, AB_SPELL | AB_STATUS_EVENTS, SPELL_TARGET_UNIT },  /* Item Cyclone */
     { "AIsw", CAbilityEvilEye, AB_SPELL, SPELL_TARGET_POINT },  /* Sentry Ward (item; code=Aeye) */
     { "APwt", CAbilityItemWatcherWard, AB_ITEM | AB_POWERUP },  /* Rune of the Watcher (code=Aeye) */
     { "AIxs", CAbilityAntiMagicShellInstant, AB_SPELL, SPELL_TARGET_UNIT },  /* Item Anti-magic Shield */
