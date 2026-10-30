@@ -9,10 +9,14 @@
 #define TORNADO_SPIN MAKEFOURCC('A','t','s','p')
 #define TORNADO_MARK MAKEFOURCC('T','s','p','M')
 #define TORNADO_DAMAGE_INTERVAL_MS 1000u
-#define TORNADO_SPIN_DEFAULT_INTERVAL_MS 3000u /* classic guide; overridden by Atsp DataA */
-#define TORNADO_SPIN_REPEAT_MS 22000u /* classic guide; retail timer algorithm still under review */
 #define TORNADO_SPIN_LIFT_DURATION_SECONDS 10.0f
 #define TORNADO_SPIN_LIFT_HEIGHT 200.0f
+
+static uint32_t tornado_spin_interval_ms(edict_t *tornado) {
+    abilityAliasRef_t ability = S_ResolveAbilityAlias(tornado, TORNADO_SPIN);
+    float const seconds = ability.alias ? S_SpellData(ability.alias, ability.level, 2) : 0.0f;
+    return seconds > 0.0f ? (uint32_t)(seconds * 1000.0f) : 0;
+}
 
 static void tornado_set_fly_height(edict_t *unit, float height) {
     if (!unit) return;
@@ -38,11 +42,12 @@ static bool tornado_recent_target(edict_t *thinker, edict_t *target) {
     return false;
 }
 
-static void tornado_mark_target(edict_t *thinker, edict_t *target) {
+static void tornado_mark_target(edict_t *thinker, edict_t *target, uint32_t repeat_ms) {
+    if (!repeat_ms) return;
     edict_t *mark = S_SpellIdentityThinker(thinker, TORNADO_MARK, target);
     if (!mark) return;
     mark->svflags |= SVF_NOCLIENT;
-    mark->resources = G_Time() + TORNADO_SPIN_REPEAT_MS;
+    mark->resources = G_Time() + repeat_ms;
 }
 
 static void tornado_release_markers(edict_t *thinker, bool all) {
@@ -114,7 +119,9 @@ static void tornado_spin_one(edict_t *tornado, edict_t *thinker) {
                 tornado_set_fly_height(choice, TORNADO_SPIN_LIFT_HEIGHT);
                 choice->goalentity = NULL;
                 choice->currentmove = &holdpos_move_stand;
-                tornado_mark_target(thinker, choice);
+                float const repeat_seconds = S_SpellData(ability.alias, ability.level, 1);
+                tornado_mark_target(thinker, choice,
+                                    repeat_seconds > 0.0f ? (uint32_t)(repeat_seconds * 1000.0f) : 0);
             }
         }
     }
@@ -136,6 +143,7 @@ static void tornado_finish(edict_t *thinker, edict_t *tornado) {
 void tornado_think(edict_t *thinker) {
     edict_t *tornado = S_SpellChannelTarget(thinker);
     uint32_t now = G_Time();
+    uint32_t interval_ms;
     if (!tornado_valid_unit(tornado) || !S_SpellChannelActive(thinker) ||
         (int32_t)(now - thinker->resources) >= 0) {
         tornado_finish(thinker, tornado);
@@ -149,11 +157,8 @@ void tornado_think(edict_t *thinker) {
         tornado_damage_buildings(tornado);
         thinker->freetime += TORNADO_DAMAGE_INTERVAL_MS;
     }
-    if ((int32_t)(now - thinker->damage) >= 0) {
-        abilityAliasRef_t spin = S_ResolveAbilityAlias(tornado, TORNADO_SPIN);
-        float const interval = spin.alias ? S_SpellData(spin.alias, spin.level, 1) : 0.0f;
-        uint32_t const interval_ms = interval > 0.0f ? (uint32_t)(interval * 1000.0f) :
-                                     TORNADO_SPIN_DEFAULT_INTERVAL_MS;
+    interval_ms = tornado_spin_interval_ms(tornado);
+    if (interval_ms && (int32_t)(now - thinker->damage) >= 0) {
         tornado_spin_one(tornado, thinker);
         thinker->damage = now + MAX(FRAMETIME, interval_ms);
     }
@@ -215,7 +220,7 @@ BZ_ABILITY_PROC(CAbilityTornado) {
     G_GetChannel(thinker)->target_spawn_time = summon->spawn_time;
     thinker->resources = G_Time() + (uint32_t)(duration * 1000.0f);
     thinker->freetime = G_Time() + TORNADO_DAMAGE_INTERVAL_MS;
-    thinker->damage = G_Time() + TORNADO_SPIN_DEFAULT_INTERVAL_MS;
+    thinker->damage = G_Time() + tornado_spin_interval_ms(summon);
     thinker->variation = (summon->s.number + 1u) * 2654435761u ^ summon->spawn_time;
     thinker->svflags |= SVF_NOCLIENT;
     thinker->think = tornado_think;

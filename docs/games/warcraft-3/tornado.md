@@ -31,8 +31,9 @@ Do not substitute these for the summoned unit or fabricate ANto CasterArt.
   DataA DPS, DataB/DataC the medium radius/DPS, DataD/DataE the direct
   small-radius/DPS. The bands are mutually exclusive and honor enemy targeting;
   the normal spell-damage pipeline owns combat/death side effects.
-- `Atsp`: periodic ground-only enemy selection, using the ability's DataA
-  interval when positive (otherwise classic guide's 3 seconds). Each lift
+- `Atsp`: periodic ground-only enemy selection. DataB sets the spin interval;
+  DataA sets the delay before the same unit can be selected again. The stock
+  1.29 row uses DataA=22 seconds and DataB=3 seconds. Each lift
   applies the Cyclone `Bcyc` status for 10 seconds, independent of the
   Tornado's remaining life and Atsp's standalone Dur/HeroDur. The status owns
   its authored persistent TargetArt, raises the victim to 200 fly height, and
@@ -65,8 +66,7 @@ must also be verified in retail and in OpenRealm (no automatic local run):
 5. Cancel through Stop, movement, death and stun; ensure no leaked tornado or
    toss markers. Save/reload with a live channel and a recent toss marker.
 
-The 3s spin interval / 22s victim restriction and exact Atwa destination
-selection are classic guide/community observations, **not yet verified at
-engine-internal fidelity**. The data-controlled effects and summon lifecycle
-are the confident part. A custom map's ability rows take precedence over the
-classic reference numbers.
+The stock Atsp row provides the 3s spin interval and 22s same-unit delay. The
+random selection order and exact Atwa destination policy remain unverified at
+engine-internal fidelity. A custom map's ability rows take precedence over the
+stock values.

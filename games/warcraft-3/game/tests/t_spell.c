@@ -4029,15 +4029,15 @@ TEST(wc3_spell, tornado_summons_at_selected_point) {
 
 TEST(wc3_spell, tornado_spin_lift_lasts_ten_seconds) {
     const char slk[] =
-        "ID;PWXL;N;EBB;Y3;X8\n"
+        "ID;PWXL;N;EBB;Y3;X9\n"
         "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
         "C;Y1;X3;K\"targs\"\nC;Y1;X4;K\"Area1\"\n"
-        "C;Y1;X5;K\"DataA1\"\nC;Y1;X6;K\"Dur1\"\n"
-        "C;Y1;X7;K\"HeroDur1\"\nC;Y1;X8;K\"BuffID1\"\n"
+        "C;Y1;X5;K\"DataA1\"\nC;Y1;X6;K\"DataB1\"\n"
+        "C;Y1;X7;K\"Dur1\"\nC;Y1;X8;K\"HeroDur1\"\nC;Y1;X9;K\"BuffID1\"\n"
         "C;Y2;X1;K\"Atsp\"\nC;Y2;X2;K\"Atsp\"\n"
         "C;Y2;X3;K\"ground,enemy\"\nC;Y2;X4;K\"500\"\n"
-        "C;Y2;X5;K\"3\"\nC;Y2;X6;K\"1\"\n"
-        "C;Y2;X7;K\"1\"\nC;Y2;X8;K\"BNto\"\n"
+        "C;Y2;X5;K\"20\"\nC;Y2;X6;K\"4\"\n"
+        "C;Y2;X7;K\"1\"\nC;Y2;X8;K\"1\"\nC;Y2;X9;K\"BNto\"\n"
         "E\n";
     const char buff_slk[] =
         "ID;PWXL;N;EBB;Y2;X3\n"
@@ -4047,7 +4047,7 @@ TEST(wc3_spell, tornado_spin_lift_lasts_ten_seconds) {
     static UnitAbilities_t const tornado_abilities = { .abilList = "Atsp" };
     slkTestData_t *rows = parse_slk_string(slk), *old;
     slkTestData_t *buff_rows = parse_slk_string(buff_slk), *old_buffs;
-    edict_t *caster, *tornado, *target, *thinker;
+    edict_t *caster, *tornado, *target, *target2, *thinker, *first_target = NULL, *other_target;
     channel_t *cast;
     heroabilitystatus_t *lift;
     edict_t *lift_effect = NULL;
@@ -4059,6 +4059,7 @@ TEST(wc3_spell, tornado_spin_lift_lasts_ten_seconds) {
     caster = make_hero(MAKEFOURCC('H','p','a','l'), 500.0f, 200.0f, 0.0f, 0.0f);
     tornado = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64.0f, 0.0f);
     target = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 128.0f, 0.0f);
+    target2 = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 160.0f, 0.0f);
     tornado->data.UnitAbilities = &tornado_abilities;
     tornado->summon_ability = FS_SLKKey("ANto");
     tornado->owner = caster;
@@ -4068,7 +4069,11 @@ TEST(wc3_spell, tornado_spin_lift_lasts_ten_seconds) {
     target->s.player = 1;
     target->svflags |= SVF_MONSTER;
     target->targtype = TARG_GROUND;
+    target2->s.player = 1;
+    target2->svflags |= SVF_MONSTER;
+    target2->targtype = TARG_GROUND;
     target->unitinfo.FlyHeight = 25.0f;
+    target2->unitinfo.FlyHeight = 25.0f;
     ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
     ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
 
@@ -4089,18 +4094,57 @@ TEST(wc3_spell, tornado_spin_lift_lasts_ten_seconds) {
 
     tornado_think(thinker);
     lift = unit_findstatus(target, MAKEFOURCC('B','c','y','c'));
+    if (lift) first_target = target;
+    else if (unit_findstatus(target2, MAKEFOURCC('B','c','y','c'))) first_target = target2;
+    other_target = first_target == target ? target2 : target;
+    T_NOT_NULL(first_target);
+    if (!lift && first_target == target2) lift = unit_findstatus(target2, MAKEFOURCC('B','c','y','c'));
     T_NOT_NULL(lift);
     if (lift) {
         T_EQ(lift->duration_ms, 10000u);
         T_EQ(lift->timestamp, G_Time() + 10000u);
         T_ASSERT(lift->buff_flags & WC3_STATUS_BUFF_TARGET_ART);
     }
-    T_FEQ(target->unitinfo.FlyHeight, 200.0f, 0.001f);
+    T_FEQ(first_target ? first_target->unitinfo.FlyHeight : 0.0f, 200.0f, 0.001f);
     FILTER_EDICTS(effect, effect->status_effect_code == MAKEFOURCC('B','c','y','c') &&
-                  effect->goalentity == target) { lift_effect = effect; break; }
+                  effect->goalentity == first_target) { lift_effect = effect; break; }
     T_NOT_NULL(lift_effect);
-    if (lift) unit_removestatus(target, lift, STATUS_REMOVE_EXPIRE);
+    T_EQ(thinker->damage, 9000u); /* Non-stock DataB=4 seconds, not DataA=20 seconds. */
+    {
+        edict_t *target2_effect = NULL;
+        level.time = 9000;
+        tornado_think(thinker);
+        T_NOT_NULL(unit_findstatus(other_target, MAKEFOURCC('B','c','y','c')));
+        FILTER_EDICTS(effect, effect->status_effect_code == MAKEFOURCC('B','c','y','c') &&
+                      effect->goalentity == other_target) { target2_effect = effect; break; }
+        T_NOT_NULL(target2_effect);
+    }
+    level.time = 13000;
+    tornado_think(thinker);
+    T_NOT_NULL(unit_findstatus(target, MAKEFOURCC('B','c','y','c')));
+    T_NOT_NULL(unit_findstatus(target2, MAKEFOURCC('B','c','y','c')));
+    T_EQ(thinker->damage, 17000u);
+    level.time = 19000;
+    unit_updatestatuses(target);
+    unit_updatestatuses(target2);
+    T_ASSERT(!unit_findstatus(target, MAKEFOURCC('B','c','y','c')));
+    T_ASSERT(!unit_findstatus(target2, MAKEFOURCC('B','c','y','c')));
+    tornado_think(thinker);
+    T_ASSERT(!unit_findstatus(target, MAKEFOURCC('B','c','y','c')));
+    T_ASSERT(!unit_findstatus(target2, MAKEFOURCC('B','c','y','c')));
+    T_EQ(thinker->damage, 23000u);
+    level.time = 25000;
+    tornado_think(thinker);
+    T_NOT_NULL(unit_findstatus(first_target, MAKEFOURCC('B','c','y','c'))); /* Non-stock DataA=20 seconds. */
+    T_EQ(thinker->damage, 29000u);
+    {
+        heroabilitystatus_t *target_lift = unit_findstatus(target, MAKEFOURCC('B','c','y','c'));
+        heroabilitystatus_t *target2_lift = unit_findstatus(target2, MAKEFOURCC('B','c','y','c'));
+        if (target_lift) unit_removestatus(target, target_lift, STATUS_REMOVE_EXPIRE);
+        if (target2_lift) unit_removestatus(target2, target2_lift, STATUS_REMOVE_EXPIRE);
+    }
     T_FEQ(target->unitinfo.FlyHeight, 25.0f, 0.001f);
+    T_FEQ(target2->unitinfo.FlyHeight, 25.0f, 0.001f);
     FILTER_EDICTS(effect, effect->status_effect_code == MAKEFOURCC('B','c','y','c') &&
                   effect->goalentity == target) { removed_effect = effect; break; }
     T_NULL(removed_effect);
