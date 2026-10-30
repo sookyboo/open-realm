@@ -262,6 +262,21 @@ BZ_SIMPLE_SPELL_PROC(AbilityDivineShield) {
  * Other no-target spells retain the shared channel cancellation policy. */
 BZ_ABILITY_PROC(CAbilityPhaseShift) {
     channel_t const *channel = ent ? G_GetChannel(ent) : NULL;
+    uint32_t const code = call && call->item ? call->item->code : 0;
+    switch (msg) {
+    case A_AUTOCAST_ON:
+        return ent && ent->unit_state && ent->unit_state->autocast == code;
+    case A_AUTOCAST_SET:
+        return true;
+    case A_DAMAGED:
+        /* UnitAbilities.slk selects Apsh as the Faerie Dragon's default
+         * autocast. Trigger its ordinary no-target cast when a hit lands. */
+        if (ent && code && G_UnitAutocastIsOn(ent, code))
+            (void)S_CastNoTargetSpell(ent, code);
+        return false;
+    default:
+        break;
+    }
     if (msg == A_VALIDATE && channel && channel->code == MAKEFOURCC('A','m','f','l'))
         return false;
     return CAbilityDivineShield(ent, msg, call);

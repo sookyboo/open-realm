@@ -464,7 +464,7 @@ static ability_t abilitylist[] = {
     /* NightElfAbilityStrings.txt */
     { "Avng", CAbilityVengeance, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Spirit of Vengeance */
     { "Amfl", CAbilityManaFlare, AB_SPELL | AB_CHANNEL | AB_UPDATE, SPELL_TARGET_NONE },  /* Mana Flare */
-    { "Apsh", CAbilityPhaseShift, AB_SPELL },  /* Phase Shift */
+    { "Apsh", CAbilityPhaseShift, AB_SPELL | AB_AUTOCAST },  /* Phase Shift */
     { "Aetl", CAbilityEthereal, AB_PASSIVE },  /* Ethereal */
     { "Agra", CAbilityGrabTree, AB_SPELL, SPELL_TARGET_POINT, grabtree_orders },  /* War Club */
     { "Assk", CAbilityHardenedSkin, AB_PASSIVE },  /* Hardened Skin */
