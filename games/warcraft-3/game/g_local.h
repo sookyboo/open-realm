@@ -1703,7 +1703,8 @@ typedef struct shopStockItem_s {
     X(26, DESTRUCTABLE, destructable, Destructable, destructable_t, DESTRUCTABLE_POOL_CAP, destructable_fields) \
     X(27, CONSTRUCTION, construction, Construction, construction_t, LIFECYCLE_POOL_CAP, construction_fields) \
     X(28, ITEM, item, Item, item_t, LIFECYCLE_POOL_CAP, item_fields) \
-    X(29, PILLAGE, pillage, Pillage, pillage_t, LIFECYCLE_POOL_CAP, scalar_pool_fields)
+    X(29, PILLAGE, pillage, Pillage, pillage_t, LIFECYCLE_POOL_CAP, scalar_pool_fields) \
+    X(30, CARRION_WAVE, carrion_wave, CarrionWave, carrionWave_t, LIFECYCLE_POOL_CAP, carrion_wave_fields)
 
 typedef enum {
 #define G_COMPONENT_ID(id, ID, member, Name, type, cap, fields) COMPONENT_##ID = id,
@@ -1726,6 +1727,15 @@ typedef struct {
     double gold_remainder[MAX_PLAYERS];   /* fractional pre-upkeep currency */
     double lumber_remainder[MAX_PLAYERS];
 } pillage_t;
+
+typedef struct {
+    component_t component;
+    uint32_t caster_spawn_time, identity, ability, level;
+    vec2_t direction, previous_position;
+    float travel_distance, travelled, speed, initial_width, final_width;
+    float damage_per_target, remaining_damage;
+    bool capped;
+} carrionWave_t;
 
 /* Shop-owned stock list retained across patron selection and purchases. */
 typedef struct stock_s {
@@ -3251,6 +3261,8 @@ void G_HeroSaveLoadAuditFrame(void);
 void G_FormatHeroSaveSnap(edict_t const *hero, string_t out, uint32_t out_size);
 void G_RunTimers(void);
 void G_StartProjectilePresentation(edict_t *ent);
+void G_AdvanceProjectilePresentation(edict_t *ent);
+void carrion_wave_think(edict_t *wave);
 bool G_StartProjectileDeathPresentation(edict_t *ent);
 void G_TimerStart(gtimer_t *timer, uint32_t timeout, bool periodic, struct jass_function const *handler);
 void G_TimerPause(gtimer_t *timer);

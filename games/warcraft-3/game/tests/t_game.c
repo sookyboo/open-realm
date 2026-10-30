@@ -5148,6 +5148,75 @@ TEST(wc3_save, tornado_channel_thinker_and_toss_marker_round_trip) {
     remove(filename);
 }
 
+TEST(wc3_save, carrion_wave_and_hit_identity_round_trip) {
+    cstring_t filename = Test_TempPath("wc3-save-carrion-wave.bin");
+    edict_t *caster, *target, *wave, *marker;
+    carrionWave_t *state;
+
+    reset_entities(); setup_test_world();
+    caster = alloc_test_unit(MAKEFOURCC('H','a','m','g'), 0, 0);
+    target = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 300, 0);
+    wave = G_Spawn();
+    T_NOT_NULL(wave);
+    if (!wave) return;
+    wave->class_id = MAKEFOURCC('A','C','c','v');
+    wave->owner = caster;
+    wave->think = carrion_wave_think;
+    state = G_AddCarrionWave(wave);
+    T_NOT_NULL(state);
+    if (!state) return;
+    state->caster_spawn_time = caster->spawn_time;
+    state->identity = 0x12345678u;
+    state->ability = wave->class_id;
+    state->level = 2;
+    state->direction = (vec2_t){ 1.0f, 0.0f };
+    state->previous_position = (vec2_t){ 100.0f, 0.0f };
+    state->travel_distance = 800.0f;
+    state->travelled = 100.0f;
+    state->speed = 900.0f;
+    state->initial_width = 20.0f;
+    state->final_width = 140.0f;
+    state->damage_per_target = 150.0f;
+    state->remaining_damage = 500.0f;
+    state->capped = true;
+    wave->s.origin2 = state->previous_position;
+    wave->s.origin = (vec3_t){ 100.0f, 0.0f, 0.0f };
+    marker = G_Spawn();
+    T_NOT_NULL(marker);
+    if (!marker) return;
+    marker->class_id = MAKEFOURCC('C','W','h','t');
+    marker->svflags |= SVF_NOCLIENT;
+    marker->owner = wave;
+    marker->goalentity = target;
+    marker->damage = wave->spawn_time;
+    marker->variation = state->identity;
+    marker->resources = target->spawn_time;
+
+    T_ASSERT(WriteGame(filename));
+    wave->think = NULL;
+    state->identity = 0;
+    state->travelled = 0.0f;
+    marker->owner = marker->goalentity = NULL;
+    T_ASSERT(ReadGame(filename));
+    T_ASSERT(wave->think == carrion_wave_think);
+    T_ASSERT(wave->owner == caster);
+    state = G_GetCarrionWave(wave);
+    T_NOT_NULL(state);
+    if (state) {
+        T_EQ(state->identity, 0x12345678u);
+        T_EQ(state->ability, MAKEFOURCC('A','C','c','v'));
+        T_EQ(state->level, 2u);
+        T_FEQ(state->travelled, 100.0f, 0.001f);
+        T_FEQ(state->remaining_damage, 500.0f, 0.001f);
+        T_ASSERT(state->capped);
+    }
+    T_ASSERT(marker->owner == wave);
+    T_ASSERT(marker->goalentity == target);
+    T_EQ(marker->variation, 0x12345678u);
+    T_EQ(marker->resources, target->spawn_time);
+    remove(filename);
+}
+
 TEST(wc3_save, ability_owned_timed_summon_round_trip) {
     cstring_t filename = Test_TempPath("wc3-save-ability-owned-timed-summon.bin");
     edict_t *owner, *summon;

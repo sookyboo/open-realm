@@ -234,6 +234,7 @@ static saveCFunction_t const save_cfunctions[] = {
     SAVE_CFUNCTION(sentinel_owl_think),
     SAVE_CFUNCTION(possession_projectile_death_think),
     SAVE_CFUNCTION(tornado_think),
+    SAVE_CFUNCTION(carrion_wave_think),
 };
 
 static int SaveCFunctionIndex(void *func) {
@@ -928,6 +929,24 @@ static field_t const channel_fields[] = {
     TF(channel_t, owner_spawn_time, F_INT),
     TF(channel_t, target_spawn_time, F_INT),
     TF(channel_t, origin, F_VECTOR),
+    { NULL, 0, 0, 0, 0, 0 }
+};
+
+static field_t const carrion_wave_fields[] = {
+    TF(carrionWave_t, caster_spawn_time, F_INT),
+    TF(carrionWave_t, identity, F_INT),
+    TF(carrionWave_t, ability, F_INT),
+    TF(carrionWave_t, level, F_INT),
+    TF(carrionWave_t, direction, F_VECTOR),
+    TF(carrionWave_t, previous_position, F_VECTOR),
+    TF(carrionWave_t, travel_distance, F_FLOAT),
+    TF(carrionWave_t, travelled, F_FLOAT),
+    TF(carrionWave_t, speed, F_FLOAT),
+    TF(carrionWave_t, initial_width, F_FLOAT),
+    TF(carrionWave_t, final_width, F_FLOAT),
+    TF(carrionWave_t, damage_per_target, F_FLOAT),
+    TF(carrionWave_t, remaining_damage, F_FLOAT),
+    TF(carrionWave_t, capped, F_INT),
     { NULL, 0, 0, 0, 0, 0 }
 };
 

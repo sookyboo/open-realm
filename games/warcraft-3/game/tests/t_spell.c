@@ -3891,65 +3891,148 @@ TEST(wc3_spell, first_new_ability_handlers_are_real_spells) {
 	T_EQ((int)thunder_clap_item.code, (int)MAKEFOURCC('A', 'H', 't', 'c'));
 }
 
-TEST(wc3_spell, carrion_swarm_damages_each_unit_for_its_rank_damage) {
-	const char slk[] =
-		"ID;PWXL;N;EBB;Y2;X13\n"
-		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\n"
-		"C;Y1;X4;K\"Area1\"\nC;Y1;X5;K\"Area2\"\nC;Y1;X6;K\"Area3\"\n"
-		"C;Y1;X7;K\"DataA1\"\nC;Y1;X8;K\"DataA2\"\nC;Y1;X9;K\"DataA3\"\n"
-		"C;Y1;X10;K\"DataB1\"\nC;Y1;X11;K\"DataB2\"\nC;Y1;X12;K\"DataB3\"\n"
-		"C;Y1;X13;K\"levels\"\n"
-		"C;Y2;X1;K\"AUcs\"\nC;Y2;X2;K\"AUcs\"\nC;Y2;X3;K\"ground,air\"\n"
-		"C;Y2;X4;K300\nC;Y2;X5;K300\nC;Y2;X6;K300\n"
-		"C;Y2;X7;K75\nC;Y2;X8;K125\nC;Y2;X9;K200\n"
-		"C;Y2;X10;K400\nC;Y2;X11;K700\nC;Y2;X12;K1200\nC;Y2;X13;K3\nE\n";
-	slkTestData_t *rows, *old;
-	edict_t *caster, *first, *second, *along_path, *cone_flank, *outside_cone;
-	static int const rank_damage[] = { 75, 125, 200 };
-	uint32_t rank;
+TEST(wc3_spell, carrion_swarm_travels_authored_distance_and_hits_once_with_expanding_width) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X12\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\n"
+        "C;Y1;X4;K\"Area1\"\nC;Y1;X5;K\"Rng1\"\nC;Y1;X6;K\"Cost1\"\n"
+        "C;Y1;X7;K\"Cool1\"\nC;Y1;X8;K\"DataA1\"\nC;Y1;X9;K\"DataB1\"\n"
+        "C;Y1;X10;K\"DataC1\"\nC;Y1;X11;K\"DataD1\"\nC;Y1;X12;K\"levels\"\n"
+        "C;Y2;X1;K\"AUcs\"\nC;Y2;X2;K\"AUcs\"\nC;Y2;X3;K\"ground,air,structure,enemy\"\n"
+        "C;Y2;X4;K10\nC;Y2;X5;K700\nC;Y2;X6;K0\nC;Y2;X7;K0\n"
+        "C;Y2;X8;K50\nC;Y2;X9;K0\nC;Y2;X10;K800\nC;Y2;X11;K100\nC;Y2;X12;K1\nE\n";
+    static cstring_t const ability_config =
+        "[AUcs]\nMissileArt=TestUI\\Models\\anim_projectile.mdx\nMissilespeed=1000\n";
+    static UnitBalance_t const no_regen = { .healthRegenType = "none" };
+    slkTestData_t *rows, *old;
+    edict_t *caster, *near, *middle, *far, *outside, *wave = NULL;
 
-	reset_entities();
-	setup_test_world();
-	rows = parse_slk_string(slk);
-	old = G_SetSLKRows("AbilityData", rows);
-	caster = make_hero(MAKEFOURCC('U','d','r','e'), 500, 200, 0, 0);
-	first = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 480, 0);
-	second = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 520, 10);
-	along_path = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 200, 0);
-	cone_flank = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 500, 100);
-	outside_cone = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 500, 250);
-	caster->s.player = 0;
-	first->s.player = second->s.player = along_path->s.player = cone_flank->s.player = outside_cone->s.player = 1;
-	first->targtype = second->targtype = along_path->targtype = cone_flank->targtype = outside_cone->targtype = TARG_GROUND;
-	first->svflags |= SVF_MONSTER;
-	second->svflags |= SVF_MONSTER;
-	along_path->svflags |= SVF_MONSTER;
-	cone_flank->svflags |= SVF_MONSTER;
-	outside_cone->svflags |= SVF_MONSTER;
-	first->health.value = first->health.max_value = 1000;
-	second->health.value = second->health.max_value = 1000;
-	along_path->health.value = along_path->health.max_value = 1000;
-	cone_flank->health.value = cone_flank->health.max_value = 1000;
-	outside_cone->health.value = outside_cone->health.max_value = 1000;
-	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
-	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    reset_entities(); setup_test_world();
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    T_STREQ(G_AbilityEffectArt(MAKEFOURCC('A','U','c','s'), WC3_EFFECT_MISSILE, 0),
+            "TestUI\\Models\\anim_projectile.mdx");
+    T_FEQ(S_SpellData(MAKEFOURCC('A','U','c','s'), 1, 3), 800.0f, 0.001f);
+    caster = make_hero(MAKEFOURCC('U','d','r','e'), 500, 200, 0, 0);
+    near = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 50, 0);
+    middle = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 400, 70);
+    far = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 650, 0);
+    outside = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 650, 180);
+    caster->s.player = 0;
+    near->s.player = middle->s.player = far->s.player = outside->s.player = 1;
+    near->targtype = middle->targtype = far->targtype = outside->targtype = TARG_GROUND;
+    near->svflags |= SVF_MONSTER; middle->svflags |= SVF_MONSTER;
+    far->svflags |= SVF_MONSTER; outside->svflags |= SVF_MONSTER;
+    near->health.value = near->health.max_value = 1000;
+    middle->health.value = middle->health.max_value = 1000;
+    far->health.value = far->health.max_value = 1000;
+    outside->health.value = outside->health.max_value = 1000;
+    near->data.UnitBalance = middle->data.UnitBalance = far->data.UnitBalance =
+        outside->data.UnitBalance = (UnitBalance_t *)&no_regen;
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster->unit_state->ranks[0] = MAKE(heroability_t,
+        .code = MAKEFOURCC('A','U','c','s'), .level = 1);
+    T_ASSERT(S_SpellAllowsAreaTarget(MAKEFOURCC('A','U','c','s'), caster, near));
+    T_ASSERT(S_SpellIsAliveTarget(near));
 
-	for (rank = 1; rank <= 3; rank++) {
-		caster->unit_state->ranks[0] = MAKE(heroability_t,
-			.code = MAKEFOURCC('A','U','c','s'), .level = rank);
-		first->health.value = second->health.value = along_path->health.value = cone_flank->health.value =
-			outside_cone->health.value = 1000;
-		test_execute_code(caster, "AUcs", MAKE(spellTarget_t, .type = SPELL_TARGET_POINT,
-			.point = MAKE(vec2_t, 700, 0)));
-		T_FEQ(first->health.value, 1000 - rank_damage[rank - 1], 0.001f);
-		T_FEQ(second->health.value, 1000 - rank_damage[rank - 1], 0.001f);
-		T_FEQ(along_path->health.value, 1000 - rank_damage[rank - 1], 0.001f);
-		T_FEQ(cone_flank->health.value, 1000 - rank_damage[rank - 1], 0.001f);
-		T_FEQ(outside_cone->health.value, 1000.0f, 0.001f);
-	}
+    T_ASSERT(S_CastPointTargetSpell(caster, MAKEFOURCC('A','U','c','s'), &(vec2_t){200, 0}));
+    T_FEQ(near->health.value, 1000, 0.001f); /* travel is asynchronous */
+    FILTER_EDICTS(ent, ent->class_id == MAKEFOURCC('A','U','c','s') && G_GetCarrionWave(ent)) wave = ent;
+    T_NOT_NULL(wave);
+    if (wave) { T_NOT_NULL(wave->think); T_FEQ(G_GetCarrionWave(wave)->speed, 1000.0f, 0.001f); }
+    T_EQ(wave->s.model, G_RegisterModel("TestUI\\Models\\anim_projectile.mdx"));
+    T_FEQ(G_GetCarrionWave(wave)->previous_position.x, 0.0f, 0.001f);
+    T_FEQ(G_GetCarrionWave(wave)->direction.x, 1.0f, 0.001f);
 
-	G_SetSLKRows("AbilityData", old);
-	free_slk_rows(rows);
+    T_ASSERT(wave->inuse);
+    level.time += FRAMETIME; G_RunEntities();
+    T_FEQ(G_GetCarrionWave(wave)->travelled, 100.0f, 0.001f);
+    FOR_LOOP(i, 6) { level.time += FRAMETIME; G_RunEntities(); }
+    T_FEQ(near->health.value, 950, 0.001f);
+    T_FEQ(middle->health.value, 950, 0.001f);
+    FOR_LOOP(i, 35) { level.time += FRAMETIME; G_RunEntities(); }
+    T_FEQ(middle->health.value, 950, 0.001f);
+    T_FEQ(far->health.value, 950, 0.001f);
+    T_FEQ(outside->health.value, 1000, 0.001f);
+    /* The wave advances past the short clicked point and still reaches x=650. */
+    FOR_LOOP(i, 10) { level.time += FRAMETIME; G_RunEntities(); }
+    T_FEQ(near->health.value, 950, 0.001f);
+    T_FEQ(middle->health.value, 950, 0.001f);
+    T_FEQ(far->health.value, 950, 0.001f);
+
+    G_SetSLKRows("AbilityData", old);
+    G_TestPopAbilityConfig();
+    free_slk_rows(rows);
+}
+
+TEST(wc3_spell, carrion_swarm_spends_authored_maximum_damage_in_travel_order) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X12\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\n"
+        "C;Y1;X4;K\"Area1\"\nC;Y1;X5;K\"Rng1\"\nC;Y1;X6;K\"Cost1\"\n"
+        "C;Y1;X7;K\"Cool1\"\nC;Y1;X8;K\"DataA1\"\nC;Y1;X9;K\"DataB1\"\n"
+        "C;Y1;X10;K\"DataC1\"\nC;Y1;X11;K\"DataD1\"\nC;Y1;X12;K\"levels\"\n"
+        "C;Y2;X1;K\"AUcs\"\nC;Y2;X2;K\"AUcs\"\nC;Y2;X3;K\"ground,air,structure,enemy\"\n"
+        "C;Y2;X4;K100\nC;Y2;X5;K700\nC;Y2;X6;K0\nC;Y2;X7;K0\n"
+        "C;Y2;X8;K50\nC;Y2;X9;K120\nC;Y2;X10;K800\nC;Y2;X11;K100\nC;Y2;X12;K1\nE\n";
+    static cstring_t const ability_config =
+        "[AUcs]\nMissileArt=TestUI\\Models\\anim_projectile.mdx\nMissilespeed=1000\n";
+    static UnitBalance_t const no_regen = { .healthRegenType = "none" };
+    status_application_t const immunity = {
+        .buff = "Biyy", .level = 1, .duration = 10.0f,
+        .state_mask = WC3_STATUS_STATE_MAGIC_IMMUNE
+    };
+    slkTestData_t *rows, *old;
+    edict_t *caster, *ally, *immune, *invulnerable, *first, *second, *third;
+    uint32_t code = MAKEFOURCC('A','U','c','s');
+
+    reset_entities(); setup_test_world();
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    caster = make_hero(MAKEFOURCC('U','d','r','e'), 500, 200, 0, 0);
+    ally = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 100, 0);
+    immune = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 200, 0);
+    invulnerable = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 250, 0);
+    first = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 300, 0);
+    second = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 500, 0);
+    third = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 700, 0);
+    caster->s.player = 0;
+    ally->s.player = 0;
+    immune->s.player = invulnerable->s.player = 1;
+    first->s.player = second->s.player = third->s.player = 1;
+    ally->targtype = immune->targtype = invulnerable->targtype = TARG_GROUND;
+    first->targtype = second->targtype = third->targtype = TARG_GROUND;
+    ally->svflags |= SVF_MONSTER; immune->svflags |= SVF_MONSTER; invulnerable->svflags |= SVF_MONSTER;
+    first->svflags |= SVF_MONSTER; second->svflags |= SVF_MONSTER; third->svflags |= SVF_MONSTER;
+    ally->health.value = ally->health.max_value = 1000;
+    immune->health.value = immune->health.max_value = 1000;
+    invulnerable->health.value = invulnerable->health.max_value = 1000;
+    first->health.value = first->health.max_value = 1000;
+    second->health.value = second->health.max_value = 1000;
+    third->health.value = third->health.max_value = 1000;
+    ally->data.UnitBalance = immune->data.UnitBalance = invulnerable->data.UnitBalance = (UnitBalance_t *)&no_regen;
+    first->data.UnitBalance = second->data.UnitBalance = third->data.UnitBalance = (UnitBalance_t *)&no_regen;
+    G_SetUnitFlag(invulnerable, UNIT_FLAG_INVULNERABLE, true);
+    T_NOT_NULL(unit_applystatus(immune, &immunity));
+    T_ASSERT(S_UnitSpellImmune(immune));
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster->unit_state->ranks[0] = MAKE(heroability_t, .code = code, .level = 1);
+
+    T_ASSERT(S_CastPointTargetSpell(caster, code, &(vec2_t){200, 0}));
+    FOR_LOOP(i, 80) { level.time += FRAMETIME; G_RunEntities(); }
+    /* The 120 point cap is consumed in swept collision order: 50, 50, 20. */
+    T_FEQ(ally->health.value, 1000, 0.001f);
+    T_FEQ(immune->health.value, 1000, 0.001f);
+    T_FEQ(invulnerable->health.value, 1000, 0.001f);
+    T_FEQ(first->health.value, 950, 0.001f);
+    T_FEQ(second->health.value, 950, 0.001f);
+    T_FEQ(third->health.value, 980, 0.001f);
+
+    G_SetSLKRows("AbilityData", old);
+    G_TestPopAbilityConfig();
+    free_slk_rows(rows);
 }
 
 TEST(wc3_spell, bladestorm_deals_110_damage_to_nearby_enemy_ground_units) {

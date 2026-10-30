@@ -86,7 +86,7 @@ bool G_StartProjectileDeathPresentation(edict_t *ent) {
     return true;
 }
 
-static void G_AdvanceProjectilePresentation(edict_t *ent) {
+void G_AdvanceProjectilePresentation(edict_t *ent) {
     animation_t const *anim = ent->animation;
     uint32_t step;
     uint32_t next;

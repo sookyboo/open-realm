@@ -16,45 +16,49 @@ typedef struct {
     float length, width;
 } shockwaveContext_t;
 
-typedef struct {
-    edict_t *caster;
-    vec2_t direction;
-    float length, width;
-} carrionSwarmContext_t;
+#define ID_CARRION_WAVE_HIT MAKEFOURCC('C','W','h','t')
+static uint32_t carrion_wave_identity;
+static float carrion_clamp(float value, float low, float high) { return MIN(high, MAX(low, value)); }
 
-static bool carrion_swarm_hits(edict_t *target, carrionSwarmContext_t const *ctx) {
-    vec2_t offset;
-    float along, across;
-    if (!target->inuse || target == ctx->caster || !S_SpellIsAliveTarget(target) ||
-        !S_SpellIsEnemy(ctx->caster, target) ||
-        (G_UnitTargetType(target) != TARG_GROUND && G_UnitTargetType(target) != TARG_AIR)) return false;
-    offset = Vector2_sub(&target->s.origin2, &ctx->caster->s.origin2);
-    along = Vector2_dot(&offset, &ctx->direction);
-    across = offset.x * ctx->direction.y - offset.y * ctx->direction.x;
-    /* Area1 is the cone's maximum half-width at its endpoint. The wave opens
-     * linearly from the caster and stops at the selected target point. */
-    return along >= 0.0f && along <= ctx->length &&
-           fabsf(across) <= ctx->width * (along / ctx->length);
+static bool carrion_wave_visited(edict_t *wave, edict_t *target) {
+    carrionWave_t *state = G_GetCarrionWave(wave);
+    if (!state) return false;
+    FILTER_EDICTS(marker, marker->class_id == ID_CARRION_WAVE_HIT &&
+                  marker->owner == wave && marker->goalentity == target &&
+                  marker->resources == target->spawn_time &&
+                  marker->damage == wave->spawn_time && marker->variation == state->identity)
+        return true;
+    return false;
 }
 
-static void carrion_swarm_damage(edict_t *caster, vec2_t const *point, float width,
-                                 uint32_t base_damage, float max_total) {
-    vec2_t offset = Vector2_sub(point, &caster->s.origin2);
-    float length = Vector2_len(&offset);
-    carrionSwarmContext_t ctx;
-    float damage = (float)base_damage;
-    uint32_t count = 0;
-    if (length <= 0.0f) return;
-    ctx = (carrionSwarmContext_t){ .caster = caster,
-        .direction = Vector2_scale(&offset, 1.0f / length), .length = length, .width = width };
-    if (max_total > 0.0f) {
-        FILTER_EDICTS(target, carrion_swarm_hits(target, &ctx)) count++;
-        if (count && damage * (float)count > max_total)
-            damage = MAX(1.0f, max_total / (float)count);
+static bool carrion_wave_mark_visited(edict_t *wave, edict_t *target) {
+    edict_t *marker = G_Spawn();
+    carrionWave_t *wave_state = G_GetCarrionWave(wave);
+    if (!marker) return false;
+    if (!wave_state) { G_FreeEdict(marker); return false; }
+    marker->class_id = ID_CARRION_WAVE_HIT;
+    marker->svflags |= SVF_NOCLIENT;
+    marker->owner = wave;
+    marker->damage = wave->spawn_time;
+    marker->variation = wave_state->identity;
+    marker->goalentity = target;
+    marker->resources = target->spawn_time;
+    return true;
+}
+
+static void carrion_wave_finish(edict_t *wave) {
+    carrionWave_t *state = G_GetCarrionWave(wave);
+    uint32_t i;
+    for (i = 0; i < globals.num_edicts; i++) {
+        edict_t *marker = &globals.edicts[i];
+        if (!marker->inuse || marker->class_id != ID_CARRION_WAVE_HIT || marker->owner != wave) continue;
+        if (marker->damage == wave->spawn_time && state && marker->variation == state->identity)
+            G_FreeEdict(marker);
     }
-    FILTER_EDICTS(target, carrion_swarm_hits(target, &ctx))
-        S_SpellDamage(target, caster, (uint32_t)damage);
+    G_FreeEdict(wave);
 }
+
+void carrion_wave_think(edict_t *wave);
 
 /* Deal ent->damage to every enemy within ent->collision of ent.  maxtotal > 0
  * caps the combined damage of this burst (WC3 "Max Damage" / "Maximum Damage per
@@ -186,30 +190,95 @@ static bool shockwave_hits(edict_t *target, shockwaveContext_t const *ctx) {
     return along >= 0.0f && along <= ctx->length && fabsf(across) <= ctx->width;
 }
 
+static void carrion_wave_hit(edict_t *wave, edict_t *caster, carrionWave_t *state,
+                             edict_t *target, vec2_t const *start, float step) {
+    vec2_t offset, closest;
+    float t, along, across, width, damage;
+    int applied;
+    if (!S_SpellAllowsAreaTarget(state->ability, caster, target) ||
+        !S_SpellIsEnemy(caster, target) || G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) ||
+        carrion_wave_visited(wave, target)) return;
+    offset = Vector2_sub(&target->s.origin2, start);
+    t = carrion_clamp(Vector2_dot(&offset, &state->direction) / MAX(step, 0.001f), 0.0f, 1.0f);
+    closest = (vec2_t){start->x + state->direction.x * step * t,
+                       start->y + state->direction.y * step * t};
+    offset = Vector2_sub(&target->s.origin2, &closest);
+    across = offset.x * state->direction.y - offset.y * state->direction.x;
+    along = state->travelled + step * t;
+    width = state->initial_width + (state->final_width - state->initial_width) *
+        carrion_clamp(along / MAX(0.001f, state->travel_distance), 0.0f, 1.0f);
+    if (fabsf(across) > width + MAX(0.0f, target->collision)) return;
+    if (state->capped && state->remaining_damage <= 0.0f) return;
+    damage = state->capped ? MIN(state->damage_per_target, state->remaining_damage) : state->damage_per_target;
+    applied = (int)damage;
+    if (applied <= 0) return;
+    if (!carrion_wave_mark_visited(wave, target)) return;
+    if (S_SpellDamage(target, caster, applied) && state->capped)
+        state->remaining_damage = MAX(0.0f, state->remaining_damage - (float)applied);
+}
+
+void carrion_wave_think(edict_t *wave) {
+    carrionWave_t *state = G_GetCarrionWave(wave);
+    edict_t *caster;
+    vec2_t start;
+    float step;
+    uint32_t target_count, i;
+    if (!state || !(caster = wave->owner) || !caster->inuse || caster->spawn_time != state->caster_spawn_time) {
+        carrion_wave_finish(wave); return;
+    }
+    if (state->travelled >= state->travel_distance || state->speed <= 0.0f) {
+        carrion_wave_finish(wave); return;
+    }
+    start = state->previous_position;
+    step = MIN(state->speed * FRAMETIME / 1000.0f, state->travel_distance - state->travelled);
+    /* Markers allocated for hits are edicts too; keep this collision pass
+     * bounded to the world that existed when the frame began. */
+    target_count = globals.num_edicts;
+    for (i = 0; i < target_count; i++) {
+        edict_t *target = &globals.edicts[i];
+        if (S_SpellIsAliveTarget(target)) carrion_wave_hit(wave, caster, state, target, &start, step);
+    }
+    state->travelled += step;
+    state->previous_position.x += state->direction.x * step;
+    state->previous_position.y += state->direction.y * step;
+    wave->s.origin2 = state->previous_position;
+    wave->s.origin.x = state->previous_position.x;
+    wave->s.origin.y = state->previous_position.y;
+    wave->s.origin.z = CM_GetHeightAtPoint(wave->s.origin.x, wave->s.origin.y);
+    wave->s.angle = atan2f(state->direction.y, state->direction.x);
+    G_AdvanceProjectilePresentation(wave);
+    wave->think = carrion_wave_think;
+    if (state->travelled >= state->travel_distance) carrion_wave_finish(wave);
+}
+
 static umove_t shockwave_visual_move = {
     .animation = "Stand",
     .endfunc = G_FreeEdict
 };
 
-/* Carrion Swarm resolves its damage at the selected point, while this
- * presentation-only missile travels from the caster to that point. */
-static void carrion_swarm_spawn_missile(edict_t *caster, uint32_t code, vec2_t const *point) {
+/* The selected point establishes direction; authored DataC controls travel. */
+static void carrion_swarm_spawn_missile(edict_t *caster, uint32_t code, uint32_t level,
+                                       vec2_t const *point) {
     cstring_t art = G_AbilityEffectArt(code, WC3_EFFECT_MISSILE, 0);
     cstring_t speed_text = S_SpellString(code, "Missilespeed", 0);
     float speed = speed_text ? (float)atof(speed_text) : 0.0f;
     vec2_t offset = Vector2_sub(point, &caster->s.origin2);
     float distance = Vector2_len(&offset);
+    float travel = MAX(0.0f, S_SpellData(code, level, 3));
+    float initial_width = MAX(0.0f, S_SpellNumber(code, ABILITY_NUMBER_AREA, level));
+    float final_width = MAX(0.0f, S_SpellData(code, level, 4));
     vec2_t direction;
     edict_t *missile;
-    channel_t *cast;
+    carrionWave_t *state;
 
 #if BZ_COMPAT_WORKAROUNDS
     /* RoC 1.0 omits AUcs MissileArt and Missilespeed; the 1.29 row authors
      * these same retail values. */
-    if (!art) art = "Abilities\\Spells\\Undead\\CarrionSwarm\\CarrionSwarmMissile.mdl";
-    if (speed <= 0.0f) speed = 1100.0f;
+    if ((!art || !*art) && code == MAKEFOURCC('A','U','c','s'))
+        art = "Abilities\\Spells\\Undead\\CarrionSwarm\\CarrionSwarmMissile.mdl";
+    if (speed <= 0.0f && code == MAKEFOURCC('A','U','c','s')) speed = 1100.0f;
 #endif
-    if (!art || !*art || distance <= 0.0f || speed <= 0.0f) return;
+    if (!art || !*art || distance <= 0.0f || speed <= 0.0f || travel <= 0.0f) return;
     direction = Vector2_scale(&offset, 1.0f / distance);
     missile = G_Spawn();
     if (!missile) return;
@@ -222,13 +291,25 @@ static void carrion_swarm_spawn_missile(edict_t *caster, uint32_t code, vec2_t c
     missile->s.model = G_RegisterModel(art);
     if (!missile->s.model) { G_FreeEdict(missile); return; }
     G_InheritUnitTeamColor(missile, caster);
-    cast = G_AddChannel(missile);
-    cast->owner_spawn_time = caster->spawn_time;
-    cast->origin = *point;
+    state = G_AddCarrionWave(missile);
+    if (!state) { G_FreeEdict(missile); return; }
+    state->caster_spawn_time = caster->spawn_time;
+    if (++carrion_wave_identity == 0) ++carrion_wave_identity;
+    state->identity = carrion_wave_identity;
+    state->ability = code;
+    state->level = level;
+    state->direction = direction;
+    state->previous_position = caster->s.origin2;
+    state->travel_distance = travel;
+    state->speed = speed;
+    state->initial_width = initial_width;
+    state->final_width = final_width;
+    state->damage_per_target = MAX(0.0f, S_SpellData(code, level, 1));
+    state->remaining_damage = MAX(0.0f, S_SpellData(code, level, 2));
+    state->capped = state->remaining_damage > 0.0f;
     missile->velocity = speed / 1000.0f;
-    missile->movetype = MOVETYPE_FLYMISSILE;
-    missile->aiflags |= AI_PROJECTILE_FIXED_TARGET;
-    missile->currentmove = &shockwave_visual_move;
+    missile->movetype = MOVETYPE_NONE;
+    missile->think = carrion_wave_think;
     G_StartProjectilePresentation(missile);
 }
 
@@ -370,12 +451,7 @@ BZ_SIMPLE_SPELL_PROC(AbilityBlizzard) {
 BZ_SIMPLE_SPELL_PROC(AbilityCarrionSwarm) {
     uint32_t level = S_SpellLevel(caster, spell->code);
 
-    carrion_swarm_spawn_missile(caster, spell->code, &st.point);
-    G_SpawnAbilityEffectAtPoint(spell->code, WC3_EFFECT_SPECIAL, 0, &st.point, true);
-    carrion_swarm_damage(caster, &st.point,
-        MAX(0.0f, S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level)),
-        (uint32_t)MAX(1.0f, S_SpellData(spell->code, level, 1)),
-        S_SpellData(spell->code, level, 2)); /* DataB = Max Damage */
+    carrion_swarm_spawn_missile(caster, spell->code, level, &st.point);
 }
 
 /* Name=Shockwave
