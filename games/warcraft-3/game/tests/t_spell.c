@@ -1214,6 +1214,49 @@ TEST(wc3_spell, naga_dragon_turtle_spiked_shell_returns_thirty_percent_of_melee_
 	free_slk_rows(rows);
 }
 
+TEST(wc3_spell, dragon_turtle_hardened_skin_reduces_all_attacks_but_keeps_three_damage_minimum) {
+	const char slk[] =
+		"ID;PWXL;N;EBB;Y2;X6\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"DataA1\"\n"
+		"C;Y1;X4;K\"DataB1\"\nC;Y1;X5;K\"DataC1\"\nC;Y1;X6;K\"levels\"\n"
+		"C;Y2;X1;K\"Ansk\"\nC;Y2;X2;K\"Assk\"\nC;Y2;X3;K100\n"
+		"C;Y2;X4;K3\nC;Y2;X5;K12\nC;Y2;X6;K1\nE\n";
+	slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+	edict_t *attacker, *dragon_turtle;
+	UnitAbilities_t const dragon_turtle_abilities = { .abilList = "Ansk" };
+	float health_before;
+
+	reset_entities();
+	setup_test_world();
+	attacker = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+	dragon_turtle = alloc_test_unit(MAKEFOURCC('n','t','r','d'), 50, 0);
+	dragon_turtle->data.UnitAbilities = (UnitAbilities_t *)&dragon_turtle_abilities;
+	attacker->health.value = attacker->health.max_value = 500;
+	dragon_turtle->health.value = dragon_turtle->health.max_value = 500;
+	attacker->s.player = 0;
+	dragon_turtle->s.player = 1;
+	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+	memset(level.alliances, 0, sizeof(level.alliances));
+	dragon_turtle->targtype = TARG_GROUND;
+	attacker->unit_state->armor_value = dragon_turtle->unit_state->armor_value = 0;
+
+	attacker->unit_state->attack1.type = ATK_NORMAL;
+	attacker->unit_state->attack1.weapon = WPN_NORMAL;
+	health_before = dragon_turtle->health.value;
+	S_ResolveAttackHit(attacker, dragon_turtle, 100);
+	T_FEQ(health_before - dragon_turtle->health.value, 88.0f, 0.001f);
+
+	attacker->unit_state->attack1.type = ATK_PIERCE;
+	attacker->unit_state->attack1.weapon = WPN_MISSILE;
+	health_before = dragon_turtle->health.value;
+	S_ResolveAttackHit(attacker, dragon_turtle, 10);
+	T_FEQ(health_before - dragon_turtle->health.value, 3.0f, 0.001f);
+
+	G_SetSLKRows("AbilityData", old);
+	free_slk_rows(rows);
+}
+
 TEST(wc3_spell, creep_pulverize_and_spiked_aliases_use_authored_data) {
 	const char slk[] =
 		"ID;PWXL;N;EBB;Y3;X8\n"

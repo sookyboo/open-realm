@@ -1784,6 +1784,32 @@ TEST(wc3_building, dragon_turtle_spiked_shell_shows_disabled_passive_indicator) 
     G_TestPopAbilityConfig();
 }
 
+TEST(wc3_building, dragon_turtle_hardened_skin_shows_disabled_passive_indicator) {
+    static UnitAbilities_t const dragon_turtle_abilities = { .abilList = "Ansk" };
+    static cstring_t const ability_config =
+        "[Ansk]\nArt=ReplaceableTextures\\PassiveButtons\\PASBTNHardenedSkin.blp\n"
+        "Buttonpos=2,2\nTip=Hardened Skin\n";
+    gameCommandButton_t buttons[16];
+    edict_t *dragon_turtle;
+    uint8_t count;
+    bool found = false;
+
+    reset_entities();
+    setup_test_world();
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
+    dragon_turtle = alloc_test_unit(MAKEFOURCC('n','t','r','d'), 0, 0);
+    dragon_turtle->data.UnitAbilities = (UnitAbilities_t *)&dragon_turtle_abilities;
+    count = G_GetCommandButtons(dragon_turtle, buttons, sizeof(buttons) / sizeof(buttons[0]));
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Ansk")) {
+        found = true;
+        T_ASSERT(buttons[i].disabled);
+        T_STREQ(buttons[i].art, "ReplaceableTextures\\PassiveButtons\\PASBTNHardenedSkin.blp");
+        T_STREQ(buttons[i].tooltip, "Hardened Skin");
+    }
+    T_ASSERT(found);
+    G_TestPopAbilityConfig();
+}
+
 TEST(wc3_building, spell_breaker_feedback_shows_disabled_passive_indicator) {
     static UnitAbilities_t const spell_breaker_abilities = { .abilList = "Afbk" };
     gameCommandButton_t buttons[16];

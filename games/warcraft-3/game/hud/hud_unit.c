@@ -589,6 +589,10 @@ static void G_AddPassiveEffectIndicators(edict_t *ent, gameCommandButton_t *butt
         MAKEFOURCC('A','N','t','h'), /* Spiked Shell */
         MAKEFOURCC('A','N','t','2')  /* Dragon Turtle Spiked Shell */
     };
+    static uint32_t const hardened_skin[] = {
+        MAKEFOURCC('A','s','s','k'), /* Hardened Skin */
+        MAKEFOURCC('A','n','s','k')  /* Hardened Skin (Naga Turtle) */
+    };
     static uint32_t const true_sight[] = {
         MAKEFOURCC('A','g','y','v'), /* Flying Machine True Sight */
         MAKEFOURCC('A','t','r','u')  /* Shade True Sight */
@@ -610,6 +614,8 @@ static void G_AddPassiveEffectIndicators(edict_t *ent, gameCommandButton_t *butt
         G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, slow_poison[i], slow_poison[i]);
     FOR_LOOP(i, sizeof(spiked_shell) / sizeof(spiked_shell[0]))
         G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, spiked_shell[i], spiked_shell[i]);
+    FOR_LOOP(i, sizeof(hardened_skin) / sizeof(hardened_skin[0]))
+        G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, hardened_skin[i], hardened_skin[i]);
     FOR_LOOP(i, sizeof(true_sight) / sizeof(true_sight[0]))
         G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, true_sight[i], true_sight[i]);
     /* Adtg aliases Atru but has no authored button art of its own. Show the
