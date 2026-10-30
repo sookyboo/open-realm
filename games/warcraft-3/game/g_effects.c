@@ -462,7 +462,14 @@ void G_EffectThink(edict_t *effect) {
         G_FreeEdict(effect);
         return;
     }
-    if (effect->goalentity && effect->wait != 0.0f) {
+    if (effect->goalentity &&
+        (effect->status_effect_code == MAKEFOURCC('B','c','y','c') ||
+         effect->status_effect_code == MAKEFOURCC('B','c','y','2'))) {
+        /* CycloneTarget is centered on the ground under a lifted victim. The
+         * linked origin includes FlyHeight, so remove the current altitude
+         * every frame rather than using a creation-time offset. */
+        effect->s.origin.z -= effect->goalentity->s.ground_offset;
+    } else if (effect->goalentity && effect->wait != 0.0f) {
         effect->s.origin.z += effect->wait;
     }
     M_MoveFrame(effect);
@@ -480,6 +487,9 @@ static void G_EffectLoopStand(edict_t *effect) {
         if (effect->summon_ability &&
             (effect->summon_ability == MAKEFOURCC('A','m','b','t') ||
              G_AbilityCode(effect->summon_ability) == MAKEFOURCC('A','m','b','t')))
+            return;
+        if (effect->status_effect_code == MAKEFOURCC('B','c','y','c') ||
+            effect->status_effect_code == MAKEFOURCC('B','c','y','2'))
             return;
         effect->s.renderfx |= RF_HIDDEN;
         effect->think = NULL;
@@ -611,6 +621,8 @@ edict_t *G_SpawnStatusEffectTarget(uint32_t status_id, edict_t *target, cstring_
     cstring_t count_value;
     uint32_t art_id = status_id == MAKEFOURCC('B','s','t','u')
         ? MAKEFOURCC('B','P','S','E') : status_id;
+    bool const ground_anchored = status_id == MAKEFOURCC('B','c','y','c') ||
+                                 status_id == MAKEFOURCC('B','c','y','2');
     uint32_t count = 1;
     uint32_t i;
     if (!status_id || !target || !target->inuse) return NULL;
@@ -625,15 +637,21 @@ edict_t *G_SpawnStatusEffectTarget(uint32_t status_id, edict_t *target, cstring_
     for (i = 0; i < count; i++) {
         cstring_t authored_attach = NULL;
         cstring_t selected_attach = attach_point;
-        if (i == 0) strlcpy(key, "Targetattach", sizeof(key));
-        else snprintf(key, sizeof(key), "Targetattach%u", i);
-        authored_attach = FindConfigValue(classname, key);
-        if (!authored_attach || !*authored_attach) {
-            if (i == 0) strlcpy(key, "Effectattach", sizeof(key));
-            else snprintf(key, sizeof(key), "Effectattach%u", i);
+        if (ground_anchored) {
+            /* CycloneTarget is a ground-centered vortex. Its Bcyc attachment
+             * socket follows the victim's airborne model after lift. */
+            selected_attach = "origin";
+        } else {
+            if (i == 0) strlcpy(key, "Targetattach", sizeof(key));
+            else snprintf(key, sizeof(key), "Targetattach%u", i);
             authored_attach = FindConfigValue(classname, key);
+            if (!authored_attach || !*authored_attach) {
+                if (i == 0) strlcpy(key, "Effectattach", sizeof(key));
+                else snprintf(key, sizeof(key), "Effectattach%u", i);
+                authored_attach = FindConfigValue(classname, key);
+            }
+            if (authored_attach && *authored_attach) selected_attach = authored_attach;
         }
-        if (authored_attach && *authored_attach) selected_attach = authored_attach;
         {
             /* WC3 ability rows can pair one TargetArt model with each target
              * attachment (Atol has a tree emitter followed by left/right hand
@@ -641,6 +659,8 @@ edict_t *G_SpawnStatusEffectTarget(uint32_t status_id, edict_t *target, cstring_
              * entries than attachments are authored. */
             edict_t *attached = G_SpawnAbilityEffectTarget(art_id, WC3_EFFECT_TARGET, i,
                                                             target, selected_attach, false);
+            if (attached && ground_anchored)
+                attached->s.origin.z -= target->s.ground_offset;
             if (!effect) effect = attached;
             if (attached) attached->status_effect_code = status_id;
         }

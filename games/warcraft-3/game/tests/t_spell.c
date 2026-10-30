@@ -4109,6 +4109,18 @@ TEST(wc3_spell, tornado_spin_lift_lasts_ten_seconds) {
     FILTER_EDICTS(effect, effect->status_effect_code == MAKEFOURCC('B','c','y','c') &&
                   effect->goalentity == first_target) { lift_effect = effect; break; }
     T_NOT_NULL(lift_effect);
+    if (lift_effect) {
+        T_ASSERT(!(lift_effect->s.flags & EF_NAMED_ATTACHMENT));
+        T_FEQ(first_target->s.ground_offset, 200.0f, 0.001f);
+        /* The target was lifted after its status effect was spawned. */
+        G_RunEntity(lift_effect);
+        T_FEQ(lift_effect->s.origin.z,
+              first_target->s.origin.z - first_target->s.ground_offset, 0.001f);
+        /* A linked status visual stays on the support plane across frames. */
+        G_RunEntity(lift_effect);
+        T_FEQ(lift_effect->s.origin.z,
+              first_target->s.origin.z - first_target->s.ground_offset, 0.001f);
+    }
     T_EQ(thinker->damage, 9000u); /* Non-stock DataB=4 seconds, not DataA=20 seconds. */
     {
         edict_t *target2_effect = NULL;

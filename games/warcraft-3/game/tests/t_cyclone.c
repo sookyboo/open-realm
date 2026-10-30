@@ -89,13 +89,20 @@ TEST(wc3_spell, cyclone_cast_spawns_abilitybuff_effectart_on_target) {
 
     T_ASSERT(expected_model > 0);
     T_ASSERT(G_AbilityEffectArt(BZ_BCYC, WC3_EFFECT_TARGET, 0) != NULL);
+    fix.enemy->unitinfo.FlyHeight = 200.0f;
+    fix.enemy->s.ground_offset = 200.0f;
+    fix.enemy->s.origin.z = 205.0f;
     T_ASSERT(S_CastUnitTargetSpell(fix.caster, BZ_ACYC, fix.enemy));
     FILTER_EDICTS(found, found->status_effect_code == BZ_BCYC && found->goalentity == fix.enemy) {
         effect = found;
         break;
     }
     T_NOT_NULL(effect);
-    if (effect) T_EQ(effect->s.model, expected_model);
+    if (effect) {
+        T_EQ(effect->s.model, expected_model);
+        T_ASSERT(!(effect->s.flags & EF_NAMED_ATTACHMENT));
+        T_FEQ(effect->s.origin.z, fix.enemy->s.origin.z - fix.enemy->s.ground_offset, 0.001f);
+    }
     status = unit_findstatus(fix.enemy, BZ_BCYC);
     T_NOT_NULL(status);
     if (status) T_ASSERT(status->buff_flags & WC3_STATUS_BUFF_TARGET_ART);
