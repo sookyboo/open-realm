@@ -390,7 +390,7 @@ int S_FeedbackDamage(edict_t *attacker, edict_t *target, int damage) {
     if (!attacker || !target) return damage;
     for (i = 0; i < sizeof(codes) / sizeof(*codes); i++)
         if ((level = G_UnitAbilityLevel(attacker, codes[i]))) { code = codes[i]; break; }
-    if (!code || target->mana.value <= 0.0f) return damage;
+    if (!code || S_UnitSpellImmune(target) || target->mana.value <= 0.0f) return damage;
     slot = G_UnitIsHero(target) ? 3 : 1;
     { float drained = MIN(target->mana.value, S_SpellData(code, level, slot));
       target->mana.value -= drained;

@@ -4404,6 +4404,55 @@ TEST(wc3_spell, human_attack_passives_and_defend_change_damage) {
 	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+TEST(wc3_spell, feedback_hit_uses_hero_drain_and_skips_spell_immune_targets) {
+	static UnitAbilities_t const feedback = { .abilList = "Afbk" };
+	static UnitAbilities_t const spell_immunity = { .abilList = "Amim" };
+	const char slk[] =
+		"ID;PWXL;N;EBB;Y3;X6\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"DataA1\"\n"
+		"C;Y1;X4;K\"DataB1\"\nC;Y1;X5;K\"DataC1\"\nC;Y1;X6;K\"DataD1\"\n"
+		"C;Y2;X1;K\"Afbk\"\nC;Y2;X2;K\"Afbk\"\nC;Y2;X3;K\"20\"\n"
+		"C;Y2;X4;K\"1\"\nC;Y2;X5;K\"4\"\nC;Y2;X6;K\"1\"\nE\n";
+	slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+	edict_t *attacker, *regular, *hero, *immune;
+	UnitBalance_t hero_balance = MAKE(UnitBalance_t, .strength = 20, .maxHealth = 500);
+
+	reset_entities(); setup_test_world();
+	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+	attacker = alloc_test_unit(MAKEFOURCC('h','b','r','e'), 0, 0);
+	regular = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 32, 0);
+	hero = alloc_test_unit(MAKEFOURCC('H','p','a','l'), 32, 32);
+	immune = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 32, -32);
+	attacker->data.UnitAbilities = &feedback;
+	attacker->s.player = 0;
+	attacker->svflags |= SVF_MONSTER;
+	attacker->unit_state->attack1.type = ATK_NORMAL;
+	regular->svflags |= SVF_MONSTER; hero->svflags |= SVF_MONSTER; immune->svflags |= SVF_MONSTER;
+	regular->s.player = hero->s.player = immune->s.player = 1;
+	regular->health.value = hero->health.value = immune->health.value = 500.0f;
+	regular->health.max_value = hero->health.max_value = immune->health.max_value = 500.0f;
+	regular->mana.value = regular->mana.max_value = 50.0f;
+	hero->mana.value = hero->mana.max_value = 50.0f;
+	immune->mana.value = immune->mana.max_value = 50.0f;
+	hero->data.UnitBalance = &hero_balance;
+	immune->data.UnitAbilities = &spell_immunity;
+
+	T_ASSERT(G_UnitIsHero(hero));
+	T_ASSERT(S_UnitSpellImmune(immune));
+	S_ResolveAttackHit(attacker, regular, 10);
+	T_FEQ(regular->mana.value, 30.0f, 0.001f);
+	T_FEQ(regular->health.value, 470.0f, 0.001f);
+	S_ResolveAttackHit(attacker, hero, 10);
+	T_FEQ(hero->mana.value, 46.0f, 0.001f);
+	T_FEQ(hero->health.value, 486.0f, 0.001f);
+	S_ResolveAttackHit(attacker, immune, 10);
+	T_FEQ(immune->mana.value, 50.0f, 0.001f);
+	T_FEQ(immune->health.value, 490.0f, 0.001f);
+
+	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_spell, creep_feedback_alias_reads_its_own_mana_burn_data) {
     const char slk[] =
         "ID;PWXL;N;EBB;Y2;X5\n"
