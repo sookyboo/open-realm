@@ -32,10 +32,13 @@ Do not substitute these for the summoned unit or fabricate ANto CasterArt.
   small-radius/DPS. The bands are mutually exclusive and honor enemy targeting;
   the normal spell-damage pipeline owns combat/death side effects.
 - `Atsp`: periodic ground-only enemy selection, using the ability's DataA
-  interval when positive (otherwise classic guide's 3 seconds); the existing
-  Cyclone `Bcyc` state supplies targeting/command restrictions. Btsp artwork
-  is emitted separately. The summon thinker stores a deterministic chooser
-  state and entity-generation-checked last-victim markers for 22 seconds.
+  interval when positive (otherwise classic guide's 3 seconds). Each lift
+  applies the Cyclone `Bcyc` status for 10 seconds, independent of the
+  Tornado's remaining life and Atsp's standalone Dur/HeroDur. The status owns
+  its authored persistent TargetArt, raises the victim to 200 fly height, and
+  restores its prior height when it expires, is dispelled, or is replaced. The
+  summon thinker stores a deterministic chooser state and entity-generation-
+  checked last-victim markers for 22 seconds.
 - `Atwa`: uses the established autonomous-wander component, with player
   orders taking precedence. Exact Tornado-specific pursuit and leash behavior
   remains **provisional** pending retail measurement; do not make guesses in
@@ -55,7 +58,8 @@ must also be verified in retail and in OpenRealm (no automatic local run):
 2. Measure 50 and 7 HP/s near/outer building bands and the intermediate band
    on the installed game-data version. Check simultaneous buildings and deaths.
 3. Check enemy air/ground Slow Aura, periodic ground-only toss, hero duration,
-   repeat-victim delay, spell interruption, immunity, and Btsp/Basl attachments.
+   repeat-victim delay, spell interruption, immunity, Bcyc lift TargetArt and
+   height cleanup, and Basl attachments.
 4. Issue explicit Tornado Move orders, then let it idle; check the speculative
    wandering/leash policy against classic retail.
 5. Cancel through Stop, movement, death and stun; ensure no leaked tornado or

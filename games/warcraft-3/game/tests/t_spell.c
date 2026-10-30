@@ -4027,6 +4027,91 @@ TEST(wc3_spell, tornado_summons_at_selected_point) {
     free_slk_rows(rows);
 }
 
+TEST(wc3_spell, tornado_spin_lift_lasts_ten_seconds) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y3;X8\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
+        "C;Y1;X3;K\"targs\"\nC;Y1;X4;K\"Area1\"\n"
+        "C;Y1;X5;K\"DataA1\"\nC;Y1;X6;K\"Dur1\"\n"
+        "C;Y1;X7;K\"HeroDur1\"\nC;Y1;X8;K\"BuffID1\"\n"
+        "C;Y2;X1;K\"Atsp\"\nC;Y2;X2;K\"Atsp\"\n"
+        "C;Y2;X3;K\"ground,enemy\"\nC;Y2;X4;K\"500\"\n"
+        "C;Y2;X5;K\"3\"\nC;Y2;X6;K\"1\"\n"
+        "C;Y2;X7;K\"1\"\nC;Y2;X8;K\"BNto\"\n"
+        "E\n";
+    const char buff_slk[] =
+        "ID;PWXL;N;EBB;Y2;X3\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"TargetArt\"\n"
+        "C;Y2;X1;K\"Bcyc\"\nC;Y2;X2;K\"Bcyc\"\n"
+        "C;Y2;X3;K\"TestUI\\\\Models\\\\anim_pulse.mdx\"\nE\n";
+    static UnitAbilities_t const tornado_abilities = { .abilList = "Atsp" };
+    slkTestData_t *rows = parse_slk_string(slk), *old;
+    slkTestData_t *buff_rows = parse_slk_string(buff_slk), *old_buffs;
+    edict_t *caster, *tornado, *target, *thinker;
+    channel_t *cast;
+    heroabilitystatus_t *lift;
+    edict_t *lift_effect = NULL;
+    edict_t *removed_effect = NULL;
+
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    old_buffs = G_SetSLKRows("AbilityBuffData", buff_rows);
+    caster = make_hero(MAKEFOURCC('H','p','a','l'), 500.0f, 200.0f, 0.0f, 0.0f);
+    tornado = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64.0f, 0.0f);
+    target = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 128.0f, 0.0f);
+    tornado->data.UnitAbilities = &tornado_abilities;
+    tornado->summon_ability = FS_SLKKey("ANto");
+    tornado->owner = caster;
+    tornado->s.player = caster->s.player = 0;
+    tornado->svflags |= SVF_MONSTER;
+    tornado->targtype = TARG_GROUND;
+    target->s.player = 1;
+    target->svflags |= SVF_MONSTER;
+    target->targtype = TARG_GROUND;
+    target->unitinfo.FlyHeight = 25.0f;
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+
+    level.time = 5000;
+    cast = G_AddChannel(caster);
+    cast->code = FS_SLKKey("ANto");
+    cast->serial = 1;
+    cast->origin = caster->s.origin2;
+    thinker = S_SpellChannelThinker(caster, cast->code);
+    T_NOT_NULL(thinker);
+    if (!thinker) goto tornado_lift_cleanup;
+    thinker->goalentity = tornado;
+    G_GetChannel(thinker)->target_spawn_time = tornado->spawn_time;
+    thinker->resources = G_Time() + 35000;
+    thinker->freetime = thinker->resources;
+    thinker->damage = G_Time();
+    thinker->think = tornado_think;
+
+    tornado_think(thinker);
+    lift = unit_findstatus(target, MAKEFOURCC('B','c','y','c'));
+    T_NOT_NULL(lift);
+    if (lift) {
+        T_EQ(lift->duration_ms, 10000u);
+        T_EQ(lift->timestamp, G_Time() + 10000u);
+        T_ASSERT(lift->buff_flags & WC3_STATUS_BUFF_TARGET_ART);
+    }
+    T_FEQ(target->unitinfo.FlyHeight, 200.0f, 0.001f);
+    FILTER_EDICTS(effect, effect->status_effect_code == MAKEFOURCC('B','c','y','c') &&
+                  effect->goalentity == target) { lift_effect = effect; break; }
+    T_NOT_NULL(lift_effect);
+    if (lift) unit_removestatus(target, lift, STATUS_REMOVE_EXPIRE);
+    T_FEQ(target->unitinfo.FlyHeight, 25.0f, 0.001f);
+    FILTER_EDICTS(effect, effect->status_effect_code == MAKEFOURCC('B','c','y','c') &&
+                  effect->goalentity == target) { removed_effect = effect; break; }
+    T_NULL(removed_effect);
+
+tornado_lift_cleanup:
+    G_SetSLKRows("AbilityBuffData", old_buffs);
+    free_slk_rows(buff_rows);
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
+}
+
 TEST(wc3_spell, tornado_damage_uses_three_authored_building_bands_only) {
     const char data[] =
         "ID;PWXL;N;EBB;Y2;X10\n"

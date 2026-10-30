@@ -11,6 +11,16 @@
 #define TORNADO_DAMAGE_INTERVAL_MS 1000u
 #define TORNADO_SPIN_DEFAULT_INTERVAL_MS 3000u /* classic guide; overridden by Atsp DataA */
 #define TORNADO_SPIN_REPEAT_MS 22000u /* classic guide; retail timer algorithm still under review */
+#define TORNADO_SPIN_LIFT_DURATION_SECONDS 10.0f
+#define TORNADO_SPIN_LIFT_HEIGHT 200.0f
+
+static void tornado_set_fly_height(edict_t *unit, float height) {
+    if (!unit) return;
+    unit->unitinfo.FlyHeight = MAX(0.0f, height);
+    M_CheckGround(unit);
+    if (unit->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
+    gi.LinkEntity(unit);
+}
 
 static bool tornado_valid_unit(edict_t *unit) {
     return unit && unit->inuse && !M_IsDead(unit) &&
@@ -68,8 +78,8 @@ static void tornado_damage_buildings(edict_t *tornado) {
     }
 }
 
-/* Atsp temporarily makes a nearby ground unit uncommandable through the
- * shared Cyclone status. Its own Btsp model is distinct from ntor's model.
+/* Atsp temporarily makes a nearby ground unit airborne and uncommandable
+ * through the shared Cyclone status. The Bcyc buff owns its persistent art.
  * The chooser is a persisted per-thinker PRNG, not process rand(). */
 static void tornado_spin_one(edict_t *tornado, edict_t *thinker) {
     abilityAliasRef_t ability = S_ResolveAbilityAlias(tornado, TORNADO_SPIN);
@@ -87,15 +97,21 @@ static void tornado_spin_one(edict_t *tornado, edict_t *thinker) {
         if (thinker->variation % ++seen == 0) choice = target;
     }
     if (choice) {
-        float const seconds = S_SpellResistantDuration(ability.alias, ability.level, choice);
-        if (seconds > 0.0f) {
+        /* Tornado lifts last ten seconds per victim, independent of the
+         * remaining summon life and Atsp's authored Dur/HeroDur values. */
+        if (thinker->resources > G_Time()) {
             heroabilitystatus_t *slot = S_SpellApplyTimedStatusFromAbility(
-                choice, ability.alias, ability.level, "Bcyc", seconds);
+                choice, ability.alias, ability.level, "Bcyc",
+                TORNADO_SPIN_LIFT_DURATION_SECONDS);
             if (slot) {
-                /* Bcyc is the simulation lock; Btsp supplies the separately
-                 * authored small tornado effect, not the main unit model. */
-                G_SpawnAbilityEffectTarget(MAKEFOURCC('B','t','s','p'),
-                                           WC3_EFFECT_EFFECT, 0, choice, "sprite,first", true);
+                /* Ground Atsp targets start at zero height. Keep the value in
+                 * next_tick, which this non-periodic Cyclone status does not
+                 * otherwise use, so expiry/dispel can restore it exactly. */
+                union { float height; uint32_t bits; } original_height = { .height = choice->unitinfo.FlyHeight };
+                slot->next_tick = original_height.bits;
+                slot->buff_flags |= WC3_STATUS_BUFF_TARGET_ART;
+                unit_status_enabletargetart(choice, slot, "origin");
+                tornado_set_fly_height(choice, TORNADO_SPIN_LIFT_HEIGHT);
                 choice->goalentity = NULL;
                 choice->currentmove = &holdpos_move_stand;
                 tornado_mark_target(thinker, choice);
@@ -212,4 +228,12 @@ void S_TestTornadoBuildingPulse(edict_t *tornado) { tornado_damage_buildings(tor
 #endif
 
 BZ_ABILITY_PROC(CAbilityTornadoDamage) { return CAbilityPassive(ent, msg, call); }
-BZ_ABILITY_PROC(CAbilityTornadoSpin) { return CAbilityPassive(ent, msg, call); }
+BZ_ABILITY_PROC(CAbilityTornadoSpin) {
+    if (msg == A_STATUS_REMOVE && call && call->status.slot &&
+        call->status.slot->code == MAKEFOURCC('B','c','y','c')) {
+        union { float height; uint32_t bits; } original_height = { .bits = call->status.slot->next_tick };
+        tornado_set_fly_height(ent, original_height.height);
+        return true;
+    }
+    return CAbilityPassive(ent, msg, call);
+}
