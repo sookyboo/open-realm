@@ -258,10 +258,8 @@ BZ_SIMPLE_SPELL_PROC(AbilityDivineShield) {
     if (status) unit_status_enabletargetart(caster, status, "origin");
 }
 
-/* Phase Shift may not break the Faerie Dragon's own Mana Flare channel.
- * Other no-target spells retain the shared channel cancellation policy. */
+/* Phase Shift is unavailable while the Faerie Dragon's Mana Flare status locks orders. */
 BZ_ABILITY_PROC(CAbilityPhaseShift) {
-    channel_t const *channel = ent ? G_GetChannel(ent) : NULL;
     uint32_t const code = call && call->item ? call->item->code : 0;
     switch (msg) {
     case A_AUTOCAST_ON:
@@ -277,7 +275,7 @@ BZ_ABILITY_PROC(CAbilityPhaseShift) {
     default:
         break;
     }
-    if (msg == A_VALIDATE && channel && channel->code == MAKEFOURCC('A','m','f','l'))
+    if (msg == A_VALIDATE && S_ManaFlareActive(ent))
         return false;
     return CAbilityDivineShield(ent, msg, call);
 }

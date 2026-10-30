@@ -463,7 +463,7 @@ static ability_t abilitylist[] = {
 
     /* NightElfAbilityStrings.txt */
     { "Avng", CAbilityVengeance, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Spirit of Vengeance */
-    { "Amfl", CAbilityManaFlare, AB_SPELL | AB_TOGGLE | AB_CHANNEL | AB_UPDATE | AB_STATUS_EVENTS, SPELL_TARGET_NONE },  /* Mana Flare */
+    { "Amfl", CAbilityManaFlare, AB_SPELL | AB_TOGGLE | AB_UPDATE | AB_STATUS_EVENTS, SPELL_TARGET_NONE },  /* Mana Flare */
     { "Apsh", CAbilityPhaseShift, AB_SPELL | AB_AUTOCAST },  /* Phase Shift */
     { "Aetl", CAbilityEthereal, AB_PASSIVE },  /* Ethereal */
     { "Agra", CAbilityGrabTree, AB_SPELL, SPELL_TARGET_POINT, grabtree_orders },  /* War Club */
@@ -1173,6 +1173,7 @@ BZ_ABILITY_PROC(S_AbilityMessage) {
                       msg == A_AUTOCAST_ACQUIRE || (msg == A_AUTOCAST_SET && call && call->enabled);
     if (activating && ability && (ability->flags & (AB_COMMAND | AB_SPELL | AB_AUTOCAST))) {
         uint32_t const code = call && call->item ? call->item->code : 0;
+        if (S_ManaFlareActive(ent) && code != MAKEFOURCC('A', 'm', 'f', 'l')) return false;
         if ((ability->flags & AB_SPELL) && code &&
             !G_UnitAbilityResearchAvailable(ent, code)) return false;
         /* Autocast acquisition runs independently of the normal cast pipeline.

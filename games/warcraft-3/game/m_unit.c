@@ -1212,6 +1212,7 @@ bool G_IssueUnitTargetOrder(edict_t *self, cstring_t order, edict_t *target,
     if (!self || !order || !target || !target->inuse || !unit_order_name_valid(order)) {
         return false;
     }
+    if (!S_ManaFlareAllowsOrder(self, order)) return false;
     if (M_IsDead(self) || G_BuildingUpgradeActive(self) || !S_AncientCanReceiveOrder(self)) {
         return false;
     }
@@ -1287,6 +1288,7 @@ bool G_IssueUnitTargetOrder(edict_t *self, cstring_t order, edict_t *target,
 bool G_IssueUnitPointOrder(edict_t *self, cstring_t order, vec2_t const *point,
                            bool queue, uint32_t issuer_player, float group_speed) {
     if (!self || !order || !point || !unit_order_name_valid(order)) return false;
+    if (!S_ManaFlareAllowsOrder(self, order)) return false;
     if (M_IsDead(self) || G_BuildingUpgradeActive(self) || !S_AncientCanReceiveOrder(self)) return false;
     /* Rally-point changes are metadata and apply immediately even when Shift is down. */
     if (!strcmp(order, "setrally") || (!strcmp(order, "smart") && G_UnitHasRally(self))) {
@@ -1529,6 +1531,7 @@ bool unit_issueimmediateorder(edict_t *self, cstring_t order) {
         return false;
     }
     if (!S_AncientCanReceiveOrder(self)) return false;
+    if (!S_ManaFlareAllowsOrder(self, order)) return false;
     if (G_BuildingUpgradeActive(self)) return false;
     if (M_IsDead(self)) return false;
     if (S_GoldMineWorkerIsInside(self))

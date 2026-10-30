@@ -545,6 +545,8 @@ float S_SlowPoisonAttackReduction(edict_t const *unit);
 void S_OrbOnHit(edict_t *attacker, edict_t *target);
 float S_BarkskinArmorBonus(edict_t const *unit);
 float S_ManaFlareArmorBonus(edict_t const *unit);
+bool S_ManaFlareActive(edict_t const *unit);
+bool S_ManaFlareAllowsOrder(edict_t const *unit, cstring_t order);
 
 float AB_Data(cstring_t classname, uint32_t level, uint32_t index);
 uint32_t AB_DataId(cstring_t classname, uint32_t level, uint32_t index);

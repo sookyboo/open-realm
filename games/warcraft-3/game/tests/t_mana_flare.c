@@ -93,24 +93,24 @@ static void mfl_done(mflFix_t *fix) {
 	G_SetSLKRows("AbilityData", fix->old); free_slk_rows(fix->rows);
 }
 
-TEST(wc3_spell, mana_flare_registers_channel_procedure) {
+TEST(wc3_spell, mana_flare_registers_timed_status_procedure) {
 	abilityitem_t item = S_AbilityItem(BZ_AMFL);
 	T_EQ(item.ability->proc, CAbilityManaFlare);
 	T_ASSERT(item.ability->flags & AB_SPELL);
-	T_ASSERT(item.ability->flags & AB_CHANNEL);
+	T_ASSERT(!(item.ability->flags & AB_CHANNEL));
 	T_ASSERT(item.ability->flags & AB_UPDATE);
 	T_EQ(item.ability->target_type, SPELL_TARGET_NONE);
 	T_EQ(S_AbilityItem(BZ_APSH).ability->proc, CAbilityPhaseShift);
 }
 
-/* Activation applies Bmfl, spends Cost, locks channel, and adds authored DataE armor. */
-TEST(wc3_spell, mana_flare_activates_buff_channel_and_armor) {
+/* Activation applies timed Bmfl, spends Cost, locks orders, and adds authored DataE armor. */
+TEST(wc3_spell, mana_flare_activates_status_and_armor) {
 	mflFix_t fix;
 	mfl_setup(&fix, MFL_SLK);
 	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
 	T_FEQ(fix.flare->mana.value, 175, 0.001f);
 	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 1);
-	T_EQ(G_GetChannel(fix.flare)->code, BZ_AMFL);
+	T_ASSERT(!G_GetChannel(fix.flare) || G_GetChannel(fix.flare)->code != BZ_AMFL);
 	T_FEQ(G_UnitArmorValue(fix.flare), 9, 0.001f);
 	mfl_done(&fix);
 }
@@ -153,15 +153,19 @@ TEST(wc3_spell, mana_flare_respects_cast_interval_between_flares) {
 	mfl_done(&fix);
 }
 
-/* Channel cancel strips Bmfl and armor; natural expiry does the same. */
-TEST(wc3_spell, mana_flare_cancel_and_expiry_clear_buff) {
+/* Movement and channel cleanup do not end Mana Flare; toggle-off and expiry do. */
+TEST(wc3_spell, mana_flare_persists_through_movement_and_expires) {
 	mflFix_t fix;
 	mfl_setup(&fix, MFL_SLK);
 	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
 	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 1);
 	S_SpellCancelChannel(fix.flare);
+	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 1);
+	T_ASSERT(!S_ManaFlareAllowsOrder(fix.flare, "move"));
+	T_ASSERT(S_ManaFlareAllowsOrder(fix.flare, "Amfl"));
+	T_FEQ(G_UnitArmorValue(fix.flare), 9, 0.001f);
+	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL)); /* toggle off */
 	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 0);
-	T_FEQ(G_UnitArmorValue(fix.flare), 0, 0.001f);
 	fix.flare->mana.value = 200;
 	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
 	level.time += 30000; unit_updatestatuses(fix.flare);
@@ -211,26 +215,25 @@ TEST(wc3_spell, mana_flare_time_zero_cooldown_and_status_identity) {
 	mfl_done(&fix);
 }
 
-/* Buff presence alone must not retaliate after the gameplay channel ends. */
-TEST(wc3_spell, mana_flare_requires_live_channel) {
+/* Timed Mana Flare continues retaliating without a spell channel. */
+TEST(wc3_spell, mana_flare_status_retaliates_without_channel) {
 	mflFix_t fix;
 	mfl_setup(&fix, MFL_SLK);
 	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
-	G_GetChannel(fix.flare)->code = 0;
 	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 1);
 	T_ASSERT(S_CastUnitTargetSpell(fix.enemy, BZ_AHTB, fix.flare));
-	T_FEQ(fix.enemy->health.value, 500, 0.001f);
+	T_FEQ(fix.enemy->health.value, 430, 0.001f);
 	mfl_done(&fix);
 }
 
-/* Phase Shift must not interrupt Mana Flare or consume additional mana. */
+/* Phase Shift must remain unavailable while Mana Flare is active. */
 TEST(wc3_spell, mana_flare_blocks_phase_shift_without_cancel) {
 	mflFix_t fix;
 	mfl_setup(&fix, MFL_SLK);
 	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
 	T_ASSERT(!S_CastNoTargetSpell(fix.flare, BZ_APSH));
 	T_FEQ(fix.flare->mana.value, 175, 0.001f);
-	T_EQ(G_GetChannel(fix.flare)->code, BZ_AMFL);
+	T_ASSERT(!G_GetChannel(fix.flare) || G_GetChannel(fix.flare)->code != BZ_AMFL);
 	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 1);
 	T_FEQ(G_UnitArmorValue(fix.flare), 9, 0.001f);
 	mfl_done(&fix);

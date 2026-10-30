@@ -12,6 +12,17 @@ static void mana_flare_strip(edict_t *unit) {
 	G_InvalidateUnitCommands(unit);
 }
 
+bool S_ManaFlareActive(edict_t const *unit) {
+	return unit && G_UnitStatusLevel(unit, ID_BMFL) > 0;
+}
+
+bool S_ManaFlareAllowsOrder(edict_t const *unit, cstring_t order) {
+	if (!S_ManaFlareActive(unit)) return true;
+	/* The active toggle remains available so the player can end the status. */
+	return order && ((!strncmp(order, "Amfl", 4) && (!order[4] || order[4] == ':')) ||
+		!strcmp(order, "amfl") || !strcmp(order, "manaflareon") || !strcmp(order, "manaflareoff"));
+}
+
 static void mana_flare_present(edict_t *unit, bool active) {
 	G_AddUnitAnimationProperties(unit, "channel", active);
 }
@@ -40,10 +51,9 @@ static int mana_flare_damage(edict_t *flare, edict_t *victim, float cost) {
 }
 
 /* Name=Mana Flare
- * Channel: Bmfl on caster, DataE armor, flare enemies that spend mana in Area.
+ * Timed Bmfl status on caster, DataE armor, flare enemies that spend mana in Area.
  */
 BZ_ABILITY_PROC(CAbilityManaFlare) {
-    channel_t *cast = G_GetChannel(ent);
 	uint32_t code = call && call->item && call->item->code ? call->item->code : ID_MANA_FLARE;
 	uint32_t level;
 	cstring_t buff;
@@ -51,13 +61,14 @@ BZ_ABILITY_PROC(CAbilityManaFlare) {
 	case A_TOGGLE_ON:
 		return mana_flare_status(ent) != NULL;
 	case A_STATUS_REMOVE:
-		if (call && call->status.slot && call->status.slot->code == ID_BMFL)
+		if (call && call->status.slot && call->status.slot->code == ID_BMFL) {
 			mana_flare_present(ent, false);
+			G_InvalidateUnitCommands(ent);
+		}
 		return false;
 	case A_EXECUTE:
 		if (mana_flare_status(ent)) {
-			if (cast && cast->code == code) S_SpellCancelChannel(ent);
-			else mana_flare_strip(ent);
+			mana_flare_strip(ent);
 			return true;
 		}
 		level = S_SpellLevel(ent, code);
@@ -71,6 +82,8 @@ BZ_ABILITY_PROC(CAbilityManaFlare) {
 					WC3_STATUS_BUFF_TARGET_ART;
 				unit_status_enabletargetart(ent, status, "overhead");
 				mana_flare_present(ent, true);
+				order_stop_cleanup(ent);
+				G_ClearActiveUnitOrder(ent);
 				G_InvalidateUnitCommands(ent);
 			}
 		}
@@ -79,7 +92,6 @@ BZ_ABILITY_PROC(CAbilityManaFlare) {
 		if (ent) {
 			bool active = mana_flare_status(ent) != NULL;
 			mana_flare_present(ent, active);
-			if (cast && cast->code == code && !active) S_SpellCancelChannel(ent);
 		}
 		return true;
 	case A_CANCEL:
@@ -87,12 +99,6 @@ BZ_ABILITY_PROC(CAbilityManaFlare) {
 	case A_UNIT_REMOVE:
 		if (G_UnitStatusLevel(ent, ID_BMFL)) mana_flare_strip(ent);
 		return true;
-	case A_MOVE_LEAVE:
-		if (ent && cast && cast->code == code) {
-			S_SpellCancelChannel(ent);
-			return true;
-		}
-		return false;
 	default:
 		return CAbilitySimpleSpell(ent, msg, call);
 	}
@@ -112,7 +118,6 @@ void S_ManaFlareOnCast(edict_t *caster, uint32_t spell_code, uint32_t spell_leve
 	if (cost <= 0.0f) return;
 
 	FILTER_EDICTS(flare, S_SpellIsAliveTarget(flare) && G_UnitStatusLevel(flare, ID_BMFL) &&
-				  S_SpellIsChanneling(flare) && G_GetChannel(flare)->code == ID_MANA_FLARE &&
 				  S_SpellIsEnemy(flare, caster)) {
 		heroabilitystatus_t *st;
 		uint32_t level, now, gate;

@@ -6,14 +6,14 @@
 has no `Amfl` row. It is **not** FrostNova (`AHfn` / `CAbilityFrostNova`);
 ignore `ability_map.c` and the old TODO comment.
 
-No-target channeled spell (`AB_SPELL | AB_CHANNEL`, `SPELL_TARGET_NONE`).
-Activation spends Cost, starts the shared channel lock (movement cancels),
-and applies `BuffID` token `Bmfl` for `Dur`/`HeroDur` seconds. `Untip` /
-Stop / move cancel ends the channel and strips `Bmfl`. `Bmfl` expiry (via
-`AB_UPDATE`) also clears `channel.code`. `Bmfa`
-(`CBuffManaFlareAoe`, parent `BAOE`) is presentation-only and is not required
-for damage or armor. Phase Shift (`Apsh`) is rejected during an active `Amfl`
-channel without spending mana or interrupting it.
+No-target toggle spell (`AB_SPELL | AB_TOGGLE | AB_UPDATE`, `SPELL_TARGET_NONE`).
+Activation spends Cost and applies `BuffID` token `Bmfl` for `Dur`/`HeroDur`
+seconds. While `Bmfl` is active, the Faerie Dragon is immobile and every command
+button except Mana Flare is disabled. Movement and other orders are rejected
+without removing the status; clicking Mana Flare again ends it early. Natural
+status expiry restores movement and commands. `Bmfa` (`CBuffManaFlareAoe`,
+parent `BAOE`) is presentation-only and is not required for damage or armor.
+Phase Shift (`Apsh`) is rejected during the active status without spending mana.
 
 While `Bmfl` is active, nearby enemy units that successfully cast a spell
 take damage proportional to that spell's mana cost. Friendly casts and
@@ -30,7 +30,7 @@ out-of-`Area` enemies are ignored.
 | `Area` | 750 | — | detection radius around the Faerie Dragon |
 | `Rng` | 200 | — | splash radius around the primary victim |
 | `Cast` | 0.75 | — | seconds between flares from one `Amfl` unit |
-| `Dur`/`HeroDur` | 30 | — | `Bmfl` lifetime / channel length |
+| `Dur`/`HeroDur` | 30 | — | `Bmfl` status lifetime |
 | `targs` | air,ground,enemy | — | flare victim filter (not the cast target) |
 | `BuffID` | `Bmfl,Bmfa` | — | `Bmfl` on caster; `Bmfa` unused in gameplay |
 
@@ -45,12 +45,12 @@ binding. Stock `DataE=12` matches the documented armor bonus, and stock
 AbilityData.slk (Amfl)
   -> Cost, Cool, Area, Rng, Cast, Dur, DataA-F, BuffID, targs
 CAbilityManaFlare
-  -> S_CastNoTargetSpell / A_EXECUTE: attributed Bmfl + AB_CHANNEL lock
-  -> A_CANCEL: strip Bmfl
-  -> A_UPDATE: if channel is Amfl and Bmfl is gone, S_SpellCancelChannel
+  -> S_CastNoTargetSpell / A_EXECUTE: attributed timed Bmfl status
+  -> toggle off / disable: strip Bmfl
+  -> A_UPDATE: maintain channel animation while Bmfl exists
 spell_commit (successful cast)
   -> S_ManaFlareOnCast(caster, code, level)
-     scan enemies-of-caster with Bmfl and an active Amfl channel in Area
+     scan enemies-of-caster with Bmfl status in Area
      throttle per Bmfl instance using status.next_tick (first cast at time zero works)
      damage primary via S_SpellDamage; optional Rng splash
 G_UnitArmorValue
@@ -60,15 +60,14 @@ G_UnitArmorValue
 ## Registry
 
 ```c
-{ "Amfl", CAbilityManaFlare, AB_SPELL | AB_CHANNEL | AB_UPDATE, SPELL_TARGET_NONE },
+{ "Amfl", CAbilityManaFlare, AB_SPELL | AB_TOGGLE | AB_UPDATE | AB_STATUS_EVENTS, SPELL_TARGET_NONE },
 ```
 
 ## Persistence and remaining parity
 
-The per-channel flare interval deadline uses `heroabilitystatus_t.next_tick`.
+The per-status flare interval deadline uses `heroabilitystatus_t.next_tick`.
 `data` remains reserved for the status payload/legacy origin rawcode; using it
-for cast timestamps could dispatch an unrelated status ability. Save format 128
-rejects older Mana Flare timestamp representations. `Bmfl` is explicitly
+for cast timestamps could dispatch an unrelated status ability. `Bmfl` is explicitly
 attributed to `Amfl` for status lifecycle dispatch.
 
 `Apsh` currently delegates its non-channel behavior to the existing Divine
@@ -89,6 +88,6 @@ make test-wc3-engine WC3_PATTERN='wc3_spell.mana_flare*'
 
 Focused tests cover procedure registration, authored non-stock DataA damage,
 enemy-cast trigger, out-of-area ignore, friendly-cast ignore, armor bonus,
-Cast interval gating, channel/expiry cleanup (`channel.code == 0` after `Bmfl`
-expires), splash mana-pool filter, time-zero cooldown, active channel gating, and
-Phase Shift rejection without mana loss.
+Cast interval gating, toggle/expiry cleanup, order lockout and button state,
+splash mana-pool filter, time-zero cooldown, status retaliation without a spell
+channel, and Phase Shift rejection without mana loss.

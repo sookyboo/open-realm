@@ -982,6 +982,13 @@ uint8_t G_GetCommandButtons(edict_t *ent, gameCommandButton_t *buttons, uint8_t 
     }
 
     G_ResolveNagaCommandButtonCollisions(ent, buttons, count);
+    if (S_ManaFlareActive(ent)) {
+        FOR_LOOP(i, count) {
+            /* Keep only the active Mana Flare toggle usable until Bmfl ends. */
+            if (strncmp(buttons[i].command, "Amfl", 4) != 0)
+                buttons[i].disabled = 1;
+        }
+    }
     return count;
 }
 
