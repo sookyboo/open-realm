@@ -144,7 +144,9 @@ static bool eat_tree_validate(edict_t *caster, spellTarget_t st, abilityitem_t c
     if (S_AncientIsRooted(caster)) return false;
     ancientRoot_t const *root = G_GetAncientRoot(caster);
     if (S_AncientHasRootAbility(caster) && (!root || root->mode != ANCIENT_UPROOTED)) return false;
-    if (!target || target->targtype != TARG_TREE) return false;
+    if (!target || !target->inuse || !G_IsDestructable(target) || target->targtype != TARG_TREE ||
+        !G_GetDestructable(target) || G_GetDestructable(target)->dead || target->health.value <= 0.0f)
+        return false;
     return true;
 }
 
@@ -153,8 +155,10 @@ static void eat_tree_execute(edict_t *caster, spellTarget_t st, abilityitem_t co
     uint32_t level = S_SpellLevel(caster, spell->code);
     float heal = S_SpellData(spell->code, level, 3);
 
+    if (!G_KillDestructable(target, caster)) {
+        return;
+    }
     S_SpellHeal(caster, heal);
-    G_FreeEdict(target);
 }
 
 /* ---- Moon Well (Ambt): replenish, autocast, and night regeneration -------- */
@@ -424,7 +428,26 @@ static bool moon_well_autocast_acquire(edict_t * caster, uint32_t code) {
 
 BZ_VALIDATED_SPELL_PROC(AbilityCharm, charm_validate, charm_execute)
 
-BZ_VALIDATED_SPELL_PROC(AbilityEatTree, eat_tree_validate, eat_tree_execute)
+BZ_ABILITY_PROC(CAbilityEatTree) {
+    if (msg == A_ISSUED_TARGET_ORDER) {
+        uint32_t const code = call && call->item ? call->item->code : 0;
+        edict_t *tree = call ? call->entity : NULL;
+        if (!call || !call->order || strcmp(call->order, "smart") || !tree ||
+            tree->targtype != TARG_TREE || !G_UnitAbilityLevel(ent, code))
+            return ABILITY_ORDER_UNHANDLED;
+        return S_IssueUnitTargetSpell(ent, code, tree) ?
+            ABILITY_ORDER_ACCEPTED : ABILITY_ORDER_REJECTED;
+    }
+    if (msg == A_VALIDATE) return eat_tree_validate(ent,
+        call && call->target ? *call->target : MAKE(spellTarget_t, .type = SPELL_TARGET_NONE),
+        call ? call->item : NULL);
+    if (msg == A_EXECUTE) {
+        eat_tree_execute(ent, call && call->target ? *call->target :
+            MAKE(spellTarget_t, .type = SPELL_TARGET_NONE), call ? call->item : NULL);
+        return true;
+    }
+    return CAbilitySimpleSpell(ent, msg, call);
+}
 
 BZ_ABILITY_PROC(CAbilityManaBattery) {
     spellTarget_t target = (msg == A_VALIDATE || msg == A_EXECUTE) && call && call->target ?

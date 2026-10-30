@@ -60,7 +60,7 @@ TEST(wc3_war_club, command_cursor_selects_tree_without_generic_unit_targeting) {
         "C;Y2;X1;K\"Agra\"\nC;Y2;X2;K\"Agra\"\nC;Y2;X3;K1\n"
         "C;Y2;X4;K256\nC;Y2;X5;K0\nC;Y2;X6;K0\nE\n";
     slkTestData_t *rows, *old;
-    edict_t *giant, *tree, *clent = &g_edicts[0];
+    edict_t *giant, *tree, *approach = NULL, *clent = &g_edicts[0];
     gameClient_t *client = &game.clients[0];
     char entity_number[16];
     cstring_t button[] = { "button", "Agra" };
@@ -71,12 +71,20 @@ TEST(wc3_war_club, command_cursor_selects_tree_without_generic_unit_targeting) {
     giant = make_war_club_giant();
     giant->s.player = client->ps.number = 0;
     giant->stand = unit_stand;
+    giant->think = monster_think;
+    giant->movetype = MOVETYPE_STEP;
     giant->health.value = giant->health.max_value = 500;
     giant->mana.value = giant->mana.max_value = 100;
+    giant->unitinfo.MoveSpeed = 270.0f;
+    giant->collision = 48.0f;
     clent->client = client; clent->inuse = true;
     client->connected = true;
     G_SelectEntity(client, giant);
     tree = make_war_club_tree();
+    tree->s.origin2.x = tree->s.origin.x = 600.0f;
+    tree->collision = 16.0f;
+    gi.LinkEntity(giant);
+    gi.LinkEntity(tree);
 
     G_ClientCommand(clent, 2, button);
     T_ASSERT(S_SpellEntityTargetMode(clent));
@@ -84,6 +92,25 @@ TEST(wc3_war_club, command_cursor_selects_tree_without_generic_unit_targeting) {
     T_NULL(client->menu.on_location_selected);
     snprintf(entity_number, sizeof(entity_number), "%u", (unsigned)tree->s.number);
     G_ClientCommand(clent, 2, select);
+    FILTER_EDICTS(ent, ent->inuse && ent->think == S_SpellTargetApproachThink) {
+        approach = ent;
+        break;
+    }
+    T_NOT_NULL(approach);
+    FOR_LOOP(frame, 300) {
+        level.time += FRAMETIME;
+        level.framenum++;
+        G_RunEntities();
+        /* A normal Move can settle at a destructable's collision edge and
+         * switch to Stand before the target-approach thinker runs again. */
+        if (frame == 5) {
+            giant->s.origin2 = approach->s.origin2;
+            giant->s.origin.x = approach->s.origin2.x;
+            giant->s.origin.y = approach->s.origin2.y;
+            giant->goalentity = approach;
+            unit_stand(giant);
+        }
+    }
 
     T_ASSERT(G_GetDestructable(tree)->dead);
     T_ASSERT(S_WarClubActive(giant));
