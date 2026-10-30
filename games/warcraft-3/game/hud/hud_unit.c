@@ -290,6 +290,13 @@ static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool researc
     tip = G_CommandButtonValue(
         FindConfigValue(art_code, G_ResearchField(STR_TIP, research && !upgrade_research)),
         toggle_on ? FindConfigValue(art_code, STR_UNTIP) : NULL, toggle_on);
+    /* Feedback is a passive Spell Breaker ability and some data sets omit
+     * its command-card presentation row. Keep the indicator visible with the
+     * stock passive icon when no authored art is available. */
+    if ((!art || !*art) && !research && !strcmp(code, "Afbk")) {
+        art = "ReplaceableTextures\\CommandButtons\\BTNFeedback.blp";
+        if (!tip || !*tip) tip = "Feedback";
+    }
     ubertip = G_CommandButtonValue(
         FindConfigValue(art_code, G_ResearchField(STR_UBERTIP, research && !upgrade_research)),
         toggle_on ? FindConfigValue(art_code, STR_UNUBERTIP) : NULL, toggle_on);
@@ -530,6 +537,7 @@ static void G_AddPassiveEffectIndicator(edict_t *ent, gameCommandButton_t *butto
 
 static void G_AddPassiveEffectIndicators(edict_t *ent, gameCommandButton_t *buttons,
                                          uint8_t max_buttons, uint8_t *count) {
+    static uint32_t const feedback[] = { MAKEFOURCC('A','f','b','k') };
     static uint32_t const slow_poison[] = { MAKEFOURCC('A','s','p','o') };
     static uint32_t const true_sight[] = {
         MAKEFOURCC('A','g','y','v'), /* Flying Machine True Sight */
@@ -542,6 +550,8 @@ static void G_AddPassiveEffectIndicators(edict_t *ent, gameCommandButton_t *butt
         MAKEFOURCC('A','C','m','3')  /* Dragon Magic Immunity */
     };
 
+    FOR_LOOP(i, sizeof(feedback) / sizeof(feedback[0]))
+        G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, feedback[i], feedback[i]);
     FOR_LOOP(i, sizeof(slow_poison) / sizeof(slow_poison[0]))
         G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, slow_poison[i], slow_poison[i]);
     FOR_LOOP(i, sizeof(true_sight) / sizeof(true_sight[0]))

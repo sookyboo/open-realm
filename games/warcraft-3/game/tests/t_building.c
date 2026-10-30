@@ -1657,6 +1657,25 @@ TEST(wc3_building, dryad_slow_poison_shows_disabled_passive_indicator) {
     T_ASSERT(found);
 }
 
+TEST(wc3_building, spell_breaker_feedback_shows_disabled_passive_indicator) {
+    static UnitAbilities_t const spell_breaker_abilities = { .abilList = "Afbk" };
+    gameCommandButton_t buttons[16];
+    edict_t *spell_breaker;
+    uint8_t count;
+    bool found = false;
+
+    reset_entities();
+    setup_test_world();
+    spell_breaker = alloc_test_unit(MAKEFOURCC('h','s','p','t'), 0, 0);
+    spell_breaker->data.UnitAbilities = (UnitAbilities_t *)&spell_breaker_abilities;
+    count = G_GetCommandButtons(spell_breaker, buttons, sizeof(buttons) / sizeof(buttons[0]));
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Afbk")) {
+        found = true;
+        T_ASSERT(buttons[i].disabled);
+    }
+    T_ASSERT(found);
+}
+
 TEST(wc3_building, naga_production_buttons_have_distinct_command_card_cells) {
     static uint32_t const producers[] = {
         MAKEFOURCC('n','n','t','t'), MAKEFOURCC('n','n','s','g'), MAKEFOURCC('n','n','s','a')
