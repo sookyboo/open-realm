@@ -416,8 +416,8 @@ static ability_t abilitylist[] = {
     { "ANtm", CAbilityTransmute, AB_SPELL, SPELL_TARGET_UNIT },  /* Transmute */
     { "Aasl", CAbilitySlowAura, AB_PASSIVE },  /* Slow Aura */
     { "Atdg", CAbilityTornadoDamage, AB_PASSIVE },  /* Building Damage Aura */
-    { "Atsp", CAbilityTornado, AB_SPELL | AB_CHANNEL },  /* Tornado Spin */
-    { "Atwa", CAbilityTornado, AB_SPELL | AB_CHANNEL },  /* Tornado Wander */
+    { "Atsp", CAbilityTornadoSpin, AB_PASSIVE },  /* Tornado Spin */
+    { "Atwa", CAbilityWander, AB_PASSIVE },  /* Tornado Wander: autonomous movement */
     { "ANef", CAbilityStormEarthFire, AB_SPELL },  /* Storm, Earth, And Fire */
     { "ACbf", CAbilityFrostNova, AB_SPELL, SPELL_TARGET_UNIT },  /* Breath of Frost */
     { "ANmr", CAbilityMindRot, AB_PASSIVE },  /* Mind Rot */

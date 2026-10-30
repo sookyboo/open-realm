@@ -3947,16 +3947,76 @@ TEST(wc3_spell, shockwave_target_mask_filters_damage_and_cap) {
     }
 }
 
-TEST(wc3_spell, tornado_uses_whirlwind_channel_handler) {
-	abilityitem_t tornado_item = S_AbilityItem(FS_SLKKey("ANto"));
-	ability_t const *tornado = tornado_item.ability;
+void S_TestTornadoBuildingPulse(edict_t *tornado);
 
-	T_NOT_NULL(tornado);
-	T_ASSERT(tornado->flags & AB_SPELL);
-	T_NOT_NULL(tornado->proc);
-	T_EQ((int)tornado_item.code, (int)MAKEFOURCC('A', 'N', 't', 'o'));
-	T_EQ((int)tornado->target_type, (int)SPELL_TARGET_NONE);
-	T_ASSERT(tornado->flags & AB_CHANNEL);
+TEST(wc3_spell, tornado_has_separate_summon_and_unit_passive_handlers) {
+    abilityitem_t cast = S_AbilityItem(FS_SLKKey("ANto"));
+    abilityitem_t damage = S_AbilityItem(FS_SLKKey("Atdg"));
+    abilityitem_t spin = S_AbilityItem(FS_SLKKey("Atsp"));
+    abilityitem_t wander = S_AbilityItem(FS_SLKKey("Atwa"));
+    T_NOT_NULL(cast.ability);
+    T_NOT_NULL(damage.ability);
+    T_NOT_NULL(spin.ability);
+    T_NOT_NULL(wander.ability);
+    T_ASSERT(cast.ability->proc == CAbilityTornado);
+    T_ASSERT(cast.ability->flags & AB_CHANNEL);
+    T_ASSERT(cast.ability->flags & AB_SPELL);
+    T_EQ(cast.ability->target_type, SPELL_TARGET_NONE);
+    T_ASSERT(damage.ability->proc == CAbilityTornadoDamage);
+    T_ASSERT(damage.ability->flags & AB_PASSIVE);
+    T_ASSERT(spin.ability->proc == CAbilityTornadoSpin);
+    T_ASSERT(spin.ability->flags & AB_PASSIVE);
+    T_ASSERT(!(spin.ability->flags & AB_CHANNEL));
+    T_ASSERT(wander.ability->proc == CAbilityWander);
+    T_ASSERT(wander.ability->flags & AB_PASSIVE);
+}
+
+TEST(wc3_spell, tornado_damage_uses_three_authored_building_bands_only) {
+    const char data[] =
+        "ID;PWXL;N;EBB;Y2;X10\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
+        "C;Y1;X3;K\"targs\"\nC;Y1;X4;K\"Area1\"\n"
+        "C;Y1;X5;K\"DataA1\"\nC;Y1;X6;K\"DataB1\"\n"
+        "C;Y1;X7;K\"DataC1\"\nC;Y1;X8;K\"DataD1\"\n"
+        "C;Y1;X9;K\"DataE1\"\nC;Y1;X10;K\"levels\"\n"
+        "C;Y2;X1;K\"Atdg\"\nC;Y2;X2;K\"Atdg\"\n"
+        "C;Y2;X3;K\"structure,enemy\"\nC;Y2;X4;K600\n"
+        "C;Y2;X5;K7\nC;Y2;X6;K300\nC;Y2;X7;K13\n"
+        "C;Y2;X8;K90\nC;Y2;X9;K50\nC;Y2;X10;K1\nE\n";
+    UnitAbilities_t abilities = { .abilList = "Atdg" };
+    slkTestData_t *rows, *old;
+    edict_t *storm, *close, *medium, *outer, *friend, *infantry;
+    reset_entities(); setup_test_world();
+    rows = parse_slk_string(data); old = G_SetSLKRows("AbilityData", rows);
+    storm = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    close = alloc_test_unit(MAKEFOURCC('o','b','u','r'), 40, 0);
+    medium = alloc_test_unit(MAKEFOURCC('o','b','u','r'), 180, 0);
+    outer = alloc_test_unit(MAKEFOURCC('o','b','u','r'), 470, 0);
+    friend = alloc_test_unit(MAKEFOURCC('o','b','u','r'), 75, 0);
+    infantry = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 30, 30);
+    storm->data.UnitAbilities = &abilities;
+    storm->summon_ability = MAKEFOURCC('A','N','t','o');
+    storm->s.player = 0;
+    close->s.player = medium->s.player = outer->s.player = infantry->s.player = 1;
+    friend->s.player = 0;
+    close->targtype = medium->targtype = outer->targtype = friend->targtype = TARG_STRUCTURE;
+    close->s.flags |= EF_BUILDING; medium->s.flags |= EF_BUILDING;
+    outer->s.flags |= EF_BUILDING; friend->s.flags |= EF_BUILDING;
+    close->svflags |= SVF_MONSTER; medium->svflags |= SVF_MONSTER;
+    outer->svflags |= SVF_MONSTER; friend->svflags |= SVF_MONSTER;
+    infantry->svflags |= SVF_MONSTER; infantry->targtype = TARG_GROUND;
+    edict_t *units[] = {close, medium, outer, friend, infantry};
+    FOR_LOOP(i, 5) units[i]->health.value = units[i]->health.max_value = 500;
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    S_TestTornadoBuildingPulse(storm);
+    T_FEQ(close->health.value, 450, 0.01f);
+    T_FEQ(medium->health.value, 487, 0.01f);
+    T_FEQ(outer->health.value, 493, 0.01f);
+    T_FEQ(friend->health.value, 500, 0.01f);
+    T_FEQ(infantry->health.value, 500, 0.01f);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
 TEST(wc3_spell, requested_neutral_hero_abilities_have_contracts) {

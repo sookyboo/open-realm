@@ -212,7 +212,6 @@ BZ_ABILITY_PROC(CAbilityMagicImmunity) { return CAbilityPassive(ent, msg, call);
 BZ_ABILITY_PROC(CAbilityEngineeringUpgrade) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilityDemolish) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilityFactory) { return CAbilityPassive(ent, msg, call); }
-BZ_ABILITY_PROC(CAbilityTornadoDamage) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilityRevenge) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilityGhost) {
     switch (msg) {

@@ -154,7 +154,8 @@ static uint32_t const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
 /* Version 121 persists F_ANIMSTRING values in component pools. */
 /* Version 122 rosters Possession impact callbacks and fixes Immolation substep semantics. */
 /* Version 123 persists Phoenix Fire cooldowns and Phoenix Egg hatch deadlines. */
-static uint32_t const save_version = 123;
+/* Version 124 registers the Tornado channel thinker and its saved timers. */
+static uint32_t const save_version = 124;
 #define SAVE_STREAM_BUFFER (1u << 20) // bytes; save files are several MB of field writes, so a large stdio buffer avoids per-4 KB syscalls
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
@@ -232,6 +233,7 @@ static saveCFunction_t const save_cfunctions[] = {
     SAVE_CFUNCTION(morph_end),
     SAVE_CFUNCTION(sentinel_owl_think),
     SAVE_CFUNCTION(possession_projectile_death_think),
+    SAVE_CFUNCTION(tornado_think),
 };
 
 static int SaveCFunctionIndex(void *func) {

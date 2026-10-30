@@ -176,7 +176,7 @@ void whirlwind_think(edict_t *ent) {
         return;
     }
     if (ent->freetime && G_Time() < ent->freetime) return;
-    if (item.ability && (item.ability->proc == CAbilityWhirlwind || item.ability->proc == CAbilityTornado))
+    if (item.ability && item.ability->proc == CAbilityWhirlwind)
         ent->s.origin2 = ent->owner->s.origin2;
     radial_damage_status(ent->owner, ent->s.origin2, &item, data,
                          item.ability && item.ability->proc == CAbilityWhirlwind);
@@ -642,7 +642,6 @@ BZ_SIMPLE_SPELL_PROC(AbilityWhirlwind) { whirlwind_execute(caster, st, spell); }
 /* Name=Tornado
  * Ubertip="Creates a tornado that damages and disables enemy units."
  */
-BZ_SIMPLE_SPELL_PROC(AbilityTornado) { whirlwind_execute(caster, st, spell); }
 /* Name=Banish
  * Ubertip="Turns a target unit ethereal, making it unable to attack or be attacked by physical attacks."
  */

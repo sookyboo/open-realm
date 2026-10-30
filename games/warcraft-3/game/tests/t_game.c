@@ -5096,6 +5096,56 @@ SAVE_INT_FIELD_TEST(field_summon_ability_round_trip, summon_ability, MAKEFOURCC(
 SAVE_INT_FIELD_TEST(field_phoenix_fire_cooldown_round_trip, phoenix_fire_next_ms, 8300)
 SAVE_INT_FIELD_TEST(field_phoenix_egg_hatching_round_trip, phoenix_hatch_ms, 12400)
 
+TEST(wc3_save, tornado_channel_thinker_and_toss_marker_round_trip) {
+    cstring_t filename = Test_TempPath("wc3-save-tornado-channel.bin");
+    uint32_t const code = MAKEFOURCC('A','N','t','o');
+    edict_t *caster, *tornado, *victim, *thinker, *marker;
+    channel_t *channel;
+
+    reset_entities(); setup_test_world();
+    caster = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    tornado = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 80, 0);
+    victim = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 96, 0);
+    channel = G_AddChannel(caster);
+    channel->code = code;
+    channel->serial = 73;
+    channel->origin = caster->s.origin2;
+    thinker = S_SpellChannelThinker(caster, code);
+    T_NOT_NULL(thinker);
+    if (!thinker) return;
+    thinker->goalentity = tornado;
+    G_GetChannel(thinker)->target_spawn_time = tornado->spawn_time;
+    thinker->think = tornado_think;
+    thinker->resources = 40000;
+    thinker->freetime = 1000;
+    thinker->damage = 3000;
+    thinker->variation = 0xabcddcbau;
+    marker = S_SpellIdentityThinker(thinker, MAKEFOURCC('T','s','p','M'), victim);
+    T_NOT_NULL(marker);
+    if (!marker) return;
+    marker->resources = 22000;
+    marker->svflags |= SVF_NOCLIENT;
+    T_ASSERT(WriteGame(filename));
+    thinker->owner = thinker->goalentity = NULL;
+    thinker->think = NULL;
+    thinker->resources = thinker->damage = thinker->variation = 0;
+    marker->owner = marker->goalentity = NULL;
+    G_GetChannel(thinker)->serial = 0;
+    T_ASSERT(ReadGame(filename));
+    T_ASSERT(S_SpellChannelOwner(thinker) == caster);
+    T_ASSERT(S_SpellChannelTarget(thinker) == tornado);
+    T_ASSERT(thinker->think == tornado_think);
+    T_EQ(G_GetChannel(thinker)->serial, 73u);
+    T_EQ(thinker->resources, 40000u);
+    T_EQ(thinker->freetime, 1000u);
+    T_EQ(thinker->damage, 3000u);
+    T_EQ(thinker->variation, 0xabcddcbau);
+    T_ASSERT(S_SpellChannelOwner(marker) == thinker);
+    T_ASSERT(S_SpellChannelTarget(marker) == victim);
+    T_EQ(marker->resources, 22000u);
+    remove(filename);
+}
+
 TEST(wc3_save, ability_owned_timed_summon_round_trip) {
     cstring_t filename = Test_TempPath("wc3-save-ability-owned-timed-summon.bin");
     edict_t *owner, *summon;

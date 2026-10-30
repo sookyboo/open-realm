@@ -1,0 +1,66 @@
+# Naga Sea Witch Tornado (ANto)
+
+## Authored TFT contract
+
+`ANto` is the **tornado** order; it costs 200 mana, has 120 seconds cooldown,
+700 cast range, `UnitID=ntor`, `BuffID=BNto`, and both Dur/HeroDur = 40 seconds.
+Its caster animation is `spell,channel`, with empty CasterArt and no EffectID.
+`ntor` owns `Atdg`, `Atsp`, `Atwa`, and `Aasl` (UnitAbilities.slk).
+
+`ntor`'s UnitUI model is `Abilities\Spells\Other\Tornado\TornadoElemental.mdx`
+(inside War3x.mpq). It has Birth 2233-3333ms, Stand Walk 6867-10133ms,
+and Death 13467-14500ms. There is no standalone Stand or Walk. Existing
+animation-family matching accepts its combined Stand Walk for both requests.
+The summon helper starts Birth using that model's sequence duration, then
+regular unit movement loops Stand Walk; normal death uses the Death clip and removes the wind elemental at its end, without creating a corpse.
+
+Other authored effects are distinct: `XNto` uses Tornado.mdx; `Btsp` has
+TornadoElementalSmall.mdx (sprite,first); `Basl` has Tornado_Target.mdx.
+Do not substitute these for the summoned unit or fabricate ANto CasterArt.
+
+## Runtime behavior and owners
+
+- `s_tornado.c`: a dedicated `CAbilityTornado` executes the channeled summon.
+  The new real `ntor` is player-owned, selectable and receives normal Move
+  commands; BTLF holds the 40-second timed life; the authored BNto buff is applied separately. A channel-serial/generation
+  checked thinker owns damage and spin pulses and expires if the Sea Witch
+  moves, dies, is stunned/silenced or cancels the channel.
+- `Atdg`: 1-second building-only damage pulses. The `Area` outer radius uses
+  DataA DPS, DataB/DataC the medium radius/DPS, DataD/DataE the direct
+  small-radius/DPS. The bands are mutually exclusive and honor enemy targeting;
+  the normal spell-damage pipeline owns combat/death side effects.
+- `Atsp`: periodic ground-only enemy selection, using the ability's DataA
+  interval when positive (otherwise classic guide's 3 seconds); the existing
+  Cyclone `Bcyc` state supplies targeting/command restrictions. Btsp artwork
+  is emitted separately. The summon thinker stores a deterministic chooser
+  state and entity-generation-checked last-victim markers for 22 seconds.
+- `Atwa`: uses the established autonomous-wander component, with player
+  orders taking precedence. Exact Tornado-specific pursuit and leash behavior
+  remains **provisional** pending retail measurement; do not make guesses in
+  shared Move code.
+- `Aasl`: existing Slow Aura source/recipient evaluator handles this unit's
+  authored radius and slow; `Basl` target-art presentation is separate.
+
+## Validation and open questions
+
+The focused tests cover separate active/passive registration, the three
+non-stock damage bands, enemy/ally and building/ground exclusion. The patch
+must also be verified in retail and in OpenRealm (no automatic local run):
+
+1. Cast and move the Tornado; Birth plays once, Stand Walk loops while idle
+   and moving, Death once at 40 seconds. Check the original channel caster
+   stays in spell,channel animation independently of the summoned model.
+2. Measure 50 and 7 HP/s near/outer building bands and the intermediate band
+   on the installed game-data version. Check simultaneous buildings and deaths.
+3. Check enemy air/ground Slow Aura, periodic ground-only toss, hero duration,
+   repeat-victim delay, spell interruption, immunity, and Btsp/Basl attachments.
+4. Issue explicit Tornado Move orders, then let it idle; check the speculative
+   wandering/leash policy against classic retail.
+5. Cancel through Stop, movement, death and stun; ensure no leaked tornado or
+   toss markers. Save/reload with a live channel and a recent toss marker.
+
+The 3s spin interval / 22s victim restriction and exact Atwa destination
+selection are classic guide/community observations, **not yet verified at
+engine-internal fidelity**. The data-controlled effects and summon lifecycle
+are the confident part. A custom map's ability rows take precedence over the
+classic reference numbers.

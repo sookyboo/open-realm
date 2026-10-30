@@ -237,6 +237,8 @@ BZ_ABILITY_PROC(CAbilityMassTeleport);
 BZ_ABILITY_PROC(CAbilityStampede);
 BZ_ABILITY_PROC(CAbilityWhirlwind);
 BZ_ABILITY_PROC(CAbilityTornado);
+BZ_ABILITY_PROC(CAbilityTornadoSpin);
+void tornado_think(edict_t *thinker);
 BZ_ABILITY_PROC(CAbilityBanish);
 BZ_ABILITY_PROC(CAbilitySummonPhoenix);
 BZ_ABILITY_PROC(CAbilityPhoenixMorphing);

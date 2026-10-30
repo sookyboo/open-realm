@@ -126,6 +126,14 @@ static void unit_decay_flesh_think(edict_t *self) {
  * flesh and bone constants; structures use StructureDecayTime; Heroes retain
  * their distinct dissipation/revival lifecycle. */
 void unit_begin_decay(edict_t *self) {
+    /* A channeled Tornado's summoned elemental is pure wind. Let the model's
+     * real Death clip finish, then retire it without a raisable corpse or the
+     * generic 90-second flesh/bone decay path. */
+    if (self && self->summon_ability &&
+        G_AbilityCode(self->summon_ability) == MAKEFOURCC('A','N','t','o')) {
+        G_FreeEdict(self);
+        return;
+    }
     UnitData_t const *data = self && self->data.UnitData ? self->data.UnitData :
         (self ? G_UnitData(self->class_id) : NULL);
     bool const hero = G_UnitIsHero(self) && !(self->aiflags & AI_ILLUSION);
