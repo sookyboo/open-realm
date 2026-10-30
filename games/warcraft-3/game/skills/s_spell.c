@@ -1959,6 +1959,7 @@ void spell_cmd(edict_t *clent) {
     uint32_t code = S_SpellCurrentCode(clent, 0);
     ability_t const *spell = S_SpellAbilityForCode(code);
     abilityitem_t item = { .code = code, .ability = spell };
+    abilityCall_t toggle_call = MAKE(abilityCall_t, .item = &item);
 
     if (!spell) {
         fprintf(stderr, "spell_cmd: no executable spell ability for code '%.4s'\n", (cstring_t)&code);
@@ -1977,7 +1978,8 @@ void spell_cmd(edict_t *clent) {
 
     /* Toggle abilities bypass the normal pipeline. */
     if ((spell->flags & AB_TOGGLE) && spell->proc != CAbilityFlamingArrows &&
-        spell->proc != CAbilityColdArrows) {
+        spell->proc != CAbilityColdArrows &&
+        (spell->proc != CAbilityManaFlare || S_AbilityMessage(caster, A_TOGGLE_ON, &toggle_call))) {
         spellTarget_t target = { .type = SPELL_TARGET_NONE };
         spell_message(caster, A_EXECUTE, &item, &target);
         Get_Commands_f(clent);
