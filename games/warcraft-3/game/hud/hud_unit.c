@@ -297,6 +297,11 @@ static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool researc
         art = "ReplaceableTextures\\CommandButtons\\BTNFeedback.blp";
         if (!tip || !*tip) tip = "Feedback";
     }
+    if ((!art || !*art) && !research &&
+        (!strcmp(code, "ACct") || !strcmp(code, "AOcr"))) {
+        art = "ReplaceableTextures\\CommandButtons\\BTNCriticalStrike.blp";
+        if (!tip || !*tip) tip = "Critical Strike";
+    }
     ubertip = G_CommandButtonValue(
         FindConfigValue(art_code, G_ResearchField(STR_UBERTIP, research && !upgrade_research)),
         toggle_on ? FindConfigValue(art_code, STR_UNUBERTIP) : NULL, toggle_on);
@@ -538,6 +543,10 @@ static void G_AddPassiveEffectIndicator(edict_t *ent, gameCommandButton_t *butto
 static void G_AddPassiveEffectIndicators(edict_t *ent, gameCommandButton_t *buttons,
                                          uint8_t max_buttons, uint8_t *count) {
     static uint32_t const feedback[] = { MAKEFOURCC('A','f','b','k') };
+    static uint32_t const critical_strike[] = {
+        MAKEFOURCC('A','C','c','t'), /* Critical Strike (creep) */
+        MAKEFOURCC('A','O','c','r')  /* Critical Strike */
+    };
     static uint32_t const slow_poison[] = { MAKEFOURCC('A','s','p','o') };
     static uint32_t const true_sight[] = {
         MAKEFOURCC('A','g','y','v'), /* Flying Machine True Sight */
@@ -552,6 +561,8 @@ static void G_AddPassiveEffectIndicators(edict_t *ent, gameCommandButton_t *butt
 
     FOR_LOOP(i, sizeof(feedback) / sizeof(feedback[0]))
         G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, feedback[i], feedback[i]);
+    FOR_LOOP(i, sizeof(critical_strike) / sizeof(critical_strike[0]))
+        G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, critical_strike[i], critical_strike[i]);
     FOR_LOOP(i, sizeof(slow_poison) / sizeof(slow_poison[0]))
         G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, slow_poison[i], slow_poison[i]);
     FOR_LOOP(i, sizeof(true_sight) / sizeof(true_sight[0]))
