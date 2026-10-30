@@ -2560,6 +2560,77 @@ TEST(wc3_building, druid_of_talon_adept_training_unlocks_storm_crow_and_mana) {
     building_restore_upgrade_data(old_upgrades, upgrade_rows);
 }
 
+TEST(wc3_building, druid_of_talon_cyclone_requires_master_training) {
+    static const char ability_slk[] =
+        "ID;PWXL;N;E\nB;X3;Y2;D0\n"
+        "C;X1;Y1;K\"alias\"\nC;X2;K\"code\"\nC;X3;K\"checkDep\"\n"
+        "C;X1;Y2;K\"Acyc\"\nC;X2;K\"Acyc\"\nC;X3;K1\nE\n";
+    static UnitAbilities_t const talon_abilities = { .abilList = "Acyc" };
+    static cstring_t const ability_config =
+        "[Acyc]\nArt=ReplaceableTextures\\CommandButtons\\BTNCyclone.blp\n"
+        "Buttonpos=1,2\nTip=Cyclone\n";
+    gameClient_t *client;
+    edict_t *talon;
+    UnitBalance_t balance = { .upgrades = "Redt" };
+    slkTestData_t *upgrade_rows = NULL, *old_upgrades;
+    slkTestData_t *ability_rows = parse_slk_string(ability_slk), *old_abilities;
+    uint32_t const training = MAKEFOURCC('R','e','d','t');
+    uint32_t const cyclone = MAKEFOURCC('A','c','y','c');
+    gameCommandButton_t buttons[16];
+    uint8_t count;
+    bool found;
+
+    setup_test_world();
+    old_upgrades = building_install_upgrade_data(&upgrade_rows);
+    old_abilities = G_SetSLKRows("AbilityData", ability_rows);
+    client = &game.clients[0];
+    client->ps.number = 0;
+    memset(client->tech, 0, sizeof(client->tech));
+    G_SetPlayerTechMaxAllowed(client, training, 2);
+    talon = alloc_test_unit(MAKEFOURCC('e','d','o','t'), 0, 0);
+    talon->s.player = client->ps.number;
+    talon->data.UnitBalance = &balance;
+    talon->data.UnitAbilities = &talon_abilities;
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
+
+    T_ASSERT(G_UnitAbilityResearchVisible(talon, cyclone));
+    T_ASSERT(!G_UnitAbilityResearchAvailable(talon, cyclone));
+    count = G_GetCommandButtons(talon, buttons, 16);
+    found = false;
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Acyc")) {
+        found = true;
+        T_ASSERT(buttons[i].disabled);
+    }
+    T_ASSERT(found);
+
+    G_SetPlayerTechResearched(client, training, 1);
+    T_ASSERT(!G_UnitAbilityResearchAvailable(talon, cyclone));
+    count = G_GetCommandButtons(talon, buttons, 16);
+    found = false;
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Acyc")) {
+        found = true;
+        T_ASSERT(buttons[i].disabled);
+    }
+    T_ASSERT(found);
+
+    G_SetPlayerTechResearched(client, training, 2);
+    T_ASSERT(G_UnitAbilityResearchAvailable(talon, cyclone));
+    count = G_GetCommandButtons(talon, buttons, 16);
+    found = false;
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Acyc")) {
+        found = true;
+        T_ASSERT(!buttons[i].disabled);
+    }
+    T_ASSERT(found);
+
+    G_SetPlayerTechResearched(client, training, 0);
+    G_SetPlayerTechMaxAllowed(client, training, -1);
+    G_TestPopAbilityConfig();
+    G_SetSLKRows("AbilityData", old_abilities);
+    free_slk_rows(ability_rows);
+    building_restore_upgrade_data(old_upgrades, upgrade_rows);
+}
+
 TEST(wc3_building, rlev_dependency_uses_custom_upgrade_and_ability_rawcodes) {
     static const char upgrade_slk[] =
         "ID;PWXL;N;E\nB;X13;Y2;D0\n"

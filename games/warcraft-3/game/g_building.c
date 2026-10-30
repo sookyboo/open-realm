@@ -321,6 +321,7 @@ static stockAbilityUpgradeRequirement_t const stock_ability_requirements[] = {
     { MAKEFOURCC('R', 'o', 'w', 'd'), MAKEFOURCC('A', 'h', 'w', 'd'), 2 },
     { MAKEFOURCC('R', 'e', 'd', 'c'), MAKEFOURCC('A', 'r', 'e', 'j'), 1 },
     { MAKEFOURCC('R', 'e', 'd', 'c'), MAKEFOURCC('A', 'b', 'r', 'f'), 2 },
+    { MAKEFOURCC('R', 'e', 'd', 't'), MAKEFOURCC('A', 'c', 'y', 'c'), 2 }, /* Cyclone: Master Training */
     { MAKEFOURCC('R', 'e', 's', 'i'), MAKEFOURCC('A', 'a', 'd', 'm'), 1 },
     { MAKEFOURCC('R', 'e', 's', 'c'), MAKEFOURCC('A', 'e', 's', 'n'), 1 }, /* Sentinel */
     { MAKEFOURCC('R', 'e', 'd', 't'), MAKEFOURCC('A', 'r', 'a', 'v'), 1 }, /* Storm Crow Form */
