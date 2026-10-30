@@ -73,6 +73,17 @@ static cstring_t G_EffectFieldName(wc3EffectType_t type, bool alternate) {
     }
 }
 
+/* The Healing Wave creep ability uses rawcode AChv but AbilityFunc spells its
+ * presentation section [AChV]. Preserve that data spelling for all authored
+ * ability presentation fields. */
+static void G_AbilityPresentationClassName(uint32_t ability_id, char classname[5]) {
+    if (ability_id == MAKEFOURCC('A','C','h','v')) {
+        memcpy(classname, "AChV", 5);
+    } else {
+        memcpy(classname, &ability_id, 4);
+        classname[4] = '\0';
+    }
+}
 
 static cstring_t G_BuffEffectValue(uint32_t buff_id, wc3EffectType_t type) {
     AbilityBuffData_t const *row = G_AbilityBuffData(buff_id);
@@ -116,8 +127,7 @@ static cstring_t G_EffectConfigValue(uint32_t ability_id, wc3EffectType_t type) 
     cstring_t value;
     AbilityData_t const *row;
 
-    memcpy(classname, &ability_id, 4);
-    classname[4] = '\0';
+    G_AbilityPresentationClassName(ability_id, classname);
     field = G_EffectFieldName(type, false);
     value = field ? FindConfigValue(classname, field) : NULL;
     if (!value) {
@@ -173,8 +183,7 @@ static cstring_t G_AbilityPresentationValue(uint32_t ability_id, cstring_t field
     AbilityData_t const *row;
 
     if (!field) return NULL;
-    memcpy(classname, &ability_id, 4);
-    classname[4] = '\0';
+    G_AbilityPresentationClassName(ability_id, classname);
     value = FindConfigValue(classname, field);
     if (value && *value && strcmp(value, "-") && strcmp(value, "_")) return value;
 

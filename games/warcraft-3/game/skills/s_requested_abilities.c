@@ -1184,15 +1184,22 @@ BZ_SIMPLE_SPELL_PROC(AbilityDoom) { target_status_execute(caster, st, spell); }
 BZ_SIMPLE_SPELL_PROC(AbilityHealingWave) {
     uint32_t level = S_SpellLevel(caster, spell->code), count = (uint32_t)S_SpellData(spell->code, level, 2);
     float amount = S_SpellData(spell->code, level, 1), loss = S_SpellData(spell->code, level, 3);
-    edict_t *current = st.entity, *visited[32] = {0};
+    edict_t *source = caster, *current = st.entity, *visited[32] = {0};
     FOR_LOOP(i, MIN(count ? count : 1, 32)) {
         if (!current || !S_SpellIsAliveTarget(current) || !S_SpellIsFriend(caster, current)) break;
+        G_SpawnAbilityLightning(&(abilityLightningParams_t){
+            .ability_id = spell->code, .index = i ? 1 : 0,
+            .source = source, .target = current,
+            .duration_ms = CHAIN_LIGHTNING_BOLT_MS,
+        });
+        G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_TARGET, 0, current, NULL, true);
         S_SpellHeal(current, amount); visited[i] = current; amount *= 1.0f - loss;
         current = NULL;
         FILTER_EDICTS(target, S_SpellBounceTargetAllowed(caster, spell->code, visited[i], target,
                                                         S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level), true)) {
             if (!S_SpellTargetVisited(visited, i + 1, target)) { current = target; break; }
         }
+        source = visited[i];
     }
 }
 /* Name=Hex

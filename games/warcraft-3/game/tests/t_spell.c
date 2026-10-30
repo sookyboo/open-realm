@@ -4397,11 +4397,17 @@ TEST(wc3_spell, creep_healing_wave_bounces_to_four_distinct_units_with_falling_h
         "C;Y2;X6;K100\nC;Y2;X7;K215\nC;Y2;X8;K4\nC;Y2;X9;K0.25\n"
         "C;Y2;X10;K0\nC;Y2;X11;K0\nC;Y2;X12;K700\nE\n";
     static UnitAbilities_t const abilities = { .abilList = "AChv" };
+    static cstring_t const ability_config =
+        "[AChV]\nTargetart=TestUI\\Models\\anim_pulse.mdx\n"
+        "LightningEffect=HWPB,HWSB\n";
     slkTestData_t *rows = parse_slk_string(slk), *old;
     edict_t *caster, *targets[5];
+    uint32_t target_art_model, primary_lightning = 0, secondary_lightning = 0;
+    uint32_t target_art_count = 0;
 
     reset_entities();
     setup_test_world();
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
     old = G_SetSLKRows("AbilityData", rows);
     caster = alloc_test_unit(MAKEFOURCC('n','d','r','s'), 0, 0);
     caster->data.UnitAbilities = (UnitAbilities_t *)&abilities;
@@ -4423,6 +4429,24 @@ TEST(wc3_spell, creep_healing_wave_bounces_to_four_distinct_units_with_falling_h
     T_ASSERT(test_execute_code(caster, "AChv",
         MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = targets[0])));
 
+    T_EQ(G_AbilityLightningId(MAKEFOURCC('A','C','h','v'), 0), MAKEFOURCC('H','W','P','B'));
+    T_EQ(G_AbilityLightningId(MAKEFOURCC('A','C','h','v'), 1), MAKEFOURCC('H','W','S','B'));
+    T_STREQ(G_AbilityEffectArt(MAKEFOURCC('A','C','h','v'), WC3_EFFECT_TARGET, 0),
+            "TestUI\\Models\\anim_pulse.mdx");
+    FOR_LOOP(i, MAX_LIGHTNING_EFFECTS) if (level.lightning_effects[i].inuse) {
+        if (level.lightning_effects[i].state.effect_id == MAKEFOURCC('H','W','P','B'))
+            primary_lightning++;
+        else if (level.lightning_effects[i].state.effect_id == MAKEFOURCC('H','W','S','B'))
+            secondary_lightning++;
+    }
+    T_EQ(primary_lightning, 1);
+    T_EQ(secondary_lightning, 3);
+    target_art_model = G_RegisterModel("TestUI\\Models\\anim_pulse.mdx");
+    FILTER_EDICTS(effect, effect->s.model == target_art_model && effect->goalentity) {
+        target_art_count++;
+    }
+    T_EQ(target_art_count, 4);
+
     T_FEQ(targets[0]->health.value, 715.0f, 0.01f);
     T_FEQ(targets[1]->health.value, 661.25f, 0.01f);
     T_FEQ(targets[2]->health.value, 620.9375f, 0.01f);
@@ -4430,6 +4454,7 @@ TEST(wc3_spell, creep_healing_wave_bounces_to_four_distinct_units_with_falling_h
     T_FEQ(targets[4]->health.value, 500.0f, 0.01f);
 
     G_SetSLKRows("AbilityData", old);
+    G_TestPopAbilityConfig();
     free_slk_rows(rows);
 }
 
