@@ -65,6 +65,27 @@ void G_StartProjectilePresentation(edict_t *ent) {
     if (anim) ent->s.frame = anim->interval[0];
 }
 
+/* Preserve an authored impact sequence after a projectile resolves. Some WC3
+ * missile models (including FrostBoltMissile) use Death for their hit burst
+ * and impact sound. Gameplay damage is already resolved; this is only the
+ * short-lived networked visual that lets clients cross those MDX event keys. */
+bool G_StartProjectileDeathPresentation(edict_t *ent) {
+    animation_t const *anim;
+
+    if (!ent || !ent->s.model) return false;
+    anim = G_GetAnimation(ent->s.model, "Death");
+    if (!anim || anim->interval[1] <= anim->interval[0]) return false;
+
+    ent->animation = anim;
+    ent->s.frame = anim->interval[0];
+    ent->goalentity = NULL;
+    ent->movetype = MOVETYPE_NONE;
+    ent->currentmove = NULL;
+    ent->aiflags |= AI_PROJECTILE_DEATH_PRESENTATION;
+    ent->freetime = G_Time() + (anim->interval[1] - anim->interval[0]);
+    return true;
+}
+
 static void G_AdvanceProjectilePresentation(edict_t *ent) {
     animation_t const *anim = ent->animation;
     uint32_t step;
@@ -203,6 +224,16 @@ static bool G_UnitRegeneratesHP(edict_t const *ent) {
  * into the 8-bit stat fields that are sent to clients. */
 void G_RunEntity(edict_t *ent) {
     if (!ent->inuse) return; /* defensive: freed edicts carry no simulation state */
+    if (ent->aiflags & AI_PROJECTILE_DEATH_PRESENTATION) {
+        if (G_Time() >= ent->freetime) {
+            G_FreeEdict(ent);
+            return;
+        }
+        if (ent->animation && ent->animation->interval[1] > ent->animation->interval[0]) {
+            ent->s.frame = MIN(ent->s.frame + (uint32_t)MAX(1.0f, FRAMETIME),
+                               ent->animation->interval[1] - 1);
+        }
+    }
     bool const world_active = G_UnitIsWorldActive(ent);
     spell_run_frame(ent);
     /* A validated empty timed-status index cannot expire or tick anything.

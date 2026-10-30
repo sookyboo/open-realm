@@ -233,6 +233,7 @@ enum {
     AI_SOUL_TRAPPED = 1 << 12, /* entity remains alive but leaves world interaction until Soul Trap release */
     AI_SUMMON_EXPLODES_ON_DEATH = 1 << 13, /* spirit/beast summon magical death effect, no corpse */
     AI_SCRIPT_EXPLODED = 1 << 14, /* SetUnitExploded: SpecialArt death effect instead of corpse */
+    AI_PROJECTILE_DEATH_PRESENTATION = 1 << 15, /* projectile is playing its authored impact/death sequence */
 };
 
 /* Authored damage category indexing combat armor multipliers; values match WC3 table order. */
@@ -3250,6 +3251,7 @@ void G_HeroSaveLoadAuditFrame(void);
 void G_FormatHeroSaveSnap(edict_t const *hero, string_t out, uint32_t out_size);
 void G_RunTimers(void);
 void G_StartProjectilePresentation(edict_t *ent);
+bool G_StartProjectileDeathPresentation(edict_t *ent);
 void G_TimerStart(gtimer_t *timer, uint32_t timeout, bool periodic, struct jass_function const *handler);
 void G_TimerPause(gtimer_t *timer);
 void G_TimerResume(gtimer_t *timer);

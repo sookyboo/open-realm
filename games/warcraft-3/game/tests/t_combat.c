@@ -178,6 +178,40 @@ TEST(wc3_combat, projectile_presentation_plays_birth_then_stand_sequence) {
     T_EQ(missile->s.frame, missile->animation->interval[0]);
 }
 
+TEST(wc3_combat, projectile_plays_authored_death_sequence_before_freeing) {
+    edict_t *missile;
+    uint32_t const start_time = level.time;
+    uint32_t end_time;
+
+    setup_test_world();
+    reset_entities();
+    missile = G_Spawn();
+    missile->s.model = G_RegisterModel("TestUI\\Models\\anim_projectile.mdx");
+    G_StartProjectilePresentation(missile);
+
+    T_ASSERT(G_StartProjectileDeathPresentation(missile));
+    T_STREQ(missile->animation->name, "Death");
+    T_EQ(missile->s.frame, missile->animation->interval[0]);
+    T_ASSERT(missile->aiflags & AI_PROJECTILE_DEATH_PRESENTATION);
+    T_ASSERT(missile->inuse);
+    end_time = missile->freetime;
+
+    while (level.time + (uint32_t)FRAMETIME < end_time) {
+        level.time += (uint32_t)FRAMETIME;
+        G_RunEntity(missile);
+    }
+    T_ASSERT(missile->inuse);
+    level.time = end_time - 1;
+    G_RunEntity(missile);
+    T_ASSERT(missile->inuse);
+    T_EQ(missile->s.frame, missile->animation->interval[1] - 1);
+
+    level.time++;
+    G_RunEntity(missile);
+    T_ASSERT(!missile->inuse);
+    level.time = start_time;
+}
+
 TEST(wc3_combat, flymissile_advances_animation_and_tracks_homing_yaw) {
     animation_t stand = { .name = "Stand", .interval = { 1000, 1300 } };
     edict_t *missile;
