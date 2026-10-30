@@ -258,6 +258,15 @@ BZ_SIMPLE_SPELL_PROC(AbilityDivineShield) {
     if (status) unit_status_enabletargetart(caster, status, "origin");
 }
 
+/* Phase Shift may not break the Faerie Dragon's own Mana Flare channel.
+ * Other no-target spells retain the shared channel cancellation policy. */
+BZ_ABILITY_PROC(CAbilityPhaseShift) {
+    channel_t const *channel = ent ? G_GetChannel(ent) : NULL;
+    if (msg == A_VALIDATE && channel && channel->code == MAKEFOURCC('A','m','f','l'))
+        return false;
+    return CAbilityDivineShield(ent, msg, call);
+}
+
 /* Name=Bash
  * Ubertip="Gives a chance that an attack will deal bonus damage and stun the target."
  * TODO: no command handler; the attack-resolution path must consume this passive.

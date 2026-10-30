@@ -12,7 +12,8 @@ and applies `BuffID` token `Bmfl` for `Dur`/`HeroDur` seconds. `Untip` /
 Stop / move cancel ends the channel and strips `Bmfl`. `Bmfl` expiry (via
 `AB_UPDATE`) also clears `channel.code`. `Bmfa`
 (`CBuffManaFlareAoe`, parent `BAOE`) is presentation-only and is not required
-for damage or armor.
+for damage or armor. Phase Shift (`Apsh`) is rejected during an active `Amfl`
+channel without spending mana or interrupting it.
 
 While `Bmfl` is active, nearby enemy units that successfully cast a spell
 take damage proportional to that spell's mana cost. Friendly casts and
@@ -44,12 +45,13 @@ binding. Stock `DataE=12` matches the documented armor bonus, and stock
 AbilityData.slk (Amfl)
   -> Cost, Cool, Area, Rng, Cast, Dur, DataA-F, BuffID, targs
 CAbilityManaFlare
-  -> S_CastNoTargetSpell / A_EXECUTE: Bmfl + AB_CHANNEL lock
+  -> S_CastNoTargetSpell / A_EXECUTE: attributed Bmfl + AB_CHANNEL lock
   -> A_CANCEL: strip Bmfl
   -> A_UPDATE: if channel is Amfl and Bmfl is gone, S_SpellCancelChannel
 spell_commit (successful cast)
   -> S_ManaFlareOnCast(caster, code, level)
-     scan enemies-of-caster with Bmfl in Area
+     scan enemies-of-caster with Bmfl and an active Amfl channel in Area
+     throttle per Bmfl instance using status.next_tick (first cast at time zero works)
      damage primary via S_SpellDamage; optional Rng splash
 G_UnitArmorValue
   -> S_ManaFlareArmorBonus (DataE while Bmfl)
@@ -60,6 +62,18 @@ G_UnitArmorValue
 ```c
 { "Amfl", CAbilityManaFlare, AB_SPELL | AB_CHANNEL | AB_UPDATE, SPELL_TARGET_NONE },
 ```
+
+## Persistence and remaining parity
+
+The per-channel flare interval deadline uses `heroabilitystatus_t.next_tick`.
+`data` remains reserved for the status payload/legacy origin rawcode; using it
+for cast timestamps could dispatch an unrelated status ability. Save format 128
+rejects older Mana Flare timestamp representations. `Bmfl` is explicitly
+attributed to `Amfl` for status lifecycle dispatch.
+
+`Apsh` currently delegates its non-channel behavior to the existing Divine
+Shield implementation; true Phase Shift mechanics and any Mana Flare missile
+visual effects are separate follow-up work.
 
 ## Diagnostic Workflow
 
@@ -76,4 +90,5 @@ make test-wc3-engine WC3_PATTERN='wc3_spell.mana_flare*'
 Focused tests cover procedure registration, authored non-stock DataA damage,
 enemy-cast trigger, out-of-area ignore, friendly-cast ignore, armor bonus,
 Cast interval gating, channel/expiry cleanup (`channel.code == 0` after `Bmfl`
-expires), and splash mana-pool filter.
+expires), splash mana-pool filter, time-zero cooldown, active channel gating, and
+Phase Shift rejection without mana loss.

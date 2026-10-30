@@ -5,6 +5,7 @@
 #define BZ_AMFL MAKEFOURCC('A', 'm', 'f', 'l') // rawcode; Faerie Dragon Mana Flare
 #define BZ_BMFL MAKEFOURCC('B', 'm', 'f', 'l') // rawcode; Mana Flare caster buff
 #define BZ_AHTB MAKEFOURCC('A', 'H', 't', 'b') // rawcode; Storm Bolt probe for enemy casts
+#define BZ_APSH MAKEFOURCC('A', 'p', 's', 'h') // rawcode; Faerie Dragon Phase Shift
 
 edict_t *alloc_test_unit(uint32_t class_id, float x, float y);
 void reset_entities(void);
@@ -14,7 +15,7 @@ void free_slk_rows(slkTestData_t *rows);
 
 /* Non-stock DataA=7 / DataC=70 / DataE=9 / Cost=25 so tests cannot pass on retail 3/90/12/50. */
 #define MFL_SLK \
-	"ID;PWXL;N;EBB;Y3;X18\n" \
+	"ID;PWXL;N;EBB;Y4;X18\n" \
 	"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n" \
 	"C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Cost1\"\nC;Y1;X6;K\"Cool1\"\n" \
 	"C;Y1;X7;K\"Rng1\"\nC;Y1;X8;K\"Dur1\"\nC;Y1;X9;K\"HeroDur1\"\n" \
@@ -32,7 +33,10 @@ void free_slk_rows(slkTestData_t *rows);
 	"C;Y3;X7;K\"600\"\nC;Y3;X8;K\"5\"\nC;Y3;X9;K\"3\"\n" \
 	"C;Y3;X10;K\"0\"\nC;Y3;X11;K\"0\"\nC;Y3;X12;K\"100\"\n" \
 	"C;Y3;X13;K\"0\"\nC;Y3;X14;K\"0\"\nC;Y3;X15;K\"0\"\n" \
-	"C;Y3;X16;K\"0\"\nC;Y3;X17;K\"0\"\nC;Y3;X18;K\"BHtb\"\nE\n"
+	"C;Y3;X16;K\"0\"\nC;Y3;X17;K\"0\"\nC;Y3;X18;K\"BHtb\"\n" \
+	"C;Y4;X1;K\"Apsh\"\nC;Y4;X2;K\"Apsh\"\nC;Y4;X3;K\"1\"\n" \
+	"C;Y4;X5;K\"15\"\nC;Y4;X6;K\"0\"\nC;Y4;X8;K\"2\"\n" \
+	"C;Y4;X9;K\"2\"\nC;Y4;X18;K\"Bpsh\"\nE\n"
 
 typedef struct {
 	slkTestData_t *rows, *old;
@@ -66,6 +70,7 @@ static void mfl_setup(mflFix_t *fix, cstring_t slk) {
 	fix->far_enemy->targtype = fix->far_bait->targtype = fix->splash->targtype = TARG_GROUND;
 	fix->enemy->data.UnitBalance = &fix->enemy_bal;
 	fix->flare->unit_state->ranks[0] = MAKE(heroability_t, .code = BZ_AMFL, .level = 1);
+	fix->flare->unit_state->ranks[1] = MAKE(heroability_t, .code = BZ_APSH, .level = 1);
 	fix->enemy->unit_state->ranks[0] = MAKE(heroability_t, .code = BZ_AHTB, .level = 1);
 	fix->ally->unit_state->ranks[0] = MAKE(heroability_t, .code = BZ_AHTB, .level = 1);
 	fix->far_enemy->unit_state->ranks[0] = MAKE(heroability_t, .code = BZ_AHTB, .level = 1);
@@ -95,6 +100,7 @@ TEST(wc3_spell, mana_flare_registers_channel_procedure) {
 	T_ASSERT(item.ability->flags & AB_CHANNEL);
 	T_ASSERT(item.ability->flags & AB_UPDATE);
 	T_EQ(item.ability->target_type, SPELL_TARGET_NONE);
+	T_EQ(S_AbilityItem(BZ_APSH).ability->proc, CAbilityPhaseShift);
 }
 
 /* Activation applies Bmfl, spends Cost, locks channel, and adds authored DataE armor. */
@@ -174,6 +180,71 @@ TEST(wc3_spell, mana_flare_splash_hits_mana_units_in_range) {
 	T_ASSERT(S_CastUnitTargetSpell(fix.enemy, BZ_AHTB, fix.flare));
 	T_FEQ(fix.enemy->health.value, 430, 0.001f);
 	T_FEQ(fix.splash->health.value, 430, 0.001f);
+	mfl_done(&fix);
+}
+
+/* The first flare may occur at game time zero, without losing its interval gate. */
+TEST(wc3_spell, mana_flare_time_zero_cooldown_and_status_identity) {
+	mflFix_t fix;
+	heroabilitystatus_t *status;
+	mfl_setup(&fix, MFL_SLK);
+	level.time = 0;
+	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
+	status = unit_findstatus(fix.flare, BZ_BMFL);
+	T_NOT_NULL(status);
+	T_EQ(status->source_ability, BZ_AMFL);
+	T_EQ(status->data, 0);
+	T_ASSERT(S_CastUnitTargetSpell(fix.enemy, BZ_AHTB, fix.flare));
+	T_FEQ(fix.enemy->health.value, 430, 0.001f);
+	T_EQ(status->next_tick, 750);
+	fix.enemy->mana.value = 100;
+	T_ASSERT(S_CastUnitTargetSpell(fix.enemy, BZ_AHTB, fix.flare));
+	T_FEQ(fix.enemy->health.value, 430, 0.001f);
+	level.time = 749;
+	fix.enemy->mana.value = 100;
+	T_ASSERT(S_CastUnitTargetSpell(fix.enemy, BZ_AHTB, fix.flare));
+	T_FEQ(fix.enemy->health.value, 430, 0.001f);
+	level.time = 750;
+	fix.enemy->mana.value = 100;
+	T_ASSERT(S_CastUnitTargetSpell(fix.enemy, BZ_AHTB, fix.flare));
+	T_FEQ(fix.enemy->health.value, 360, 0.001f);
+	mfl_done(&fix);
+}
+
+/* Buff presence alone must not retaliate after the gameplay channel ends. */
+TEST(wc3_spell, mana_flare_requires_live_channel) {
+	mflFix_t fix;
+	mfl_setup(&fix, MFL_SLK);
+	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
+	G_GetChannel(fix.flare)->code = 0;
+	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 1);
+	T_ASSERT(S_CastUnitTargetSpell(fix.enemy, BZ_AHTB, fix.flare));
+	T_FEQ(fix.enemy->health.value, 500, 0.001f);
+	mfl_done(&fix);
+}
+
+/* Phase Shift must not interrupt Mana Flare or consume additional mana. */
+TEST(wc3_spell, mana_flare_blocks_phase_shift_without_cancel) {
+	mflFix_t fix;
+	mfl_setup(&fix, MFL_SLK);
+	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
+	T_ASSERT(!S_CastNoTargetSpell(fix.flare, BZ_APSH));
+	T_FEQ(fix.flare->mana.value, 175, 0.001f);
+	T_EQ(G_GetChannel(fix.flare)->code, BZ_AMFL);
+	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 1);
+	T_FEQ(G_UnitArmorValue(fix.flare), 9, 0.001f);
+	mfl_done(&fix);
+}
+
+/* Splash cannot harm mana-less units, even when they are eligible enemies. */
+TEST(wc3_spell, mana_flare_splash_excludes_manaless_units) {
+	mflFix_t fix;
+	mfl_setup(&fix, MFL_SLK);
+	fix.splash->mana.max_value = 0;
+	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
+	T_ASSERT(S_CastUnitTargetSpell(fix.enemy, BZ_AHTB, fix.flare));
+	T_FEQ(fix.enemy->health.value, 430, 0.001f);
+	T_FEQ(fix.splash->health.value, 500, 0.001f);
 	mfl_done(&fix);
 }
 

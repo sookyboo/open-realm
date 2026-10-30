@@ -157,7 +157,8 @@ static uint32_t const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
 /* Version 124 registers the Tornado channel thinker and its saved timers. */
 /* Version 125 registers the Devour thinker and swallowed-unit lifecycle bits. */
 /* Version 126 persists the Mountain Giant War Club weapon alias and swing count. */
-static uint32_t const save_version = 127;
+/* Version 128 persists Mana Flare's cooldown deadline in status next_tick. */
+static uint32_t const save_version = 128;
 #define SAVE_STREAM_BUFFER (1u << 20) // bytes; save files are several MB of field writes, so a large stdio buffer avoids per-4 KB syscalls
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
@@ -3263,6 +3264,40 @@ TEST(wc3_save, current_combat_cargo_state_round_trips_without_migration) {
     T_EQ(unit->orders->wisp_egress_tree_spawn_time, goal->spawn_time);
     T_FEQ(unit->orders->wisp_egress_target.x, -32.0f, 0.001f);
     T_FEQ(unit->orders->wisp_egress_target.y, 48.0f, 0.001f);
+    remove(filename);
+}
+
+/* Mana Flare keeps its per-channel retaliation deadline in the Bmfl status. */
+TEST(wc3_save, mana_flare_status_deadline_round_trips) {
+    cstring_t filename = Test_TempPath("save-mana-flare-deadline.bin");
+    edict_t *unit;
+    heroabilitystatus_t *status;
+    int index;
+
+    setup_test_world();
+    reset_entities();
+    level.time = 1000;
+    unit = alloc_test_unit(MAKEFOURCC('e','f','d','r'), 0, 0);
+    index = unit - g_edicts;
+    T_ASSERT(unit_addtimedstatus(unit, "Bmfl", 1, 30.0f));
+    status = unit_findstatus(unit, MAKEFOURCC('B','m','f','l'));
+    T_NOT_NULL(status);
+    if (!status) return;
+    status->source_ability = MAKEFOURCC('A','m','f','l');
+    status->next_tick = 1750;
+    status->data = 0;
+    T_ASSERT(WriteGame(filename));
+    status->next_tick = 0;
+    status->source_ability = 0;
+    T_ASSERT(ReadGame(filename));
+    unit = g_edicts + index;
+    status = unit_findstatus(unit, MAKEFOURCC('B','m','f','l'));
+    T_NOT_NULL(status);
+    if (status) {
+        T_EQ(status->source_ability, MAKEFOURCC('A','m','f','l'));
+        T_EQ(status->next_tick, 1750);
+        T_EQ(status->data, 0);
+    }
     remove(filename);
 }
 

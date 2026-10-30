@@ -235,6 +235,7 @@ BZ_ABILITY_PROC(CAbilityEntanglingRoots);
 BZ_ABILITY_PROC(CAbilityDarkRitual);
 BZ_ABILITY_PROC(CAbilityFrostArmor);
 BZ_ABILITY_PROC(CAbilityDivineShield);
+BZ_ABILITY_PROC(CAbilityPhaseShift);
 BZ_ABILITY_PROC(CAbilityStoneForm);
 BZ_ABILITY_PROC(CAbilityCriticalStrike);
 BZ_ABILITY_PROC(CAbilityEvasion);

@@ -46,7 +46,7 @@ BZ_ABILITY_PROC(CAbilityManaFlare) {
 		level = S_SpellLevel(ent, code);
 		buff = S_SpellBuffId(code, level);
 		if (!buff || strlen(buff) < 4) buff = "Bmfl";
-		S_SpellApplyTimedStatus(ent, buff, level, S_SpellHeroDuration(code, level, ent));
+		S_SpellApplyTimedStatusFromAbility(ent, code, level, buff, S_SpellHeroDuration(code, level, ent));
 		return true;
 	case A_UPDATE:
 		if (ent && cast && cast->code == code && !G_UnitStatusLevel(ent, ID_BMFL))
@@ -82,6 +82,7 @@ void S_ManaFlareOnCast(edict_t *caster, uint32_t spell_code, uint32_t spell_leve
 	if (cost <= 0.0f) return;
 
 	FILTER_EDICTS(flare, S_SpellIsAliveTarget(flare) && G_UnitStatusLevel(flare, ID_BMFL) &&
+				  S_SpellIsChanneling(flare) && G_GetChannel(flare)->code == ID_MANA_FLARE &&
 				  S_SpellIsEnemy(flare, caster)) {
 		heroabilitystatus_t *st;
 		uint32_t level, now, gate;
@@ -97,8 +98,10 @@ void S_ManaFlareOnCast(edict_t *caster, uint32_t spell_code, uint32_t spell_leve
 		st = mana_flare_status(flare);
 		now = G_Time();
 		gate = (uint32_t)(S_SpellNumber(ID_MANA_FLARE, ABILITY_NUMBER_CAST, level) * 1000.0f);
-		if (st && gate && st->data && now < st->data + gate) continue;
-		if (st) st->data = now;
+		/* next_tick is a deadline, not a last-fire timestamp: time zero and
+		 * save/load both preserve the full initial cooldown. */
+		if (st && st->next_tick && now < st->next_tick) continue;
+		if (st) st->next_tick = gate ? now + gate : 0;
 
 		damage = mana_flare_damage(flare, caster, cost);
 		if (damage > 0) S_SpellDamage(caster, flare, damage);
