@@ -8294,6 +8294,70 @@ TEST(wc3_spell, cripple_and_soul_burn_apply_status_and_read_authored_consumers) 
 	G_SetSLKRows("AbilityBuffData", old_buff); free_slk_rows(buff_rows);
 }
 
+TEST(wc3_spell, mountain_giant_taunt_orders_ten_closest_enemies_in_authored_area) {
+	const char slk[] =
+		"ID;PWXL;N;EBB;Y2;X6\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs1\"\n"
+		"C;Y1;X4;K\"Area1\"\nC;Y1;X5;K\"DataA1\"\nC;Y1;X6;K\"levels\"\n"
+		"C;Y2;X1;K\"Atau\"\nC;Y2;X2;K\"Atau\"\nC;Y2;X3;K\"air,ground,enemy,vuln,invu\"\n"
+		"C;Y2;X4;K\"450\"\nC;Y2;X5;K\"10\"\nC;Y2;X6;K\"1\"\nE\n";
+	slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+	static UnitWeapons_t const weapons = { .attacksEnabled = 1 };
+	edict_t *caster, *enemy[12], *friendly, *outside;
+
+	reset_entities(); setup_test_world();
+	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+	caster = alloc_test_unit(MAKEFOURCC('n','t','r','d'), 0, 0);
+	caster->s.player = 0;
+	caster->svflags |= SVF_MONSTER;
+	caster->targtype = TARG_GROUND;
+	caster->health.value = caster->health.max_value = 1000;
+	FOR_LOOP(i, 12) {
+		enemy[i] = alloc_test_unit(MAKEFOURCC('h','f','o','o'), (float)(i + 1) * 40.0f, 0);
+		enemy[i]->s.player = 1;
+		enemy[i]->svflags |= SVF_MONSTER;
+		enemy[i]->targtype = TARG_GROUND;
+		if (i != 0) {
+			enemy[i]->data.UnitWeapons = &weapons;
+			enemy[i]->unit_state->attack1.type = ATK_NORMAL;
+			enemy[i]->unit_state->attack1.weapon = WPN_NORMAL;
+			enemy[i]->unit_state->attack1.targetsAllowed = G_TargetFlagForType(TARG_GROUND);
+		}
+	}
+	friendly = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 20, 0);
+	friendly->s.player = 0;
+	friendly->svflags |= SVF_MONSTER;
+	friendly->targtype = TARG_GROUND;
+	friendly->data.UnitWeapons = &weapons;
+	friendly->unit_state->attack1.type = ATK_NORMAL;
+	friendly->unit_state->attack1.weapon = WPN_NORMAL;
+	friendly->unit_state->attack1.targetsAllowed = G_TargetFlagForType(TARG_GROUND);
+	outside = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 460, 0);
+	outside->s.player = 1;
+	outside->svflags |= SVF_MONSTER;
+	outside->targtype = TARG_GROUND;
+	outside->data.UnitWeapons = &weapons;
+	outside->unit_state->attack1.type = ATK_NORMAL;
+	outside->unit_state->attack1.weapon = WPN_NORMAL;
+	outside->unit_state->attack1.targetsAllowed = G_TargetFlagForType(TARG_GROUND);
+
+	T_EQ((int)S_SpellNumber(MAKEFOURCC('A','t','a','u'), ABILITY_NUMBER_AREA, 1), 450);
+	T_EQ((int)S_SpellData(MAKEFOURCC('A','t','a','u'), 1, 1), 10);
+	T_ASSERT(S_SpellIsEnemy(caster, enemy[0]));
+	T_ASSERT(S_SpellAllowsAreaTarget(MAKEFOURCC('A','t','a','u'), caster, enemy[0]));
+	T_ASSERT(!S_AttackCanTarget(enemy[0], caster));
+	T_ASSERT(S_AttackCanTarget(enemy[1], caster));
+	T_ASSERT(test_execute_code(caster, "Atau", MAKE(spellTarget_t, .type = SPELL_TARGET_NONE)));
+	T_ASSERT(enemy[0]->goalentity != caster);
+	FOR_LOOP(i, 10) T_ASSERT(enemy[i + 1]->goalentity == caster);
+	T_ASSERT(enemy[11]->goalentity != caster);
+	T_ASSERT(friendly->goalentity != caster);
+	T_ASSERT(outside->goalentity != caster);
+
+	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_spell, cripple_reduces_enemy_movement_attack_rate_and_damage_from_data) {
 	const char slk[] =
 		"ID;PWXL;N;EBB;Y2;X9\n"

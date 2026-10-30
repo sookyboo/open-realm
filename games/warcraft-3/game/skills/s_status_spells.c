@@ -99,13 +99,40 @@ float S_SoulBurnDamageReduction(edict_t const *unit) {
  * Ubertip="Forces nearby enemy units to attack the caster. Lasts <Atau,Dur1> seconds."
  * One-shot AOE that re-targets all enemies in Area to attack the caster.
  */
+typedef struct {
+    edict_t *unit;
+    float distance;
+} tauntTarget_t;
+
 BZ_SIMPLE_SPELL_PROC(AbilityTaunt) {
     uint32_t level = S_SpellLevel(caster, spell->code);
     float area = S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level);
+    uint32_t limit = (uint32_t)MAX(0.0f, S_SpellData(spell->code, level, 1));
+    tauntTarget_t *targets;
+    uint32_t count = 0;
+
     G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_CASTER, 0, caster, NULL, true);
-    FILTER_EDICTS(target, target != caster && S_SpellIsAliveTarget(target) && S_SpellIsEnemy(caster, target) &&
-                  Vector2_distance(&target->s.origin2, &caster->s.origin2) <= area)
-        order_attack(target, caster);
+    if (!limit || !globals.num_edicts) return;
+    limit = MIN(limit, globals.num_edicts);
+    targets = gi.MemAlloc((size_t)limit * sizeof(*targets));
+    if (!targets) return;
+
+    FILTER_EDICTS(target, target != caster && S_SpellAllowsAreaTarget(spell->code, caster, target) &&
+                  S_AttackCanTarget(target, caster)) {
+        float distance = Vector2_distance(&target->s.origin2, &caster->s.origin2);
+        uint32_t insert = 0;
+        if (distance > area) continue;
+        while (insert < count &&
+               (targets[insert].distance < distance ||
+                (targets[insert].distance == distance &&
+                 targets[insert].unit->s.number < target->s.number))) insert++;
+        if (insert >= limit) continue;
+        if (count < limit) count++;
+        for (uint32_t i = count - 1; i > insert; i--) targets[i] = targets[i - 1];
+        targets[insert] = (tauntTarget_t){ .unit = target, .distance = distance };
+    }
+    FOR_LOOP(i, count) order_attack(targets[i].unit, caster);
+    gi.MemFree(targets);
 }
 
 /* ---- Poison attacks (Aven/Apoi/Apo2) ---------------------------------------
