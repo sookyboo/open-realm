@@ -140,13 +140,26 @@ static cstring_t G_ProcessTooltipString(cstring_t input) {
         if (*p == '<') {
             char classname[16];
             char field[16];
+            char format[16] = "";
             cstring_t replacement;
-            int matched = sscanf(p, "<%15[^,],%15[^>]>", classname, field);
+            int matched = sscanf(p, "<%15[^,],%15[^,>],%15[^>]>", classname, field, format);
 
             if (matched == 2 && (replacement = G_AbilityString(classname, field))) {
                 strncat(out, replacement, sizeof(buffers[0]) - strlen(out) - 1);
                 p += strlen(classname) + strlen(field) + 2;
                 continue;
+            }
+            if (matched == 3 && !strcmp(format, "%") &&
+                (replacement = G_AbilityString(classname, field))) {
+                char *end;
+                double const value = strtod(replacement, &end);
+                if (end != replacement && !*end) {
+                    char percent[32];
+                    snprintf(percent, sizeof(percent), "%.0f", value * 100.0);
+                    strncat(out, percent, sizeof(buffers[0]) - strlen(out) - 1);
+                    p += strlen(classname) + strlen(field) + strlen(format) + 3;
+                    continue;
+                }
             }
         }
         strncat(out, p, 1);

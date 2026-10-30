@@ -1861,6 +1861,43 @@ TEST(wc3_building, draenei_saboteur_healing_wave_is_an_enabled_command) {
     G_TestPopAbilityConfig();
 }
 
+TEST(wc3_building, percent_tooltip_placeholders_expand_from_ability_data) {
+    static UnitAbilities_t const unit_abilities = { .abilList = "Aspo" };
+    static cstring_t const ability_config =
+        "[Aspo]\nArt=ReplaceableTextures\\PassiveButtons\\PASBTNSlowPoison.blp\n"
+        "Buttonpos=1,2\n"
+        "Ubertip=\"A poison attack that deals <Aspo,DataA1> damage per second, and slows the target enemy's movement by <Aspo,DataB1,%>% and attack by <Aspo,DataC1,%>% for <Aspo,Dur1> seconds.\"\n";
+    static char const ability_slk[] =
+        "ID;PWXL;N;E\nB;X7;Y2;D0\n"
+        "C;X1;Y1;K\"alias\"\nC;X2;K\"code\"\nC;X3;K\"levels\"\n"
+        "C;X4;K\"DataA1\"\nC;X5;K\"DataB1\"\nC;X6;K\"DataC1\"\nC;X7;K\"Dur1\"\n"
+        "C;X1;Y2;K\"Aspo\"\nC;X2;K\"Aspo\"\nC;X3;K1\n"
+        "C;X4;K4\nC;X5;K0.5\nC;X6;K0.25\nC;X7;K5\nE\n";
+    gameCommandButton_t buttons[16];
+    edict_t *unit;
+    slkTestData_t *rows = parse_slk_string(ability_slk);
+    slkTestData_t *old_rows;
+    uint8_t count;
+    bool found = false;
+
+    reset_entities();
+    setup_test_world();
+    old_rows = G_SetSLKRows("AbilityData", rows);
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
+    unit = alloc_test_unit(MAKEFOURCC('n','d','s','a'), 0, 0);
+    unit->data.UnitAbilities = (UnitAbilities_t *)&unit_abilities;
+    count = G_GetCommandButtons(unit, buttons, sizeof(buttons) / sizeof(buttons[0]));
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Aspo")) {
+        found = true;
+        T_STREQ(buttons[i].ubertip,
+                "A poison attack that deals 4 damage per second, and slows the target enemy's movement by 50% and attack by 25% for 5 seconds.");
+    }
+    T_ASSERT(found);
+    G_TestPopAbilityConfig();
+    G_SetSLKRows("AbilityData", old_rows);
+    free_slk_rows(rows);
+}
+
 TEST(wc3_building, naga_production_buttons_have_distinct_command_card_cells) {
     static uint32_t const producers[] = {
         MAKEFOURCC('n','n','t','t'), MAKEFOURCC('n','n','s','g'), MAKEFOURCC('n','n','s','a')
