@@ -1367,6 +1367,17 @@ static void mana_shield_remove(edict_t *unit, uint32_t buff) {
     G_InvalidateUnitInfoPanel(unit);
 }
 
+static void mana_shield_apply(edict_t *unit, uint32_t code, uint32_t level, uint32_t buff) {
+    heroabilitystatus_t *status;
+    if (!unit || !buff || unit->mana.value <= 0.0f) return;
+    unit_addstatus(unit, GetClassName(buff), level);
+    status = unit_findstatus(unit, buff);
+    if (!status) return;
+    status->source_ability = code;
+    status->rank = level;
+    unit_status_enabletargetart(unit, status, "origin");
+}
+
 /* Mana Shield owns its authored buff so learned-but-inactive abilities never intercept damage. */
 BZ_ABILITY_PROC(CAbilityManaShield) {
     uint32_t code = call && call->item && call->item->code ? call->item->code : 0;
@@ -1383,7 +1394,7 @@ BZ_ABILITY_PROC(CAbilityManaShield) {
     case A_TOGGLE_ON: return active;
     case A_EXECUTE:
         if (active) mana_shield_remove(ent, buff);
-        else if (buff && ent->mana.value > 0.0f) unit_addstatus(ent, GetClassName(buff), level);
+        else mana_shield_apply(ent, code, level, buff);
         return true;
     case A_ORDER:
         if (!call || !call->order) return false;
@@ -1392,7 +1403,7 @@ BZ_ABILITY_PROC(CAbilityManaShield) {
         code = ref.alias; level = ref.level; buff = mana_shield_buff(code, level);
         active = buff && G_UnitStatusLevel(ent, buff);
         if (!strcmp(call->order, "manashieldon")) {
-            if (!active && buff && ent->mana.value > 0.0f) unit_addstatus(ent, GetClassName(buff), level);
+            if (!active) mana_shield_apply(ent, code, level, buff);
             return true;
         }
         if (!strcmp(call->order, "manashieldoff")) {
