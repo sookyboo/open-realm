@@ -298,8 +298,13 @@ static void bounce_execute(bounceParams_t const *params) {
         edict_t *candidates[MAX_GROUP_SIZE];
         uint32_t candidate_count = 0;
         if (!current) break;
+        G_SpawnAbilityLightning(&(abilityLightningParams_t){
+            .ability_id = spell->code, .index = 0,
+            .source = caster, .target = current,
+            .duration_ms = CHAIN_LIGHTNING_BOLT_MS,
+        });
         S_SpellDamage(current, caster, (int)MAX(1.0f, damage));
-        G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_TARGET, 0, current, NULL, true);
+        G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_SPECIAL, 0, current, NULL, true);
         visited[nvisited++] = current; damage *= scale;
         FILTER_EDICTS(target, S_SpellBounceTargetAllowed(caster, spell->code, current, target,
                                                         S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level), false)) {
