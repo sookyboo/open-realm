@@ -139,6 +139,11 @@ BZ_ABILITY_PROC(CAbilitySalvage);
 BZ_ABILITY_PROC(CAbilityTreeOfLife);
 BZ_ABILITY_PROC(CAbilityWarp);
 BZ_ABILITY_PROC(CAbilityGrabTree);
+bool S_WarClubActive(edict_t const *unit);
+void S_WarClubEquip(edict_t *unit, uint32_t ability);
+void S_WarClubConsumeAttack(edict_t *unit);
+void S_WarClubClear(edict_t *unit);
+
 BZ_ABILITY_PROC(CAbilityDetector);
 BZ_ABILITY_PROC(CAbilityMagicSentry);
 BZ_ABILITY_PROC(CAbilityNeutralSpell);

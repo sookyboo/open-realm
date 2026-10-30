@@ -383,7 +383,92 @@ BZ_ABILITY_PROC(CAbilityTreeOfLife) {
         return CAbilityPassive(ent, msg, call);
     }
 }
-BZ_ABILITY_PROC(CAbilityGrabTree) { return CAbilityPassive(ent, msg, call); }
+/* War Club is a per-unit alternate weapon, not a temporary modification of
+ * shared unit data. The stock club lasts for fifteen committed swings. */
+#define WAR_CLUB_STRIKES 15u
+
+bool S_WarClubActive(edict_t const *unit) {
+    return unit && unit->unit_state && unit->unit_state->war_club_attacks_remaining > 0;
+}
+
+void S_WarClubClear(edict_t *unit) {
+    if (!unit || !unit->unit_state || !S_WarClubActive(unit)) return;
+    unit->unit_state->war_club_ability = 0;
+    unit->unit_state->war_club_attacks_remaining = 0;
+    G_AddUnitAnimationProperties(unit, "upgrade", false);
+    G_InvalidateUnitInfoPanel(unit);
+}
+
+void S_WarClubEquip(edict_t *unit, uint32_t ability) {
+    if (!unit || !unit->unit_state || !ability || M_IsDead(unit) ||
+        unit->unit_state->attack2.type == ATK_NONE) return;
+    unit->unit_state->war_club_ability = ability;
+    unit->unit_state->war_club_attacks_remaining = WAR_CLUB_STRIKES;
+    G_AddUnitAnimationProperties(unit, "upgrade", true);
+    G_InvalidateUnitInfoPanel(unit);
+}
+
+void S_WarClubConsumeAttack(edict_t *unit) {
+    if (!S_WarClubActive(unit)) return;
+    /* Keep the final hit's attack profile until it has resolved, then
+     * retire the presentation and return to Attack 1 for the next swing. */
+    if (unit->unit_state->war_club_attacks_remaining == 1) S_WarClubClear(unit);
+    else unit->unit_state->war_club_attacks_remaining--;
+}
+
+static bool war_club_tree(edict_t const *tree) {
+    destructable_t *state;
+    if (!tree || !tree->inuse || !G_IsDestructable(tree) || tree->targtype != TARG_TREE ||
+        G_UnitHasFlag(tree, UNIT_FLAG_INVULNERABLE) || (tree->s.renderfx & RF_HIDDEN))
+        return false;
+    state = G_GetDestructable((edict_t *)tree);
+    return state && !state->dead && tree->health.value > 0.0f;
+}
+
+/* No magic/area damage is applied to the tree. Destructable death owns
+ * navigation, triggers, loot and the regular tree-fall presentation. */
+BZ_ABILITY_PROC(CAbilityGrabTree) {
+    uint32_t code = call && call->item ? call->item->code : 0;
+    edict_t *tree = call && call->target && call->target->type == SPELL_TARGET_UNIT ?
+                    call->target->entity : NULL;
+    if (msg == A_SPELL_TARGET_MODE) {
+        if (call) ((abilityCall_t *)call)->spell_entity_target_mode = true;
+        return true;
+    }
+    if (msg == A_SPELL_APPROACH_RANGE) return true;
+    if (msg == A_ISSUED_TARGET_ORDER) {
+        if (!call || !call->order ||
+            (strcmp(call->order, "smart") && strcmp(call->order, "grabtree")))
+            return ABILITY_ORDER_UNHANDLED;
+        if (!war_club_tree(call->entity))
+            return strcmp(call->order, "smart") ? ABILITY_ORDER_REJECTED : ABILITY_ORDER_UNHANDLED;
+        if (!code || !ent || !G_UnitAbilityLevel(ent, code) || S_WarClubActive(ent))
+            return strcmp(call->order, "smart") ? ABILITY_ORDER_REJECTED : ABILITY_ORDER_UNHANDLED;
+        return S_IssueUnitTargetSpell(ent, code, call->entity) ?
+               ABILITY_ORDER_ACCEPTED : ABILITY_ORDER_REJECTED;
+    }
+    if (msg == A_VALIDATE) {
+        return ent && !M_IsDead(ent) && !S_WarClubActive(ent) &&
+               ent->unit_state && ent->unit_state->attack2.type != ATK_NONE &&
+               war_club_tree(tree);
+    }
+    if (msg == A_EXECUTE) {
+        if (!code || !ent || !tree || S_WarClubActive(ent) ||
+            ent->unit_state->attack2.type == ATK_NONE || !war_club_tree(tree)) return false;
+        if (!G_KillDestructable(tree, ent)) return false;
+        S_WarClubEquip(ent, code);
+        return S_WarClubActive(ent);
+    }
+    if (msg == A_DISABLE || msg == A_DEATH || msg == A_UNIT_REMOVE) {
+        if (ent && S_WarClubActive(ent)) {
+            /* A different derived ability must not clear its peer's club. */
+            if (msg != A_DISABLE || ent->unit_state->war_club_ability == code)
+                S_WarClubClear(ent);
+        }
+        return true;
+    }
+    return CAbilitySimpleSpell(ent, msg, call);
+}
 BZ_ABILITY_PROC(CAbilityDetector) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilityMagicSentry) {
     switch (msg) {

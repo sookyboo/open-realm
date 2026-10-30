@@ -1410,11 +1410,11 @@ void UI_WriteSingleInfo(edict_t *ent, gameClient_t *viewer) {
     uint32_t level = is_hero && ent->unit_state->hero.level > 0 ? ent->unit_state->hero.level
                                                  : MAX(1, balance->level);
     int32_t dice = ent->unit_state->attack1.numberOfDice;
-    bool has_attack1 = dice > 0;
+    bool has_attack1 = dice > 0 && (!S_WarClubActive(ent) || S_UnitAttackSlotEnabled(ent, 0));
     int32_t min_damage = has_attack1 ? MAX(0, (int32_t)(ent->unit_state->attack1.damageBase + dice)) : 0;
     int32_t max_damage = has_attack1 ? MAX(0, (int32_t)(ent->unit_state->attack1.damageBase + dice * ent->unit_state->attack1.sidesPerDie)) : 0;
     int32_t dice2 = ent->unit_state->attack2.numberOfDice;
-    bool has_attack2 = UI_HasSecondAttack(weapons) && dice2 > 0;
+    bool has_attack2 = dice2 > 0 && (S_WarClubActive(ent) ? S_UnitAttackSlotEnabled(ent, 1) : UI_HasSecondAttack(weapons));
     int32_t min_damage2 = has_attack2 ? MAX(0, (int32_t)(ent->unit_state->attack2.damageBase + dice2)) : 0;
     int32_t max_damage2 = has_attack2 ? MAX(0, (int32_t)(ent->unit_state->attack2.damageBase + dice2 * ent->unit_state->attack2.sidesPerDie)) : 0;
 

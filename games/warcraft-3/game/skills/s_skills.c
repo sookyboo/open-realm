@@ -14,6 +14,7 @@ cstring_t const ancient_root_orders[] = { "root", "unroot", NULL };
 static cstring_t const mana_shield_orders[] = { "manashieldon", "manashieldoff", NULL };
 static cstring_t const build_orders[] = { "build", NULL };
 static cstring_t const hide_orders[] = { "ambush", NULL };
+static cstring_t const grabtree_orders[] = { "grabtree", NULL };
 static cstring_t const entangle_orders[] = {
     "entangle", "entangleinstant", "autoentangle", "autoentangleinstant", NULL
 };
@@ -465,7 +466,7 @@ static ability_t abilitylist[] = {
     { "Amfl", CAbilityManaFlare, AB_SPELL | AB_CHANNEL | AB_UPDATE, SPELL_TARGET_NONE },  /* Mana Flare */
     { "Apsh", CAbilityDivineShield, AB_SPELL },  /* Phase Shift */
     { "Aetl", CAbilityEthereal, AB_PASSIVE },  /* Ethereal */
-    { "Agra", CAbilityGrabTree, AB_PASSIVE },  /* War Club */
+    { "Agra", CAbilityGrabTree, AB_SPELL, SPELL_TARGET_POINT, grabtree_orders },  /* War Club */
     { "Assk", CAbilityHardenedSkin, AB_PASSIVE },  /* Hardened Skin */
     { "Arsk", CAbilityResistantSkin, AB_PASSIVE },  /* Resistant Skin */
     { "Atau", CAbilityTaunt, AB_SPELL },  /* Taunt */

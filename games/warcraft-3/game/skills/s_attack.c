@@ -100,6 +100,12 @@ bool S_UnitAttackSlotEnabled(edict_t const *attacker, uint32_t slot) {
     uint32_t enabled;
     if (!attacker || !attacker->unit_state || slot >= 2) return false;
     enabled = attacker->data.UnitWeapons ? attacker->data.UnitWeapons->attacksEnabled : 0;
+    /* War Club is a per-unit switch, never a mutation of UnitWeapons. The
+     * alternate weapon is authored as Attack 2 even when the stock unit enables
+     * only Attack 1 in its normal form. */
+    if (attacker->unit_state->war_club_attacks_remaining &&
+        attacker->unit_state->attack2.type != ATK_NONE)
+        enabled = 2u;
     if (S_AncientHasRootAbility(attacker)) {
         /* Root/Unroot transitions must not retain an attack order from the
          * previous form. Stable forms use their authored AbilityData masks. */
@@ -729,6 +735,10 @@ static void damage_target(edict_t *ent) {
     edict_t *target = ent->goalentity;
     attack_set_backswing_deadline(ent);
     S_ResolveAttackHit(ent, ent->goalentity, G_AttackDamage(ent, ent->goalentity, ai_rolldamage1(ent, 1)));
+    /* Count committed weapon swings, not issued orders or approach frames.
+     * Damage (including the final Siege strike) has been resolved before the
+     * club expires and changes the effective profile. */
+    S_WarClubConsumeAttack(ent);
     /* Normal units enter recovery from the attack animation's end callback.
      * Some building models (notably Orc Burrows in the current asset path) do
      * not resolve a usable attack sequence. Their damage-point timer still
@@ -773,6 +783,7 @@ static void throw_missile(edict_t *ent) {
                                G_ImpalingBoltResearchLevel(ent) > 0 && G_IsDestructable(other),
         .area_targets = ent->data.UnitWeapons ? (atk == &ent->unit_state->attack2 ? ent->data.UnitWeapons->attack2.areaTargets : ent->data.UnitWeapons->attack1.areaTargets) : 0,
     });
+    S_WarClubConsumeAttack(ent);
     /* See damage_target(): if the model has no finite attack sequence there
      * will be no animation-end callback to start recovery, so do it at the
      * projectile launch point instead. */

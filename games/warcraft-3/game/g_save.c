@@ -156,7 +156,8 @@ static uint32_t const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
 /* Version 123 persists Phoenix Fire cooldowns and Phoenix Egg hatch deadlines. */
 /* Version 124 registers the Tornado channel thinker and its saved timers. */
 /* Version 125 registers the Devour thinker and swallowed-unit lifecycle bits. */
-static uint32_t const save_version = 125;
+/* Version 126 persists the Mountain Giant War Club weapon alias and swing count. */
+static uint32_t const save_version = 126;
 #define SAVE_STREAM_BUFFER (1u << 20) // bytes; save files are several MB of field writes, so a large stdio buffer avoids per-4 KB syscalls
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
@@ -996,6 +997,8 @@ static field_t const unit_state_fields[] = {
     TF(unitState_t, attack_cooldown_end_time, F_INT),
     TF(unitState_t, attack_backswing_end_time, F_INT),
     TF(unitState_t, attack_target_spawn_time, F_INT),
+    TF(unitState_t, war_club_ability, F_INT),
+    TF(unitState_t, war_club_attacks_remaining, F_INT),
 
     TF(unitState_t, score_level_xp, F_INT),
     TF(unitState_t, shortcut_alert_until, F_IGNORE, 0, FIELD_RUNTIME),
@@ -3219,6 +3222,8 @@ TEST(wc3_save, current_combat_cargo_state_round_trips_without_migration) {
     unit->unit_state->attack_cooldown_end_time = 12000;
     unit->unit_state->attack_backswing_end_time = 9000;
     unit->unit_state->attack_target_spawn_time = goal->spawn_time;
+    unit->unit_state->war_club_ability = MAKEFOURCC('A','g','r','a');
+    unit->unit_state->war_club_attacks_remaining = 7;
     unit->orders->cargo_unload_pending = true;
     unit->orders->cargo_unload_ability = MAKEFOURCC('A','t','d','p');
     unit->orders->cargo_unload_goal = goal;
@@ -3244,6 +3249,8 @@ TEST(wc3_save, current_combat_cargo_state_round_trips_without_migration) {
     T_EQ(unit->unit_state->attack_cooldown_end_time, 12000);
     T_EQ(unit->unit_state->attack_backswing_end_time, 9000);
     T_EQ(unit->unit_state->attack_target_spawn_time, goal->spawn_time);
+    T_EQ(unit->unit_state->war_club_ability, MAKEFOURCC('A','g','r','a'));
+    T_EQ(unit->unit_state->war_club_attacks_remaining, 7u);
     T_FEQ(unit->unitinfo.PropWindow, 0.0f, 0.001f);
     T_ASSERT(unit->orders->cargo_unload_pending);
     T_EQ(unit->orders->cargo_unload_ability, MAKEFOURCC('A','t','d','p'));

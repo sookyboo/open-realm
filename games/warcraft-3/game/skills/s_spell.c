@@ -888,9 +888,12 @@ static bool spell_execute_unit_target(spellUnitTargetParams_t const *params, edi
  * item only after the ability has successfully executed. */
 static bool spell_execute_point_target(edict_t *clent, edict_t *caster, uint32_t code,
                                        uint32_t level, ability_t const *spell,
-                                       vec2_t const *point, edict_t *source_item,
-                                       uint32_t source_item_spawn_time, edict_t *active_approach) {
-    spellTarget_t st = { .type = SPELL_TARGET_POINT, .point = *point };
+                                       vec2_t const *point, edict_t *entity_target,
+                                       edict_t *source_item, uint32_t source_item_spawn_time,
+                                       edict_t *active_approach) {
+    spellTarget_t st = (entity_target && spell->proc == CAbilityGrabTree) ?
+                       MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = entity_target) :
+                       MAKE(spellTarget_t, .type = SPELL_TARGET_POINT, .point = *point);
     abilityitem_t item = { .code = code, .ability = spell };
     abilityCall_t call = MAKE(abilityCall_t, .item = &item, .target = &st,
                               .source_item = source_item,
@@ -973,17 +976,23 @@ void S_SpellTargetApproachThink(edict_t *thinker) {
          * ordinary unit-target validation intentionally rejects. */
         st = entity_point_target ? MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = target) :
                                    MAKE(spellTarget_t, .type = SPELL_TARGET_POINT, .point = target->s.origin2);
-        if (!spell_validate_point(&val) || !spell_message(caster, A_VALIDATE, &item, &st)) {
+        if ((spell->proc == CAbilityGrabTree && !G_UnitAbilityLevel(caster, code)) ||
+            !spell_validate_point(&val) || !spell_message(caster, A_VALIDATE, &item, &st)) {
             if (caster->goalentity == target) caster->goalentity = NULL;
             unit_stand(caster);
             G_FreeEdict(thinker);
             return;
         }
+        /* A large Giant need only reach a tree's edge rather than overlap
+         * the destructable's centre to cast Grab Tree. */
+        if (spell->proc == CAbilityGrabTree)
+            range += MAX(0.0f, caster->collision) + MAX(0.0f, target->collision);
         if (range > 0.0f && Vector2_distance(&caster->s.origin2, &target->s.origin2) > range)
             return;
         if (caster->goalentity == target) caster->goalentity = NULL;
         unit_stand(caster);
         spell_execute_point_target(clent, caster, code, level, spell, &target->s.origin2,
+                                   (entity_point_target && spell->proc == CAbilityGrabTree) ? target : NULL,
                                    source_item, thinker_cast->source_item_spawn_time, thinker);
         G_FreeEdict(thinker);
         return;
@@ -1179,6 +1188,9 @@ static bool spell_point_or_entity_target_selected(edict_t *clent, vec2_t const *
         return false;
     }
 
+    /* War Club uses the edge of the large caster and the tree footprint. */
+    if (target && spell->proc == CAbilityGrabTree)
+        range += MAX(0.0f, caster->collision) + MAX(0.0f, target->collision);
     if (range > 0.0f && Vector2_distance(&caster->s.origin2, point) > range) {
         if (!spell_begin_target_approach(caster, code, target, target ? NULL : point,
                                          source_item, source_item_spawn_time)) return false;
@@ -1190,6 +1202,7 @@ static bool spell_point_or_entity_target_selected(edict_t *clent, vec2_t const *
     }
 
     if (!spell_execute_point_target(clent, caster, code, level, spell, point,
+                                    (spell->proc == CAbilityGrabTree) ? target : NULL,
                                     source_item, source_item_spawn_time, NULL)) return false;
     spell_order_accepted(caster, spell);
     if (spell_is_tiny_structure(spell)) spell_tiny_cursor_clear(clent);
@@ -1791,10 +1804,21 @@ bool S_IssueUnitTargetSpell(edict_t *caster, uint32_t code, edict_t *unit) {
     if (!caster || !unit || !code || !G_UnitAbilityLevel(caster, code) || S_UnitPolymorphed(caster)) return false;
     spell = S_SpellAbilityForCode(code);
     abilityitem_t item = { .code = code, .ability = spell };
-    if (!spell || (spell->target_type != SPELL_TARGET_UNIT &&
-                   spell->target_type != SPELL_TARGET_UNIT_OR_POINT) ||
-        !S_AbilityHasCommand(spell) || (spell->flags & AB_TOGGLE)) return false;
+    if (!spell || !S_AbilityHasCommand(spell) || (spell->flags & AB_TOGGLE)) return false;
     level = S_SpellLevel(caster, code);
+    if (spell->target_type == SPELL_TARGET_POINT && spell->proc == CAbilityGrabTree) {
+        spellPointValidateParams_t val = MAKE(spellPointValidateParams_t,
+            .caster = caster, .code = code, .level = level, .point = &unit->s.origin2, .range = 0.0f);
+        float const cast_range = S_SpellRange(code, level) + MAX(0.0f, caster->collision) +
+                                 MAX(0.0f, unit->collision);
+        if (!spell_validate_point(&val) || !spell_message(caster, A_VALIDATE, &item, &target)) return false;
+        if (Vector2_distance(&caster->s.origin2, &unit->s.origin2) > cast_range)
+            return spell_begin_target_approach(caster, code, unit, NULL, NULL, 0);
+        return spell_execute_point_target(NULL, caster, code, level, spell, &unit->s.origin2,
+                                          unit, NULL, 0, NULL);
+    }
+    if (spell->target_type != SPELL_TARGET_UNIT && spell->target_type != SPELL_TARGET_UNIT_OR_POINT)
+        return false;
     range = S_SpellRange(code, level);
     if (!spell_validate(NULL, caster, code, level, unit, 0.0f) ||
         !S_SpellAllowsTarget(code, caster, unit)) return false;
@@ -1835,7 +1859,7 @@ bool S_IssuePointTargetSpell(edict_t *caster, uint32_t code, vec2_t const *point
     if (range > 0.0f && Vector2_distance(&caster->s.origin2, point) > range)
         return spell_begin_target_approach(caster, code, NULL, point, NULL, 0);
 
-    spell_execute_point_target(NULL, caster, code, level, spell, point, NULL, 0, NULL);
+    spell_execute_point_target(NULL, caster, code, level, spell, point, NULL, NULL, 0, NULL);
     return true;
 }
 
