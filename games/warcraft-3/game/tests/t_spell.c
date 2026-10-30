@@ -7177,6 +7177,210 @@ TEST(wc3_spell, melee_spells_use_authored_status_and_bonus_values) {
 	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+/* Spell Steal transfers a positive enemy buff to a friendly unit in the
+ * authored effect area and preserves the buff's remaining runtime state. */
+TEST(wc3_spell, spell_steal_transfers_positive_enemy_buff_to_nearby_ally) {
+	static UnitAbilities_t const abilities = { .abilList = "Asps" };
+	const char slk[] =
+		"ID;PWXL;N;EBB;Y2;X8\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+		"C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Cost1\"\nC;Y1;X6;K\"Cool1\"\n"
+		"C;Y1;X7;K\"Rng1\"\nC;Y1;X8;K\"Area1\"\n"
+		"C;Y2;X1;K\"Asps\"\nC;Y2;X2;K\"Asps\"\nC;Y2;X3;K\"1\"\n"
+		"C;Y2;X4;K\"air,ground,friend,enemy,neutral,self\"\n"
+		"C;Y2;X5;K\"75\"\nC;Y2;X6;K\"3\"\nC;Y2;X7;K\"70\"\nC;Y2;X8;K\"32\"\nE\n";
+	slkTestData_t *rows = parse_slk_string(slk), *old;
+	edict_t *caster, *enemy, *ally;
+	heroabilitystatus_t *source, *stolen;
+	status_application_t app = {
+		.buff = "Bblo", .level = 2, .duration = 20.0f,
+		.source_ability = MAKEFOURCC('A','b','l','o'), .data = MAKEFOURCC('A','b','l','o'),
+		.rank = 2,
+		.buff_flags = WC3_STATUS_BUFF_POSITIVE | WC3_STATUS_BUFF_MAGICAL |
+		              WC3_STATUS_BUFF_TRANSFERABLE
+	};
+	wc3_status_modifier_t modifier = {
+		.type = WC3_STATUS_MOD_ATTACK_SPEED_PERCENT,
+		.policy = WC3_STATUS_MOD_ADD, .value = 0.4f
+	};
+	uint32_t const code = MAKEFOURCC('A','s','p','s');
+	uint32_t source_expiry = 0;
+
+	reset_entities(); setup_test_world(); level.time = 1000;
+	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+	old = G_SetSLKRows("AbilityData", rows);
+	ally = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 80, 0);
+	enemy = alloc_test_unit(MAKEFOURCC('o','g','r','u'), 64, 0);
+	caster = alloc_test_unit(MAKEFOURCC('h','p','r','i'), 0, 0);
+	caster->data.UnitAbilities = &abilities;
+	caster->svflags |= SVF_MONSTER; enemy->svflags |= SVF_MONSTER; ally->svflags |= SVF_MONSTER;
+	caster->targtype = enemy->targtype = ally->targtype = TARG_GROUND;
+	caster->s.player = ally->s.player = 0; enemy->s.player = 1;
+	caster->mana.value = caster->mana.max_value = 300;
+	caster->unit_state->ranks[0] = MAKE(heroability_t, .code = code, .level = 1);
+	source = unit_applystatus(enemy, &app);
+	T_NOT_NULL(source);
+	if (source) {
+		T_ASSERT(unit_status_setmodifier(source, 0, &modifier));
+		source_expiry = source->timestamp;
+	}
+
+	T_FEQ(S_SpellRange(code, 1), 70.0f, 0.001f);
+	T_FEQ(S_SpellNumber(code, ABILITY_NUMBER_COST, 1), 75.0f, 0.001f);
+	T_FEQ(S_SpellNumber(code, ABILITY_NUMBER_COOLDOWN, 1), 3.0f, 0.001f);
+	enemy->s.origin.x = enemy->s.origin2.x = 71.0f;
+	T_ASSERT(!S_CastUnitTargetSpell(caster, code, enemy)); /* outside authored Range */
+	T_FEQ(caster->mana.value, 300.0f, 0.001f);
+	enemy->s.origin.x = enemy->s.origin2.x = 64.0f;
+	T_ASSERT(S_SpellAllowsTarget(code, caster, enemy));
+	T_ASSERT(test_ability_message(caster, A_VALIDATE, &(abilityitem_t){ .code = code, .ability = S_SpellAbilityForCode(code) }, &(spellTarget_t){ .type = SPELL_TARGET_UNIT, .entity = enemy }));
+	T_ASSERT(S_CastUnitTargetSpell(caster, code, enemy));
+	T_FEQ(caster->mana.value, 225.0f, 0.001f);
+	T_ASSERT(!S_SpellCooldownReady(caster, code));
+	T_FEQ(S_SpellCooldownRemaining(caster, code), 3.0f, 0.001f);
+	T_ASSERT(!S_UnitHasStatus(enemy, MAKEFOURCC('B','b','l','o')));
+	stolen = unit_findstatus(ally, MAKEFOURCC('B','b','l','o'));
+	T_NOT_NULL(stolen);
+	if (stolen) {
+		T_EQ(stolen->level, 2u);
+		T_EQ(stolen->timestamp, source_expiry);
+		T_EQ(stolen->source_ability, app.source_ability);
+		T_EQ(stolen->data, app.data);
+		T_EQ(stolen->source, caster);
+		T_EQ(stolen->rank, 2u);
+		T_EQ(stolen->modifier_count, 1u);
+		T_FEQ(stolen->modifiers[0].value, 0.4f, 0.001f);
+	}
+	T_ASSERT(!S_CastUnitTargetSpell(caster, code, enemy));
+	T_FEQ(caster->mana.value, 225.0f, 0.001f);
+
+	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* A negative status on a friendly unit transfers to a nearby enemy. */
+TEST(wc3_spell, spell_steal_transfers_negative_friendly_debuff_to_nearby_enemy) {
+	static UnitAbilities_t const abilities = { .abilList = "Asps" };
+	const char slk[] =
+		"ID;PWXL;N;EBB;Y2;X8\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+		"C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Cost1\"\nC;Y1;X6;K\"Cool1\"\n"
+		"C;Y1;X7;K\"Rng1\"\nC;Y1;X8;K\"Area1\"\n"
+		"C;Y2;X1;K\"Asps\"\nC;Y2;X2;K\"Asps\"\nC;Y2;X3;K\"1\"\n"
+		"C;Y2;X4;K\"air,ground,friend,enemy,neutral,self\"\n"
+	"C;Y2;X5;K\"75\"\nC;Y2;X6;K\"3\"\nC;Y2;X7;K\"70\"\nC;Y2;X8;K\"32\"\nE\n";
+	slkTestData_t *rows = parse_slk_string(slk), *old;
+	edict_t *caster, *ally, *enemy;
+	heroabilitystatus_t *stolen;
+	status_application_t app = {
+		.buff = "Bfae", .level = 1, .duration = 12.0f,
+		.source_ability = MAKEFOURCC('A','f','a','e'),
+		.buff_flags = WC3_STATUS_BUFF_NEGATIVE | WC3_STATUS_BUFF_MAGICAL |
+		              WC3_STATUS_BUFF_TRANSFERABLE
+	};
+	uint32_t const code = MAKEFOURCC('A','s','p','s');
+
+	reset_entities(); setup_test_world(); level.time = 2000;
+	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+	old = G_SetSLKRows("AbilityData", rows);
+	caster = alloc_test_unit(MAKEFOURCC('h','p','r','i'), 0, 0);
+	caster->data.UnitAbilities = &abilities;
+	ally = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64, 0);
+	enemy = alloc_test_unit(MAKEFOURCC('o','g','r','u'), 200, 0);
+	caster->svflags |= SVF_MONSTER; ally->svflags |= SVF_MONSTER; enemy->svflags |= SVF_MONSTER;
+	caster->targtype = ally->targtype = enemy->targtype = TARG_GROUND;
+	caster->s.player = ally->s.player = 0; enemy->s.player = 1;
+	caster->mana.value = caster->mana.max_value = 300;
+	caster->unit_state->ranks[0] = MAKE(heroability_t, .code = code, .level = 1);
+	T_NOT_NULL(unit_applystatus(ally, &app));
+	T_ASSERT(!S_CastUnitTargetSpell(caster, code, ally)); /* opposing recipient outside Area */
+	T_FEQ(caster->mana.value, 300.0f, 0.001f);
+	T_ASSERT(S_UnitHasStatus(ally, MAKEFOURCC('B','f','a','e')));
+	enemy->s.origin.x = enemy->s.origin2.x = 80.0f;
+	T_ASSERT(S_CastUnitTargetSpell(caster, code, ally));
+	T_ASSERT(!S_UnitHasStatus(ally, MAKEFOURCC('B','f','a','e')));
+	stolen = unit_findstatus(enemy, MAKEFOURCC('B','f','a','e'));
+	T_NOT_NULL(stolen);
+	if (stolen) {
+		T_EQ(stolen->level, 1u);
+		T_EQ(stolen->source_ability, app.source_ability);
+		T_EQ(stolen->source, caster);
+		T_ASSERT(stolen->timestamp > G_Time());
+		T_ASSERT(stolen->timestamp <= G_Time() + 12000u);
+	}
+	T_FEQ(caster->mana.value, 225.0f, 0.001f);
+	unit_removestatus(enemy, unit_findstatus(enemy, MAKEFOURCC('B','f','a','e')), STATUS_REMOVE_SCRIPT);
+	level.time += 3000;
+	T_NOT_NULL(unit_applystatus(caster, &app));
+	enemy->s.origin.x = enemy->s.origin2.x = 20.0f;
+	T_ASSERT(S_CastUnitTargetSpell(caster, code, caster)); /* Self is an authored valid source target. */
+	T_ASSERT(!S_UnitHasStatus(caster, MAKEFOURCC('B','f','a','e')));
+	T_ASSERT(S_UnitHasStatus(enemy, MAKEFOURCC('B','f','a','e')));
+
+	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* Autocast only commits for an explicitly transferable source status with a
+ * valid opposing recipient in the source unit's authored effect area. */
+TEST(wc3_spell, spell_steal_autocast_requires_transferable_buff_and_recipient) {
+	static UnitAbilities_t const abilities = { .abilList = "Asps" };
+	const char slk[] =
+		"ID;PWXL;N;EBB;Y2;X8\n"
+		"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+		"C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Cost1\"\nC;Y1;X6;K\"Cool1\"\n"
+		"C;Y1;X7;K\"Rng1\"\nC;Y1;X8;K\"Area1\"\n"
+		"C;Y2;X1;K\"Asps\"\nC;Y2;X2;K\"Asps\"\nC;Y2;X3;K\"1\"\n"
+		"C;Y2;X4;K\"air,ground,friend,enemy,neutral,self\"\n"
+		"C;Y2;X5;K\"75\"\nC;Y2;X6;K\"3\"\nC;Y2;X7;K\"70\"\nC;Y2;X8;K\"32\"\nE\n";
+	slkTestData_t *rows = parse_slk_string(slk), *old;
+	edict_t *caster, *enemy, *ally;
+	abilityitem_t item;
+	abilityCall_t call;
+	status_application_t special[] = {
+		{ .buff = "Bams", .level = 1, .duration = 10.0f },
+		{ .buff = "Buhf", .level = 1, .duration = 10.0f },
+		{ .buff = "Bcyc", .level = 1, .duration = 10.0f }
+	};
+	status_application_t positive = {
+		.buff = "Bblo", .level = 1, .duration = 10.0f,
+		.buff_flags = WC3_STATUS_BUFF_POSITIVE | WC3_STATUS_BUFF_MAGICAL |
+		              WC3_STATUS_BUFF_TRANSFERABLE
+	};
+	uint32_t const code = MAKEFOURCC('A','s','p','s');
+
+	reset_entities(); setup_test_world(); level.time = 3000;
+	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+	old = G_SetSLKRows("AbilityData", rows);
+	ally = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 80, 0);
+	enemy = alloc_test_unit(MAKEFOURCC('o','g','r','u'), 64, 0);
+	caster = alloc_test_unit(MAKEFOURCC('h','p','r','i'), 0, 0);
+	caster->data.UnitAbilities = &abilities;
+	caster->svflags |= SVF_MONSTER; enemy->svflags |= SVF_MONSTER; ally->svflags |= SVF_MONSTER;
+	caster->targtype = enemy->targtype = ally->targtype = TARG_GROUND;
+	caster->s.player = ally->s.player = 0; enemy->s.player = 1;
+	caster->mana.value = caster->mana.max_value = 300;
+	caster->unit_state->ranks[0] = MAKE(heroability_t, .code = code, .level = 1);
+	item = S_AbilityItem(code); call = MAKE(abilityCall_t, .item = &item);
+	T_ASSERT(G_SetUnitAutocast(caster, code, true));
+	for (uint32_t i = 0; i < sizeof(special) / sizeof(special[0]); i++) {
+		uint32_t buff = FS_SLKKey(special[i].buff);
+		T_NOT_NULL(unit_applystatus(enemy, &special[i]));
+		T_ASSERT(!S_AbilityMessage(caster, A_AUTOCAST_ACQUIRE, &call));
+		T_FEQ(caster->mana.value, 300.0f, 0.001f);
+		T_ASSERT(!S_UnitHasStatus(ally, buff));
+		unit_removestatus(enemy, unit_findstatus(enemy, buff), STATUS_REMOVE_SCRIPT);
+	}
+	T_NOT_NULL(unit_applystatus(enemy, &positive));
+	T_ASSERT(S_AbilityMessage(caster, A_AUTOCAST_ACQUIRE, &call));
+	T_FEQ(caster->mana.value, 225.0f, 0.001f);
+	T_ASSERT(!S_UnitHasStatus(enemy, MAKEFOURCC('B','b','l','o')));
+	T_ASSERT(S_UnitHasStatus(ally, MAKEFOURCC('B','b','l','o')));
+
+	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_spell, bloodlust_autocast_waits_for_spell_cooldown) {
 	const char slk[] =
 		"ID;PWXL;N;EBB;Y2;X9\n"
