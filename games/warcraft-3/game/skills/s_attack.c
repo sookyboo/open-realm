@@ -396,6 +396,16 @@ static float const g_default_damage_table[8][8] = {
     { 1.00f, 1.00f, 1.00f, 0.50f, 1.00f, 1.00f, 0.05f, 1.00f }, /* hero   */
 };
 
+/* Shared attack-type/defense-type multiplier, independently of numeric armor.
+ * Enhanced-physical spells use ATK_SPELLS but deliberately skip armor. */
+float G_AttackTypeDamageMultiplier(uint32_t atk, uint32_t def) {
+    if (atk >= 8) atk = ATK_NONE;
+    if (def >= 8) def = 7;
+    return game.constants.combatConstantsLoaded
+        ? game.constants.damageBonus[atk][def]
+        : g_default_damage_table[atk][def];
+}
+
 /* Apply the Warsmash/WC3 damage formula: active attack×defense multiplier,
  * then numeric armor. Positive armor is 1/(1+K*A); negative armor uses the
  * Warcraft exponential curve 2-(1-K)^(-A). Result remains minimum 1 for the
@@ -413,12 +423,7 @@ int G_AttackDamageWithType(edict_t *attacker, edict_t *target, int base, uint32_
 static int attack_damage_type(edict_t *attacker, edict_t *target, int base, uint32_t atk) {
     if (!attacker || !target || base <= 0) return base;
     uint32_t def = target->unit_state ? target->unit_state->defense_type : 0;
-    if (atk >= 8) atk = 0;
-    if (def >= 8) def = 7;
-
-    float const mult = game.constants.combatConstantsLoaded
-                     ? game.constants.damageBonus[atk][def]
-                     : g_default_damage_table[atk][def];
+    float const mult = G_AttackTypeDamageMultiplier(atk, def);
     float const armor_coefficient = game.constants.combatConstantsLoaded
                                   ? game.constants.defenseArmor
                                   : 0.06f;

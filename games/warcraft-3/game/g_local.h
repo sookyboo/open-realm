@@ -3948,6 +3948,7 @@ void G_ResetHeroPassiveCaches(void);
 // g_combat.c
 int G_AttackDamage(edict_t *, edict_t *, int);
 int G_AttackDamageWithType(edict_t *, edict_t *, int, uint32_t);
+float G_AttackTypeDamageMultiplier(uint32_t, uint32_t);
 void T_Damage(edict_t *, edict_t *, int);
 
 // g_utils.c

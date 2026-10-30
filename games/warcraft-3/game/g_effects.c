@@ -411,6 +411,18 @@ cstring_t G_AbilityEffectArt(uint32_t ability_id, wc3EffectType_t type, uint32_t
 
     out[0] = '\0';
     if (!list || !*list || type == WC3_EFFECT_LIGHTNING) {
+        /* AEfk's original expansion archive supplies a separate caster burst
+         * and an animated knife missile burst. Some early ability-function
+         * tables do not name either effect; fall back to those stock models
+         * only when the field is ABSENT (not when a map clears it with '-'
+         * or '_'). Custom aliases inherit their AEfk base as usual. */
+        if (!list && (ability_id == MAKEFOURCC('A','E','f','k') ||
+                      G_AbilityCode(ability_id) == MAKEFOURCC('A','E','f','k'))) {
+            if (type == WC3_EFFECT_CASTER)
+                return "Abilities\\Spells\\NightElf\\FanOfKnives\\FanOfKnivesCaster.mdx";
+            if (type == WC3_EFFECT_MISSILE)
+                return "Abilities\\Spells\\NightElf\\FanOfKnives\\FanOfKnivesMissile.mdx";
+        }
         /* Warcraft stores Unholy Frenzy's persistent target model on neither
          * Auhf nor its AbilityBuffData row. Keep the stock asset as the final
          * fallback for both TFT's BUhf and RoC's BUhf compatibility status. */

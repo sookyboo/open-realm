@@ -67,3 +67,8 @@ Targetattach=origin
 [BEim]
 Buffart=ReplaceableTextures\CommandButtons\BTNImmolationOn.blp
 Targetart=TestUI\Models\anim_pulse.mdx
+
+// Custom Fan of Knives art fixture: independent, finite Birth effects.
+[A0fk]
+Casterart=TestUI\Models\anim_oneshot.mdx
+Missileart=TestUI\Models\anim_pulse.mdx
