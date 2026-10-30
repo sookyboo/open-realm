@@ -442,11 +442,41 @@ static void chain_lightning_execute(edict_t *caster, spellTarget_t st, abilityit
     chain_lightning_mark_visited(thinker, st.entity);
 }
 
+static edict_t *reincarnation_spawn_tombstone(vec2_t const *point) {
+    edict_t *tombstone;
+    uint32_t model;
+
+    if (!point) return NULL;
+    model = G_RegisterModel("Doodads\\Northrend\\Props\\NorthrendTombstone\\NorthrendTombStone0.mdx");
+    if (!model) return NULL;
+    tombstone = G_Spawn();
+    if (!tombstone) return NULL;
+    tombstone->s.model = model;
+    tombstone->s.flags |= EF_NOT_SELECTABLE;
+    tombstone->s.origin2 = *point;
+    tombstone->s.origin.x = point->x;
+    tombstone->s.origin.y = point->y;
+    tombstone->s.origin.z = CM_GetHeightAtPoint(point->x, point->y);
+    tombstone->movetype = MOVETYPE_NONE;
+    gi.LinkEntity(tombstone);
+    return tombstone;
+}
+
 void reincarnation_think(edict_t *thinker) {
     edict_t *owner = S_SpellChannelOwner(thinker);
-    if (!owner) { G_FreeEdict(thinker); return; }
+    if (!owner) {
+        if (thinker->goalentity && thinker->goalentity->inuse) G_FreeEdict(thinker->goalentity);
+        G_FreeEdict(thinker);
+        return;
+    }
     if (G_Time() < thinker->spawn_time) return;
-    if (M_IsDead(owner)) G_ReviveHero(owner, thinker->s.origin2.x, thinker->s.origin2.y);
+    if (thinker->goalentity && thinker->goalentity->inuse) G_FreeEdict(thinker->goalentity);
+    thinker->goalentity = NULL;
+    if (M_IsDead(owner)) {
+        G_ReviveHero(owner, thinker->s.origin2.x, thinker->s.origin2.y);
+        G_SpawnModelEffect("Abilities\\Spells\\Orc\\Reincarnation\\ReincarnationTarget.mdx",
+                           &owner->s.origin2, NULL, NULL, true);
+    }
     G_FreeEdict(thinker);
 }
 
@@ -457,6 +487,7 @@ void S_ReincarnationOnDeath(edict_t *unit) {
     FOR_LOOP(i, sizeof(codes) / sizeof(*codes)) if ((level = G_UnitAbilityLevel(unit, codes[i]))) { code = codes[i]; break; }
     if (!level || !S_SpellCooldownReady(unit, code)) return;
     thinker = G_Spawn(); thinker->owner = unit; thinker->class_id = code; thinker->s.origin2 = unit->s.origin2;
+    thinker->goalentity = reincarnation_spawn_tombstone(&unit->s.origin2);
     G_AddChannel(thinker);
     G_GetChannel(thinker)->owner_spawn_time = unit->spawn_time;
     thinker->spawn_time = G_Time() + (uint32_t)(S_SpellData(code, level, 1) * 1000.0f);
