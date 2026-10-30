@@ -81,7 +81,12 @@ static cstring_t G_BuffEffectValue(uint32_t buff_id, wc3EffectType_t type) {
     if (row->id != buff_id) return NULL;
     switch (type) {
         case WC3_EFFECT_EFFECT:  value = row->effectArt; break;
-        case WC3_EFFECT_TARGET:  value = row->targetArt; break;
+        case WC3_EFFECT_TARGET:
+            /* Persistent buff models use EffectArt in AbilityFunc.txt even
+             * though the status owns and attaches them like TargetArt. */
+            value = row->targetArt && *row->targetArt && strcmp(row->targetArt, "-") &&
+                    strcmp(row->targetArt, "_") ? row->targetArt : row->effectArt;
+            break;
         case WC3_EFFECT_SPECIAL: value = row->specialArt; break;
         case WC3_EFFECT_MISSILE: value = row->missileArt; break;
         default: break;
@@ -93,7 +98,9 @@ static cstring_t G_BuffEffectValue(uint32_t buff_id, wc3EffectType_t type) {
         if (base->id == row->code) {
             switch (type) {
                 case WC3_EFFECT_EFFECT:  return base->effectArt;
-                case WC3_EFFECT_TARGET:  return base->targetArt;
+                case WC3_EFFECT_TARGET:
+                    return base->targetArt && *base->targetArt && strcmp(base->targetArt, "-") &&
+                           strcmp(base->targetArt, "_") ? base->targetArt : base->effectArt;
                 case WC3_EFFECT_SPECIAL: return base->specialArt;
                 case WC3_EFFECT_MISSILE: return base->missileArt;
                 default: break;
@@ -133,6 +140,27 @@ static cstring_t G_EffectConfigValue(uint32_t ability_id, wc3EffectType_t type) 
             value = field ? FindConfigValue(classname, field) : NULL;
         }
         if (value) return value;
+    }
+    /* AbilityBuffFunc authors persistent status models as EffectArt, not
+     * TargetArt. Resolve that field only for an actual buff rawcode so an
+     * ability's unrelated cast/impact EffectArt is never treated as target art. */
+    if (type == WC3_EFFECT_TARGET) {
+        AbilityBuffData_t const *buff = G_AbilityBuffData(ability_id);
+        if (buff->id == ability_id) {
+            cstring_t effect_field = G_EffectFieldName(WC3_EFFECT_EFFECT, false);
+            memcpy(classname, &ability_id, 4);
+            classname[4] = '\0';
+            value = FindConfigValue(classname, effect_field);
+            if (!value) value = FindConfigValue(classname, G_EffectFieldName(WC3_EFFECT_EFFECT, true));
+            if (value && *value && strcmp(value, "-") && strcmp(value, "_")) return value;
+            if (buff->code && buff->code != ability_id) {
+                memcpy(classname, &buff->code, 4);
+                classname[4] = '\0';
+                value = FindConfigValue(classname, effect_field);
+                if (!value) value = FindConfigValue(classname, G_EffectFieldName(WC3_EFFECT_EFFECT, true));
+                if (value && *value && strcmp(value, "-") && strcmp(value, "_")) return value;
+            }
+        }
     }
     return G_BuffEffectValue(ability_id, type);
 }
@@ -600,6 +628,11 @@ edict_t *G_SpawnStatusEffectTarget(uint32_t status_id, edict_t *target, cstring_
         if (i == 0) strlcpy(key, "Targetattach", sizeof(key));
         else snprintf(key, sizeof(key), "Targetattach%u", i);
         authored_attach = FindConfigValue(classname, key);
+        if (!authored_attach || !*authored_attach) {
+            if (i == 0) strlcpy(key, "Effectattach", sizeof(key));
+            else snprintf(key, sizeof(key), "Effectattach%u", i);
+            authored_attach = FindConfigValue(classname, key);
+        }
         if (authored_attach && *authored_attach) selected_attach = authored_attach;
         {
             /* WC3 ability rows can pair one TargetArt model with each target

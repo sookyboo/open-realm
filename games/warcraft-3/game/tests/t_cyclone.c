@@ -73,6 +73,38 @@ TEST(wc3_spell, cyclone_aliases_share_procedure) {
     T_EQ(S_AbilityItem(BZ_AICY).ability->proc, CAbilityCyclone);
 }
 
+/* Blizzard stores persistent Cyclone status art as AbilityBuffFunc EffectArt,
+ * with Targetattach/Effectattach for the attachment point. */
+TEST(wc3_spell, cyclone_cast_spawns_abilitybuff_effectart_on_target) {
+    const char buff_slk[] =
+        "ID;PWXL;N;EBB;Y2;X2\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
+        "C;Y2;X1;K\"Bcyc\"\nC;Y2;X2;K\"Bcyc\"\nE\n";
+    cycFix_t fix = cyc_setup(CYC_SLK, BZ_ACYC);
+    slkTestData_t *buff_rows = parse_slk_string(buff_slk);
+    slkTestData_t *old_buffs = G_SetSLKRows("AbilityBuffData", buff_rows);
+    uint32_t const expected_model = G_RegisterModel("TestUI\\Models\\anim_pulse.mdx");
+    edict_t *effect = NULL;
+    heroabilitystatus_t *status;
+
+    T_ASSERT(expected_model > 0);
+    T_ASSERT(G_AbilityEffectArt(BZ_BCYC, WC3_EFFECT_TARGET, 0) != NULL);
+    T_ASSERT(S_CastUnitTargetSpell(fix.caster, BZ_ACYC, fix.enemy));
+    FILTER_EDICTS(found, found->status_effect_code == BZ_BCYC && found->goalentity == fix.enemy) {
+        effect = found;
+        break;
+    }
+    T_NOT_NULL(effect);
+    if (effect) T_EQ(effect->s.model, expected_model);
+    status = unit_findstatus(fix.enemy, BZ_BCYC);
+    T_NOT_NULL(status);
+    if (status) T_ASSERT(status->buff_flags & WC3_STATUS_BUFF_TARGET_ART);
+
+    cyc_done(fix);
+    G_SetSLKRows("AbilityBuffData", old_buffs);
+    free_slk_rows(buff_rows);
+}
+
 /* Item AIcy reads its own Dur/DataA; status.data keeps AIcy for S_StatusIsUndispellable. */
 TEST(wc3_spell, cyclone_item_aicy_applies_authored_duration_and_dispel) {
     const char slk[] =

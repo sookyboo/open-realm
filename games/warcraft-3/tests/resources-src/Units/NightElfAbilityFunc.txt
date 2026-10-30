@@ -29,6 +29,14 @@ Unorder=unimmolation
 Targetart=TestUI\Models\anim_pulse.mdx
 LightningEffect=MBUR
 
+[Bcyc]
+Effectart=TestUI\Models\anim_pulse.mdx
+Targetattach=sprite,first
+
+[Bcy2]
+Effectart=TestUI\Models\anim_pulse.mdx
+Effectattach=sprite,first
+
 [Aroa]
 Casterart=TestUI\Models\anim_oneshot.mdx
 

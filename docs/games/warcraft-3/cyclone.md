@@ -17,6 +17,11 @@
 Casting tosses one living unit into the air until `Dur` / `HeroDur` expires. While
 cycloned the victim cannot move, attack, or cast, and others cannot attack or
 target it with spells. Physical `S_ResolveAttackHit` / `T_Damage` also no-op.
+The persistent visual is authored on the `Bcyc` buff: `Effectart` points to
+`Abilities\\Spells\\NightElf\\Cyclone\\CycloneTarget.mdl`, and
+`Targetattach=sprite,first` attaches it to the victim. ROC 1.0 and TFT 1.29
+both use this `EffectArt` field. The status effect stays until Cyclone ends,
+including when Tornado applies the same `Bcyc` lift status.
 
 ## ROC vs TFT
 
@@ -87,7 +92,8 @@ make test-wc3-engine WC3_PATTERN='wc3_spell.cyclone*'
 Focused tests cover alias procedure lookup (including item `AIcy`), TFT
 organic/mechanical and ally filters, already-cycloned rejection without mana
 spend, move/attack/spell/damage locks, ROC empty-BuffID → `Bcyc`, HeroDur vs Dur,
-expiry restore, recast, item-row authored duration/DataA dispel via
+authored `Bcyc.EffectArt` attachment on a cast, expiry restore, recast,
+item-row authored duration/DataA dispel via
 `S_StatusIsUndispellable`, and DataA dispel eligibility (non-stock DataA≠0
 removed by Adis/Purge; DataA=0 survives while other buffs and mana spend still
 apply).

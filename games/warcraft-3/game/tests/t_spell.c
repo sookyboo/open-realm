@@ -4041,7 +4041,7 @@ TEST(wc3_spell, tornado_spin_lift_lasts_ten_seconds) {
         "E\n";
     const char buff_slk[] =
         "ID;PWXL;N;EBB;Y2;X3\n"
-        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"TargetArt\"\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"EffectArt\"\n"
         "C;Y2;X1;K\"Bcyc\"\nC;Y2;X2;K\"Bcyc\"\n"
         "C;Y2;X3;K\"TestUI\\\\Models\\\\anim_pulse.mdx\"\nE\n";
     static UnitAbilities_t const tornado_abilities = { .abilList = "Atsp" };
