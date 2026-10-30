@@ -20,12 +20,14 @@ normal maximum. The amount removed from an enemy is the amount the receiver
 can accept; reaching the cap does not destroy extra target mana. Allied transfer
 uses current mana, including excess, but is limited by the ally's normal cap.
 
-`G_RunEntity` runs the general over-cap decay branch at **3 mana/second** and
-stops at the ordinary maximum. The Siphon-owned `S_ManaExcessDecayRate()`
-returns zero while a live Siphon channel exists; channel cancellation, expiry,
-movement or stun causes decay to resume. The numeric rate is an approximate
-community-reported value pending an exact retail measurement; the 200% cap
-comes from patch 1.17. Natural regeneration resumes only below normal max.
+`G_RunEntity` runs the general over-cap decay branch using `AHdr` `DataI`
+(**3 mana/second** in installed 1.29 data) and stops at the ordinary maximum.
+The Siphon-owned `S_ManaExcessDecayRate()` returns zero while a Siphon channel
+is active; cancellation, expiry, movement or stun causes decay to resume.
+`ACsm` has `DataI=0` and does not replace the Blood Mage row. A non-stock
+`DataI=5` regression verifies that one 100 ms production tick removes 0.5
+mana, proving this is not a hardcoded retail value. The 200% cap comes from
+patch 1.17. Natural regeneration resumes only below normal max.
 
 `compress_stat` saturates the 8-bit snapshot ratio at 255, while the selected
 unit's existing current/max mana fields carry the real over-cap number. Hero

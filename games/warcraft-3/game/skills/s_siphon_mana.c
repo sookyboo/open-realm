@@ -1,6 +1,6 @@
 #include "s_skills.h"
 
-#define SIPHON_MANA_EXCESS_DECAY 3.0f // mana/sec; approximate excess decay, pending retail timing measurement
+#define SIPHON_MANA_ABILITY_CODE MAKEFOURCC('A','H','d','r')
 
 /* The special cap belongs to Siphon Mana, not Life Drain, even when both
  * share a channel thinker. Look up the concrete ability procedure so custom
@@ -14,7 +14,8 @@ static bool siphon_mana_is_siphon(uint32_t code) {
  * The ability owns the pause policy, including cancel/recast and aliases. */
 float S_ManaExcessDecayRate(edict_t *ent) {
     channel_t const *cast = G_GetChannel(ent);
-    return cast && cast->code && siphon_mana_is_siphon(cast->code) ? 0.0f : SIPHON_MANA_EXCESS_DECAY;
+    return cast && cast->code && siphon_mana_is_siphon(cast->code) ? 0.0f :
+        MAX(0.0f, S_SpellData(SIPHON_MANA_ABILITY_CODE, 1, 9));
 }
 
 /* Drain's Ndr1/Ndr2 select health/mana independently; allied transfer uses Ndr4/Ndr5 instead. */

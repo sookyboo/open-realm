@@ -51,7 +51,7 @@ static void review_capture_sound_policy(vec3_t const *origin, edict_t *emitter, 
 }
 
 static char const review_slk[] =
-    "ID;PWXL;N;EBB;Y12;X17\n"
+    "ID;PWXL;N;EBB;Y12;X18\n"
     "C;Y1;X1;K\"alias\"\n"
     "C;Y1;X2;K\"code\"\n"
     "C;Y1;X3;K\"targs\"\n"
@@ -66,6 +66,7 @@ static char const review_slk[] =
     "C;Y1;X12;K\"DataD1\"\n"
     "C;Y1;X13;K\"DataE1\"\n"
     "C;Y1;X14;K\"BuffID1\"\n"
+    "C;Y1;X18;K\"DataI1\"\n"
     "C;Y1;X15;K\"UnitID1\"\n"
     "C;Y1;X17;K\"EfctID1\"\n"
     "C;Y2;X1;K\"AHfs\"\n"
@@ -112,6 +113,7 @@ static char const review_slk[] =
     "C;Y4;X12;K\"0\"\n"
     "C;Y4;X13;K\"30\"\n"
     "C;Y4;X14;K\"\"\n"
+    "C;Y4;X18;K\"3\"\n"
     "C;Y5;X1;K\"ANdr\"\n"
     "C;Y5;X2;K\"AHdr\"\n"
     "C;Y5;X3;K\"air,ground,enemy\"\n"
@@ -997,6 +999,21 @@ TEST(wc3_ability_lifecycle, siphon_mana_overcharge_decays_after_stop) {
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+TEST(wc3_ability_lifecycle, siphon_mana_overcharge_decay_uses_authored_data) {
+    char slk[sizeof(review_slk)];
+    memcpy(slk, review_slk, sizeof(slk));
+    char *cell = strstr(slk, "C;Y4;X18;K\"3\"\n");
+    T_NOT_NULL(cell);
+    if (cell) cell[strlen("C;Y4;X18;K\"")] = '5';
+    slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+    edict_t *caster = review_setup();
+    caster->mana.max_value = 100; caster->mana.value = 101;
+    T_FEQ(S_ManaExcessDecayRate(caster), 5.0f, .001f);
+    G_RunEntity(caster);
+    T_FEQ(caster->mana.value, 100.5f, .001f);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 /* Other channelled spells, including Life Drain, must not suspend decay. */
 TEST(wc3_ability_lifecycle, life_drain_channel_does_not_freeze_siphon_overcharge) {
     edict_t *caster = review_setup(), *enemy = review_unit(1, 100);
@@ -1514,6 +1531,7 @@ TEST(wc3_ability_lifecycle, live_drain_continues_once_after_save_load) {
  * field or thinker; loading a saved surplus must allow decay to resume. */
 TEST(wc3_ability_lifecycle, siphon_overcharge_survives_save_load_and_decays) {
     cstring_t path = Test_TempPath("skill-siphon-overcharge-save.bin");
+    slkTestData_t *rows = parse_slk_string(review_slk), *old = G_SetSLKRows("AbilityData", rows);
     edict_t *caster = review_setup();
     caster->mana.max_value = 100; caster->mana.value = 145;
     T_ASSERT(WriteGame(path));
@@ -1524,6 +1542,7 @@ TEST(wc3_ability_lifecycle, siphon_overcharge_survives_save_load_and_decays) {
     G_RunEntity(caster);
     T_FEQ(caster->mana.value, 144.7f, .001f);
     remove(path);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
 /* The ROC Data11/Data12 spell schema and TFT DataA1/DataB1 schema must produce the same stock six waves. */
