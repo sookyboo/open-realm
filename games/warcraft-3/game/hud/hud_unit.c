@@ -95,6 +95,10 @@ static cstring_t G_CommandArtCode(edict_t *ent, cstring_t code) {
     if (!strcmp(code, STR_CmdBuild)) {
         return GetBuildCommand(WC3_RaceFromString(ent->data.UnitData->race));
     }
+    /* Ability rawcode is AChv, but retail AbilityFunc data uses [AChV].
+     * INI section lookup is case-sensitive, so use the authored spelling for
+     * presentation fields such as Art and Buttonpos. */
+    if (!strcmp(code, "AChv")) return "AChV";
     return code;
 }
 
@@ -287,6 +291,11 @@ static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool researc
     buttonpos = G_CommandButtonValue(
         FindConfigValue(art_code, G_ResearchField(STR_BUTTONPOS, research && !upgrade_research)),
         toggle_on ? FindConfigValue(art_code, STR_UNBUTTONPOS) : NULL, toggle_on);
+    /* Keep the retail Healing Wave position if a compatibility data set omits
+     * its command presentation row. */
+    if ((!buttonpos || !*buttonpos) && !research && !strcmp(code, "AChv")) {
+        buttonpos = "0,2";
+    }
     tip = G_CommandButtonValue(
         FindConfigValue(art_code, G_ResearchField(STR_TIP, research && !upgrade_research)),
         toggle_on ? FindConfigValue(art_code, STR_UNTIP) : NULL, toggle_on);
@@ -305,6 +314,10 @@ static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool researc
     if ((!art || !*art) && !research && !strcmp(code, "Aliq")) {
         art = "ReplaceableTextures\\CommandButtons\\BTNLiquidFire.blp";
         if (!tip || !*tip) tip = "Liquid Fire";
+    }
+    if ((!art || !*art) && !research && !strcmp(code, "AChv")) {
+        art = "ReplaceableTextures\\CommandButtons\\BTNHealingWave.blp";
+        if (!tip || !*tip) tip = "Healing Wave";
     }
     ubertip = G_CommandButtonValue(
         FindConfigValue(art_code, G_ResearchField(STR_UBERTIP, research && !upgrade_research)),

@@ -4384,6 +4384,55 @@ TEST(wc3_spell, human_support_spells_use_authored_status_and_heal_values) {
 	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+TEST(wc3_spell, creep_healing_wave_bounces_to_four_distinct_units_with_falling_heal) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X12\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+        "C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"targs1\"\nC;Y1;X6;K\"Area1\"\n"
+        "C;Y1;X7;K\"DataA1\"\nC;Y1;X8;K\"DataB1\"\nC;Y1;X9;K\"DataC1\"\n"
+        "C;Y1;X10;K\"Cost1\"\nC;Y1;X11;K\"Cool1\"\nC;Y1;X12;K\"Rng1\"\n"
+        "C;Y2;X1;K\"AChv\"\nC;Y2;X2;K\"AOhw\"\nC;Y2;X3;K1\n"
+        "C;Y2;X4;K\"air,ground,friend,self,vuln,invu,organic\"\n"
+        "C;Y2;X5;K\"air,ground,friend,self,vuln,invu,organic\"\n"
+        "C;Y2;X6;K100\nC;Y2;X7;K215\nC;Y2;X8;K4\nC;Y2;X9;K0.25\n"
+        "C;Y2;X10;K0\nC;Y2;X11;K0\nC;Y2;X12;K700\nE\n";
+    static UnitAbilities_t const abilities = { .abilList = "AChv" };
+    slkTestData_t *rows = parse_slk_string(slk), *old;
+    edict_t *caster, *targets[5];
+
+    reset_entities();
+    setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    caster = alloc_test_unit(MAKEFOURCC('n','d','r','s'), 0, 0);
+    caster->data.UnitAbilities = (UnitAbilities_t *)&abilities;
+    caster->s.player = 0;
+    for (uint32_t i = 0; i < 5; i++) {
+        targets[i] = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 1000.0f + 40.0f * i, 0);
+        targets[i]->s.player = 0;
+        targets[i]->health.max_value = 1000.0f;
+        targets[i]->health.value = 500.0f;
+        targets[i]->svflags |= SVF_MONSTER;
+        targets[i]->targtype = TARG_GROUND;
+    }
+
+    T_ASSERT(S_SpellIsAliveTarget(targets[1]));
+    T_ASSERT(S_SpellIsFriend(caster, targets[1]));
+    T_ASSERT(S_SpellAllowsTarget(MAKEFOURCC('A','C','h','v'), caster, targets[1]));
+    T_ASSERT(Vector2_distance(&targets[0]->s.origin2, &targets[1]->s.origin2) <= 100.0f);
+
+    T_ASSERT(test_execute_code(caster, "AChv",
+        MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = targets[0])));
+
+    T_FEQ(targets[0]->health.value, 715.0f, 0.01f);
+    T_FEQ(targets[1]->health.value, 661.25f, 0.01f);
+    T_FEQ(targets[2]->health.value, 620.9375f, 0.01f);
+    T_FEQ(targets[3]->health.value, 590.703125f, 0.01f);
+    T_FEQ(targets[4]->health.value, 500.0f, 0.01f);
+
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
+}
+
 /* Stock BuffIDs may be shared by custom abilities; both data schemas must
  * retain the casting alias through modifier installation and removal. */
 TEST(wc3_spell, human_support_aliases_preserve_authored_modifiers) {

@@ -1817,6 +1817,45 @@ TEST(wc3_building, draenei_saboteur_liquid_fire_shows_disabled_passive_indicator
     T_ASSERT(found);
 }
 
+TEST(wc3_building, draenei_saboteur_healing_wave_is_an_enabled_command) {
+    static UnitAbilities_t const saboteur_abilities = { .abilList = "Aliq,Ashm,AChv" };
+    static cstring_t const ability_config =
+        "[AChV]\nArt=ReplaceableTextures\\CommandButtons\\BTNHealingWave.blp\n"
+        "Buttonpos=0,2\nTip=Healing Wave\n";
+    gameCommandButton_t buttons[16];
+    edict_t *saboteur;
+    uint8_t count;
+    bool found = false;
+    bool found_hide = false;
+
+    reset_entities();
+    setup_test_world();
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
+    saboteur = alloc_test_unit(MAKEFOURCC('n','d','s','a'), 0, 0);
+    saboteur->data.UnitAbilities = (UnitAbilities_t *)&saboteur_abilities;
+    count = G_GetCommandButtons(saboteur, buttons, sizeof(buttons) / sizeof(buttons[0]));
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "AChv")) {
+        found = true;
+        T_ASSERT(!buttons[i].disabled);
+        T_STREQ(buttons[i].art, "ReplaceableTextures\\CommandButtons\\BTNHealingWave.blp");
+        T_STREQ(buttons[i].tooltip, "Healing Wave");
+        T_EQ(buttons[i].x, 0);
+        T_EQ(buttons[i].y, 2);
+    }
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Ashm")) {
+        found_hide = true;
+        T_ASSERT(buttons[i].art[0]);
+    }
+    T_ASSERT(found);
+    T_ASSERT(found_hide);
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "AChv")) {
+        FOR_LOOP(j, count) if (!strcmp(buttons[j].command, "Ashm")) {
+            T_ASSERT(buttons[i].x != buttons[j].x || buttons[i].y != buttons[j].y);
+        }
+    }
+    G_TestPopAbilityConfig();
+}
+
 TEST(wc3_building, naga_production_buttons_have_distinct_command_card_cells) {
     static uint32_t const producers[] = {
         MAKEFOURCC('n','n','t','t'), MAKEFOURCC('n','n','s','g'), MAKEFOURCC('n','n','s','a')
