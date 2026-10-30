@@ -15,6 +15,7 @@
 #define ID_MANA_SHIELD MAKEFOURCC('A', 'N', 'm', 's')
 #define ID_DRUNKEN_BRAWLER MAKEFOURCC('A', 'N', 'd', 'b')
 #define ID_SEARING_ARROWS MAKEFOURCC('A', 'H', 'f', 'a')
+#define ID_COLD_ARROWS MAKEFOURCC('A', 'H', 'c', 'a')
 #define ID_POISON_ARROWS MAKEFOURCC('A', 'E', 'p', 'a')
 #define ID_TRUESHOT_AURA MAKEFOURCC('A', 'E', 'a', 'r')
 #define ID_SLOW_AURA MAKEFOURCC('A', 'a', 's', 'l')
@@ -1263,6 +1264,65 @@ int S_SearingArrowDamage(edict_t *attacker, int damage) {
     return damage + (int)S_SpellData(code, level, 1);
 }
 
+bool S_ColdArrowsIssueOrder(edict_t *attacker, edict_t *target, uint32_t ability) {
+    status_application_t app;
+    heroabilitystatus_t *status;
+    uint32_t level;
+
+    if (!attacker || !target || G_AbilityCode(ability) != ID_COLD_ARROWS ||
+        !G_UnitAbilityLevel(attacker, ability) || !S_AttackCanTarget(attacker, target) ||
+        !attacker->unit_state || attacker->unit_state->attack1.weapon != WPN_MISSILE) return false;
+    level = G_UnitAbilityLevel(attacker, ability);
+    app = (status_application_t){
+        .buff = GetClassName(ability), .level = level, .source_ability = ability,
+        .rank = level, .buff_flags = WC3_STATUS_BUFF_ONE_SHOT_ATTACK
+    };
+    status = unit_applystatus(attacker, &app);
+    if (!status) return false;
+    status->buff_flags |= WC3_STATUS_BUFF_ONE_SHOT_ATTACK;
+    if (S_OrderAttack(attacker, target)) return true;
+    unit_removestatus(attacker, status, STATUS_REMOVE_SCRIPT);
+    return false;
+}
+
+int S_ColdArrowsDamage(edict_t *attacker, edict_t *target, int damage) {
+    uint32_t code = 0, level = 0;
+    heroabilitystatus_t *manual = NULL;
+    cstring_t buff_list, buff;
+
+    if (!attacker || !target || !attacker->unit_state ||
+        attacker->unit_state->attack1.weapon != WPN_MISSILE) return damage;
+    FOR_LOOP(i, MAX_UNIT_STATUSES) {
+        heroabilitystatus_t *status = attacker->unit_state->statuses + i;
+        uint32_t const source = status->source_ability ? status->source_ability : status->code;
+        if (!status->level || (status->timestamp && status->timestamp <= G_Time()) ||
+            !(status->buff_flags & WC3_STATUS_BUFF_ONE_SHOT_ATTACK) ||
+            G_AbilityCode(source) != ID_COLD_ARROWS) continue;
+        manual = status;
+        code = source;
+        level = status->rank ? status->rank : status->level;
+        break;
+    }
+    if (!level && attacker->unit_state->autocast &&
+        G_AbilityCode(attacker->unit_state->autocast) == ID_COLD_ARROWS &&
+        G_UnitAutocastIsOn(attacker, attacker->unit_state->autocast)) {
+        code = attacker->unit_state->autocast;
+        level = G_UnitAbilityLevel(attacker, code);
+    }
+    if (!code || !level) return damage;
+    if (!S_SpellSpendMana(attacker, code, level)) {
+        if (manual) unit_removestatus(attacker, manual, STATUS_REMOVE_SCRIPT);
+        return damage;
+    }
+    if (manual) unit_removestatus(attacker, manual, STATUS_REMOVE_SCRIPT);
+    buff_list = S_SpellBuffId(code, level);
+    buff = S_SpellBuffToken(buff_list, 1);
+    if (!buff) buff = "Bcsd";
+    S_SpellApplyTimedTargetStatus(target, code, level, buff,
+        S_SpellResistantDuration(code, level, target));
+    return damage + (int)S_SpellData(code, level, 1);
+}
+
 /* Authored AbilityFunc MissileArt normally supplies this value. Keep the
  * stock Searing Arrow missile available for data sets that omit that field. */
 cstring_t S_SearingArrowsMissileArt(edict_t *attacker) {
@@ -1274,14 +1334,15 @@ cstring_t S_SearingArrowsMissileArt(edict_t *attacker) {
         if (!status->level || !(status->buff_flags & WC3_STATUS_BUFF_ONE_SHOT_ATTACK) ||
             (status->timestamp && status->timestamp <= G_Time())) continue;
         code = status->source_ability ? status->source_ability : status->code;
-        if (G_AbilityCode(code) == ID_SEARING_ARROWS) {
+        if (G_AbilityCode(code) == ID_SEARING_ARROWS || G_AbilityCode(code) == ID_COLD_ARROWS) {
             level = status->rank ? status->rank : status->level;
             break;
         }
         code = 0;
     }
     if (!code && attacker->unit_state->autocast &&
-        G_AbilityCode(attacker->unit_state->autocast) == ID_SEARING_ARROWS &&
+        (G_AbilityCode(attacker->unit_state->autocast) == ID_SEARING_ARROWS ||
+         G_AbilityCode(attacker->unit_state->autocast) == ID_COLD_ARROWS) &&
         G_UnitAutocastIsOn(attacker, attacker->unit_state->autocast)) {
         code = attacker->unit_state->autocast;
         level = G_UnitAbilityLevel(attacker, code);

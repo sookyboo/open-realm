@@ -1065,8 +1065,10 @@ static bool spell_unit_target_selected(edict_t *clent, edict_t *target) {
     /* Searing Arrows is an attack modifier, not a unit-target spell cast. Its
      * manual target order arms one projectile and spends mana at weapon
      * damage point, so it must bypass cast-time mana/cooldown commit. */
-    if (spell->proc == CAbilityFlamingArrows) {
-        bool const accepted = S_SearingArrowsIssueOrder(caster, target, code);
+    if (spell->proc == CAbilityFlamingArrows || spell->proc == CAbilityColdArrows) {
+        bool const accepted = spell->proc == CAbilityColdArrows
+            ? S_ColdArrowsIssueOrder(caster, target, code)
+            : S_SearingArrowsIssueOrder(caster, target, code);
         if (accepted) spell_order_accepted(caster, spell);
         return accepted;
     }
@@ -1664,6 +1666,13 @@ static void status_apply_authored_modifiers(heroabilitystatus_t *slot, uint32_t 
         status_authored_modifier(slot, WC3_STATUS_MOD_MOVE_SPEED_PERCENT, -S_SpellData(ability, rank, 2));
         status_authored_modifier(slot, WC3_STATUS_MOD_ATTACK_SPEED_PERCENT, -S_SpellData(ability, rank, 3));
         break;
+    case MAKEFOURCC('B','c','s','d'):
+        /* Sea Witch Frost Arrows carry rank through their shared stacking
+         * debuff; retain the concrete ability alias for authored DataB/C. */
+        if (!ability) ability = MAKEFOURCC('A','H','c','a');
+        status_authored_modifier(slot, WC3_STATUS_MOD_MOVE_SPEED_PERCENT, -S_SpellData(ability, rank, 2));
+        status_authored_modifier(slot, WC3_STATUS_MOD_ATTACK_SPEED_PERCENT, -S_SpellData(ability, rank, 3));
+        break;
     case MAKEFOURCC('B','i','n','f'):
         if (!ability) ability = MAKEFOURCC('A','i','n','f');
         status_authored_modifier(slot, WC3_STATUS_MOD_ARMOR_FLAT, S_SpellData(ability, rank, 2));
@@ -1844,7 +1853,8 @@ void spell_cmd(edict_t *clent) {
     }
 
     /* Toggle abilities bypass the normal pipeline. */
-    if ((spell->flags & AB_TOGGLE) && spell->proc != CAbilityFlamingArrows) {
+    if ((spell->flags & AB_TOGGLE) && spell->proc != CAbilityFlamingArrows &&
+        spell->proc != CAbilityColdArrows) {
         spellTarget_t target = { .type = SPELL_TARGET_NONE };
         spell_message(caster, A_EXECUTE, &item, &target);
         Get_Commands_f(clent);

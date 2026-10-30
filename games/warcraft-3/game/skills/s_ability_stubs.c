@@ -103,23 +103,18 @@ BZ_ABILITY_PROC(CAbilityImmolation) {
     return true;
 }
 
-/* Name=Cold Arrows
- * Ubertip="Adds cold damage to attacks and slows the movement speed of the attacked unit."
- * Untip="Right-click to activate auto-casting."
- * Unubertip="Right-click to deactivate auto-casting."
- */
-
-BZ_SIMPLE_SPELL_PROC(AbilityColdArrows) {
-    uint32_t code = MAKEFOURCC('c', 'o', 'l', 'd');
-
-    FOR_LOOP(i, caster->unit_state ? MAX_UNIT_STATUSES : 0) {
-        if (caster->unit_state->statuses[i].level && caster->unit_state->statuses[i].code == code) {
-            unit_removestatus(caster, &caster->unit_state->statuses[i], STATUS_REMOVE_SCRIPT);
-            G_InvalidateUnitInfoPanel(caster);
-            return;
-        }
+/* Cold Arrows is an attack modifier. The selected autocast alias controls
+ * attack damage and projectile presentation; clicking the command button
+ * opens the same one-shot target order used by Searing Arrows. */
+BZ_ABILITY_PROC(CAbilityColdArrows) {
+    uint32_t const code = call && call->item ? call->item->code : 0;
+    bool const active = ent && ent->unit_state && ent->unit_state->autocast == code;
+    switch (msg) {
+    case A_TOGGLE_ON: return active;
+    case A_AUTOCAST_ON: return active;
+    case A_AUTOCAST_SET: return true;
+    default: return CAbilitySimpleSpell(ent, msg, call);
     }
-    unit_addstatus(caster, "cold", 1);
 }
 
 /* Name=War Stomp

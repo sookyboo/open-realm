@@ -528,7 +528,8 @@ void S_ResolveAttackHit(edict_t *attacker, edict_t *target, int damage) {
     S_HumanBreakInvisibility(attacker);
     S_PermanentInvisibilityReveal(attacker);
     damage = S_OrbAnnihilationDamage(attacker,
-        S_SearingArrowDamage(attacker, S_BlackArrowDamage(attacker, S_CriticalStrikeDamage(attacker, damage))));
+        S_ColdArrowsDamage(attacker, target,
+            S_SearingArrowDamage(attacker, S_BlackArrowDamage(attacker, S_CriticalStrikeDamage(attacker, damage)))));
     damage = (int)((float)damage * (1.0f + S_TrueshotAttackBonus(attacker) + S_CommandAuraAttackBonus(attacker) +
                                          S_WarDrumsAttackBonus(attacker) + S_RoarDamageBonus(attacker)
                                          + unit_status_modifier_total(attacker, WC3_STATUS_MOD_ATTACK_DAMAGE_PERCENT)

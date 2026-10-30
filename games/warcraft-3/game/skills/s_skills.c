@@ -655,7 +655,7 @@ static ability_t abilitylist[] = {
     { "ANb2", CAbilityBash, AB_PASSIVE },  /* Bash (maul, SP Bear, level 3) */
     { "ANbh", CAbilityBash, AB_PASSIVE },  /* Bash (Beastmaster Bear) */
     { "ANbl", CAbilityBlink, AB_SPELL, SPELL_TARGET_POINT },  /* Blink (Beastmaster Bear) */
-    { "ANfa", CAbilityColdArrows, AB_SPELL | AB_TOGGLE | AB_AUTOCAST },  /* Sea Witch - Frost Arrows */
+    { "ANfa", CAbilityColdArrows, AB_SPELL | AB_TOGGLE | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Sea Witch - Frost Arrows */
     { "ANre", CAbilityAuraRegenMana, AB_PASSIVE },  /* Neutral Regen (mana only) */
     { "ANrn", CAbilityReincarnation, AB_PASSIVE },  /* Mannoroth - Reincarnation */
     { "ANta", CAbilityTaunt, AB_SPELL },  /* Taunt (Creep) */
