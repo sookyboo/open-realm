@@ -55,6 +55,24 @@ static bool impale_cast(edict_t *caster, cstring_t code, vec2_t point) {
     return S_AbilityMessage(caster, A_EXECUTE, &call) != 0;
 }
 
+TEST(wc3_spell, impale_approach_range_query_accepts_null_caster) {
+    slkTestData_t *rows = parse_slk_string(impale_slk), *old;
+    abilityitem_t item;
+    abilityCall_t call;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    item = S_AbilityItem(MAKEFOURCC('A','U','i','m'));
+    call = MAKE(abilityCall_t, .item = &item, .spell_approach_range = 700.0f);
+    T_NOT_NULL(item.ability);
+    if (item.ability && item.ability->proc) {
+        T_ASSERT(item.ability->proc(NULL, A_SPELL_APPROACH_RANGE, &call));
+        T_FEQ(call.spell_approach_range, 700.0f, 0.001f);
+    } else {
+        T_ASSERT(false);
+    }
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_spell, impale_wave_hits_in_authored_travel_order_once_per_cast) {
     slkTestData_t *rows = parse_slk_string(impale_slk), *old;
     edict_t *caster, *near, *middle, *far, *behind, *beyond, *side;

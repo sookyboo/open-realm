@@ -281,6 +281,10 @@ static bool impale_validate(edict_t *caster, spellTarget_t target, abilityitem_t
 }
 
 BZ_ABILITY_PROC(CAbilityImpale) {
+    /* The point-target order path queries custom approach distance with a
+     * NULL caster. Impale uses its authored Rng unchanged, so accept the
+     * query without entering the generic spell handler. */
+    if (msg == A_SPELL_APPROACH_RANGE) return true;
     spellTarget_t target = call && call->target ? *call->target : MAKE(spellTarget_t, .type = SPELL_TARGET_NONE);
     abilityitem_t const *spell = call ? call->item : NULL;
     impaleWave_t *state;
