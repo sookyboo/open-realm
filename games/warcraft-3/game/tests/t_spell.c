@@ -11115,8 +11115,6 @@ TEST(wc3_spell, phoenix_death_creates_egg_that_hatches_on_authored_deadline) {
     G_SetSLKRows("UnitUI", old_ui); free_slk_rows(ui);
 }
 
-#endif /* BZ_TESTS */
-
 /* Obsidian support: recipients are selected from real world entities in stable
  * encounter order, with unit-type masks applied before the six-unit cap. */
 TEST(wc3_spell, obsidian_essence_caps_organic_allies_and_skips_mechanical_units) {
@@ -11138,6 +11136,7 @@ TEST(wc3_spell, obsidian_essence_caps_organic_allies_and_skips_mechanical_units)
     caster = alloc_test_unit(MAKEFOURCC('u','o','b','s'), 0, 0);
     caster->s.player = 0; caster->svflags |= SVF_MONSTER;
     caster->health.value = caster->health.max_value;
+    caster->mana.value = caster->mana.max_value = 100;
     FOR_LOOP(i, 8) {
         allies[i] = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64 + 32 * i, 0);
         allies[i]->s.player = 0; allies[i]->svflags |= SVF_MONSTER;
@@ -11154,7 +11153,6 @@ TEST(wc3_spell, obsidian_essence_caps_organic_allies_and_skips_mechanical_units)
     T_FEQ(mechanical->health.value, 50.0f, 0.01f);
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
-
 TEST(wc3_spell, destroyer_absorb_mana_is_an_active_friendly_unit_spell) {
     const char slk[] =
         "ID;PWXL;N;EBB;Y2;X4\n"
@@ -11193,3 +11191,4 @@ TEST(wc3_spell, destroyer_absorb_mana_is_an_active_friendly_unit_spell) {
     T_ASSERT(!CAbilityAbsorb(caster, A_VALIDATE, &call));
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
+#endif /* BZ_TESTS */
