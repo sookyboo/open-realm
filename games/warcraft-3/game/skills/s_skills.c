@@ -12,6 +12,7 @@ int G_AutocastDebugLevel(void) {
 cstring_t const raven_orders[] = { "ravenform", "unravenform", NULL };
 cstring_t const ancient_root_orders[] = { "root", "unroot", NULL };
 static cstring_t const mana_shield_orders[] = { "manashieldon", "manashieldoff", NULL };
+static cstring_t const mana_flare_orders[] = { "manaflareon", "manaflareoff", NULL };
 static cstring_t const build_orders[] = { "build", NULL };
 static cstring_t const hide_orders[] = { "ambush", NULL };
 static cstring_t const grabtree_orders[] = { "grabtree", NULL };
@@ -463,7 +464,7 @@ static ability_t abilitylist[] = {
 
     /* NightElfAbilityStrings.txt */
     { "Avng", CAbilityVengeance, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Spirit of Vengeance */
-    { "Amfl", CAbilityManaFlare, AB_SPELL | AB_TOGGLE | AB_UPDATE | AB_STATUS_EVENTS, SPELL_TARGET_NONE },  /* Mana Flare */
+    { "Amfl", CAbilityManaFlare, AB_SPELL | AB_TOGGLE | AB_UPDATE | AB_STATUS_EVENTS, SPELL_TARGET_NONE, mana_flare_orders },  /* Mana Flare */
     { "Apsh", CAbilityPhaseShift, AB_SPELL | AB_AUTOCAST },  /* Phase Shift */
     { "Aetl", CAbilityEthereal, AB_PASSIVE },  /* Ethereal */
     { "Agra", CAbilityGrabTree, AB_SPELL, SPELL_TARGET_POINT, grabtree_orders },  /* War Club */

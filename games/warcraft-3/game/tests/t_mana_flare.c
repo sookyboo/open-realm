@@ -295,4 +295,89 @@ TEST(wc3_spell, mana_flare_splash_excludes_manaless_units) {
 	mfl_done(&fix);
 }
 
+
+/* Disabling an active stance is not a second cast. In particular, it must
+ * succeed before Cool expires and when current mana has fallen to zero. */
+TEST(wc3_spell, mana_flare_direct_deactivation_ignores_mana_and_cooldown) {
+	mflFix_t fix;
+	float cooldown;
+	mfl_setup(&fix, MFL_SLK_WITH_COOL("5"));
+	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
+	T_ASSERT(S_ManaFlareActive(fix.flare));
+	cooldown = S_SpellCooldownRemaining(fix.flare, BZ_AMFL);
+	T_ASSERT(cooldown > 0.0f);
+	fix.flare->mana.value = 0.0f;
+	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
+	T_ASSERT(!S_ManaFlareActive(fix.flare));
+	T_FEQ(fix.flare->mana.value, 0.0f, 0.001f);
+	T_FEQ(S_SpellCooldownRemaining(fix.flare, BZ_AMFL), cooldown, 0.001f);
+	T_ASSERT(!S_CastNoTargetSpell(fix.flare, BZ_AMFL)); /* cannot reactivate */
+	mfl_done(&fix);
+}
+
+/* Native IssueImmediateOrder and IssueImmediateOrderById both delegate to
+ * unit_issueimmediateorder after resolving the stock Warcraft order IDs. */
+TEST(wc3_spell, mana_flare_order_ids_and_idempotent_state_requests) {
+	mflFix_t fix;
+	ability_t const *on = FindAbilityByOrder("manaflareon");
+	ability_t const *off = FindAbilityByOrder("manaflareoff");
+	float cooldown;
+	T_NOT_NULL(on);
+	T_NOT_NULL(off);
+	if (!on || !off) return;
+	T_EQ(on->proc, CAbilityManaFlare);
+	T_EQ(off->proc, CAbilityManaFlare);
+	T_EQ(G_OrderId("manaflareon"), 852512u);
+	T_EQ(G_OrderId("manaflareoff"), 852513u);
+	T_STREQ(G_OrderId2String(852512), "manaflareon");
+	T_STREQ(G_OrderId2String(852513), "manaflareoff");
+
+	mfl_setup(&fix, MFL_SLK_WITH_COOL("5"));
+	T_ASSERT(!unit_issueimmediateorder(fix.enemy, "manaflareon"));
+	T_ASSERT(!unit_issueimmediateorder(fix.enemy, "manaflareoff"));
+	T_ASSERT(unit_issueimmediateorder(fix.flare, "manaflareoff")); /* already off */
+	T_FEQ(fix.flare->mana.value, 200.0f, 0.001f);
+	T_ASSERT(S_SpellCooldownReady(fix.flare, BZ_AMFL));
+
+	T_ASSERT(unit_issueimmediateorder(fix.flare, G_OrderId2String(852512)));
+	T_ASSERT(S_ManaFlareActive(fix.flare));
+	T_FEQ(fix.flare->mana.value, 175.0f, 0.001f);
+	cooldown = S_SpellCooldownRemaining(fix.flare, BZ_AMFL);
+	T_ASSERT(cooldown > 0.0f);
+	T_ASSERT(unit_issueimmediateorder(fix.flare, "manaflareon")); /* already on */
+	T_FEQ(fix.flare->mana.value, 175.0f, 0.001f);
+	T_FEQ(S_SpellCooldownRemaining(fix.flare, BZ_AMFL), cooldown, 0.001f);
+
+	fix.flare->mana.value = 0.0f;
+	T_ASSERT(unit_issueimmediateorder(fix.flare, G_OrderId2String(852513)));
+	T_ASSERT(!S_ManaFlareActive(fix.flare));
+	T_ASSERT(unit_issueimmediateorder(fix.flare, "manaflareoff")); /* still off */
+	T_FEQ(fix.flare->mana.value, 0.0f, 0.001f);
+	T_FEQ(S_SpellCooldownRemaining(fix.flare, BZ_AMFL), cooldown, 0.001f);
+	T_ASSERT(!unit_issueimmediateorder(fix.flare, "manaflareon")); /* still cooling down */
+	T_ASSERT(!S_ManaFlareActive(fix.flare));
+	mfl_done(&fix);
+}
+
+/* Command-issued activation must use the same capacity and resource preflight
+ * as clicking the Mana Flare button; a rejected cast cannot spend resources. */
+TEST(wc3_spell, mana_flare_issued_activation_checks_status_capacity) {
+	mflFix_t fix;
+	char buff[5] = "Z000";
+	mfl_setup(&fix, MFL_SLK_WITH_COOL("5"));
+	FOR_LOOP(i, MAX_UNIT_STATUSES) {
+		buff[1] = (char)('a' + i);
+		T_ASSERT(unit_addtimedstatus(fix.flare, buff, 1, 30.0f));
+	}
+	T_ASSERT(!unit_issueimmediateorder(fix.flare, "manaflareon"));
+	T_ASSERT(!S_ManaFlareActive(fix.flare));
+	T_FEQ(fix.flare->mana.value, 200.0f, 0.001f);
+	T_ASSERT(S_SpellCooldownReady(fix.flare, BZ_AMFL));
+	unit_removestatus(fix.flare, fix.flare->unit_state->statuses, STATUS_REMOVE_SCRIPT);
+	T_ASSERT(unit_issueimmediateorder(fix.flare, "manaflareon"));
+	T_ASSERT(S_ManaFlareActive(fix.flare));
+	T_FEQ(fix.flare->mana.value, 175.0f, 0.001f);
+	mfl_done(&fix);
+}
+
 #endif

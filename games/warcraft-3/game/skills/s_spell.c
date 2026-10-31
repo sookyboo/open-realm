@@ -1403,6 +1403,14 @@ bool S_CastNoTargetSpell(edict_t *caster, uint32_t code) {
                     (unsigned)(spell && S_AbilityHasCommand(spell)));
         return false;
     }
+    /* A running Mana Flare is a cancellable stance, not a new cast. It must
+     * remain possible to turn it off while the original cooldown is active
+     * or current mana is insufficient. Do not publish a spell event, break
+     * channels or run spell_commit for the deactivation. */
+    if (spell->proc == CAbilityManaFlare && S_ManaFlareActive(caster)) {
+        if (!S_SpellIsAliveTarget(caster)) return false;
+        return spell_message(caster, A_EXECUTE, &item, &target) != 0;
+    }
     level = S_SpellLevel(caster, code);
     if (!spell_validate(NULL, caster, code, level, NULL, 0)) {
         if (WC3_MISHA_DEBUG_ENABLED() && code == MAKEFOURCC('A','r','s','g'))

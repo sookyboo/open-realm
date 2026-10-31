@@ -80,6 +80,15 @@ BZ_ABILITY_PROC(CAbilityManaFlare) {
 		return mana_flare_can_apply(ent, code);
 	case A_TOGGLE_ON:
 		return mana_flare_status(ent) != NULL;
+	case A_ORDER:
+		/* Immediate orders are explicit state requests, unlike the HUD's
+		 * toggle command. Check ability ownership before executing either. */
+		if (!ent || !call || !call->order || !G_UnitAbilityLevel(ent, code)) return false;
+		if (!strcmp(call->order, "manaflareon"))
+			return mana_flare_status(ent) || S_CastNoTargetSpell(ent, code);
+		if (!strcmp(call->order, "manaflareoff"))
+			return !mana_flare_status(ent) || S_CastNoTargetSpell(ent, code);
+		return false;
 	case A_STATUS_REMOVE:
 		if (call && call->status.slot && call->status.slot->code == ID_BMFL) {
 			mana_flare_present(ent, false);

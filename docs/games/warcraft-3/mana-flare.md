@@ -14,7 +14,19 @@ Flare can still be toggled off at capacity. Successful activation spends Cost
 and applies `Bmfl` for `Dur`/`HeroDur` seconds. While `Bmfl` is active, the Faerie Dragon is immobile and every command
 button except Mana Flare is disabled. Movement and other orders are rejected
 without removing the status; clicking Mana Flare again ends it early. Natural
-status expiry restores movement and commands. `Bmfa` (`CBuffManaFlareAoe`,
+status expiry restores movement and commands. The shared no-target cast path
+recognizes a running Mana Flare before resource/cooldown validation: turning it
+off runs only the status-removal callback, without a second spell commit, cast
+event, mana cost, or cooldown reset. Explicit immediate orders
+`manaflareon` (852512) and `manaflareoff` (852513) are idempotent: an already
+active on-order and an already inactive off-order do not change resources.
+Activation by `manaflareon` still uses the normal cast checks and commit, and
+both orders require the unit to possess `Amfl`. `IssueImmediateOrderById`
+resolves the same two names through `G_OrderId2String`. The immediate-order
+resolver must pass the resolved `Amfl` ability code to `S_AbilityMessage`:
+an order payload with code zero would otherwise be rejected by the active
+Mana Flare command lock before `A_ORDER` could switch it off.
+`Bmfa` (`CBuffManaFlareAoe`,
 parent `BAOE`) is presentation-only and is not required for damage or armor.
 Phase Shift (`Apsh`) is rejected during the active status without spending mana.
 
@@ -98,4 +110,8 @@ channel, and Phase Shift rejection without mana loss.
 The full-status-slot regression uses non-stock `Cool=5` to confirm rejection
 leaves both mana and cooldown unchanged; freeing one slot permits activation.
 The toggle-off regression fills the other 15 slots after activation and
-confirms the original status can still be removed.
+confirms the original status can still be removed. Additional regressions
+confirm direct deactivation with zero mana and a running cooldown, stable
+cooldown and mana on repeated on/off orders, rejection of on-orders during
+cooldown and when the unit has no Mana Flare ability, and the Warcraft order
+IDs for the string and `ById` JASS paths.

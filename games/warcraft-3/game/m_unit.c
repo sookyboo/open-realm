@@ -733,6 +733,8 @@ static unitOrderDef_t const unit_order_defs[] = {
     { "forkedlightning", 852587, MAKEFOURCC('A','N','f','l') },
     { "manashieldon", 852589, 0 },
     { "manashieldoff", 852590, 0 },
+    { "manaflareon", 852512, MAKEFOURCC('A','m','f','l') },
+    { "manaflareoff", 852513, MAKEFOURCC('A','m','f','l') },
     { "silence", 852592, MAKEFOURCC('A','N','s','i') },
     { "stampede", 852593, MAKEFOURCC('A','N','s','t') },
     { "summongrizzly", 852594, MAKEFOURCC('A','N','s','g') },
@@ -1557,7 +1559,12 @@ bool unit_issueimmediateorder(edict_t *self, cstring_t order) {
     }
     ability_t const *ability = FindAbilityByOrder(order);
     if (ability) {
-        abilityitem_t item = MAKE(abilityitem_t, .ability = ability);
+        /* Mana Flare remains the only permitted command while its status is
+         * active. Pass the concrete ability code so S_AbilityMessage's
+         * active-status gate does not mistake its on/off orders for another
+         * ability (an order-only item previously had code == 0). */
+        uint32_t code = ability->proc == CAbilityManaFlare ? unit_spell_code_for_order(self, order) : 0;
+        abilityitem_t item = MAKE(abilityitem_t, .code = code, .ability = ability);
         abilityCall_t call = MAKE(abilityCall_t, .item = &item, .order = order);
         bool const accepted = S_AbilityMessage(self, A_ORDER, &call);
         if (accepted) {
