@@ -36,6 +36,7 @@ void UI_TestSetDamageTooltip(frameDef_t *icon, edict_t *ent, attackType_t type,
                              int32_t min_damage, int32_t max_damage, float range,
                              float cooldown, uint32_t upgrade,
                              float temporary_damage_bonus, float damage_base);
+void UI_TestFormatArmorValue(char *buffer, size_t buffer_size, edict_t const *ent);
 void UI_TestFormatArmorTooltip(char *tip, size_t tip_size, char *body, size_t body_size,
                                uint32_t type, float armor, float move_speed,
                                cstring_t upgrade_name, uint32_t upgrade_level);
@@ -1683,6 +1684,52 @@ TEST(wc3_game, armor_icon_tooltip_shows_rifleman_defense_details) {
                            G_UnitArmorValue(rifleman), rifleman->unitinfo.MoveSpeed, 0);
     T_STREQ(icon.Tip, "Armor: 6 |cff00ff00+5|r");
     T_ASSERT(icon.Ubertip && strstr(icon.Ubertip, "Bonus Armor: |cff00ff00+5|r") != NULL);
+}
+
+TEST(wc3_game, armor_icon_formats_negative_values_without_rounding_toward_zero) {
+    char buffer[128], tip[256], body[1536];
+    edict_t *rifleman;
+    reset_entities(); setup_test_world();
+    rifleman = alloc_test_unit(MAKEFOURCC('h','r','i','f'), 64.0f, 64.0f);
+    rifleman->unit_state->armor_value = -1.0f;
+    rifleman->unit_state->temporary_armor_bonus = 0.0f;
+    UI_TestFormatArmorValue(buffer, sizeof(buffer), rifleman);
+    T_STREQ(buffer, "-1");
+    UI_TestFormatArmorTooltip(tip, sizeof(tip), body, sizeof(body), 4, -1.0f,
+                              270.0f, NULL, 0);
+    T_STREQ(tip, "Armor: -1");
+    T_ASSERT(strstr(body, "Normal armor takes standard damage from all attack types.") != NULL);
+}
+
+TEST(wc3_game, damage_and_armor_tooltips_use_map_specific_attack_matrix) {
+    char tip[256], body[1536];
+    bool const loaded = game.constants.combatConstantsLoaded;
+    float old[8][8];
+    memcpy(old, game.constants.damageBonus, sizeof(old));
+    for (uint32_t attack = 0; attack < 8; ++attack)
+        for (uint32_t defense = 0; defense < 8; ++defense) {
+            /* Populate the full table so only this one nonstock change matters. */
+            game.constants.combatConstantsLoaded = false;
+            float const stock = G_AttackTypeDamageMultiplier(attack, defense);
+            game.constants.damageBonus[attack][defense] = stock;
+        }
+    game.constants.combatConstantsLoaded = true;
+    game.constants.damageBonus[ATK_PIERCE][4] = 1.75f;
+
+    UI_TestFormatDamageTooltip(tip, sizeof(tip), body, sizeof(body), ATK_PIERCE,
+                               21, 36, 600.0f, 1.5f, NULL, 0);
+    T_ASSERT(strstr(body, "Damage multipliers vs armor:") != NULL);
+    T_ASSERT(strstr(body, "Type: Normal  175%") != NULL);
+    T_ASSERT(strstr(body, "Piercing attacks do extra damage") == NULL);
+
+    UI_TestFormatArmorTooltip(tip, sizeof(tip), body, sizeof(body), 4, 6.0f,
+                              270.0f, NULL, 0);
+    T_ASSERT(strstr(body, "Incoming attack multipliers:") != NULL);
+    T_ASSERT(strstr(body, "Type: Piercing  175%") != NULL);
+    T_ASSERT(strstr(body, "Normal armor takes standard damage") == NULL);
+
+    game.constants.combatConstantsLoaded = loaded;
+    memcpy(game.constants.damageBonus, old, sizeof(old));
 }
 
 TEST(wc3_game, hero_primary_attribute_icon_shows_attribute_bonuses) {

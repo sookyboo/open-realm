@@ -282,7 +282,7 @@ void UI_TestFormatAttackDamageWithStatus(char *buffer, size_t buffer_size,
 static void FormatArmorValue(char *buffer, size_t buffer_size, edict_t const *ent) {
     float const temporary_bonus = ent->unit_state ? ent->unit_state->temporary_armor_bonus : 0.0f;
     float const status_bonus = unit_status_modifier_total(ent, WC3_STATUS_MOD_ARMOR_FLAT);
-    int32_t const base = (int32_t)(G_UnitArmorValue(ent) - temporary_bonus - status_bonus + 0.5f);
+    int32_t const base = (int32_t)roundf(G_UnitArmorValue(ent) - temporary_bonus - status_bonus);
     int32_t const bonus = (int32_t)(temporary_bonus + status_bonus);
 
     if (bonus > 0) {
@@ -738,7 +738,7 @@ static void InfoPanelArmorTypeStrings(uint32_t type, cstring_t *type_key,
     case 3: *type_key = "ARMOR_FORT"; *type_fallback = "Type: Fortified";
             *tip_key = "ARMORTIP_FORT"; *tip_fallback = "Fortified armor greatly reduces Piercing, Magic, Normal and Hero attacks, but takes extra damage from Siege attacks."; break;
     case 4: *type_key = "ARMOR_NORMAL"; *type_fallback = "Type: Normal";
-            *tip_key = "ARMORTIP_NORMAL"; *tip_fallback = "Medium armor takes extra damage from Normal attacks, and reduces damage from Piercing, Magic, and Siege attacks."; break;
+            *tip_key = "ARMORTIP_NORMAL"; *tip_fallback = "Normal armor takes standard damage from all attack types."; break;
     case 5: *type_key = "ARMOR_HERO"; *type_fallback = "Type: Hero";
             *tip_key = "ARMORTIP_HERO"; *tip_fallback = "Heroes take reduced damage from Piercing, Magic, Siege attacks, and Spells."; break;
     case 6: *type_key = "ARMOR_DIVINE"; *type_fallback = "Type: Divine";
@@ -747,6 +747,58 @@ static void InfoPanelArmorTypeStrings(uint32_t type, cstring_t *type_key,
             *tip_key = "ARMORTIP_NONE"; *tip_fallback = "Unarmored takes extra damage from Piercing, and Siege attacks."; break;
     default: *type_key = "ARMOR_UNKNOWN"; *type_fallback = "Type: Unknown";
              *tip_key = "ARMORTIP_UNKNOWN"; *tip_fallback = "Unknown armor applies an unknown reduction to all attacks."; break;
+    }
+}
+
+static void InfoPanelDamageTypeStrings(attackType_t type, cstring_t *label_key,
+                                       cstring_t *label_fallback, cstring_t *tip_key,
+                                       cstring_t *tip_fallback);
+
+/* The gameplay damage matrix (including war3mapMisc overrides) is authoritative.
+ * Only use the localized stock explanation if every relevant multiplier still
+ * matches stock; otherwise give the actual percentages rather than misleading
+ * players with a canned description. */
+static bool InfoPanelArmorMatchupsAreDefault(uint32_t defense) {
+    for (uint32_t attack = ATK_NORMAL; attack <= ATK_HERO; ++attack)
+        if (!G_AttackTypeDamageMultiplierIsDefault(attack, defense)) return false;
+    return true;
+}
+
+static bool InfoPanelDamageMatchupsAreDefault(attackType_t attack) {
+    for (uint32_t defense = 0; defense < 8; ++defense)
+        if (!G_AttackTypeDamageMultiplierIsDefault(attack, defense)) return false;
+    return true;
+}
+
+static void InfoPanelAppendMatchup(char *body, size_t body_size, cstring_t label, float multiplier) {
+    size_t const used = strlen(body);
+    if (used < body_size)
+        snprintf(body + used, body_size - used, "\n%s  %.0f%%", label, multiplier * 100.0f);
+}
+
+static void InfoPanelAppendArmorMatchups(char *body, size_t body_size, uint32_t defense) {
+    size_t const used = strlen(body);
+    if (used < body_size)
+        snprintf(body + used, body_size - used, "\n\n%s",
+                 InfoPanelString("ARMOR_MATCHUPS", "Incoming attack multipliers:"));
+    for (uint32_t attack = ATK_NORMAL; attack <= ATK_HERO; ++attack) {
+        cstring_t key, fallback, tip_key, tip_fallback;
+        InfoPanelDamageTypeStrings((attackType_t)attack, &key, &fallback, &tip_key, &tip_fallback);
+        InfoPanelAppendMatchup(body, body_size, InfoPanelString(key, fallback),
+                               G_AttackTypeDamageMultiplier(attack, defense));
+    }
+}
+
+static void InfoPanelAppendDamageMatchups(char *body, size_t body_size, attackType_t attack) {
+    size_t const used = strlen(body);
+    if (used < body_size)
+        snprintf(body + used, body_size - used, "\n\n%s",
+                 InfoPanelString("DAMAGE_MATCHUPS", "Damage multipliers vs armor:"));
+    for (uint32_t defense = 0; defense < 8; ++defense) {
+        cstring_t key, fallback, tip_key, tip_fallback;
+        InfoPanelArmorTypeStrings(defense, &key, &fallback, &tip_key, &tip_fallback);
+        InfoPanelAppendMatchup(body, body_size, InfoPanelString(key, fallback),
+                               G_AttackTypeDamageMultiplier(attack, defense));
     }
 }
 
@@ -770,7 +822,7 @@ static void FormatArmorTooltip(char *tip, size_t tip_size, char *body, size_t bo
     size_t used;
 
     if (!tip || !tip_size || !body || !body_size) return;
-    snprintf(tip, tip_size, "%s %d", armor_label, (int)(armor + 0.5f));
+    snprintf(tip, tip_size, "%s %d", armor_label, (int)roundf(armor));
     InfoPanelArmorTypeStrings(type, &type_key, &type_fallback, &armor_tip_key, &armor_tip_fallback);
     snprintf(body, body_size, "%s\n%s %d%%\n%s %s",
              InfoPanelString(type_key, type_fallback), reduction_label,
@@ -784,7 +836,9 @@ static void FormatArmorTooltip(char *tip, size_t tip_size, char *body, size_t bo
                  InfoPanelString("COLON_UPGRADE", "Upgrade:"), upgrade);
         used = strlen(body);
     }
-    if (armor_tip_fallback && *armor_tip_fallback && used < body_size)
+    if (!InfoPanelArmorMatchupsAreDefault(type))
+        InfoPanelAppendArmorMatchups(body, body_size, type);
+    else if (armor_tip_fallback && *armor_tip_fallback && used < body_size)
         snprintf(body + used, body_size - used, "\n\n%s",
                  InfoPanelString(armor_tip_key, armor_tip_fallback));
 }
@@ -886,7 +940,9 @@ static void FormatDamageTooltip(char *tip, size_t tip_size, char *body, size_t b
                  InfoPanelString("COLON_UPGRADE", "Upgrade:"), upgrade);
         used = strlen(body);
     }
-    if (damage_tip_fallback && *damage_tip_fallback && used < body_size)
+    if (!InfoPanelDamageMatchupsAreDefault(type))
+        InfoPanelAppendDamageMatchups(body, body_size, type);
+    else if (damage_tip_fallback && *damage_tip_fallback && used < body_size)
         snprintf(body + used, body_size - used, "\n\n%s",
                  InfoPanelString(damage_tip_key, damage_tip_fallback));
 }
@@ -938,6 +994,10 @@ void UI_TestSetDamageTooltip(frameDef_t *icon, edict_t *ent, attackType_t type,
                              float temporary_damage_bonus, float damage_base) {
     SetDamageTooltip(icon, ent, type, min_damage, max_damage, range, cooldown, upgrade,
                      temporary_damage_bonus, damage_base);
+}
+
+void UI_TestFormatArmorValue(char *buffer, size_t buffer_size, edict_t const *ent) {
+    FormatArmorValue(buffer, buffer_size, ent);
 }
 
 void UI_TestFormatArmorTooltip(char *tip, size_t tip_size, char *body, size_t body_size,

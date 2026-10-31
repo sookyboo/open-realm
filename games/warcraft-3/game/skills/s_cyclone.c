@@ -13,11 +13,20 @@ static void cyclone_set_fly_height(edict_t *unit, float height) {
     gi.LinkEntity(unit);
 }
 
+static bool cyclone_is_lift_buff(uint32_t code) {
+    return code == BZ_CYCLONE_BUFF || code == BZ_CYCLONE_BUFF_EXTRA;
+}
+
+static heroabilitystatus_t *cyclone_existing_lift_status(edict_t *unit) {
+    heroabilitystatus_t *status = unit_findstatus(unit, BZ_CYCLONE_BUFF);
+    return status ? status : unit_findstatus(unit, BZ_CYCLONE_BUFF_EXTRA);
+}
+
 static bool cyclone_has_other_lift_status(edict_t const *unit, heroabilitystatus_t const *removed) {
     FOR_LOOP(i, unit && unit->unit_state ? MAX_UNIT_STATUSES : 0) {
         heroabilitystatus_t const *status = unit->unit_state->statuses + i;
         if (status == removed || !status->level) continue;
-        if (status->code == BZ_CYCLONE_BUFF || status->code == BZ_CYCLONE_BUFF_EXTRA) return true;
+        if (cyclone_is_lift_buff(status->code)) return true;
     }
     return false;
 }
@@ -48,7 +57,7 @@ BZ_ABILITY_PROC(CAbilityCyclone) {
     union { float height; uint32_t bits; } original_height;
 
     if (msg == A_STATUS_REMOVE && call && call->status.slot &&
-        call->status.slot->code == BZ_CYCLONE_BUFF &&
+        cyclone_is_lift_buff(call->status.slot->code) &&
         !cyclone_has_other_lift_status(ent, call->status.slot)) {
         union { float height; uint32_t bits; } original_height = { .bits = call->status.slot->next_tick };
         cyclone_set_fly_height(ent, original_height.height);
@@ -76,8 +85,10 @@ BZ_ABILITY_PROC(CAbilityCyclone) {
     if (!buff || strlen(buff) < 4) buff = "Bcyc";
     original_height.height = target->entity->unitinfo.FlyHeight;
     memcpy(&buff_code, buff, sizeof(buff_code));
-    if (buff_code == BZ_CYCLONE_BUFF) {
-        heroabilitystatus_t *existing = unit_findstatus(target->entity, BZ_CYCLONE_BUFF);
+    if (cyclone_is_lift_buff(buff_code)) {
+        /* Replacements and overlapping Bcyc/Bcy2 statuses must retain the
+         * pre-Cyclone height, not snapshot the already lifted 200-unit height. */
+        heroabilitystatus_t *existing = cyclone_existing_lift_status(target->entity);
         if (existing) original_height.bits = existing->next_tick;
     }
     slot = S_SpellApplyTimedStatus(target->entity, buff, level,
@@ -86,7 +97,7 @@ BZ_ABILITY_PROC(CAbilityCyclone) {
     if (slot) {
         slot->data = call->item->code;
         slot->source_ability = call->item->code;
-        if (slot->code == BZ_CYCLONE_BUFF) {
+        if (cyclone_is_lift_buff(slot->code)) {
             slot->next_tick = original_height.bits;
             cyclone_set_fly_height(target->entity, BZ_CYCLONE_LIFT_HEIGHT);
         }

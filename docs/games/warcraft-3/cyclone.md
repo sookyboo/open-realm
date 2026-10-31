@@ -52,6 +52,21 @@ still says non-mechanical; enforce via authored targs only). ROC rows omit
 DataA from that rawcode — never hardcode `Acyc`. Dispel Magic and Purge both
 skip undispellable slots; other buffs on the same unit still clear.
 
+### Secondary Cyclone buff and lift restoration
+
+`S_UnitIsCycloned` recognizes both `Bcyc` and `Bcy2`. Stock TFT's comma-separated
+`BuffID` chooses its first entry (`Bcyc`), but custom maps can author `Bcy2`
+as the sole first buff. Either rawcode must lift the victim and restore its
+pre-Cyclone `FlyHeight` on dispel or natural expiry. Reapplying the same status
+or attaching another Cyclone status preserves the original height in each
+status's `next_tick` payload; the lift ends only when the final Cyclone status
+is removed. The target-art attachment still follows the actual buff rawcode.
+
+`wc3_spell.cyclone_bcy2_only_cast_restores_height_on_dispel_and_expiry` and
+`wc3_spell.cyclone_bcy2_replacement_keeps_original_height` exercise the
+production execute/removal callbacks, recast and overlapping statuses using a
+non-stock `BuffID=Bcy2` fixture.
+
 Unit-target Purge cannot currently select a cycloned unit through
 `S_SpellAllowsTarget` (Cyclone blocks spell targeting). AoE Dispel/Devour still
 hit the victim. Purge's clear loop honors DataA when execute runs (tested via

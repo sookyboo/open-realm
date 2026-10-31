@@ -406,6 +406,13 @@ float G_AttackTypeDamageMultiplier(uint32_t atk, uint32_t def) {
         : g_default_damage_table[atk][def];
 }
 
+/* The tooltip may use retail/localized prose only while the actual map's
+ * multipliers agree with the same stock table used for fallback combat. */
+bool G_AttackTypeDamageMultiplierIsDefault(uint32_t atk, uint32_t def) {
+    if (atk >= 8 || def >= 8) return false;
+    return fabsf(G_AttackTypeDamageMultiplier(atk, def) - g_default_damage_table[atk][def]) < 0.0001f;
+}
+
 /* Apply the Warsmash/WC3 damage formula: active attack×defense multiplier,
  * then numeric armor. Positive armor is 1/(1+K*A); negative armor uses the
  * Warcraft exponential curve 2-(1-K)^(-A). Result remains minimum 1 for the
