@@ -458,6 +458,8 @@ float S_EnduranceAttackBonus(edict_t *unit);
 float S_VampiricLifeSteal(edict_t *unit);
 float S_TrueshotAttackBonus(edict_t *unit);
 int S_SearingArrowDamage(edict_t *attacker, int damage);
+bool S_DestroyerOrbCommitAttack(edict_t *attacker, edict_t *target,
+                                uint32_t *ability, uint32_t *rank, int *bonus);
 int S_ColdArrowsDamage(edict_t *attacker, edict_t *target, int damage);
 cstring_t S_SearingArrowsMissileArt(edict_t *attacker);
 bool S_SearingArrowsIssueOrder(edict_t *attacker, edict_t *target, uint32_t ability);

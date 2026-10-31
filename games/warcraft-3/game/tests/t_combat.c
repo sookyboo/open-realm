@@ -5186,4 +5186,92 @@ TEST(wc3_combat, negative_natural_regeneration_from_full_health_is_lethal) {
     T_ASSERT(unit->svflags & SVF_DEADMONSTER);
 }
 
+/* An empowered Orb snapshots its damage and three splash bands on the fired
+ * missile, and spends mana at launch exactly once (not again on impact). */
+TEST(wc3_combat, destroyer_orb_launch_applies_authored_splash_on_plain_missile_weapon) {
+    static UnitAbilities_t abilities = { .abilList = "Afak" };
+    static UnitWeapons_t weapons = { .attacksEnabled = 1,
+        .attack1 = { .areaTargets = WC3_TARGET_FLAG_GROUND } };
+    static char const slk[] =
+        "ID;PWXL;N;EBB;Y2;X11\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+        "C;Y1;X4;K\"Cost1\"\nC;Y1;X5;K\"Area1\"\n"
+        "C;Y1;X6;K\"DataA1\"\nC;Y1;X7;K\"DataB1\"\n"
+        "C;Y1;X8;K\"DataC1\"\nC;Y1;X9;K\"DataD1\"\n"
+        "C;Y1;X10;K\"DataE1\"\nC;Y1;X11;K\"targs\"\n"
+        "C;Y2;X1;K\"Afak\"\nC;Y2;X2;K\"Afak\"\nC;Y2;X3;K1\n"
+        "C;Y2;X4;K13\nC;Y2;X5;K180\nC;Y2;X6;K31\n"
+        "C;Y2;X7;K0.6\nC;Y2;X8;K0.2\nC;Y2;X9;K4\n"
+        "C;Y2;X10;K95\nC;Y2;X11;K\"air,ground,enemy\"\nE\n";
+    slkTestData_t *rows, *old;
+    edict_t *attacker, *primary, *bystander, *ally, *missile = NULL;
+    artillery_t *splash;
+    float health_before, bystander_before;
+    reset_entities(); setup_test_world();
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    attacker = make_combat_unit(MAKEFOURCC('u','b','s','p'), 500, 0, 0);
+    primary = make_combat_unit(MAKEFOURCC('h','f','o','o'), 900, 200, 0);
+    bystander = make_combat_unit(MAKEFOURCC('h','f','o','o'), 900, 275, 0);
+    ally = make_combat_unit(MAKEFOURCC('h','f','o','o'), 900, 280, 0);
+    attacker->s.player = ally->s.player = 0;
+    primary->s.player = bystander->s.player = 1;
+    attacker->data.UnitAbilities = &abilities;
+    attacker->data.UnitWeapons = &weapons;
+    attacker->mana.value = attacker->mana.max_value = 100.0f;
+    attacker->unit_state->attack1.type = ATK_MAGIC;
+    attacker->unit_state->attack1.weapon = WPN_MISSILE;
+    attacker->unit_state->attack1.range = 600;
+    attacker->unit_state->attack1.targetsAllowed = WC3_TARGET_FLAG_GROUND;
+    attacker->unit_state->attack1.damageBase = 40;
+    attacker->unit_state->attack1.numberOfDice = 0;
+    attacker->unit_state->attack1.damagePoint = 0.1f;
+    attacker->unit_state->attack1.cooldown = 1.0f;
+    attacker->unit_state->attack1.projectile.speed = 900;
+    primary->targtype = bystander->targtype = ally->targtype = TARG_GROUND;
+    T_ASSERT(G_SetUnitAutocast(attacker, FS_SLKKey("Afak"), true));
+    attacker->goalentity = primary;
+    attack_ranged(attacker);
+    T_NOT_NULL(attacker->currentmove);
+    if (!attacker->currentmove) goto done;
+    attacker->wait = 0.1f;
+    attacker->currentmove->think(attacker);
+    FILTER_EDICTS(ent, ent->owner == attacker && ent->movetype == MOVETYPE_FLYMISSILE) {
+        missile = ent;
+        break;
+    }
+    T_NOT_NULL(missile);
+    if (!missile) goto done;
+    splash = G_GetArtillery(missile);
+    T_NOT_NULL(splash);
+    if (splash) {
+        T_FEQ(splash->area_full, 4, 0.001f);
+        T_FEQ(splash->area_medium, 95, 0.001f);
+        T_FEQ(splash->area_small, 180, 0.001f);
+        T_FEQ(splash->factor_medium, 0.6f, 0.001f);
+        T_FEQ(splash->factor_small, 0.2f, 0.001f);
+    }
+    T_FEQ(attacker->mana.value, 87, 0.001f);
+    T_EQ(missile->s.model, G_RegisterModel("TestUI\\Models\\anim_projectile.mdx"));
+    T_ASSERT(missile->damage >= 31u);
+    health_before = primary->health.value;
+    bystander_before = bystander->health.value;
+    FOR_LOOP(i, 20) {
+        if (!missile->inuse || missile->movetype != MOVETYPE_FLYMISSILE) break;
+        G_RunEntity(missile);
+    }
+    T_ASSERT(primary->health.value < health_before);
+    T_ASSERT(bystander->health.value < bystander_before);
+    T_FEQ(ally->health.value, 900.0f, 0.001f);
+    T_FEQ(attacker->mana.value, 87.0f, 0.001f);
+    if (missile->inuse) {
+        T_ASSERT(missile->aiflags & AI_PROJECTILE_DEATH_PRESENTATION);
+        T_STREQ(missile->animation->name, "Death");
+    }
+
+done:
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 #endif

@@ -11236,4 +11236,66 @@ TEST(wc3_spell, obsidian_statue_spirit_touch_jass_autocast_orders_toggle_state) 
     T_ASSERT(!G_UnitAutocastIsOn(statue, life_code));
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
+
+/* This is a real A_EXECUTE + fixed-point missile + impact lifecycle. Devour
+ * must not dispel a unit at cast time while its authored missile is in flight. */
+TEST(wc3_spell, destroyer_devour_magic_dispels_only_when_projectile_arrives) {
+    static UnitAbilities_t abilities = { .abilList = "Advm" };
+    static char const slk[] =
+        "ID;PWXL;N;EBB;Y2;X8\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
+        "C;Y1;X3;K\"levels\"\nC;Y1;X4;K\"Area1\"\n"
+        "C;Y1;X5;K\"DataA1\"\nC;Y1;X6;K\"DataB1\"\n"
+        "C;Y1;X7;K\"DataE1\"\nC;Y1;X8;K\"targs\"\n"
+        "C;Y2;X1;K\"Advm\"\nC;Y2;X2;K\"Advm\"\n"
+        "C;Y2;X3;K1\nC;Y2;X4;K160\nC;Y2;X5;K25\n"
+        "C;Y2;X6;K35\nC;Y2;X7;K90\n"
+        "C;Y2;X8;K\"air,ground,enemy,friend\"\nE\n";
+    slkTestData_t *rows, *old;
+    edict_t *caster, *enemy, *missile = NULL;
+    abilityitem_t item = S_AbilityItem(FS_SLKKey("Advm"));
+    spellTarget_t st;
+    abilityCall_t call;
+    uint32_t const buff = FS_SLKKey("Binf");
+    reset_entities(); setup_test_world();
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = alloc_test_unit(MAKEFOURCC('u','b','s','p'), 0, 0);
+    enemy = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 250, 0);
+    caster->s.player = 0; enemy->s.player = 1;
+    caster->data.UnitAbilities = &abilities;
+    caster->svflags |= SVF_MONSTER; enemy->svflags |= SVF_MONSTER;
+    caster->mana.value = 0; caster->mana.max_value = 100;
+    enemy->health.value = enemy->health.max_value = 400;
+    T_NOT_NULL(unit_applystatus(enemy, &(status_application_t){
+        .buff = "Binf", .level = 1, .duration = 30.0f,
+        .buff_flags = WC3_STATUS_BUFF_MAGICAL | WC3_STATUS_BUFF_POSITIVE }));
+    T_EQ(G_UnitStatusLevel(enemy, buff), 1u);
+    st = MAKE(spellTarget_t, .type = SPELL_TARGET_POINT, .point = enemy->s.origin2);
+    call = MAKE(abilityCall_t, .item = &item, .target = &st);
+    T_ASSERT(S_AbilityMessage(caster, A_EXECUTE, &call));
+    FILTER_EDICTS(ent, ent->owner == caster && ent->movetype == MOVETYPE_FLYMISSILE) {
+        missile = ent;
+        break;
+    }
+    T_NOT_NULL(missile);
+    T_EQ(G_UnitStatusLevel(enemy, buff), 1u);
+    if (missile) {
+        T_ASSERT(missile->aiflags & AI_PROJECTILE_FIXED_TARGET);
+        T_EQ(missile->s.model, G_RegisterModel("TestUI\\Models\\anim_projectile.mdx"));
+        FOR_LOOP(i, 20) {
+            if (!missile->inuse || missile->movetype != MOVETYPE_FLYMISSILE) break;
+            G_RunEntity(missile);
+        }
+        T_EQ(G_UnitStatusLevel(enemy, buff), 0u);
+        T_FEQ(caster->mana.value, 35, 0.001f);
+        if (missile->inuse) {
+            T_ASSERT(missile->aiflags & AI_PROJECTILE_DEATH_PRESENTATION);
+            T_STREQ(missile->animation->name, "Death");
+        }
+    }
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 #endif /* BZ_TESTS */

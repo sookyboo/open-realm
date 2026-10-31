@@ -70,8 +70,16 @@ and duration remain to be proven. Do not infer debris from the presence of
 - **`Afak` Orb of Annihilation**: manual one-shot and autocast use the same
   attack-modifier order, spend authored mana and add `DataA` damage on a
   successful shot; the missile uses the ability's authored `MissileArt`
-  (stock: `AnnihilationMissile.mdx`). **Area-splash rings are still missing**;
-  do not declare full Orb parity based only on projectile replacement.
+  (stock: `AnnihilationMissile.mdx`). Once the weapon projectile is allocated,
+  Orb spends mana once and snapshots `DataA` bonus, `DataD` full radius,
+  `DataE` medium radius, `Area` outer radius and `DataB`/`DataC` falloffs.
+  Even a plain `WPN_MISSILE` weapon uses the existing generic Missile Splash
+  impact path for an empowered Orb. Conversely, a `WPN_MSPLASH` weapon that
+  owns stock `Afak` does not perform Orb splash while the modifier is off or
+  unpaid. The missile's `Death` event owns the hit
+  sound and presentation; other weapons are unchanged. If the Orb cannot be
+  paid for, the attack remains a normal missile attack. Manual one-shot Orb
+  state is consumed when the shot is released, not again on hit.
 - **`Advm` Devour Magic**: reuses the shared area-dispel inverse lifecycle. It
   now refunds `DataA` HP/`DataB` mana once per hostile buffed unit, rather than
   once per removed status; friendly buffs and Sentinel wards produce no refund.
@@ -81,7 +89,8 @@ and duration remain to be proven. Do not infer debris from the presence of
 - **`Aabs` Absorb Mana**: a unit-target spell with a homing projectile
   (`AbsorbManaBirthMissile.mdx` via authored MissileArt); on valid impact,
   transfers up to `DataB`, capped by source mana and the Destroyer's empty
-  capacity, without creating mana. Cancellation, projectile save/load and
+  capacity, without creating mana. The missile is retained through its Death
+  impact animation/SND event, rather than freed before the visual can finish. Cancellation, projectile save/load and
   mid-flight target disappearance need focused testing.
 
 ## Regression and verification
@@ -95,3 +104,21 @@ Magic per-hostile-target refund. Custom values should be used in addition to
 stock-shaped tests. The engine is validated separately by the project test
 suite; this document records current implementation gaps rather than claiming
 complete retail parity.
+
+## Visual investigation and remaining verification
+
+MPQ animation-event inspection (31 October 2026) confirms:
+
+- `Aave`: forward morph begins at 23,333 ms; SND fires there, Crumble2 SPN
+  at 24,300 ms, geoset alpha handoff at 24,333 ms, end at 25,333 ms.
+- `Afak`: `AnnihilationMissile.mdx` has Birth, Stand and Death sequences,
+  including launch/hit SND events; no additional splash model is authored.
+- `Advm`: missile Birth has `DevourMagic.wav`, and Death has generic hit SND.
+  SpecialArt is `DispelMagicTarget.mdx`.
+
+The current projectile mover is straight-line: `Advm`'s configured 0.10
+missile arc is not yet simulated. Whether retail applies the gameplay dispel
+strictly at missile impact has not been established from model data alone;
+the engine now follows the visibly coherent impact-time policy. Projectile
+Death event playback depends on the usual renderer event-crossing behavior.
+No gameplay tests were executed during patch preparation.

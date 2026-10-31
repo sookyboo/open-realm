@@ -44,3 +44,13 @@ Targetattach=overhead
 [Bcrs]
 TargetArt=TestUI\Models\anim_pulse.mdx
 Targetattach=overhead
+
+// Synthetic Destroyer projectile art: exercise the actual launch/impact path.
+[Afak]
+MissileArt=TestUI\Models\anim_projectile.mdx
+Missilespeed=1500
+
+[Advm]
+MissileArt=TestUI\Models\anim_projectile.mdx
+Missilespeed=1200
+SpecialArt=TestUI\Models\anim_oneshot.mdx

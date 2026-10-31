@@ -265,7 +265,9 @@ static void absorb_mana_missile_hit(edict_t *missile) {
     edict_t *target = S_SpellProjectileTarget(missile);
     if (caster && !M_IsDead(caster) && target)
         absorb_mana_transfer(caster, target, missile->class_id);
-    G_FreeEdict(missile);
+    /* The authored Death sequence contains the impact sound event. Retain
+     * the projectile as presentation only after the transfer has resolved. */
+    if (!G_StartProjectileDeathPresentation(missile)) G_FreeEdict(missile);
 }
 
 static umove_t absorb_mana_missile_move = { "stand", NULL, absorb_mana_missile_hit, CAbilityAbsorb };
@@ -289,8 +291,12 @@ BZ_ABILITY_PROC(CAbilityAbsorb) {
         speed = value ? (float)atof(value) : 1500.0f;
         missile = S_SpawnUnitTargetSpellMissile(ent, code, target,
                          speed > 0.0f ? speed : 1500.0f, &absorb_mana_missile_move);
-        if (!missile) absorb_mana_transfer(ent, target, code);
-        G_PlayAbilityEffectSound(code, &ent->s.origin2);
+        if (!missile) {
+            absorb_mana_transfer(ent, target, code);
+            G_PlayAbilityEffectSound(code, &ent->s.origin2);
+        }
+        /* With authored missile art, the MDX Birth event owns AbsorbMana.wav;
+         * a second game-side sound would duplicate it. */
         return true;
     }
     default: return CAbilitySimpleSpell(ent, msg, call);

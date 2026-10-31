@@ -187,7 +187,9 @@ void SV_Physics_Toss(edict_t *ent) {
                 S_ResolveAttackHitWithArrow(attacker, ent->goalentity, damage,
                                              ent->missile->arrow_ability, ent->missile->arrow_level);
             }
-            G_FreeEdict(ent);
+            ent->s.origin = target;
+            ent->s.origin2 = MAKE(vec2_t, target.x, target.y);
+            if (!G_StartProjectileDeathPresentation(ent)) G_FreeEdict(ent);
         }
     } else {
         Vector3_normalize(&dir);

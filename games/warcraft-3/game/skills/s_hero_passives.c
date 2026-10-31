@@ -1271,9 +1271,13 @@ static uint32_t attack_modifier_code(edict_t *attacker, uint32_t *rank,
 int S_SearingArrowDamage(edict_t *attacker, int damage) {
     uint32_t code, level = 0;
     heroabilitystatus_t *manual = NULL;
-    if (!attacker || !attacker->unit_state || attacker->unit_state->attack1.weapon != WPN_MISSILE)
-        return damage;
+    if (!attacker || !attacker->unit_state ||
+        (attacker->unit_state->attack1.weapon != WPN_MISSILE &&
+         attacker->unit_state->attack1.weapon != WPN_MSPLASH)) return damage;
     code = attack_modifier_code(attacker, &level, &manual);
+    /* Afak is committed at projectile launch, not again when a missile hits.
+     * Launch snapshots its bonus and splash profile for every victim. */
+    if (level && G_AbilityCode(code) == ID_DESTROYER_ORB) return damage;
     if (!level) { level = G_UnitStatusLevel(attacker, ID_POISON_ARROWS); code = ID_POISON_ARROWS; }
     if (!level) return damage;
     /* Autocast and a manually targeted one-shot use the same authored damage
@@ -1284,6 +1288,31 @@ int S_SearingArrowDamage(edict_t *attacker, int damage) {
         if (!paid) return damage;
     }
     return damage + (int)S_SpellData(code, level, 1);
+}
+
+/* Return the resolved Orb rank and its authored bonus only after the attack
+ * projectile has been allocated. The caller snapshots all damage rings on the
+ * missile; the next attack (or a later mana change) cannot change this shot. */
+bool S_DestroyerOrbCommitAttack(edict_t *attacker, edict_t *target,
+                                uint32_t *ability, uint32_t *rank, int *bonus) {
+    heroabilitystatus_t *manual = NULL;
+    uint32_t level = 0, code;
+    bool paid;
+    if (!attacker || !target || !ability || !rank || !bonus || !attacker->unit_state ||
+        (attacker->unit_state->attack1.weapon != WPN_MISSILE &&
+         attacker->unit_state->attack1.weapon != WPN_MSPLASH)) return false;
+    code = attack_modifier_code(attacker, &level, &manual);
+    if (!level || G_AbilityCode(code) != ID_DESTROYER_ORB) return false;
+    /* Orb's magical enhancement cannot fire on an immune victim. The normal
+     * weapon attack still proceeds without consuming mana. */
+    paid = S_SpellIsEnemy(attacker, target) && S_SpellAllowsTarget(code, attacker, target) &&
+           !S_UnitSpellImmune(target) && S_SpellSpendMana(attacker, code, level);
+    if (manual) unit_removestatus(attacker, manual, STATUS_REMOVE_SCRIPT);
+    if (!paid) return false;
+    *ability = code;
+    *rank = level;
+    *bonus = (int)S_SpellData(code, level, 1);
+    return true;
 }
 
 bool S_ColdArrowsIssueOrder(edict_t *attacker, edict_t *target, uint32_t ability) {
@@ -1361,9 +1390,12 @@ int S_ColdArrowsDamage(edict_t *attacker, edict_t *target, int damage) {
 cstring_t S_SearingArrowsMissileArt(edict_t *attacker) {
     uint32_t level = 0, code;
     cstring_t art;
-    if (!attacker || !attacker->unit_state || attacker->unit_state->attack1.weapon != WPN_MISSILE)
-        return NULL;
+    if (!attacker || !attacker->unit_state ||
+        (attacker->unit_state->attack1.weapon != WPN_MISSILE &&
+         attacker->unit_state->attack1.weapon != WPN_MSPLASH)) return NULL;
     code = attack_modifier_code(attacker, &level, NULL);
+    /* Orb art is selected only after its mana is actually spent at launch. */
+    if (level && G_AbilityCode(code) == ID_DESTROYER_ORB) return NULL;
     if (!code && attacker->unit_state->autocast && cold_attack_ability(attacker->unit_state->autocast) &&
         G_UnitAutocastIsOn(attacker, attacker->unit_state->autocast)) {
         code = attacker->unit_state->autocast;

@@ -719,12 +719,68 @@ void S_DispelMagicArea(edict_t *caster, uint32_t code, uint32_t level, vec2_t co
                                  caster->mana.value + heal_mana * (float)devoured_enemy_units);
 }
 
+/* A Devour Magic point cast launches the authored birth missile. Its gameplay
+ * dispel and special art resolve on arrival, so units entering/leaving the area
+ * while it travels are evaluated at impact rather than at the cast point. */
+static void devour_magic_missile_hit(edict_t *missile) {
+    channel_t const *cast = G_GetChannel(missile);
+    edict_t *caster = S_SpellProjectileOwner(missile);
+    if (cast && caster && !M_IsDead(caster)) {
+        vec2_t const point = cast->origin;
+        S_DispelMagicArea(caster, missile->class_id, S_SpellLevel(caster, missile->class_id), &point);
+        G_SpawnAbilityEffectAtPoint(missile->class_id, WC3_EFFECT_SPECIAL, 0, &point, true);
+        missile->s.origin2 = point;
+        missile->s.origin = MAKE(vec3_t, point.x, point.y, CM_GetHeightAtPoint(point.x, point.y));
+    }
+    if (!G_StartProjectileDeathPresentation(missile)) G_FreeEdict(missile);
+}
+
+static umove_t devour_magic_missile_move = {
+    "stand", NULL, devour_magic_missile_hit, CAbilityDispelMagic
+};
+
+static bool devour_magic_launch(edict_t *caster, uint32_t code, vec2_t const *point) {
+    cstring_t art = G_AbilityEffectArt(code, WC3_EFFECT_MISSILE, 0);
+    cstring_t speed_text = S_SpellString(code, "Missilespeed", 0);
+    float speed = speed_text ? (float)atof(speed_text) : 0.0f;
+    edict_t *missile;
+    channel_t *cast;
+    vec2_t direction;
+    if (!caster || !point || !art || !*art || !isfinite(speed) || speed <= 0.0f) return false;
+    missile = G_Spawn();
+    if (!missile) return false;
+    missile->s.model = G_RegisterModel(art);
+    if (!missile->s.model) { G_FreeEdict(missile); return false; }
+    missile->class_id = code;
+    missile->owner = caster;
+    missile->s.player = caster->s.player;
+    G_InheritUnitTeamColor(missile, caster);
+    missile->s.origin = caster->s.origin;
+    missile->s.origin2 = caster->s.origin2;
+    direction = Vector2_sub(point, &caster->s.origin2);
+    missile->s.angle = atan2f(direction.y, direction.x);
+    missile->aiflags |= AI_PROJECTILE_FIXED_TARGET;
+    missile->velocity = speed / 1000.0f;
+    missile->movetype = MOVETYPE_FLYMISSILE;
+    missile->currentmove = &devour_magic_missile_move;
+    cast = G_AddChannel(missile);
+    cast->origin = *point;
+    cast->owner_spawn_time = caster->spawn_time;
+    G_StartProjectilePresentation(missile);
+    return true;
+}
+
 BZ_SIMPLE_SPELL_PROC(AbilityDispelMagic) {
-    S_DispelMagicArea(caster, spell->code, S_SpellLevel(caster, spell->code), &st.point);
     if (G_AbilityCode(spell->code) == MAKEFOURCC('A','d','v','m')) {
+        if (devour_magic_launch(caster, spell->code, &st.point)) return;
+        /* No authored missile: resolve immediately, keeping gameplay usable
+         * for custom archives without effect models or missile speed. */
+        S_DispelMagicArea(caster, spell->code, S_SpellLevel(caster, spell->code), &st.point);
         G_SpawnAbilityEffectAtPoint(spell->code, WC3_EFFECT_SPECIAL, 0, &st.point, true);
         G_PlayAbilityEffectSound(spell->code, &st.point);
+        return;
     }
+    S_DispelMagicArea(caster, spell->code, S_SpellLevel(caster, spell->code), &st.point);
 }
 /* Name=Heal; Ubertip="Heals a target friendly non-mechanical wounded unit for <Ahea,DataA1> hit points." */
 BZ_HUMAN_AUTOCAST_SPELL(AbilityHeal, heal_validate(ent, target, call ? call->item : NULL), heal_execute, true, true)

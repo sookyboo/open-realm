@@ -96,6 +96,7 @@ typedef struct {
      * attacks. Explicit Attack Ground must never inherit it. */
     bool impaling_line;
     bool tree_attack_allowed;
+    bool allow_destroyer_orb;
 }  rocketDesc_t;
 
 bool S_UnitAttackSlotEnabled(edict_t const *attacker, uint32_t slot) {
@@ -215,7 +216,15 @@ void fire_rocket(edict_t *ent, rocketDesc_t const *desc) {
     /* Missile Splash follows a unit instead of the artillery impact point.
      * Both weapons snapshot their splash profile when the projectile launches,
      * so morphs, upgrades and target changes cannot change an in-flight hit. */
-    if (desc->attack && (desc->attack->weapon == WPN_ARTILLERY || desc->attack->weapon == WPN_MSPLASH)) {
+    /* Afak's authored splash belongs to empowered shots, not the Destroyer's
+     * ordinary weapon. Stock Destroyers may author WPN_MSPLASH as the weapon
+     * delivery type; do not apply its default splash when the Orb is off or
+     * cannot be paid. Other splash weapons retain their ordinary profile. */
+    bool const destroyer_orb_weapon = desc->allow_destroyer_orb &&
+        desc->attack && desc->attack->weapon == WPN_MSPLASH &&
+        G_UnitAbilityLevel(ent, MAKEFOURCC('A','f','a','k')) != 0;
+    if (desc->attack && (desc->attack->weapon == WPN_ARTILLERY ||
+                         (desc->attack->weapon == WPN_MSPLASH && !destroyer_orb_weapon))) {
         artillery_t *splash = G_AddArtillery(rocket);
         splash->attack_type = desc->attack->type;
         splash->area_targets = desc->area_targets;
@@ -225,6 +234,33 @@ void fire_rocket(edict_t *ent, rocketDesc_t const *desc) {
         splash->area_small = desc->attack->areaSmall;
         splash->factor_medium = desc->attack->factorMedium;
         splash->factor_small = desc->attack->factorSmall;
+    }
+    /* Afak supplies its own splash rings even when the unit's weapon is a
+     * plain missile. The generic Missile Splash route then applies attack
+     * damage once to the primary and falloff to the other valid targets. */
+    if (desc->allow_destroyer_orb && desc->target && !desc->fixed_target) {
+        uint32_t code = 0, level = 0;
+        int bonus = 0;
+        if (S_DestroyerOrbCommitAttack(ent, desc->target, &code, &level, &bonus)) {
+            artillery_t *splash = G_GetArtillery(rocket);
+            cstring_t art = G_AbilityEffectArt(code, WC3_EFFECT_MISSILE, 0);
+            cstring_t speed_text = S_SpellString(code, "Missilespeed", 0);
+            float speed = speed_text ? (float)atof(speed_text) : 0.0f;
+            if (!splash) splash = G_AddArtillery(rocket);
+            if (splash) {
+                splash->attack_type = desc->attack_type;
+                splash->targets_allowed = desc->attack->targetsAllowed;
+                splash->area_targets = desc->area_targets;
+                splash->area_full = MAX(0.0f, S_SpellData(code, level, 4));
+                splash->area_medium = MAX(0.0f, S_SpellData(code, level, 5));
+                splash->area_small = MAX(0.0f, S_SpellNumber(code, ABILITY_NUMBER_AREA, level));
+                splash->factor_medium = MAX(0.0f, S_SpellData(code, level, 2));
+                splash->factor_small = MAX(0.0f, S_SpellData(code, level, 3));
+            }
+            rocket->damage = (uint32_t)MAX(0, (int)rocket->damage + bonus);
+            if (art && *art) rocket->s.model = G_RegisterModel(art);
+            if (isfinite(speed) && speed > 0.0f) rocket->velocity = speed / 1000.0f;
+        }
     }
     rocket->owner = ent;
     rocket->movetype = MOVETYPE_FLYMISSILE;
@@ -883,6 +919,7 @@ static void throw_missile(edict_t *ent) {
         .model = missile_art ? G_RegisterModel(missile_art) : atk->projectile.model,
         .arrow_ability = arrow_code,
         .arrow_level = arrow_level,
+        .allow_destroyer_orb = !arrow_code,
         .damage = damage,
         .attack_type = atk->type,
         .attack = atk,
@@ -1203,7 +1240,9 @@ bool S_SearingArrowsIssueOrder(edict_t *attacker, edict_t *target, uint32_t abil
         (G_AbilityCode(ability) != MAKEFOURCC('A','H','f','a') &&
          G_AbilityCode(ability) != MAKEFOURCC('A','f','a','k')) ||
         !G_UnitAbilityLevel(attacker, ability) || !S_AttackCanTarget(attacker, target) ||
-        !attacker->unit_state || attacker->unit_state->attack1.weapon != WPN_MISSILE) return false;
+        !attacker->unit_state ||
+        (attacker->unit_state->attack1.weapon != WPN_MISSILE &&
+         attacker->unit_state->attack1.weapon != WPN_MSPLASH)) return false;
     level = G_UnitAbilityLevel(attacker, ability);
     app = (status_application_t){
         .buff = GetClassName(ability), .level = level, .source_ability = ability,
