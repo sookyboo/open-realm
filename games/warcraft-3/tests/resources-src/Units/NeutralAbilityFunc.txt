@@ -38,3 +38,15 @@ Missilespeed=790
 [ACbk]
 MissileArt=TestUI\Models\anim_projectile.mdx
 Missilespeed=590
+
+// The original Dark Ranger channels a DRAL lightning ribbon between the two
+// chest-attached drain models, with a looping authored sound alias.
+[ANdr]
+LightningEffect=DRAB,DRAL,DRAM
+Effectsoundlooped=DrainLoop
+
+[Bdcl]
+TargetArt=TestUI\Models\anim_pulse.mdx
+
+[Bdtl]
+TargetArt=TestUI\Models\anim_pulse.mdx

@@ -10,6 +10,76 @@ static bool siphon_mana_is_siphon(uint32_t code) {
     return item.ability && item.ability->proc == CAbilityDrain;
 }
 
+/* Life Drain is CAbilityDrainNeutral even though its AbilityData base is
+ * AHdr (the same base as Siphon Mana).  Only the Life Drain presentation
+ * belongs here: the Siphon Mana gameplay/channel contract remains unchanged. */
+static bool siphon_mana_is_life_drain(uint32_t code) {
+    abilityitem_t item = S_AbilityItem(code);
+    return item.ability && item.ability->proc == CAbilityDrainNeutral;
+}
+
+/* The authored LightningEffect array contains DRAB (mixed drain), DRAL (life)
+ * and DRAM (mana).  Select by the effective DataA/B/D/E transfer modes rather
+ * than hardcoding ANdr, so custom ability aliases keep their own fields. */
+static uint32_t siphon_mana_lightning_index(uint32_t code, uint32_t rank) {
+    bool const life = S_SpellData(code, rank, 1) > 0.0f ||
+                      S_SpellData(code, rank, 4) > 0.0f;
+    bool const mana = S_SpellData(code, rank, 2) > 0.0f ||
+                      S_SpellData(code, rank, 5) > 0.0f;
+    return life && mana ? 0u : life ? 1u : 2u;
+}
+
+/* The existing lightning slot is saved with its unique handle.  Reuse the
+ * thinker's already-serialized variation field to remember just that handle,
+ * without extending the edict/save/network contracts.  Never delete a beam
+ * merely because it has the same caster and target as a newer channel. */
+static void siphon_mana_end_presentation(edict_t *thinker) {
+    uint32_t const handle = thinker ? thinker->variation : 0;
+    if (!thinker) return;
+    thinker->variation = 0;
+    thinker->s.sound = 0;
+    if (handle) {
+        FOR_LOOP(i, MAX_LIGHTNING_EFFECTS) {
+            gLightning_t *lightning = &level.lightning_effects[i];
+            if (G_LightningValid(lightning) && lightning->state.handle == handle) {
+                G_LightningRemove(lightning);
+                break;
+            }
+        }
+    }
+    G_DestroyOwnedEffects(thinker);
+}
+
+static void siphon_mana_end(edict_t *thinker) {
+    siphon_mana_end_presentation(thinker);
+    S_SpellEndChannel(thinker);
+}
+
+/* The MPQ's drain buff art is attached to the two chests and stays visible
+ * through the channel, not through a temporary status.  The configured
+ * Life Drain buff classes are Bdcl (caster) and Bdtl (victim).  Missing
+ * optional art/sound/lightning must not change gameplay or the channel. */
+static void siphon_mana_begin_presentation(edict_t *thinker, edict_t *caster,
+                                           edict_t *target, uint32_t code, uint32_t rank) {
+    gLightning_t *lightning;
+    if (!thinker || !caster || !target || !siphon_mana_is_life_drain(code)) return;
+    (void)G_SpawnOwnedAbilityEffectTarget(thinker, MAKEFOURCC('B','d','c','l'),
+                                          WC3_EFFECT_TARGET, 0, caster, "chest");
+    (void)G_SpawnOwnedAbilityEffectTarget(thinker, MAKEFOURCC('B','d','t','l'),
+                                          WC3_EFFECT_TARGET, 0, target, "chest");
+    lightning = G_SpawnAbilityLightning(&(abilityLightningParams_t){
+        .ability_id = code, .index = siphon_mana_lightning_index(code, rank),
+        .source = caster, .target = target,
+        /* A channel owns this beam; the 2-second LightningData duration is
+         * the ribbon's animation data, not the scripted channel lifetime. */
+        .duration_ms = 0,
+    });
+    if (lightning) thinker->variation = lightning->state.handle;
+    thinker->s.origin = caster->s.origin;
+    thinker->s.origin2 = caster->s.origin2;
+    thinker->s.sound = (uint16_t)G_AbilityEffectSoundIndex(code, true);
+}
+
 /* General mana regeneration only asks for a decay rate when overcharged.
  * The ability owns the pause policy, including cancel/recast and aliases. */
 float S_ManaExcessDecayRate(edict_t *ent) {
@@ -36,7 +106,7 @@ void siphon_mana_think(edict_t *ent) {
     uint32_t now = G_Time(), code = ent->class_id, rank = ent->resources;
     float amount, before;
     if (!S_SpellChannelActive(ent) || !S_SpellIsAliveTarget(target) || !S_SpellAllowsTarget(code, caster, target) ||
-        !S_SpellTargetInRange(caster, target, ent->collision)) { S_SpellEndChannel(ent); return; }
+        !S_SpellTargetInRange(caster, target, ent->collision)) { siphon_mana_end(ent); return; }
     if (now < ent->freetime) return;
     if (S_SpellIsFriend(caster, target)) {
         amount = MIN(MAX(0, caster->health.value - 1), S_SpellData(code, rank, 4) * ent->velocity);
@@ -55,7 +125,7 @@ void siphon_mana_think(edict_t *ent) {
          * let a retired thinker affect a replacement cast in the same pulse. */
         if (!S_SpellChannelActive(ent) || !S_SpellIsAliveTarget(target) ||
             S_SpellChannelTarget(ent) != target) {
-            S_SpellEndChannel(ent);
+            siphon_mana_end(ent);
             return;
         }
         /* Siphon Mana transfers to a temporary 200% cap. Only transfer what
@@ -67,7 +137,7 @@ void siphon_mana_think(edict_t *ent) {
         target->mana.value -= amount;
         caster->mana.value += amount;
     }
-    if (now >= ent->spawn_time || !S_SpellIsAliveTarget(target)) { S_SpellEndChannel(ent); return; }
+    if (now >= ent->spawn_time || !S_SpellIsAliveTarget(target)) { siphon_mana_end(ent); return; }
     ent->freetime = now + (uint32_t)MAX(FRAMETIME, ent->velocity * 1000.0f);
 }
 
@@ -80,6 +150,7 @@ static void siphon_mana_execute(edict_t *caster, spellTarget_t st, abilityitem_t
     ent->spawn_time = G_Time() + (uint32_t)(S_SpellHeroDuration(spell->code, rank, st.entity) * 1000.0f);
     ent->think = siphon_mana_think;
     ent->freetime = G_Time() + (uint32_t)MAX(FRAMETIME, ent->velocity * 1000.0f);
+    siphon_mana_begin_presentation(ent, caster, st.entity, spell->code, rank);
 }
 
 BZ_VALIDATED_SPELL_PROC(AbilityDrainNeutral, siphon_mana_validate, siphon_mana_execute)

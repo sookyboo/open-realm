@@ -1133,6 +1133,174 @@ TEST(wc3_ability_lifecycle, life_drain_lethal_pulse_does_not_drain_mana) {
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+/* The real Life Drain cast owns a single DRAL ribbon, two persistent
+ * chest attachments, and the authored looping sound.  No game installation
+ * is needed: the test archive supplies spell/buff art and a sound row. */
+TEST(wc3_ability_lifecycle, life_drain_attaches_art_beam_and_looped_sound) {
+    edict_t *caster = review_setup(), *victim = review_unit(1, 100);
+    slkTestData_t *rows = parse_slk_string(review_slk), *old = G_SetSLKRows("AbilityData", rows);
+    int (*old_alias)(cstring_t, cstring_t) = gi.SoundIndexAlias;
+    gLightning_t *beam = NULL;
+    edict_t *thinker;
+    uint32_t visuals = 0;
+    uint32_t const model = G_RegisterModel("TestUI\\Models\\anim_pulse.mdx");
+
+    gi.SoundIndexAlias = review_capture_sound_index_alias;
+    memset(level.lightning_effects, 0, sizeof(level.lightning_effects));
+    T_EQ(G_AbilityLightningId(FS_SLKKey("ANdr"), 1), MAKEFOURCC('D','R','A','L'));
+    T_ASSERT(model != 0);
+    T_ASSERT(S_CastUnitTargetSpell(caster, FS_SLKKey("ANdr"), victim));
+    thinker = review_thinker(caster);
+    T_NOT_NULL(thinker);
+    if (thinker) {
+        T_NE(thinker->variation, 0u);
+        T_EQ(thinker->s.sound, 91);
+        FILTER_EDICTS(effect, effect->owner == thinker && effect->s.model == model) {
+            T_ASSERT(effect->goalentity == caster || effect->goalentity == victim);
+            T_ASSERT(effect->s.flags & EF_NAMED_ATTACHMENT);
+            T_EQ(effect->movetype, MOVETYPE_LINK);
+            visuals++;
+        }
+        T_EQ(visuals, 2u);
+        FOR_LOOP(i, MAX_LIGHTNING_EFFECTS) {
+            gLightning_t *candidate = &level.lightning_effects[i];
+            if (candidate->inuse && candidate->state.handle == thinker->variation) beam = candidate;
+        }
+        T_NOT_NULL(beam);
+        if (beam) {
+            T_EQ(beam->state.effect_id, MAKEFOURCC('D','R','A','L'));
+            T_EQ(beam->state.end_time, 0u);
+            T_ASSERT(beam->source_entity == caster && beam->target_entity == victim);
+            victim->s.origin.x += 55.0f;
+            G_LightningUpdateAttached(beam);
+            T_FEQ(beam->state.target.x, victim->s.origin.x, 0.001f);
+        }
+        T_STREQ(blizzard_sound_path, "TestUI\\Sounds\\LifeDrain.wav");
+        T_ASSERT(unit_issueimmediateorder(caster, "stop"));
+        G_RunEntity(thinker);
+        T_ASSERT(!thinker->inuse);
+        if (beam) T_ASSERT(!beam->inuse);
+        FILTER_EDICTS(effect, effect->s.model == model &&
+                      (effect->goalentity == caster || effect->goalentity == victim)) {
+            T_ASSERT(effect->owner != thinker);
+        }
+    }
+    gi.SoundIndexAlias = old_alias;
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* Beam retirement follows the old thinker's unique handle, not the endpoints.
+ * Recasting between cancellation and cleanup must keep the new beam alive. */
+TEST(wc3_ability_lifecycle, life_drain_recast_retains_only_new_beam) {
+    edict_t *caster = review_setup(), *victim = review_unit(1, 100);
+    slkTestData_t *rows = parse_slk_string(review_slk), *old = G_SetSLKRows("AbilityData", rows);
+    edict_t *first, *second;
+    uint32_t first_id, second_id;
+    uint32_t count = 0;
+
+    memset(level.lightning_effects, 0, sizeof(level.lightning_effects));
+    T_ASSERT(S_CastUnitTargetSpell(caster, FS_SLKKey("ANdr"), victim));
+    first = review_thinker(caster);
+    T_NOT_NULL(first);
+    if (!first) goto done;
+    first_id = first->variation;
+    T_NE(first_id, 0u);
+    T_ASSERT(unit_issueimmediateorder(caster, "stop"));
+    T_ASSERT(S_CastUnitTargetSpell(caster, FS_SLKKey("ANdr"), victim));
+    second = NULL;
+    FILTER_EDICTS(candidate, candidate != first && candidate->owner == caster &&
+                  candidate->think == siphon_mana_think) { second = candidate; break; }
+    T_NOT_NULL(second);
+    if (!second) goto done;
+    second_id = second->variation;
+    T_NE(second_id, first_id);
+    G_RunEntity(first);
+    T_ASSERT(!first->inuse);
+    T_ASSERT(second->inuse);
+    FOR_LOOP(i, MAX_LIGHTNING_EFFECTS) {
+        gLightning_t *beam = &level.lightning_effects[i];
+        if (!beam->inuse) continue;
+        T_NE(beam->state.handle, first_id);
+        T_EQ(beam->state.handle, second_id);
+        count++;
+    }
+    T_EQ(count, 1u);
+    T_ASSERT(unit_issueimmediateorder(caster, "stop"));
+    G_RunEntity(second);
+    T_ASSERT(!second->inuse);
+    FOR_LOOP(i, MAX_LIGHTNING_EFFECTS) T_ASSERT(!level.lightning_effects[i].inuse);
+
+done:
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* Losing the victim or stunning the caster must retire the same persistent
+ * presentation; otherwise a dead target could leave a permanent beam. */
+TEST(wc3_ability_lifecycle, life_drain_victim_death_and_stun_retire_beam) {
+    FOR_LOOP(reason, 2) {
+        edict_t *caster = review_setup(), *victim = review_unit(1, 100);
+        slkTestData_t *rows = parse_slk_string(review_slk), *old = G_SetSLKRows("AbilityData", rows);
+        edict_t *thinker;
+        uint32_t beam_handle;
+        bool beam_left = false;
+        memset(level.lightning_effects, 0, sizeof(level.lightning_effects));
+        T_ASSERT(S_CastUnitTargetSpell(caster, FS_SLKKey("ANdr"), victim));
+        thinker = review_thinker(caster);
+        T_NOT_NULL(thinker);
+        if (!thinker) {
+            G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+            continue;
+        }
+        beam_handle = thinker->variation;
+        T_NE(beam_handle, 0u);
+        if (!reason) victim->health.value = 0;
+        else T_ASSERT(unit_addtimedstatus(caster, "Bstu", 1, 2.0f));
+        G_RunEntity(thinker);
+        T_ASSERT(!thinker->inuse);
+        FOR_LOOP(i, MAX_LIGHTNING_EFFECTS)
+            if (level.lightning_effects[i].inuse &&
+                level.lightning_effects[i].state.handle == beam_handle) beam_left = true;
+        T_ASSERT(!beam_left);
+        G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+    }
+}
+
+/* The thinker's variation field and lightning registry were already saved;
+ * a channel loaded mid-effect can clean up by the original handle. */
+TEST(wc3_ability_lifecycle, life_drain_visual_identity_survives_save_and_cleanup) {
+    cstring_t filename = Test_TempPath("wc3-life-drain-beam.bin");
+    edict_t *caster = review_setup(), *victim = review_unit(1, 100);
+    slkTestData_t *rows = parse_slk_string(review_slk), *old = G_SetSLKRows("AbilityData", rows);
+    edict_t *thinker;
+    uint32_t beam_handle;
+    bool found = false;
+
+    memset(level.lightning_effects, 0, sizeof(level.lightning_effects));
+    T_ASSERT(S_CastUnitTargetSpell(caster, FS_SLKKey("ANdr"), victim));
+    thinker = review_thinker(caster);
+    T_NOT_NULL(thinker);
+    if (!thinker) goto done;
+    beam_handle = thinker->variation;
+    T_NE(beam_handle, 0u);
+    T_ASSERT(WriteGame(filename));
+    thinker->variation = 0;
+    memset(level.lightning_effects, 0, sizeof(level.lightning_effects));
+    T_ASSERT(ReadGame(filename));
+    T_EQ(thinker->variation, beam_handle);
+    FOR_LOOP(i, MAX_LIGHTNING_EFFECTS)
+        if (level.lightning_effects[i].inuse &&
+            level.lightning_effects[i].state.handle == beam_handle) found = true;
+    T_ASSERT(found);
+    T_ASSERT(unit_issueimmediateorder(caster, "stop"));
+    G_RunEntity(thinker);
+    T_ASSERT(!thinker->inuse);
+    FOR_LOOP(i, MAX_LIGHTNING_EFFECTS) T_ASSERT(!level.lightning_effects[i].inuse);
+
+done:
+    remove(filename);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 /* Tranquility is AB_CHANNEL even though it needs no target-selection click. */
 TEST(wc3_ability_lifecycle, no_target_tranquility_establishes_channel) {
     edict_t *caster = review_setup();

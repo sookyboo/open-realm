@@ -228,3 +228,53 @@ been established by the provided MPQ audit. Patch 5 remains Life Drain
 attachments, continuous lightning, and loop sound; subsequent parity work
 may revisit the Black Arrow death presentation. No builds or tests were run
 by the patch author.
+
+## Life Drain presentation — Patch 5
+
+`ANdr` executes as `CAbilityDrainNeutral`, sharing the existing `AHdr` health/
+mana channel thinker without inheriting Siphon Mana's 200% mana cap. Its
+presentation now begins when the production unit-target cast creates that
+thinker:
+
+- The stock caster buff class `Bdcl` resolves `DrainCaster.mdl`, attached at
+  `chest` to the Dark Ranger. The victim class `Bdtl` resolves
+  `DrainTarget.mdl`, also attached at `chest`. Both effects are owned by the
+  channel thinker and render their authored looping `Stand` sequence.
+- `ANdr.LightningEffect` lists `DRAB,DRAL,DRAM`. A health-only drain uses
+  index 1 (`DRAL`, DrainLightning texture); a mixed health/mana transfer uses
+  index 0, and a mana-only transfer index 2. The ability alias's resolved
+  function table supplies these IDs. The generic attached lightning API
+  updates both endpoints from live unit bodies every frame. Its current
+  half-radius endpoint offset is **not** proven to equal the retail chest
+  socket; exact chest-socket lightning endpoints remain parity work.
+- `ANdr.Effectsoundlooped=DrainLoop` resolves through the authored ability
+  sound table (stock `LifeDrain.wav`) and plays on the channel thinker. This
+  is a loop, not a fabricated one-shot cast sound.
+
+The beam is an **indefinite** lightning slot while the channel is live:
+`LightningData`'s duration of 2 describes authored beam animation data, not
+an 8-second channel timeout. The thinker's already-persisted `variation`
+field stores the unique registry handle, which is saved alongside the
+lightning registry and moving endpoint entity identities. On Stop, stun,
+movement, caster/target death, range/target invalidation, completion or
+replacement cast, its next channel tick removes only the matching beam
+handle, turns off sound and retires both owned attached effects. This avoids
+old thinkers deleting a new cast's beam after a quick recast; no new save or
+network fields or version bump are necessary.
+
+The attached model presentation and beam use only game-module-authored
+entities/lightning; the universal client remains unaware of Dark Ranger.
+Missing models, sound rows or lightning declarations are allowed and do not
+change health drain gameplay. Siphon Mana visuals are not part of this patch.
+
+`game/tests/t_ability_lifecycle.c` covers the real `ANdr` cast, both model
+attachments, `DRAL` selection and moving endpoints, loop sound selection,
+Stop cleanup, old-channel recast isolation and save/load followed by cleanup.
+The test archive includes `NeutralAbilityFunc.txt` spell/buff art and a
+`DrainLoop` alias in `AbilitySounds.slk`; it does not require retail MPQs.
+No local build or tests were performed by the patch author.
+
+**Remaining uncertain retail details:** the exact internal choice of
+`DRAB` for mixed drains, lightning socket offsets, MDX emitter timing, and
+whether additional ability aliases use other buff classes. The MPQ audit
+confirms the stock Life Drain files but does not resolve those runtime rules.

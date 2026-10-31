@@ -732,6 +732,10 @@ void G_DestroyOwnedEffects(edict_t *owner) {
         if (count < sizeof(owned) / sizeof(owned[0])) owned[count++] = effect;
     }
     FOR_LOOP(i, count) {
+        /* A retired owner's slot may be reused before the model finishes its
+         * Death animation.  Do not leave an obsolete owner pointer attached
+         * to that presentation-only entity. */
+        owned[i]->owner = NULL;
         owned[i]->s.sound = 0;
         if (owned[i]->s.model) G_DestroyEffect(owned[i]);
         else G_FreeEdict(owned[i]);

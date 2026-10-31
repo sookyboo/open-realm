@@ -43,3 +43,14 @@ in those tests.
 
 Reference: [Blizzard patch 1.17](https://warcraft.wiki.gg/wiki/Warcraft_III/Patch_1.17),
 [Blizzard's Blood Mage guide](https://classic.battle.net/war3/human/units/bloodmage.shtml).
+
+## Life Drain visual ownership
+
+Dark Ranger `ANdr` now adds chest-attached `Bdcl`/`Bdtl` effect models,
+a linked ability lightning ribbon and the configured `DrainLoop` sound
+when the shared drain thinker begins. The thinker's persisted `variation`
+contains its unique lightning registry handle; cancellation and natural
+completion remove that beam and both owned model effects without affecting
+newer channel incarnations. Siphon Mana's mana-transfer/overcharge behaviour
+is unchanged. See [Dark Ranger](dark-ranger.md) for asset mappings and
+verification limitations.
