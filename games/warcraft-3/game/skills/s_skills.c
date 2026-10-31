@@ -13,6 +13,7 @@ cstring_t const raven_orders[] = { "ravenform", "unravenform", NULL };
 cstring_t const ancient_root_orders[] = { "root", "unroot", NULL };
 static cstring_t const mana_shield_orders[] = { "manashieldon", "manashieldoff", NULL };
 static cstring_t const mana_flare_orders[] = { "manaflareon", "manaflareoff", NULL };
+static cstring_t const replenish_mana_orders[] = { "replenishmanaon", "replenishmanaoff", NULL };
 static cstring_t const build_orders[] = { "build", NULL };
 static cstring_t const hide_orders[] = { "ambush", NULL };
 static cstring_t const grabtree_orders[] = { "grabtree", NULL };
@@ -526,7 +527,7 @@ static ability_t abilitylist[] = {
     /* UndeadAbilityStrings.txt */
     { "Arpb", CAbilityReplenish, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Replenish */
     { "Arpl", CAbilityReplenishLife, AB_SPELL | AB_AUTOCAST },  /* Essence of Blight */
-    { "Arpm", CAbilityReplenishMana, AB_SPELL | AB_AUTOCAST },  /* Spirit Touch */
+    { "Arpm", CAbilityReplenishMana, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_NONE, replenish_mana_orders },  /* Spirit Touch */
     { "Aexh", CAbilityExhumeCorpses, AB_PASSIVE | AB_UPDATE },  /* Exhume Corpses */
     { "Aave", CAbilityMetamorphosis, AB_SPELL },  /* Destroyer Form */
     { "Afak", CAbilityFlamingArrows, AB_SPELL | AB_TOGGLE | AB_AUTOCAST },  /* Orb of Annihilation */

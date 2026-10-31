@@ -1565,7 +1565,9 @@ bool unit_issueimmediateorder(edict_t *self, cstring_t order) {
          * active. Pass the concrete ability code so S_AbilityMessage's
          * active-status gate does not mistake its on/off orders for another
          * ability (an order-only item previously had code == 0). */
-        uint32_t code = ability->proc == CAbilityManaFlare ? unit_spell_code_for_order(self, order) : 0;
+        uint32_t code = (ability->proc == CAbilityManaFlare ||
+                         ability->proc == CAbilityReplenishMana) ?
+            unit_spell_code_for_order(self, order) : 0;
         abilityitem_t item = MAKE(abilityitem_t, .code = code, .ability = ability);
         abilityCall_t call = MAKE(abilityCall_t, .item = &item, .order = order);
         bool const accepted = S_AbilityMessage(self, A_ORDER, &call);
