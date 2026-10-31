@@ -682,19 +682,25 @@ uint32_t S_DispelUnitMagic(edict_t *target) {
  * unit_status_can_magic_dispel; resurrected/animated dispel-immune summons
  * are separately protected from summoned damage. */
 void S_DispelMagicArea(edict_t *caster, uint32_t code, uint32_t level, vec2_t const *point) {
-    uint32_t removed = 0;
+    uint32_t devoured_enemy_units = 0;
+    bool const devour = G_AbilityCode(code) == MAKEFOURCC('A','d','v','m');
     float area = S_SpellNumber(code, ABILITY_NUMBER_AREA, level);
     float data_a = S_SpellData(code, level, 1), data_b = S_SpellData(code, level, 2);
     float data_e = S_SpellData(code, level, 5);
     float summon_dmg = data_e > 0.0f ? data_e : data_b;
     float heal_hp = data_e > 0.0f ? data_a : 0.0f, heal_mana = data_e > 0.0f ? data_b : 0.0f;
     if (!caster || !point || !(area >= 0.0f)) return;
-    removed += S_SentinelDispelAt(point, area);
+    S_SentinelDispelAt(point, area);
     FILTER_EDICTS(target, S_SpellIsAliveTarget(target) &&
                   Vector2_distance(&target->s.origin2, point) <= area) {
         uint32_t const target_removed = S_DispelUnitMagic(target);
         bool affected = target_removed > 0;
-        removed += target_removed;
+        /* Devour Magic refunds per enemy unit affected, not per status:
+         * consuming two buffs on one enemy must not restore twice as much.
+         * Friendly buffs, Sentinel owls and other special ward cases never
+         * generate a Destroyer refund. */
+        if (devour && target_removed && S_SpellIsEnemy(caster, target) &&
+            target->targtype != TARG_WARD) devoured_enemy_units++;
         /* Retail dispel damages hostile summons, not friendly summons. */
         if (!S_SpellIsFriend(caster, target) && S_DispelIsSummoned(target) &&
             !S_SummonIsDispelImmune(target) && summon_dmg > 0.0f)
@@ -703,15 +709,22 @@ void S_DispelMagicArea(edict_t *caster, uint32_t code, uint32_t level, vec2_t co
     }
     /* Only Dispel Magic / Disenchant remove loose terrain Blight.  Devour Magic
      * has its own buff-healing contract and does not paint the terrain. */
-    if (S_AbilityItem(code).ability && S_AbilityItem(code).ability->proc == CAbilityDispelMagic)
+    if (!devour && S_AbilityItem(code).ability &&
+        S_AbilityItem(code).ability->proc == CAbilityDispelMagic)
         G_DispelBlightRadius(point, area);
-    if (removed && heal_hp > 0.0f) S_SpellHeal(caster, heal_hp * (float)removed);
-    if (removed && heal_mana > 0.0f)
-        caster->mana.value = MIN(caster->mana.max_value, caster->mana.value + heal_mana * (float)removed);
+    if (devoured_enemy_units && heal_hp > 0.0f)
+        S_SpellHeal(caster, heal_hp * (float)devoured_enemy_units);
+    if (devoured_enemy_units && heal_mana > 0.0f)
+        caster->mana.value = MIN(caster->mana.max_value,
+                                 caster->mana.value + heal_mana * (float)devoured_enemy_units);
 }
 
 BZ_SIMPLE_SPELL_PROC(AbilityDispelMagic) {
     S_DispelMagicArea(caster, spell->code, S_SpellLevel(caster, spell->code), &st.point);
+    if (G_AbilityCode(spell->code) == MAKEFOURCC('A','d','v','m')) {
+        G_SpawnAbilityEffectAtPoint(spell->code, WC3_EFFECT_SPECIAL, 0, &st.point, true);
+        G_PlayAbilityEffectSound(spell->code, &st.point);
+    }
 }
 /* Name=Heal; Ubertip="Heals a target friendly non-mechanical wounded unit for <Ahea,DataA1> hit points." */
 BZ_HUMAN_AUTOCAST_SPELL(AbilityHeal, heal_validate(ent, target, call ? call->item : NULL), heal_execute, true, true)
