@@ -307,7 +307,11 @@ static void carrion_swarm_spawn_missile(edict_t *caster, uint32_t code, uint32_t
         art = "Abilities\\Spells\\Undead\\CarrionSwarm\\CarrionSwarmMissile.mdl";
     if (speed <= 0.0f && code == MAKEFOURCC('A','U','c','s')) speed = 1100.0f;
 #endif
-    if (!art || !*art || distance <= 0.0f || speed <= 0.0f || travel <= 0.0f) return;
+    if (distance <= 0.0f || travel <= 0.0f) return;
+    /* The damage wave is authoritative gameplay. Missing/invalid visual data
+     * may hide its model, but must not cancel the paid spell. Use the retail
+     * Carrion Swarm travel rate when custom missile speed is unavailable. */
+    if (!isfinite(speed) || speed <= 0.0f) speed = 1100.0f;
     direction = Vector2_scale(&offset, 1.0f / distance);
     missile = G_Spawn();
     if (!missile) return;
@@ -317,8 +321,8 @@ static void carrion_swarm_spawn_missile(edict_t *caster, uint32_t code, uint32_t
     missile->s.origin = caster->s.origin;
     missile->s.origin2 = caster->s.origin2;
     missile->s.angle = atan2f(direction.y, direction.x);
-    missile->s.model = G_RegisterModel(art);
-    if (!missile->s.model) { G_FreeEdict(missile); return; }
+    /* A zero model is an invisible wave, not a gameplay failure. */
+    missile->s.model = (art && *art) ? G_RegisterModel(art) : 0;
     /* The authored Crushing Wave missile needs about 3x its default size in
      * game. Scale proportionally from stock DataD=300 so customized aliases
      * keep the same visual relationship to their final wave area. */

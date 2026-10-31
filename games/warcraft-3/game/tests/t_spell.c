@@ -3980,6 +3980,54 @@ TEST(wc3_spell, carrion_swarm_travels_authored_distance_and_hits_once_with_expan
     free_slk_rows(rows);
 }
 
+TEST(wc3_spell, crushing_wave_without_missile_art_or_speed_still_damages) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X12\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\n"
+        "C;Y1;X4;K\"Area1\"\nC;Y1;X5;K\"Rng1\"\nC;Y1;X6;K\"Cost1\"\n"
+        "C;Y1;X7;K\"Cool1\"\nC;Y1;X8;K\"DataA1\"\nC;Y1;X9;K\"DataB1\"\n"
+        "C;Y1;X10;K\"DataC1\"\nC;Y1;X11;K\"DataD1\"\nC;Y1;X12;K\"levels\"\n"
+        "C;Y2;X1;K\"ACcv\"\nC;Y2;X2;K\"ACcv\"\nC;Y2;X3;K\"ground,enemy\"\n"
+        "C;Y2;X4;K90\nC;Y2;X5;K700\nC;Y2;X6;K0\nC;Y2;X7;K0\n"
+        "C;Y2;X8;K63\nC;Y2;X9;K0\nC;Y2;X10;K600\nC;Y2;X11;K90\nC;Y2;X12;K1\nE\n";
+    static cstring_t const ability_config = "[ACcv]\nMissileArt=\nMissilespeed=0\n";
+    static UnitBalance_t const no_regen = { .healthRegenType = "none" };
+    slkTestData_t *rows, *old;
+    edict_t *caster, *enemy, *wave = NULL;
+    uint32_t const code = MAKEFOURCC('A','C','c','v');
+
+    reset_entities(); setup_test_world();
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    caster = make_hero(MAKEFOURCC('U','d','r','e'), 500, 200, 0, 0);
+    enemy = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 300, 0);
+    caster->s.player = 0; enemy->s.player = 1;
+    enemy->targtype = TARG_GROUND;
+    enemy->svflags |= SVF_MONSTER;
+    enemy->health.value = enemy->health.max_value = 1000;
+    enemy->data.UnitBalance = (UnitBalance_t *)&no_regen;
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster->unit_state->ranks[0] = MAKE(heroability_t, .code = code, .level = 1);
+
+    T_ASSERT(S_CastPointTargetSpell(caster, code, &(vec2_t){200, 0}));
+    FILTER_EDICTS(ent, ent->class_id == code && G_GetCarrionWave(ent)) wave = ent;
+    T_NOT_NULL(wave);
+    if (wave) {
+        T_EQ(wave->s.model, 0);
+        T_FEQ(G_GetCarrionWave(wave)->speed, 1100.0f, 0.001f);
+        T_NOT_NULL(wave->think);
+        T_EQ(wave->movetype, MOVETYPE_FLYMISSILE);
+    }
+    T_FEQ(enemy->health.value, 1000, 0.001f);
+    FOR_LOOP(i, 8) { level.time += FRAMETIME; G_RunEntities(); }
+    T_FEQ(enemy->health.value, 937, 0.001f);
+
+    G_SetSLKRows("AbilityData", old);
+    G_TestPopAbilityConfig();
+    free_slk_rows(rows);
+}
+
 TEST(wc3_spell, carrion_swarm_spends_authored_maximum_damage_in_travel_order) {
     const char slk[] =
         "ID;PWXL;N;EBB;Y2;X12\n"
