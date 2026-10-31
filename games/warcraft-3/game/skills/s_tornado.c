@@ -235,10 +235,6 @@ void S_TestTornadoBuildingPulse(edict_t *tornado) { tornado_damage_buildings(tor
 BZ_ABILITY_PROC(CAbilityTornadoDamage) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilityTornadoSpin) {
     if (msg == A_STATUS_REMOVE && call && call->status.slot &&
-        call->status.slot->code == MAKEFOURCC('B','c','y','c')) {
-        union { float height; uint32_t bits; } original_height = { .bits = call->status.slot->next_tick };
-        tornado_set_fly_height(ent, original_height.height);
-        return true;
-    }
+        S_CycloneRestoreLiftHeight(ent, call->status.slot)) return true;
     return CAbilityPassive(ent, msg, call);
 }

@@ -31,6 +31,19 @@ static bool cyclone_has_other_lift_status(edict_t const *unit, heroabilitystatus
     return false;
 }
 
+/* Both Acyc and Tornado's Atsp can own Bcyc. Removal callbacks run while
+ * their slot is still live; restore the original height only on the final
+ * Cyclone status, regardless of which ability created or removed it. */
+bool S_CycloneRestoreLiftHeight(edict_t *unit, heroabilitystatus_t const *removed) {
+    union { float height; uint32_t bits; } original_height;
+    if (!unit || !removed || !cyclone_is_lift_buff(removed->code)) return false;
+    if (!cyclone_has_other_lift_status(unit, removed)) {
+        original_height.bits = removed->next_tick;
+        cyclone_set_fly_height(unit, original_height.height);
+    }
+    return true;
+}
+
 bool S_UnitIsCycloned(edict_t const *unit) {
     return unit && (G_UnitStatusLevel(unit, BZ_CYCLONE_BUFF) || G_UnitStatusLevel(unit, BZ_CYCLONE_BUFF_EXTRA));
 }
@@ -57,12 +70,7 @@ BZ_ABILITY_PROC(CAbilityCyclone) {
     union { float height; uint32_t bits; } original_height;
 
     if (msg == A_STATUS_REMOVE && call && call->status.slot &&
-        cyclone_is_lift_buff(call->status.slot->code) &&
-        !cyclone_has_other_lift_status(ent, call->status.slot)) {
-        union { float height; uint32_t bits; } original_height = { .bits = call->status.slot->next_tick };
-        cyclone_set_fly_height(ent, original_height.height);
-        return true;
-    }
+        S_CycloneRestoreLiftHeight(ent, call->status.slot)) return true;
 
     if ((msg != A_VALIDATE && msg != A_EXECUTE) || !call || !call->item || !call->target)
         return CAbilitySimpleSpell(ent, msg, call);

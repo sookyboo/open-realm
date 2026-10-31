@@ -70,3 +70,13 @@ The stock Atsp row provides the 3s spin interval and 22s same-unit delay. The
 random selection order and exact Atwa destination policy remain unverified at
 engine-internal fidelity. A custom map's ability rows take precedence over the
 stock values.
+
+## Shared Cyclone lift restoration
+
+Tornado's `Atsp` writes `Bcyc` with the victim's original flight height stored
+in the status `next_tick` payload. `CAbilityTornadoSpin` and ordinary
+`CAbilityCyclone` both delegate removal to `S_CycloneRestoreLiftHeight`.
+If `Bcyc` and `Bcy2` overlap (including map-authored variants), removal,
+dispel, or expiry of either status leaves the unit at the lifted height while
+the other status remains; the final removal restores the saved height. The
+regression checks both removal orders via the production status dispatch.

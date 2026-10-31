@@ -60,7 +60,9 @@ as the sole first buff. Either rawcode must lift the victim and restore its
 pre-Cyclone `FlyHeight` on dispel or natural expiry. Reapplying the same status
 or attaching another Cyclone status preserves the original height in each
 status's `next_tick` payload; the lift ends only when the final Cyclone status
-is removed. The target-art attachment still follows the actual buff rawcode.
+is removed. The target-art attachment still follows the actual buff rawcode. Tornado’s
+`Atsp` uses the same restoration helper when its `Bcyc` status ends, so a
+concurrent `Bcy2` status retains the lift until it also expires or is dispelled.
 
 `wc3_spell.cyclone_bcy2_only_cast_restores_height_on_dispel_and_expiry` and
 `wc3_spell.cyclone_bcy2_replacement_keeps_original_height` exercise the

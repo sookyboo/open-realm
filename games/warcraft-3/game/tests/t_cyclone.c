@@ -231,6 +231,50 @@ TEST(wc3_spell, cyclone_bcy2_replacement_keeps_original_height) {
     cyc_done(fix);
 }
 
+/* Tornado's Atsp and ordinary Cyclone share lift ownership. Both callback
+ * dispatch paths must leave the victim airborne until the last buff ends. */
+TEST(wc3_spell, tornado_cyclone_overlap_restores_only_after_last_status) {
+    cycFix_t fix = cyc_setup(CYC_SLK_WITH_BUFF("Bcy2"), BZ_ACYC);
+    abilityitem_t item = S_AbilityItem(BZ_ACYC);
+    spellTarget_t target = MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = fix.enemy);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item, .target = &target);
+    uint32_t const tornado_spin = MAKEFOURCC('A','t','s','p');
+    heroabilitystatus_t *spin, *cyclone;
+    union { float height; uint32_t bits; } initial = { .height = 31.0f };
+
+    FOR_LOOP(pass, 2) {
+        fix.enemy->unitinfo.FlyHeight = initial.height;
+        spin = S_SpellApplyTimedStatusFromAbility(fix.enemy, tornado_spin, 1, "Bcyc", 10.0f);
+        T_NOT_NULL(spin);
+        if (!spin) break;
+        spin->next_tick = initial.bits;
+        fix.enemy->unitinfo.FlyHeight = 200.0f;
+        T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
+        cyclone = unit_findstatus(fix.enemy, BZ_BCY2);
+        T_NOT_NULL(cyclone);
+        if (!cyclone) break;
+        T_EQ(cyclone->next_tick, initial.bits);
+        T_FEQ(fix.enemy->unitinfo.FlyHeight, 200.0f, 0.001f);
+
+        if (pass == 0) {
+            /* Atsp expires before Bcy2: its callback must not lower the unit. */
+            unit_removestatus(fix.enemy, spin, STATUS_REMOVE_EXPIRE);
+            T_ASSERT(S_UnitIsCycloned(fix.enemy));
+            T_FEQ(fix.enemy->unitinfo.FlyHeight, 200.0f, 0.001f);
+            unit_removestatus(fix.enemy, cyclone, STATUS_REMOVE_DISPEL);
+        } else {
+            /* Bcy2 is dispelled first; the remaining Atsp status owns lift. */
+            unit_removestatus(fix.enemy, cyclone, STATUS_REMOVE_DISPEL);
+            T_ASSERT(S_UnitIsCycloned(fix.enemy));
+            T_FEQ(fix.enemy->unitinfo.FlyHeight, 200.0f, 0.001f);
+            unit_removestatus(fix.enemy, spin, STATUS_REMOVE_EXPIRE);
+        }
+        T_ASSERT(!S_UnitIsCycloned(fix.enemy));
+        T_FEQ(fix.enemy->unitinfo.FlyHeight, initial.height, 0.001f);
+    }
+    cyc_done(fix);
+}
+
 /* Recast on an already-cycloned target fails without spending mana. */
 TEST(wc3_spell, cyclone_rejects_already_cycloned_without_mana_spend) {
     cycFix_t fix = cyc_setup(CYC_SLK, BZ_ACYC);

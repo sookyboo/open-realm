@@ -624,6 +624,7 @@ bool S_IssuePointTargetSpell(edict_t *caster, uint32_t code, vec2_t const *point
 bool S_SpellTargetInRange(edict_t *caster, edict_t *target, float range);
 bool S_SpellIsAliveTarget(edict_t *target);
 bool S_UnitIsCycloned(edict_t const *unit);
+bool S_CycloneRestoreLiftHeight(edict_t *unit, heroabilitystatus_t const *removed);
 bool S_StatusIsUndispellable(heroabilitystatus_t const *status);
 bool S_SummonIsDispelImmune(edict_t const *unit);
 bool S_UnitIsSilenced(edict_t const *unit);
