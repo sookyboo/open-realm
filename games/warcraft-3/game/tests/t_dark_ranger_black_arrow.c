@@ -14,15 +14,20 @@ void free_slk_rows(slkTestData_t *rows);
 /* Nonstock mana, damage and projectile art distinguish the authored fields
  * from any fallback values; rank 2 is intentionally stronger than rank 1. */
 static char const black_arrow_slk[] =
-    "ID;PWXL;N;EBB;Y3;X11\n"
+    "ID;PWXL;N;EBB;Y3;X16\n"
     "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
     "C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Cost1\"\nC;Y1;X6;K\"Cost2\"\n"
     "C;Y1;X7;K\"DataA1\"\nC;Y1;X8;K\"DataA2\"\nC;Y1;X9;K\"Rng1\"\n"
     "C;Y1;X10;K\"UnitID1\"\nC;Y1;X11;K\"DataC1\"\n"
+    "C;Y1;X12;K\"Dur1\"\nC;Y1;X13;K\"Dur2\"\n"
+    "C;Y1;X14;K\"BuffID1\"\nC;Y1;X15;K\"UnitID2\"\n"
+    "C;Y1;X16;K\"DataC2\"\n"
     "C;Y2;X1;K\"ANba\"\nC;Y2;X2;K\"ANba\"\nC;Y2;X3;K2\n"
     "C;Y2;X4;K\"enemy,organic,ground,air\"\nC;Y2;X5;K13\nC;Y2;X6;K17\n"
     "C;Y2;X7;K15\nC;Y2;X8;K24\nC;Y2;X9;K600\n"
-    "C;Y2;X10;K\"ndr1\"\nC;Y2;X11;K80\n"
+    "C;Y2;X10;K\"hfoo\"\nC;Y2;X11;K12\n"
+    "C;Y2;X12;K3\nC;Y2;X13;K1.5\nC;Y2;X14;K\"BNba\"\n"
+    "C;Y2;X15;K\"hpea\"\nC;Y2;X16;K6\n"
     "C;Y3;X1;K\"ACbk\"\nC;Y3;X2;K\"ANba\"\nC;Y3;X3;K1\n"
     "C;Y3;X4;K\"enemy,organic,ground,air\"\nC;Y3;X5;K9\n"
     "C;Y3;X7;K4\nC;Y3;X9;K600\nE\n";
@@ -45,8 +50,9 @@ static void dr_black_setup(drBlackFix_t *fix) {
     fix->mechanical = alloc_test_unit(MAKEFOURCC('h','m','t','t'), 140, 0);
     edict_t *all[] = { fix->archer, fix->enemy, fix->ally, fix->mechanical };
     uint32_t const all_count = (uint32_t)(sizeof(all) / sizeof(all[0]));
-    FOR_LOOP(i, ARRAY_COUNT(all)) {
+    FOR_LOOP(i, all_count) {
         all[i]->svflags |= SVF_MONSTER;
+        all[i]->die = unit_die;
         all[i]->targtype = TARG_GROUND;
         all[i]->health.value = all[i]->health.max_value = 1000;
         all[i]->unit_state->armor_value = 0;
@@ -175,6 +181,160 @@ TEST(wc3_spell, dark_ranger_black_arrow_manual_rejects_invalid_target_without_ma
     T_ASSERT(!S_BlackArrowIssueOrder(fix.archer, fix.ally, DR_BLACK));
     T_ASSERT(!S_BlackArrowIssueOrder(fix.archer, fix.mechanical, DR_BLACK));
     T_FEQ(fix.archer->mana.value, 100, 0.001f);
+    dr_black_done(&fix);
+}
+
+/* The synthetic data uses a Footman/Peasant as Dark Minion stand-ins so a
+ * headless test archive need not contain retail ndr1/ndr2 unit tables.
+ * DeathType is supplied explicitly because the small test SLK omits that
+ * column; it must match retail corpse-capable units (both Raise and Decay). */
+static void dr_black_corpses(drBlackFix_t *fix, bool enabled) {
+    static UnitData_t corpse_data;
+    UnitData_t const *original = fix->enemy->data.UnitData;
+    corpse_data = original ? *original : (UnitData_t){ 0 };
+    corpse_data.deathType = enabled ? 3u : 0u;
+    fix->enemy->data.UnitData = &corpse_data;
+}
+
+static uint32_t dr_black_minion_count(edict_t *caster, uint32_t unit_id) {
+    uint32_t count = 0;
+    FILTER_EDICTS(ent, ent->summon_ability == DR_BLACK && ent->owner == caster &&
+                  (!unit_id || ent->class_id == unit_id)) count++;
+    return count;
+}
+
+TEST(wc3_spell, dark_ranger_black_arrow_marks_survivor_then_other_attack_summons) {
+    drBlackFix_t fix;
+    heroabilitystatus_t *mark;
+    dr_black_setup(&fix);
+    dr_black_corpses(&fix, true);
+    S_ResolveAttackHitWithArrow(fix.archer, fix.enemy, 40, DR_BLACK, 1);
+    mark = unit_findstatus(fix.enemy, MAKEFOURCC('B','N','b','a'));
+    T_NOT_NULL(mark);
+    if (mark) {
+        T_EQ(mark->source_ability, DR_BLACK);
+        T_EQ(mark->rank, 1u);
+        T_ASSERT(mark->source == fix.archer);
+        T_EQ(mark->timestamp, G_Time() + 3000u);
+        T_ASSERT(mark->buff_flags & WC3_STATUS_BUFF_NEGATIVE);
+    }
+    T_EQ(dr_black_minion_count(fix.archer, 0), 0u);
+    /* The original Archer does not need to provide the killing blow. */
+    T_Damage(fix.enemy, fix.ally, 2000);
+    T_ASSERT(M_IsDead(fix.enemy));
+    T_EQ(dr_black_minion_count(fix.archer, MAKEFOURCC('h','f','o','o')), 1u);
+    T_ASSERT(fix.enemy->aiflags & AI_CORPSE_UNRAISABLE);
+    T_ASSERT(fix.enemy->aiflags & AI_CORPSE_NO_DECAY);
+    T_ASSERT(!G_UnitIsRaisableCorpse(fix.enemy));
+    T_NULL(unit_findstatus(fix.enemy, MAKEFOURCC('B','N','b','a')));
+    /* Repeated death notifications must never duplicate a summon. */
+    unit_die(fix.enemy, fix.ally);
+    T_EQ(dr_black_minion_count(fix.archer, 0), 1u);
+    dr_black_done(&fix);
+}
+
+TEST(wc3_spell, dark_ranger_black_arrow_lethal_hit_summons_once_and_uses_launch_rank) {
+    drBlackFix_t fix;
+    dr_black_setup(&fix);
+    dr_black_corpses(&fix, true);
+    fix.enemy->health.value = 30;
+    /* A level-up between shot launch and impact cannot choose a new minion. */
+    fix.archer->unit_state->ranks[0].level = 2;
+    S_ResolveAttackHitWithArrow(fix.archer, fix.enemy, 100, DR_BLACK, 1);
+    T_EQ(dr_black_minion_count(fix.archer, MAKEFOURCC('h','f','o','o')), 1u);
+    T_EQ(dr_black_minion_count(fix.archer, MAKEFOURCC('h','p','e','a')), 0u);
+    dr_black_done(&fix);
+}
+
+TEST(wc3_spell, dark_ranger_black_arrow_expiry_and_no_corpse_prevent_summon) {
+    drBlackFix_t fix;
+    dr_black_setup(&fix);
+    dr_black_corpses(&fix, true);
+    S_ResolveAttackHitWithArrow(fix.archer, fix.enemy, 20, DR_BLACK, 1);
+    T_NOT_NULL(unit_findstatus(fix.enemy, MAKEFOURCC('B','N','b','a')));
+    level.time += 3001;
+    T_Damage(fix.enemy, fix.ally, 2000);
+    T_EQ(dr_black_minion_count(fix.archer, 0), 0u);
+    dr_black_done(&fix);
+
+    dr_black_setup(&fix);
+    dr_black_corpses(&fix, false);
+    S_ResolveAttackHitWithArrow(fix.archer, fix.enemy, 20, DR_BLACK, 1);
+    T_NULL(unit_findstatus(fix.enemy, MAKEFOURCC('B','N','b','a')));
+    T_Damage(fix.enemy, fix.ally, 2000);
+    T_EQ(dr_black_minion_count(fix.archer, 0), 0u);
+    dr_black_done(&fix);
+}
+
+TEST(wc3_spell, dark_ranger_black_arrow_refresh_replaces_owner_and_rank) {
+    drBlackFix_t fix;
+    heroabilitystatus_t *mark;
+    dr_black_setup(&fix);
+    dr_black_corpses(&fix, true);
+    S_ResolveAttackHitWithArrow(fix.archer, fix.enemy, 20, DR_BLACK, 1);
+    mark = unit_findstatus(fix.enemy, MAKEFOURCC('B','N','b','a'));
+    T_NOT_NULL(mark);
+    level.time += 1000;
+    /* Another Black Arrow rank refreshes the same debuff; the most recent
+     * attack determines which level of Dark Minion is produced. */
+    S_ResolveAttackHitWithArrow(fix.archer, fix.enemy, 20, DR_BLACK, 2);
+    T_ASSERT(unit_findstatus(fix.enemy, MAKEFOURCC('B','N','b','a')) == mark);
+    if (mark) {
+        T_EQ(mark->rank, 2u);
+        T_EQ(mark->timestamp, G_Time() + 1500u);
+    }
+    T_Damage(fix.enemy, fix.ally, 2000);
+    T_EQ(dr_black_minion_count(fix.archer, MAKEFOURCC('h','p','e','a')), 1u);
+    T_EQ(dr_black_minion_count(fix.archer, MAKEFOURCC('h','f','o','o')), 0u);
+    dr_black_done(&fix);
+}
+
+TEST(wc3_spell, dark_ranger_black_arrow_invulnerable_and_stale_caster_do_not_summon) {
+    drBlackFix_t fix;
+    dr_black_setup(&fix);
+    dr_black_corpses(&fix, true);
+    G_SetUnitFlag(fix.enemy, UNIT_FLAG_INVULNERABLE, true);
+    S_ResolveAttackHitWithArrow(fix.archer, fix.enemy, 20, DR_BLACK, 1);
+    T_NULL(unit_findstatus(fix.enemy, MAKEFOURCC('B','N','b','a')));
+    G_SetUnitFlag(fix.enemy, UNIT_FLAG_INVULNERABLE, false);
+    S_ResolveAttackHitWithArrow(fix.archer, fix.enemy, 20, DR_BLACK, 1);
+    heroabilitystatus_t *mark = unit_findstatus(fix.enemy, MAKEFOURCC('B','N','b','a'));
+    T_NOT_NULL(mark);
+    if (mark) mark->source_spawn_time++;
+    T_Damage(fix.enemy, fix.ally, 2000);
+    T_EQ(dr_black_minion_count(fix.archer, 0), 0u);
+    dr_black_done(&fix);
+}
+
+TEST(wc3_save, dark_ranger_black_arrow_mark_survives_save_and_source_identity) {
+    drBlackFix_t fix;
+    char const *filename = Test_TempPath("wc3-black-arrow-mark.bin");
+    heroabilitystatus_t *mark;
+    dr_black_setup(&fix);
+    dr_black_corpses(&fix, true);
+    S_ResolveAttackHitWithArrow(fix.archer, fix.enemy, 20, DR_BLACK, 1);
+    mark = unit_findstatus(fix.enemy, MAKEFOURCC('B','N','b','a'));
+    T_NOT_NULL(mark);
+    T_ASSERT(WriteGame(filename));
+    if (mark) {
+        mark->source = NULL;
+        mark->source_spawn_time = mark->source_ability = mark->rank = mark->timestamp = 0;
+    }
+    T_ASSERT(ReadGame(filename));
+    mark = unit_findstatus(fix.enemy, MAKEFOURCC('B','N','b','a'));
+    T_NOT_NULL(mark);
+    if (mark) {
+        T_EQ(mark->source_ability, DR_BLACK);
+        T_EQ(mark->rank, 1u);
+        T_ASSERT(S_SpellStatusSource(mark) == fix.archer);
+        T_EQ(mark->timestamp, 4000u);
+    }
+    /* Completing the lifecycle after restoring the source pointer proves
+     * that a saved mark remains an actual death trigger, not inert metadata. */
+    dr_black_corpses(&fix, true);
+    T_Damage(fix.enemy, fix.ally, 2000);
+    T_EQ(dr_black_minion_count(fix.archer, MAKEFOURCC('h','f','o','o')), 1u);
+    remove(filename);
     dr_black_done(&fix);
 }
 #endif

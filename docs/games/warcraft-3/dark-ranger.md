@@ -170,12 +170,12 @@ attack cannot simultaneously acquire Searing/Cold autocast effects at impact.
 Existing Searing/Frost Arrow impact-selection behaviour remains outside this
 patch's scope.
 
-Until Patch 4's victim marker is implemented, Dark Minion creation still
-requires a lethal **Black Arrow hit**. Unlike the original implementation,
-an ordinary attack no longer creates skeletons merely because a toggle was
-active. Patch 4 will implement the short lived on-victim Black Arrow mark,
-corpse eligibility, and death from other causes while marked. No unverified
-conversion effect is synthesized by this patch.
+Patch 4 extends that launch-time selection into a post-mitigation timed
+victim marker. An unempowered attack never creates a Dark Minion, even when
+autocast remains enabled. The short-lived marker is created only after the
+attack has survived shields, Spirit Link, invulnerability, miss and evasion,
+and it persists when another unit lands the final blow. No unverified
+conversion effect is synthesized.
 
 `attackMissile_t` gains `arrow_ability` and `arrow_level`, both serialized
 through the normal missile pool. The save format is bumped to 136 according to
@@ -183,3 +183,48 @@ repository save-compatibility policy; older saves are rejected. New tests
 cover manual and autocast selection, authored cost and bonus, target masks,
 a surviving launch snapshot, missile visuals/speed, and missile-field
 round-tripping. Builds and test execution remain with the integrator.
+
+## Black Arrow death-mark lifecycle — Patch 4
+
+`S_BlackArrowMarkHit` runs for the **primary** empowered attack only, in
+`T_DamageInternal` after positive post-shield/Spirit-Link unit damage is
+confirmed, but before the damage can call `unit_die`. Its selected concrete
+ability and rank were snapshotted by Patch 3. Ordinary attacks, misses,
+secondary splash and spell damage do not mark a target.
+
+A victim must be a non-Hero, non-building, non-illusion living unit that
+produces raisable remains (`UnitData.deathType` Raise bit); scripted explosions
+and already unraisable corpses cannot create Dark Minions. The target still
+takes its Black Arrow-enhanced weapon damage if corpse generation is forbidden.
+The marker uses its ability rank's `BuffID` when authored (fallback `BNba`
+for older/partial game data), and `Dur` when positive, otherwise the established
+original two-second window. It is a negative magical status and may be removed
+by the ordinary buff-removal system.
+
+The existing `unit_statusdeath` dispatcher delivers `A_STATUS_DEATH` to the
+mark's originating `CAbilityBlackArrow` procedure. The procedure consumes the
+mark before spawning, verifies the source incarnation with
+`S_SpellStatusSource`, and uses the recorded rank's `UnitID` and `DataC`
+for the Dark Minion type and timed life. Where an ability alias leaves those
+fields blank, it inherits its base ability's fields. The newest active Black
+Arrow marker wins if different custom buff rawcodes coexist. `S_SummonAbilityAt`
+handles ownership, generated unit events, and ordinary timed-life disposal.
+On a successful conversion the original remains are marked unraisable and
+removed after their normal Death presentation; failed summons leave corpse
+policy unchanged. The original killer need not be the Dark Ranger; expiring, dispelling or
+invalidating the marker prevents the summon. A target dying under an active
+mark summons at most once. There is no ability-specific scan of corpse
+entities or new serialized gameplay state.
+
+`games/warcraft-3/game/tests/t_dark_ranger_black_arrow.c` now covers lethal
+and delayed deaths, marks expired before death, non-corpse targets, rank
+refresh, invulnerability, stale caster incarnation and mark save/load.
+Its stock-shaped object references use locally configured hfoo/hpea summons
+as deterministic stand-ins for MPQ-only Dark Minion unit IDs. The actual
+`ndr1`/`ndr2`/`ndr3` scale, art and combat data remain MPQ-authored.
+
+**Visual parity not included:** a distinct skeleton-creation effect has not
+been established by the provided MPQ audit. Patch 5 remains Life Drain
+attachments, continuous lightning, and loop sound; subsequent parity work
+may revisit the Black Arrow death presentation. No builds or tests were run
+by the patch author.

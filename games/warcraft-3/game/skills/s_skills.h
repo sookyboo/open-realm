@@ -492,7 +492,7 @@ void S_PolymorphRemove(edict_t *unit);
 bool S_BlackArrowIssueOrder(edict_t *attacker, edict_t *target, uint32_t ability);
 bool S_BlackArrowPrepareAttack(edict_t *attacker, edict_t *target, uint32_t *ability, uint32_t *rank);
 int S_BlackArrowDamageForShot(uint32_t ability, uint32_t level, int damage);
-void S_BlackArrowDeathForShot(edict_t *attacker, edict_t *target, uint32_t ability, uint32_t level);
+void S_BlackArrowMarkHit(edict_t *attacker, edict_t *target, uint32_t ability, uint32_t level);
 void S_ResolveAttackHit(edict_t *attacker, edict_t *target, int damage);
 void S_ResolveAttackHitWithArrow(edict_t *attacker, edict_t *target, int damage,
                                  uint32_t arrow_code, uint32_t arrow_level);

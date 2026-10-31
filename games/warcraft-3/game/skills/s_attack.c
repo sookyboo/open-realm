@@ -459,7 +459,8 @@ static int attack_damage_type(edict_t *attacker, edict_t *target, int base, uint
  * If the hit is lethal, the target's die() callback is invoked and the
  * attacker returns to its stand (idle) state.  Otherwise, if the target is
  * able to attack back it issues an automatic counter-attack order. */
-static void T_DamageInternal(edict_t *target, edict_t *attacker, int damage, bool primary_attack) {
+static void T_DamageInternal(edict_t *target, edict_t *attacker, int damage, bool primary_attack,
+                             uint32_t arrow_code, uint32_t arrow_level) {
     bool instant_kill;
 
     if (!G_UnitIsWorldActive(target) || G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) ||
@@ -497,6 +498,11 @@ static void T_DamageInternal(edict_t *target, edict_t *attacker, int damage, boo
         if (target->unit_state->statuses[i].level && target->unit_state->statuses[i].code == MAKEFOURCC('B','U','s','l'))
             unit_removestatus(target, target->unit_state->statuses + i, STATUS_REMOVE_SCRIPT);
     unit_updatestatuses(target);
+    /* A real, positive, post-shield/Spirit-Link Black Arrow hit marks the
+     * victim before lethal damage dispatches A_STATUS_DEATH. Projectile
+     * misses and secondary/spell damage cannot apply the marker. */
+    if (primary_attack && arrow_code && arrow_level)
+        S_BlackArrowMarkHit(attacker, target, arrow_code, arrow_level);
     unit_entercombat(attacker, target);
     unit_entercombat(target, attacker);
 
@@ -534,7 +540,7 @@ static void T_DamageInternal(edict_t *target, edict_t *attacker, int damage, boo
 }
 
 void T_Damage(edict_t *target, edict_t *attacker, int damage) {
-    T_DamageInternal(target, attacker, damage, false);
+    T_DamageInternal(target, attacker, damage, false, 0, 0);
 }
 
 /* Secondary hits carry the primary weapon's type, not a different weapon selected for the victim.
@@ -580,7 +586,7 @@ void S_ResolveAttackHitWithArrow(edict_t *attacker, edict_t *target, int damage,
     G_WC3_AttackAlert(target, attacker);
     G_PlayCombatImpactSound(attacker, target);
     S_IncinerateOnHit(attacker, target);
-    T_DamageInternal(target, attacker, damage, true);
+    T_DamageInternal(target, attacker, damage, true, arrow_code, arrow_level);
     S_CreepAttackOnHit(attacker, target);
     S_PulverizeAttack(attacker, target);
     S_HumanAttackSplash(attacker, target, damage);
@@ -595,7 +601,6 @@ void S_ResolveAttackHitWithArrow(edict_t *attacker, edict_t *target, int damage,
                       Vector2_distance(&other->s.origin2, &target->s.origin2) <= radius)
             T_Damage(other, attacker, (int)MAX(1.0f, damage * fraction));
     } }
-    S_BlackArrowDeathForShot(attacker, target, arrow_code, arrow_level);
     S_MoonGlaiveAttack(attacker, target, damage);
     S_SlowPoisonOnHit(attacker, target);
     S_OrbOnHit(attacker, target);

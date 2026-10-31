@@ -280,13 +280,94 @@ int S_BlackArrowDamageForShot(uint32_t ability, uint32_t level, int damage) {
         damage + (int)S_SpellData(ability, level, 1) : damage;
 }
 
-/* Patch 4 will replace immediate-kill detection with an authored timed
- * victim marker. Until then only the *actual empowered shot* may summon. */
-void S_BlackArrowDeathForShot(edict_t *attacker, edict_t *target,
-                             uint32_t ability, uint32_t level) {
-    if (attacker && target && ability && level && black_arrow_ability(ability) && M_IsDead(target))
-        S_SummonAbilityAt(attacker, ability, S_SpellUnitId(ability, level),
-                          &target->s.origin2, S_SpellData(ability, level, 3));
+/* Black Arrow raises a Dark Minion only from a corpse-producing unit. The
+ * shared UnitData deathType bit 0 marks raisable remains; units with no corpse,
+ * structures, Heroes, illusions and already-unraisable victims are excluded.
+ * A legal hit still inflicts its ordinary damage when conversion is ineligible. */
+static bool black_arrow_corpse_eligible(edict_t const *victim) {
+    UnitData_t const *data;
+    if (!victim || !victim->inuse || !(victim->svflags & SVF_MONSTER) ||
+        G_UnitIsHero(victim) || G_UnitIsStructure(victim) ||
+        (victim->aiflags & (AI_CORPSE_UNRAISABLE | AI_SCRIPT_EXPLODED | AI_ILLUSION)))
+        return false;
+    data = victim->data.UnitData ? victim->data.UnitData : G_UnitData(victim->class_id);
+    return data && (data->deathType & 1u) != 0;
+}
+
+/* This is called after the authoritative attack shields, Spirit Link and
+ * immunities accept positive damage, but before the damage can kill its unit.
+ * The status uses existing serialized source/alias/rank/timestamp fields, so
+ * save/load preserves the mark without adding a new entity/save contract. */
+void S_BlackArrowMarkHit(edict_t *attacker, edict_t *victim,
+                         uint32_t ability, uint32_t level) {
+    cstring_t buff;
+    float duration;
+    heroabilitystatus_t *mark;
+    if (!attacker || !attacker->inuse || !victim || M_IsDead(victim) ||
+        !ability || !level || !black_arrow_ability(ability) ||
+        !black_arrow_corpse_eligible(victim)) return;
+    buff = S_SpellBuffId(ability, level);
+    /* RoC/custom aliases can omit a BuffID. Use the stock Black Arrow marker
+     * identity rather than making such projectiles lose conversion entirely. */
+    if (!buff || strlen(buff) < 4) buff = "BNba";
+    duration = S_SpellDuration(ability, level, false);
+    /* Some old ability tables omit Dur for an attack modifier. The documented
+     * original Black Arrow mark lasts two seconds. */
+    if (duration <= 0.0f) duration = 2.0f;
+    mark = unit_applystatus(victim, &(status_application_t){
+        .buff = buff, .level = level, .duration = duration,
+        .source_ability = ability, .rank = level, .source = attacker,
+        .buff_flags = WC3_STATUS_BUFF_NEGATIVE | WC3_STATUS_BUFF_MAGICAL
+    });
+    if (mark) {
+        mark->source_ability = ability;
+        mark->rank = level;
+        mark->source = attacker;
+        mark->source_spawn_time = attacker->spawn_time;
+    }
+}
+
+/* A_STATUS_DEATH runs during the ordinary unit_die lifecycle, including when
+ * an unrelated attacker delivers the finishing blow during the mark's life.
+ * Consume first so nested death events can never create a second skeleton. */
+static bool black_arrow_summon_on_death(edict_t *victim, heroabilitystatus_t *mark) {
+    edict_t *source;
+    uint32_t ability, rank, unit_id;
+    float duration;
+    if (!victim || !mark || !mark->level ||
+        (mark->timestamp && mark->timestamp <= G_Time())) return false;
+    ability = mark->source_ability;
+    rank = mark->rank ? mark->rank : mark->level;
+    source = S_SpellStatusSource(mark);
+    /* If multiple custom Black Arrow buffs coexist, the most recent landed
+     * mark is authoritative; earlier marks cannot produce another summon. */
+    FOR_LOOP(i, victim->unit_state ? MAX_UNIT_STATUSES : 0) {
+        heroabilitystatus_t const *other = victim->unit_state->statuses + i;
+        if (other != mark && other->level && other->instance_id > mark->instance_id &&
+            (!other->timestamp || other->timestamp > G_Time()) &&
+            black_arrow_ability(other->source_ability)) {
+            unit_removestatus_deferred(victim, mark, STATUS_REMOVE_DEATH);
+            return true;
+        }
+    }
+    unit_removestatus_deferred(victim, mark, STATUS_REMOVE_DEATH);
+    if (!source || !black_arrow_ability(ability) || !black_arrow_corpse_eligible(victim)) return true;
+    unit_id = S_SpellUnitId(ability, rank);
+    duration = S_SpellData(ability, rank, 3);
+    /* Some creep/custom aliases omit their UnitID/lifetime and inherit the
+     * base Black Arrow row. Keep the concrete alias for summon ownership. */
+    if (!unit_id && G_AbilityCode(ability) != ability) {
+        uint32_t const base = G_AbilityCode(ability);
+        unit_id = S_SpellUnitId(base, rank);
+        if (duration <= 0.0f) duration = S_SpellData(base, rank, 3);
+    }
+    if (unit_id && S_SummonAbilityAt(source, ability, unit_id, &victim->s.origin2,
+                                     duration > 0.0f ? duration : 0.0f)) {
+        /* Successful conversion consumes raisable remains. The unit's normal
+         * Death animation still plays; its corpse is removed afterward. */
+        victim->aiflags |= AI_CORPSE_UNRAISABLE | AI_CORPSE_NO_DECAY;
+    }
+    return true;
 }
 
 static void death_coil_projectile_hit(edict_t *missile);
@@ -807,6 +888,8 @@ BZ_ABILITY_PROC(CAbilityBlackArrow) {
     case A_TOGGLE_ON: return active;
     case A_AUTOCAST_ON: return active;
     case A_AUTOCAST_SET: return true;
+    case A_STATUS_DEATH:
+        return black_arrow_summon_on_death(ent, call ? call->status.slot : NULL);
     default: return CAbilitySimpleSpell(ent, msg, call);
     }
 }
