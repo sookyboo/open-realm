@@ -1387,14 +1387,133 @@ BZ_SIMPLE_SPELL_PROC(AbilityHowlOfTerror) {
  * Ubertip="Slows enemy units and gives them a chance to miss on attacks."
  */
 BZ_SIMPLE_SPELL_PROC(AbilityDrunkenHaze) { target_status_execute(caster, st, spell); }
+/* Doom is permanent until the victim dies. A_STATUS_TICK advances an authored
+ * one-second damage clock even when status->timestamp == 0; this keeps damage,
+ * spell locking, targeting and art owned by the victim's serialized status.
+ * DataA = damage per second, DataC = summon timed life, DataD = creep level cap. */
+#define DOOM_TICK_MS 1000u
+
+static cstring_t doom_first_buff(uint32_t code, uint32_t rank) {
+    cstring_t id = S_SpellBuffId(code, rank);
+    return id && strlen(id) >= 4 ? S_SpellBuffToken(id, 0) : "BNdo";
+}
+
+static bool doom_validate(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
+    edict_t *target = st.entity;
+    UnitBalance_t const *balance;
+    uint32_t rank;
+    float max_creep;
+    cstring_t buff;
+    if (!caster || !spell || !target || target == caster ||
+        !S_SpellIsAliveTarget(target) || !S_SpellIsEnemy(caster, target) ||
+        !S_SpellAllowsTarget(spell->code, caster, target) ||
+        S_UnitIsResistant(target) || G_UnitIsStructure(target) ||
+        target->targtype == TARG_MECHANICAL || (target->aiflags & AI_ILLUSION)) return false;
+    rank = S_SpellLevel(caster, spell->code);
+    max_creep = S_SpellData(spell->code, rank, 4);
+    balance = target->data.UnitBalance;
+    if (target->s.player == PLAYER_NEUTRAL_AGGRESSIVE && max_creep > 0.0f &&
+        (!balance || balance->level > max_creep)) return false;
+    buff = doom_first_buff(spell->code, rank);
+    if (buff) {
+        wc3_status_apply_check_t const check = unit_status_checkapplication(target, &(status_application_t){
+            .buff = buff, .level = rank
+        });
+        return check != WC3_STATUS_APPLY_INVALID && check != WC3_STATUS_APPLY_FULL;
+    }
+    return false;
+}
+
+static void doom_execute(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
+    uint32_t rank = S_SpellLevel(caster, spell->code);
+    heroabilitystatus_t *slot;
+    cstring_t buff = doom_first_buff(spell->code, rank);
+    if (!doom_validate(caster, st, spell)) return;
+    slot = unit_applystatus(st.entity, &(status_application_t){
+        .buff = buff, .level = rank, .source_ability = spell->code,
+        .source = caster, .rank = rank,
+        /* data stores owner player for caster-loss fallback; spell code is
+         * already in source_ability and level in rank. */
+        .data = caster->s.player,
+        .state_mask = WC3_STATUS_STATE_SILENCED,
+        .buff_flags = WC3_STATUS_BUFF_NEGATIVE | WC3_STATUS_BUFF_MAGICAL |
+                      WC3_STATUS_BUFF_UNDISPELLABLE | WC3_STATUS_BUFF_TARGET_ART
+    });
+    if (!slot) return;
+    slot->next_tick = G_Time() + DOOM_TICK_MS;
+    unit_status_invalidate_update_mask(st.entity);
+    S_SpellCancelChannel(st.entity);
+}
+
+static void doom_tick(edict_t *victim, heroabilitystatus_t *slot) {
+    edict_t *caster;
+    uint32_t code, rank;
+    int damage;
+    if (!victim || !slot || !slot->level) return;
+    code = slot->source_ability;
+    rank = slot->rank;
+    caster = S_SpellStatusSource(slot);
+    damage = (int)MAX(0.0f, S_SpellData(code, rank, 1));
+    while (unit_status_take_due_tick(slot, DOOM_TICK_MS, G_Time())) {
+        if (damage > 0) {
+            /* Doom persists if its original caster has died or been removed.
+             * Fall back to ordinary damage without dereferencing stale owner. */
+            if (caster) S_SpellDamage(victim, caster, damage);
+            else T_Damage(victim, victim, damage);
+        }
+        if (M_IsDead(victim) || !slot->level) break;
+    }
+}
+
+static void doom_death(edict_t *victim, heroabilitystatus_t *slot) {
+    edict_t *caster = S_SpellStatusSource(slot), *summon = NULL;
+    uint32_t const code = slot->source_ability;
+    uint32_t const rank = slot->rank;
+    uint32_t const player = slot->data;
+    uint32_t const summon_id = S_SpellUnitId(code, rank);
+    float const duration = MAX(0.0f, S_SpellData(code, rank, 3));
+    cstring_t const buffs = S_SpellBuffId(code, rank);
+    cstring_t const death_buff = buffs ? S_SpellBuffToken(buffs, 1) : NULL;
+    vec2_t const point = victim->s.origin2;
+    /* Invalidate before invoking spawn events or any other callbacks. */
+    unit_removestatus_deferred(victim, slot, STATUS_REMOVE_DEATH);
+    if (death_buff && strlen(death_buff) >= 4)
+        G_SpawnAbilityEffectAtPoint(FS_SLKKey(death_buff), WC3_EFFECT_EFFECT, 0, &point, true);
+    if (!summon_id) return;
+    if (caster) summon = S_SummonAbilityAt(caster, code, summon_id, &point, duration);
+    else if (player < MAX_PLAYERS) {
+        /* A summoned Doom Guard retains its owner's player even when the
+         * caster edict was freed and its slot reused. */
+        summon = SP_SpawnAtLocation(summon_id, player, &point);
+        if (summon) {
+            summon->summon_ability = code;
+            G_ActivateUnitFood(summon);
+            if (summon->stand) summon->stand(summon);
+            if (duration > 0.0f) S_SpellApplyTimedLife(summon, 1, duration);
+        }
+    }
+}
+
 /* Name=Doom
  * Ubertip="Curses a target enemy unit, preventing it from casting spells and damaging it over time."
  */
-static bool doom_validate(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
-    return spell && st.entity && S_SpellIsAliveTarget(st.entity) &&
-        S_SpellIsEnemy(caster, st.entity) && !S_UnitIsResistant(st.entity);
+BZ_ABILITY_PROC(CAbilityDoom) {
+    if (msg == A_STATUS_TICK && call && call->status.slot) {
+        doom_tick(ent, call->status.slot);
+        return true;
+    }
+    if (msg == A_STATUS_DEATH && call && call->status.slot) {
+        doom_death(ent, call->status.slot);
+        return true;
+    }
+    if (msg == A_VALIDATE || msg == A_EXECUTE) {
+        spellTarget_t st = call && call->target ? *call->target : MAKE(spellTarget_t, .type = SPELL_TARGET_NONE);
+        if (msg == A_VALIDATE) return doom_validate(ent, st, call ? call->item : NULL);
+        if (call && call->item) doom_execute(ent, st, call->item);
+        return true;
+    }
+    return CAbilitySimpleSpell(ent, msg, call);
 }
-BZ_VALIDATED_SPELL_PROC(AbilityDoom, doom_validate, target_status_execute)
 /* Name=Healing Wave
  * Ubertip="Heals a target friendly unit and bounces to nearby friendlies, healing less each jump."
  */

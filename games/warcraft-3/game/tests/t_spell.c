@@ -4456,6 +4456,194 @@ TEST(wc3_spell, tornado_damage_uses_three_authored_building_bands_only) {
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+
+/* Doom's buff must outlive the caster and its explicit tick deadline must
+ * survive a status-mask rebuild. The synthetic unit ID exercises the stock
+ * summon path without requiring any installed MPQ. */
+static char const pit_lord_doom_slk[] =
+    "ID;PWXL;N;EBB;Y2;X14\n"
+    "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+    "C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"BuffID1\"\nC;Y1;X6;K\"DataA1\"\n"
+    "C;Y1;X7;K\"DataB1\"\nC;Y1;X8;K\"DataC1\"\nC;Y1;X9;K\"DataD1\"\n"
+    "C;Y1;X10;K\"UnitID1\"\nC;Y1;X11;K\"Rng1\"\nC;Y1;X12;K\"Cost1\"\n"
+    "C;Y1;X13;K\"Cool1\"\nC;Y1;X14;K\"Dur1\"\n"
+    "C;Y2;X1;K\"ANdo\"\nC;Y2;X2;K\"ANdo\"\nC;Y2;X3;K1\n"
+    "C;Y2;X4;K\"air,ground,enemy,nonhero,organic\"\n"
+    "C;Y2;X5;K\"BNdo,BNdi\"\nC;Y2;X6;K40\nC;Y2;X7;K1\n"
+    "C;Y2;X8;K120\nC;Y2;X9;K5\nC;Y2;X10;K\"hfoo\"\n"
+    "C;Y2;X11;K650\nC;Y2;X12;K0\nC;Y2;X13;K0\nC;Y2;X14;K0\nE\n";
+
+static void pit_lord_doom_setup(slkTestData_t **rows, slkTestData_t **old,
+                                edict_t **caster, edict_t **target) {
+    *rows = parse_slk_string(pit_lord_doom_slk);
+    *old = G_SetSLKRows("AbilityData", *rows);
+    *caster = make_hero(MAKEFOURCC('N','p','l','h'), 500, 400, 0, 0);
+    *target = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 100, 0);
+    (*caster)->s.player = 0;
+    (*target)->s.player = 1;
+    (*target)->svflags |= SVF_MONSTER;
+    (*target)->targtype = TARG_GROUND;
+    (*target)->die = unit_die;
+    (*target)->health.value = (*target)->health.max_value = 400.0f;
+    (*caster)->unit_state->ranks[0] = MAKE(heroability_t,
+        .code = MAKEFOURCC('A','N','d','o'), .level = 1);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    level.time = 1000;
+}
+
+TEST(wc3_spell, pit_lord_doom_persists_and_ticks_without_dispel_or_expiry) {
+    slkTestData_t *rows, *old;
+    edict_t *caster, *victim;
+    heroabilitystatus_t *slot;
+    pit_lord_doom_setup(&rows, &old, &caster, &victim);
+    T_ASSERT(S_CastUnitTargetSpell(caster, MAKEFOURCC('A','N','d','o'), victim));
+    slot = unit_findstatus(victim, MAKEFOURCC('B','N','d','o'));
+    T_NOT_NULL(slot);
+    if (slot) {
+        T_EQ(slot->timestamp, 0u);
+        T_EQ(slot->next_tick, 2000u);
+        T_ASSERT(!unit_status_can_magic_dispel(slot));
+        T_ASSERT(slot->buff_flags & WC3_STATUS_BUFF_UNDISPELLABLE);
+    }
+    T_ASSERT(S_UnitIsSilenced(victim));
+    unit_status_invalidate_update_mask(victim);
+    level.time = 1999; unit_updatestatuses(victim);
+    T_FEQ(victim->health.value, 400.0f, 0.001f);
+    level.time = 2000; unit_updatestatuses(victim);
+    T_FEQ(victim->health.value, 360.0f, 0.001f);
+    level.time = 3000; unit_updatestatuses(victim);
+    T_FEQ(victim->health.value, 320.0f, 0.001f);
+    T_ASSERT(unit_findstatus(victim, MAKEFOURCC('B','N','d','o')) != NULL);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, pit_lord_doom_death_summons_once_with_caster_ownership) {
+    slkTestData_t *rows, *old;
+    edict_t *caster, *victim, *guard = NULL;
+    pit_lord_doom_setup(&rows, &old, &caster, &victim);
+    T_ASSERT(S_CastUnitTargetSpell(caster, MAKEFOURCC('A','N','d','o'), victim));
+    T_ASSERT(unit_findstatus(victim, MAKEFOURCC('B','N','d','o')) != NULL);
+    /* Any cause of death triggers Doom; not only Doom damage. */
+    unit_die(victim, caster);
+    T_ASSERT(!unit_findstatus(victim, MAKEFOURCC('B','N','d','o')));
+    FILTER_EDICTS(unit, unit->inuse && unit->summon_ability == MAKEFOURCC('A','N','d','o') &&
+                  unit != victim && unit->s.player == 0) {
+        guard = unit;
+        break;
+    }
+    T_NOT_NULL(guard);
+    if (guard) {
+        T_EQ(guard->class_id, MAKEFOURCC('h','f','o','o'));
+        T_EQ(guard->owner, caster);
+        T_NOT_NULL(unit_findstatus(guard, MAKEFOURCC('B','T','L','F')));
+    }
+    unit_statusdeath(victim);
+    {
+        uint32_t count = 0;
+        FILTER_EDICTS(unit, unit->inuse && unit->summon_ability == MAKEFOURCC('A','N','d','o')) count++;
+        T_EQ(count, 1u);
+    }
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, pit_lord_doom_rejects_resistant_heroes_mechanical_and_overlevel_creeps) {
+    slkTestData_t *rows, *old;
+    edict_t *caster, *victim;
+    abilityitem_t item = S_AbilityItem(MAKEFOURCC('A','N','d','o'));
+    spellTarget_t target;
+    pit_lord_doom_setup(&rows, &old, &caster, &victim);
+    target = MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = victim);
+    T_ASSERT(test_ability_message(caster, A_VALIDATE, &item, &target));
+    victim->targtype = TARG_MECHANICAL;
+    T_ASSERT(!test_ability_message(caster, A_VALIDATE, &item, &target));
+    victim->targtype = TARG_GROUND;
+    victim->aiflags |= AI_ILLUSION;
+    T_ASSERT(!test_ability_message(caster, A_VALIDATE, &item, &target));
+    victim->aiflags &= ~AI_ILLUSION;
+    { heroability_t *r = &victim->unit_state->ranks[0];
+      *r = MAKE(heroability_t, .code = MAKEFOURCC('A','C','s','k'), .level = 1); }
+    T_ASSERT(!test_ability_message(caster, A_VALIDATE, &item, &target));
+    memset(victim->unit_state->ranks, 0, sizeof(victim->unit_state->ranks));
+    {
+        UnitBalance_t level_data = *victim->data.UnitBalance;
+        victim->s.player = PLAYER_NEUTRAL_AGGRESSIVE;
+        level_data.level = 6;
+        victim->data.UnitBalance = &level_data;
+        T_ASSERT(!test_ability_message(caster, A_VALIDATE, &item, &target));
+        level_data.level = 5;
+        if (S_SpellIsEnemy(caster, victim))
+            T_ASSERT(test_ability_message(caster, A_VALIDATE, &item, &target));
+    }
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, pit_lord_doom_status_capacity_is_preflighted) {
+    slkTestData_t *rows, *old;
+    edict_t *caster, *victim;
+    char buff[5] = "Z000";
+    pit_lord_doom_setup(&rows, &old, &caster, &victim);
+    FOR_LOOP(i, MAX_UNIT_STATUSES) {
+        buff[1] = (char)('a' + i);
+        T_ASSERT(unit_addstatus(victim, buff, 1));
+    }
+    T_ASSERT(!S_CastUnitTargetSpell(caster, MAKEFOURCC('A','N','d','o'), victim));
+    T_ASSERT(!unit_findstatus(victim, MAKEFOURCC('B','N','d','o')));
+    T_FEQ(caster->mana.value, 400.0f, 0.001f);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, pit_lord_doom_caster_disappearance_keeps_damage_and_summon_player) {
+    slkTestData_t *rows, *old;
+    edict_t *caster, *victim, *guard = NULL;
+    pit_lord_doom_setup(&rows, &old, &caster, &victim);
+    T_ASSERT(S_CastUnitTargetSpell(caster, MAKEFOURCC('A','N','d','o'), victim));
+    caster->inuse = false; /* caster's original incarnation no longer exists */
+    victim->health.value = 20.0f;
+    level.time = 2000;
+    unit_updatestatuses(victim);
+    T_ASSERT(M_IsDead(victim));
+    FILTER_EDICTS(unit, unit->inuse && unit->summon_ability == MAKEFOURCC('A','N','d','o') &&
+                  unit->class_id == MAKEFOURCC('h','f','o','o') && unit != victim) {
+        guard = unit;
+        break;
+    }
+    T_NOT_NULL(guard);
+    if (guard) {
+        T_EQ(guard->s.player, 0u);
+        T_NOT_NULL(unit_findstatus(guard, MAKEFOURCC('B','T','L','F')));
+    }
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, pit_lord_doom_save_load_preserves_permanent_tick) {
+    cstring_t const path = Test_TempPath("pit-lord-doom-save.bin");
+    slkTestData_t *rows, *old;
+    edict_t *caster, *victim;
+    heroabilitystatus_t *slot;
+    pit_lord_doom_setup(&rows, &old, &caster, &victim);
+    T_ASSERT(S_CastUnitTargetSpell(caster, MAKEFOURCC('A','N','d','o'), victim));
+    T_ASSERT(WriteGame(path));
+    slot = unit_findstatus(victim, MAKEFOURCC('B','N','d','o'));
+    T_NOT_NULL(slot);
+    if (slot) { slot->next_tick = 0; slot->state_mask = 0; }
+    T_ASSERT(ReadGame(path));
+    slot = unit_findstatus(victim, MAKEFOURCC('B','N','d','o'));
+    T_NOT_NULL(slot);
+    if (slot) {
+        T_EQ(slot->timestamp, 0u);
+        T_EQ(slot->next_tick, 2000u);
+        T_EQ(slot->source_ability, MAKEFOURCC('A','N','d','o'));
+    }
+    T_ASSERT(S_UnitIsSilenced(victim));
+    level.time = 2000;
+    unit_updatestatuses(victim);
+    T_FEQ(victim->health.value, 360.0f, 0.001f);
+    remove(path);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_spell, requested_neutral_hero_abilities_have_contracts) {
 	ability_t const *mana_shield = FindAbilityByClassname("ANms");
 	ability_t const *revive = FindAbilityByClassname("AHre");

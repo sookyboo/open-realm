@@ -1,4 +1,4 @@
-# Pit Lord (`Nplh`) — Howl, Cleave and Rain of Fire (Patches 1–2)
+# Pit Lord (`Nplh`) — Howl, Cleave, Rain of Fire and Doom (Patches 1, 2 and 4)
 
 ## Source evidence and scope
 
@@ -6,7 +6,7 @@ The stock MPQ/MDX inspection supplied for this task identifies `Nplh` with
 `ANrf` (Rain of Fire), `ANht` (Howl of Terror), `ANca` (Cleaving Attack) and
 `ANdo` (Doom). Patch 1 implements Howl target presentation and secondary-hit Cleave
 presentation/eligibility. Patch 2 implements Rain of Fire wave and burning
-gameplay. Rain of Fire presentation and Doom are separate follow-up patches.
+gameplay. Rain of Fire presentation is reserved for Patch 3. Patch 4 implements Doom gameplay and target/death art.
 
 | Ability | Stock presentation data | Runtime ownership |
 | --- | --- | --- |
@@ -116,3 +116,46 @@ Regression tests use nonstock `DataA/B/D/E/F` values to verify initial and
 subsequent wave deadlines, friendly fire, building reduction, area
 exclusion, per-wave cap, independent burning after channel interruption
 and burn-thinker save/load. No retail MPQ is required by those fixtures.
+
+## Doom (`ANdo`) — Patch 4
+
+Doom is a dedicated `CAbilityDoom` procedure, no longer the generic timed
+status application. The stock `ANdo` row has `DataA=40` damage per second,
+`DataB=1` (interval metadata), `DataC=120` seconds of summoned Doom Guard
+lifetime, `DataD=5` maximum neutral-aggressive creep level, `UnitID=nba2`,
+and `BuffID=BNdo,BNdi`. The reported classic guide's 180-second summon lifetime
+conflicts with the supplied stock SLK `DataC=120`. This implementation follows
+the active **authored row**, not a fixed 180-second duration. Custom map rows can
+change the summon type and duration.
+
+- Validate a live enemy, the authored target mask, resistant/hero exclusion,
+  nonmechanical, nonstructure and nonillusion eligibility and the neutral creep
+  level ceiling. Check recipient status capacity **before** spell costs commit.
+- Apply permanent `BNdo` with `WC3_STATUS_STATE_SILENCED`, the negative/magical
+  and undispellable flags, and status-owned `BNdo.TargetArt` (default `origin`
+  attachment in the absence of a `Targetattach`). A victim cannot cast, and
+  magical dispels cannot remove the curse. Cancellation of an already active
+  channel is delegated to `S_SpellCancelChannel`.
+- `next_tick` schedules one second pulses of `DataA` damage. Persistent statuses
+  (`timestamp == 0`) with an explicit `next_tick` participate in the shared
+  event-driven status scheduler; no new entity thinker or serialized callback
+  is needed. Ordinary timed statuses continue to use their original path.
+- `unit_statusdeath` dispatches Doom's `A_STATUS_DEATH` once, whether death
+  came from the curse or another source. It retires the status **before**
+  generating effects and summoning, so recursive death events cannot spawn
+  duplicate minions. `BNdi.EffectArt` supplies the one-shot death visual.
+  `S_SummonAbilityAt` creates the authored unit at the victim position, records
+  the creating ability and applies `DataC` timed life. When the original caster
+  entity is gone, its player ID retained in the status supplies fallback
+  ownership; the invalid source pointer is never followed.
+- The original `source_ability`, `source_spawn_time`, rank, player and `next_tick`
+  are held in the existing saved status layout. No save-format version bump is
+  required because no persistent field was added.
+
+Tests cover persistence without a timer expiry, the silence and undispellability
+contract, exact one-second damage ticks, one summon following ordinary death,
+source-player ownership when the caster is removed, and save/load with a live
+permanent tick. A synthetic `hfoo` summons in the test fixture in place of the
+retail `nba2` asset. Rendering of `DoomTarget.mdl` and `DoomDeath.mdl` still
+requires user-side visual verification, especially `BNdi` animation placement
+and its short 4.5-second `Birth` lifecycle. No runtime tests were run here.

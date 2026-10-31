@@ -2126,7 +2126,8 @@ void unit_expirestatus(edict_t *ent, heroabilitystatus_t *status) {
 
 bool unit_status_take_due_tick(heroabilitystatus_t *slot, uint32_t interval_ms, uint32_t now_ms) {
     if (!slot || !slot->level || !interval_ms || !slot->next_tick ||
-        slot->timestamp <= now_ms || slot->next_tick > now_ms || slot->next_tick >= slot->timestamp) return false;
+        (slot->timestamp && slot->timestamp <= now_ms) || slot->next_tick > now_ms ||
+        (slot->timestamp && slot->next_tick >= slot->timestamp)) return false;
     /* Do not wrap a live deadline back into an earlier game tick. */
     if (UINT32_MAX - slot->next_tick < interval_ms) {
         slot->next_tick = 0;
@@ -2142,7 +2143,8 @@ static void unit_status_track_timed_slot(edict_t *ent, heroabilitystatus_t const
     bit = 1u << (slot - ent->unit_state->statuses);
     if (slot->level) ent->unit_state->status_occupied_mask |= bit;
     else ent->unit_state->status_occupied_mask &= ~bit;
-    if (slot->level && slot->timestamp) ent->unit_state->timed_status_update_mask |= bit;
+    /* Persistent status-owned periodic effects (Doom) also need update slots. */
+    if (slot->level && (slot->timestamp || slot->next_tick)) ent->unit_state->timed_status_update_mask |= bit;
     else ent->unit_state->timed_status_update_mask &= ~bit;
 }
 
@@ -2171,7 +2173,7 @@ void unit_updatestatuses(edict_t *ent) {
             heroabilitystatus_t const *status = ent->unit_state->statuses + i;
             if (!status->level) continue;
             occupied |= 1u << i;
-            if (status->timestamp) mask |= 1u << i;
+            if (status->timestamp || status->next_tick) mask |= 1u << i;
         }
         ent->unit_state->status_occupied_mask = occupied;
         ent->unit_state->timed_status_update_mask = mask;
@@ -2189,11 +2191,11 @@ void unit_updatestatuses(edict_t *ent) {
         index = (uint32_t)__builtin_ctz(remaining);
         next = index + 1;
         status = ent->unit_state->statuses + index;
-        if (!status->level || !status->timestamp) {
+        if (!status->level || (!status->timestamp && !status->next_tick)) {
             unit_status_track_timed_slot(ent, status);
             continue;
         }
-        if (now >= status->timestamp) {
+        if (status->timestamp && now >= status->timestamp) {
             if (unit_status_timedlife(status->code)) {
                 kill = true;
             }

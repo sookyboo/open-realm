@@ -206,11 +206,11 @@ The selected neutral-hero contracts now also cover `ANms` (Mana Shield) as an
 authored-`BNms` no-target toggle at the central damage boundary, `AHre` (Resurrection) through nearby ordinary friendly-corpse
 revival, `ANbf` (Breath of Fire) through point-area damage, `ANdb` (Drunken
 Brawler) through the existing critical/evasion hooks, `ANdh` (Drunken Haze) and
-`ANdo` (Doom) through timed target buffs, `ANht` (Howl of Terror) through its
+`ANdo` (Doom) through a persistent undispellable silencing damage/status and death-owned summoned demon, `ANht` (Howl of Terror) through its
 authored area buff and status-owned `BNht` target visual, and `ANca` (Cleaving
 Attack) through melee physical splash with authored secondary-hit art and target
 mask. See [Pit Lord](../pit-lord.md) for implementation details and the
-remaining Rain of Fire presentation, burn-dispel parity and Doom gaps.
+remaining Rain of Fire presentation, burn-dispel parity, and Doom visual verification.
 
 The current selected-block implementation also covers `AHfa` (Searing Arrows)
 through the missile attack hook, `AEar` (Trueshot Aura) through the ranged
