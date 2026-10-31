@@ -7,8 +7,11 @@ has no `Amfl` row. It is **not** FrostNova (`AHfn` / `CAbilityFrostNova`);
 ignore `ability_map.c` and the old TODO comment.
 
 No-target toggle spell (`AB_SPELL | AB_TOGGLE | AB_UPDATE`, `SPELL_TARGET_NONE`).
-Activation spends Cost and applies `BuffID` token `Bmfl` for `Dur`/`HeroDur`
-seconds. While `Bmfl` is active, the Faerie Dragon is immobile and every command
+Activation preflights the first `BuffID` token (`Bmfl` in stock data) against
+status capacity before any mana or cooldown commit. A full 16-slot status list
+rejects activation without spending resources, while an already active Mana
+Flare can still be toggled off at capacity. Successful activation spends Cost
+and applies `Bmfl` for `Dur`/`HeroDur` seconds. While `Bmfl` is active, the Faerie Dragon is immobile and every command
 button except Mana Flare is disabled. Movement and other orders are rejected
 without removing the status; clicking Mana Flare again ends it early. Natural
 status expiry restores movement and commands. `Bmfa` (`CBuffManaFlareAoe`,
@@ -91,3 +94,8 @@ enemy-cast trigger, out-of-area ignore, friendly-cast ignore, armor bonus,
 Cast interval gating, toggle/expiry cleanup, order lockout and button state,
 splash mana-pool filter, time-zero cooldown, status retaliation without a spell
 channel, and Phase Shift rejection without mana loss.
+
+The full-status-slot regression uses non-stock `Cool=5` to confirm rejection
+leaves both mana and cooldown unchanged; freeing one slot permits activation.
+The toggle-off regression fills the other 15 slots after activation and
+confirms the original status can still be removed.

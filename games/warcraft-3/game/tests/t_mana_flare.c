@@ -14,7 +14,7 @@ slkTestData_t *parse_slk_string(char const *text);
 void free_slk_rows(slkTestData_t *rows);
 
 /* Non-stock DataA=7 / DataC=70 / DataE=9 / Cost=25 so tests cannot pass on retail 3/90/12/50. */
-#define MFL_SLK \
+#define MFL_SLK_WITH_COOL(COOL) \
 	"ID;PWXL;N;EBB;Y4;X18\n" \
 	"C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n" \
 	"C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Cost1\"\nC;Y1;X6;K\"Cool1\"\n" \
@@ -23,7 +23,7 @@ void free_slk_rows(slkTestData_t *rows);
 	"C;Y1;X13;K\"DataB1\"\nC;Y1;X14;K\"DataC1\"\nC;Y1;X15;K\"DataD1\"\n" \
 	"C;Y1;X16;K\"DataE1\"\nC;Y1;X17;K\"DataF1\"\nC;Y1;X18;K\"BuffID1\"\n" \
 	"C;Y2;X1;K\"Amfl\"\nC;Y2;X2;K\"Amfl\"\nC;Y2;X3;K\"1\"\n" \
-	"C;Y2;X4;K\"air,ground,enemy\"\nC;Y2;X5;K\"25\"\nC;Y2;X6;K\"0\"\n" \
+	"C;Y2;X4;K\"air,ground,enemy\"\nC;Y2;X5;K\"25\"\nC;Y2;X6;K\"" COOL "\"\n" \
 	"C;Y2;X7;K\"200\"\nC;Y2;X8;K\"30\"\nC;Y2;X9;K\"30\"\n" \
 	"C;Y2;X10;K\"750\"\nC;Y2;X11;K\"0.75\"\nC;Y2;X12;K\"7\"\n" \
 	"C;Y2;X13;K\"2\"\nC;Y2;X14;K\"70\"\nC;Y2;X15;K\"40\"\n" \
@@ -37,6 +37,8 @@ void free_slk_rows(slkTestData_t *rows);
 	"C;Y4;X1;K\"Apsh\"\nC;Y4;X2;K\"Apsh\"\nC;Y4;X3;K\"1\"\n" \
 	"C;Y4;X5;K\"15\"\nC;Y4;X6;K\"0\"\nC;Y4;X8;K\"2\"\n" \
 	"C;Y4;X9;K\"2\"\nC;Y4;X18;K\"Bpsh\"\nE\n"
+
+#define MFL_SLK MFL_SLK_WITH_COOL("0")
 
 typedef struct {
 	slkTestData_t *rows, *old;
@@ -112,6 +114,48 @@ TEST(wc3_spell, mana_flare_activates_status_and_armor) {
 	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 1);
 	T_ASSERT(!G_GetChannel(fix.flare) || G_GetChannel(fix.flare)->code != BZ_AMFL);
 	T_FEQ(G_UnitArmorValue(fix.flare), 9, 0.001f);
+	mfl_done(&fix);
+}
+
+/* With every status slot occupied, attempting Mana Flare cannot charge its
+ * mana cost or start its authored cooldown. A freed slot accepts the cast. */
+TEST(wc3_spell, mana_flare_full_status_list_does_not_consume_resources) {
+	mflFix_t fix;
+	char buff[5] = "Z000";
+	mfl_setup(&fix, MFL_SLK_WITH_COOL("5"));
+	FOR_LOOP(i, MAX_UNIT_STATUSES) {
+		buff[1] = (char)('a' + i);
+		T_ASSERT(unit_addtimedstatus(fix.flare, buff, 1, 30.0f));
+	}
+	T_ASSERT(!S_ManaFlareActive(fix.flare));
+	T_ASSERT(S_SpellCooldownReady(fix.flare, BZ_AMFL));
+	T_ASSERT(!S_CastNoTargetSpell(fix.flare, BZ_AMFL));
+	T_FEQ(fix.flare->mana.value, 200.0f, 0.001f);
+	T_ASSERT(S_SpellCooldownReady(fix.flare, BZ_AMFL));
+	T_FEQ(S_SpellCooldownRemaining(fix.flare, BZ_AMFL), 0.0f, 0.001f);
+	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 0);
+
+	unit_removestatus(fix.flare, fix.flare->unit_state->statuses, STATUS_REMOVE_SCRIPT);
+	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
+	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 1);
+	T_FEQ(fix.flare->mana.value, 175.0f, 0.001f);
+	T_ASSERT(!S_SpellCooldownReady(fix.flare, BZ_AMFL));
+	mfl_done(&fix);
+}
+
+/* An active toggle never requires another status slot to switch off. */
+TEST(wc3_spell, mana_flare_toggle_off_works_at_status_capacity) {
+	mflFix_t fix;
+	char buff[5] = "Z000";
+	mfl_setup(&fix, MFL_SLK);
+	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
+	FOR_LOOP(i, MAX_UNIT_STATUSES - 1) {
+		buff[1] = (char)('a' + i);
+		T_ASSERT(unit_addtimedstatus(fix.flare, buff, 1, 30.0f));
+	}
+	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 1);
+	T_ASSERT(S_CastNoTargetSpell(fix.flare, BZ_AMFL));
+	T_EQ(G_UnitStatusLevel(fix.flare, BZ_BMFL), 0);
 	mfl_done(&fix);
 }
 

@@ -28,10 +28,28 @@ static void mana_flare_present(edict_t *unit, bool active) {
 }
 
 static heroabilitystatus_t *mana_flare_status(edict_t *unit) {
-	FOR_LOOP(i, unit->unit_state ? MAX_UNIT_STATUSES : 0)
+	FOR_LOOP(i, unit && unit->unit_state ? MAX_UNIT_STATUSES : 0)
 		if (unit->unit_state->statuses[i].level && unit->unit_state->statuses[i].code == ID_BMFL)
 			return unit->unit_state->statuses + i;
 	return NULL;
+}
+
+/* Preflight the exact first BuffID token used by execute. A full status list
+ * must reject the cast before spell_commit spends mana or starts cooldown. */
+static bool mana_flare_can_apply(edict_t *unit, uint32_t code) {
+	uint32_t level;
+	cstring_t buff;
+	wc3_status_apply_check_t result;
+	if (!unit) return false;
+	unit_updatestatuses(unit);
+	if (mana_flare_status(unit)) return true; /* toggling off needs no free slot */
+	level = S_SpellLevel(unit, code);
+	buff = S_SpellBuffId(code, level);
+	if (!buff || strlen(buff) < 4) buff = "Bmfl";
+	result = unit_status_checkapplication(unit, &(status_application_t){
+		.buff = buff, .level = level
+	});
+	return result == WC3_STATUS_APPLY_FREE_SLOT || result == WC3_STATUS_APPLY_REUSE;
 }
 
 static bool mana_flare_can_splash(edict_t *flare, edict_t *primary, edict_t *target, float splash_r, bool mana_only) {
@@ -58,6 +76,8 @@ BZ_ABILITY_PROC(CAbilityManaFlare) {
 	uint32_t level;
 	cstring_t buff;
 	switch (msg) {
+	case A_VALIDATE:
+		return mana_flare_can_apply(ent, code);
 	case A_TOGGLE_ON:
 		return mana_flare_status(ent) != NULL;
 	case A_STATUS_REMOVE:
@@ -77,15 +97,14 @@ BZ_ABILITY_PROC(CAbilityManaFlare) {
 		{
 			heroabilitystatus_t *status = S_SpellApplyTimedStatusFromAbility(
 				ent, code, level, buff, S_SpellHeroDuration(code, level, ent));
-			if (status) {
-				status->buff_flags |= WC3_STATUS_BUFF_POSITIVE | WC3_STATUS_BUFF_MAGICAL |
-					WC3_STATUS_BUFF_TARGET_ART;
-				unit_status_enabletargetart(ent, status, "overhead");
-				mana_flare_present(ent, true);
-				order_stop_cleanup(ent);
-				G_ClearActiveUnitOrder(ent);
-				G_InvalidateUnitCommands(ent);
-			}
+			if (!status) return false; /* Defensive: a failed application is never success. */
+			status->buff_flags |= WC3_STATUS_BUFF_POSITIVE | WC3_STATUS_BUFF_MAGICAL |
+				WC3_STATUS_BUFF_TARGET_ART;
+			unit_status_enabletargetart(ent, status, "overhead");
+			mana_flare_present(ent, true);
+			order_stop_cleanup(ent);
+			G_ClearActiveUnitOrder(ent);
+			G_InvalidateUnitCommands(ent);
 		}
 		return true;
 	case A_UPDATE:
