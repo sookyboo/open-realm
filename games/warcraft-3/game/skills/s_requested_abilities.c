@@ -650,19 +650,87 @@ BZ_SIMPLE_SPELL_PROC(AbilityBanish) { target_status_execute(caster, st, spell); 
  * Ubertip="Summons a Phoenix to fight for the caster."
  */
 BZ_SIMPLE_SPELL_PROC(AbilitySummonPhoenix) { S_SummonPhoenix(caster, spell->code); }
-/* Name=Carrion Beetles
- * Ubertip="Raises carrion beetles from a nearby corpse."
- */
-BZ_SIMPLE_SPELL_PROC(AbilityCarrionScarabs) {
-    uint32_t level = S_SpellLevel(caster, spell->code), count = (uint32_t)MAX(1.0f, S_SpellData(spell->code, level, 1));
-    float range = S_SpellRange(spell->code, level);
-    edict_t *corpse = NULL;
-    FILTER_EDICTS(unit, G_UnitIsRaisableCorpse(unit) && !G_UnitIsHero(unit) &&
-                  Vector2_distance(&unit->s.origin2, &caster->s.origin2) <= range) { corpse = unit; break; }
-    if (!corpse) return;
-    FOR_LOOP(i, count) S_SummonAbilityAt(caster, spell->code, S_SpellDataId(spell->code, level, 3),
-                                          &corpse->s.origin2, S_SpellDuration(spell->code, level, false));
-    G_FreeEdict(corpse);
+/* Carrion Beetles consume one targeted corpse, spawn authored DataC beetles,
+ * and cap living beetles per Crypt Lord using DataE. DataA is beetles per cast;
+ * Dur=0 makes each beetle permanent until killed. */
+static uint32_t carrion_scarab_count(edict_t *caster, uint32_t code) {
+    uint32_t count = 0;
+    if (!caster) return 0;
+    FILTER_EDICTS(beetle, beetle->inuse && !M_IsDead(beetle) && beetle->owner == caster &&
+                  beetle->summon_ability && G_AbilityCode(beetle->summon_ability) == G_AbilityCode(code))
+        count++;
+    return count;
+}
+
+static bool carrion_scarab_corpse_valid(edict_t *caster, edict_t *corpse, abilityitem_t const *spell) {
+    if (!caster || !corpse || !spell || !G_UnitIsRaisableCorpse(corpse) ||
+        G_UnitIsHero(corpse) || G_UnitIsStructure(corpse) ||
+        !S_SpellAllowsTarget(spell->code, caster, corpse)) return false;
+    return carrion_scarab_count(caster, spell->code) <
+        (uint32_t)MAX(0.0f, S_SpellData(spell->code, S_SpellLevel(caster, spell->code), 5));
+}
+
+static bool carrion_scarab_validate(edict_t *caster, spellTarget_t target, abilityitem_t const *spell) {
+    return target.type == SPELL_TARGET_UNIT &&
+        carrion_scarab_corpse_valid(caster, target.entity, spell);
+}
+
+static void carrion_scarab_execute(edict_t *caster, spellTarget_t target, abilityitem_t const *spell) {
+    uint32_t level = S_SpellLevel(caster, spell->code);
+    uint32_t beetle_id = S_SpellDataId(spell->code, level, 3); /* DataC */
+    uint32_t limit = (uint32_t)MAX(0.0f, S_SpellData(spell->code, level, 5)); /* DataE */
+    uint32_t remaining = limit > carrion_scarab_count(caster, spell->code) ?
+        limit - carrion_scarab_count(caster, spell->code) : 0;
+    uint32_t count = (uint32_t)MAX(1.0f, S_SpellData(spell->code, level, 1)); /* DataA */
+    edict_t *corpse = target.entity;
+    vec2_t position;
+    uint32_t spawned = 0;
+
+    if (!carrion_scarab_corpse_valid(caster, corpse, spell) || !beetle_id || !remaining) return;
+    position = corpse->s.origin2;
+    count = MIN(count, remaining);
+    FOR_LOOP(i, count) {
+        edict_t *beetle = S_SummonAbilityAt(caster, spell->code, beetle_id, &position,
+                                             S_SpellDuration(spell->code, level, false));
+        if (beetle) {
+            spawned++;
+        }
+    }
+    if (spawned) G_FreeEdict(corpse);
+}
+
+static bool carrion_scarab_autocast_acquire(edict_t *caster, uint32_t code) {
+    abilityitem_t spell = S_AbilityItem(code);
+    edict_t *nearest = NULL;
+    float best = FLT_MAX;
+    float range;
+
+    if (!caster || !spell.ability || carrion_scarab_count(caster, code) >=
+        (uint32_t)MAX(0.0f, S_SpellData(code, S_SpellLevel(caster, code), 5))) return false;
+    range = S_SpellRange(code, S_SpellLevel(caster, code));
+    FILTER_EDICTS(corpse, G_UnitIsRaisableCorpse(corpse) && !G_UnitIsHero(corpse) &&
+                  !G_UnitIsStructure(corpse) && S_SpellAllowsTarget(code, caster, corpse)) {
+        float distance = Vector2_distance(&corpse->s.origin2, &caster->s.origin2);
+        if (distance <= range && distance < best) {
+            nearest = corpse;
+            best = distance;
+        }
+    }
+    return nearest && S_CastUnitTargetSpell(caster, code, nearest);
+}
+
+BZ_ABILITY_PROC(CAbilityCarrionScarabs) {
+    spellTarget_t target = (msg == A_VALIDATE || msg == A_EXECUTE) && call && call->target ?
+        *call->target : MAKE(spellTarget_t, .type = SPELL_TARGET_NONE);
+    uint32_t code = call && call->item ? call->item->code : MAKEFOURCC('A','U','c','b');
+    switch (msg) {
+    case A_VALIDATE: return carrion_scarab_validate(ent, target, call ? call->item : NULL);
+    case A_EXECUTE: carrion_scarab_execute(ent, target, call ? call->item : NULL); return true;
+    case A_AUTOCAST_ON: return ent && ent->unit_state && ent->unit_state->autocast == code;
+    case A_AUTOCAST_SET: return true;
+    case A_AUTOCAST_ACQUIRE: return carrion_scarab_autocast_acquire(ent, code);
+    default: return CAbilityModalSpell(ent, msg, call);
+    }
 }
 /* Name=Impale
  * Ubertip="Slams the ground, impaling enemy units in a line and stunning them."

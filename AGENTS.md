@@ -179,6 +179,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | WC3 corpse decay/raisability/reservation, Graveyard Agyd, Cannibalize Acan, Raise Dead Arai/ACrd/AIrd | [docs/games/warcraft-3/corpse-mechanics.md](docs/games/warcraft-3/corpse-mechanics.md) |
 | WC3 Unsummon Building Auns timed DataB demolition, progressive DataA refund, Buns immunity | [docs/games/warcraft-3/unsummon.md](docs/games/warcraft-3/unsummon.md) |
 | WC3 Undead Sacrifice Asac/Alam Acolyte-to-Shade production lifecycle | [docs/games/warcraft-3/sacrifice.md](docs/games/warcraft-3/sacrifice.md) |
+| WC3 Crypt Lord Carrion Beetles AUcb corpse consumption, permanent DataC summons, DataE cap, and autocast | [docs/games/warcraft-3/carrion-beetles.md](docs/games/warcraft-3/carrion-beetles.md) |
 | WC3 Hippogryph couple Acoa/Acoh mount and Adec dismount, UnitID ehpr | [docs/games/warcraft-3/hippogryph-couple.md](docs/games/warcraft-3/hippogryph-couple.md) |
 | WC3 Spirit Link Aspl DataA share / DataB cap, Bspl redirect via T_Damage | [docs/games/warcraft-3/spirit-link.md](docs/games/warcraft-3/spirit-link.md) |
 | WC3 Mana Flare Amfl channel, Bmfl armor/DataE, enemy-cast flare hook | [docs/games/warcraft-3/mana-flare.md](docs/games/warcraft-3/mana-flare.md) |

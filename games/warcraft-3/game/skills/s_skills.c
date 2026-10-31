@@ -279,7 +279,7 @@ static ability_t abilitylist[] = {
     /* UndeadAbilityStrings.txt */
     { "AUim", CAbilityImpale, AB_SPELL, SPELL_TARGET_POINT },  /* Impale */
     { "AUts", CAbilityPassive, AB_PASSIVE },  /* Spiked Carapace */
-    { "AUcb", CAbilityCarrionScarabs, AB_SPELL | AB_AUTOCAST },  /* Carrion Beetles */
+    { "AUcb", CAbilityCarrionScarabs, AB_SPELL | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Carrion Beetles */
     { "AUls", CAbilityLocustSwarm, AB_SPELL | AB_CHANNEL },  /* Locust Swarm */
     { "Aaha", CAbilityAcolyteHarvest, AB_COMMAND },  /* Gather */
     { "AUdc", CAbilityDeathCoil, AB_SPELL, SPELL_TARGET_UNIT },  /* Death Coil */
