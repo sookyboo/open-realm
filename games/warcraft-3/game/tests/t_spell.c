@@ -4056,9 +4056,10 @@ TEST(wc3_spell, carrion_swarm_spends_authored_maximum_damage_in_travel_order) {
     ally = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 100, 0);
     immune = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 200, 0);
     invulnerable = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 250, 0);
-    first = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 300, 0);
-    second = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 500, 0);
-    third = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 700, 0);
+    /* Allocate in the reverse of encounter order, all within one sweep. */
+    third = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 280, 0);
+    second = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 250, 0);
+    first = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 220, 0);
     caster->s.player = 0;
     ally->s.player = 0;
     immune->s.player = invulnerable->s.player = 1;
@@ -4083,8 +4084,9 @@ TEST(wc3_spell, carrion_swarm_spends_authored_maximum_damage_in_travel_order) {
     caster->unit_state->ranks[0] = MAKE(heroability_t, .code = code, .level = 1);
 
     T_ASSERT(S_CastPointTargetSpell(caster, code, &(vec2_t){200, 0}));
-    FOR_LOOP(i, 80) { level.time += FRAMETIME; G_RunEntities(); }
-    /* The 120 point cap is consumed in swept collision order: 50, 50, 20. */
+    FOR_LOOP(i, 3) { level.time += FRAMETIME; G_RunEntities(); }
+    /* All three targets are struck in the same tick. The 120 cap is spent
+     * in nearest-first order even though their entity slots are reversed. */
     T_FEQ(ally->health.value, 1000, 0.001f);
     T_FEQ(immune->health.value, 1000, 0.001f);
     T_FEQ(invulnerable->health.value, 1000, 0.001f);

@@ -235,7 +235,9 @@ void carrion_wave_think(edict_t *wave) {
     edict_t *caster;
     vec2_t start;
     float step;
-    uint32_t target_count, i;
+    uint32_t target_count, i, previous_index = 0;
+    float previous_along = 0.0f;
+    bool have_previous = false;
     if (!state || !(caster = wave->owner) || !caster->inuse || caster->spawn_time != state->caster_spawn_time) {
         carrion_wave_finish(wave); return;
     }
@@ -248,11 +250,33 @@ void carrion_wave_think(edict_t *wave) {
     /* Markers allocated for hits are edicts too; keep this collision pass
      * bounded to the world that existed when the frame began. */
     target_count = globals.num_edicts;
-    for (i = 0; i < target_count; i++) {
-        edict_t *target = &globals.edicts[i];
-        float along;
-        if (carrion_wave_candidate(wave, caster, state, target, &start, step, &along))
-            carrion_wave_hit(wave, caster, state, target);
+    /* Damage caps are consumed by encounters along the sweep, not by edict
+     * allocation order. Repeated nearest selection avoids per-tick heap
+     * allocation and also works when the entity pool is near capacity.
+     * Stable entity index ordering resolves exact-distance ties. */
+    for (;;) {
+        edict_t *nearest = NULL;
+        uint32_t nearest_index = 0;
+        float nearest_along = 0.0f;
+        if (state->capped && state->remaining_damage <= 0.0f) break;
+        for (i = 0; i < target_count; i++) {
+            edict_t *target = &globals.edicts[i];
+            float along;
+            if (!carrion_wave_candidate(wave, caster, state, target, &start, step, &along)) continue;
+            if (have_previous && (along < previous_along ||
+                (along == previous_along && i <= previous_index))) continue;
+            if (!nearest || along < nearest_along ||
+                (along == nearest_along && i < nearest_index)) {
+                nearest = target;
+                nearest_along = along;
+                nearest_index = i;
+            }
+        }
+        if (!nearest) break;
+        carrion_wave_hit(wave, caster, state, nearest);
+        previous_along = nearest_along;
+        previous_index = nearest_index;
+        have_previous = true;
     }
     state->travelled += step;
     state->previous_position = wave->s.origin2;
