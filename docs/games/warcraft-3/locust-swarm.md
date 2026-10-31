@@ -20,19 +20,23 @@ merely because the victim is spell immune.
 The ability validates presence of a summoned `UnitID`, positive `Dur`, positive
 `DataA` and positive `DataB` before a committed cast. On execution it creates
 one invisible `locust_swarm_think` controller, which retains the caster's
-`spawn_time` identity and an authored release schedule. The first release occurs
-one interval after the cast, then successive releases are interval-spaced.
-This *first-release policy* is provisional until verified against retail.
-
-The first release occurs immediately on the next simulation think, followed
+`spawn_time` identity and an authored release schedule. The first release occurs immediately on the next simulation think, followed
 by interval-spaced releases. This first-release policy remains provisional
 until verified against retail. Each release uses the current caster location and the existing summon helper
 `S_SummonAbilityAt` (food, spawn and ownership events). Each summoned unit
 gets a `locustMember_t` with the controller pointer, its spawn generation and
 its release index. Membership is distinct from the caster's generic `owner`
-field. Summons have no individual `BTLF` timed-life status; the controller
-removes its children at the 30-second expiry, or on caster removal/death/
-identity change. The controller does **not** cancel when the Crypt Lord moves
+field. Summons have **no individual `BTLF` timed-life status**: an independent
+status expiry would trigger ordinary `unit_die` while `locust_member_think`
+replaces the unit's corpse/death-animation thinker, leaving a stationary corpse.
+The controller owns all member lifetimes. At expiry, members with no damage
+credit are immediately hidden and queued for deferred removal; members with
+credit fly back to heal before disappearing, bounded by the recall grace
+period. Recasting, teleporting, caster death and stale owner identities remove
+all members regardless of remaining credit. A locust naturally killed by
+combat still generates its normal death events, then its custom thinker queues
+removal so no frozen model is left. Deferred removal preserves same-frame
+simulation safety and releases normal unit/game resources. The controller does **not** cancel when the Crypt Lord moves
 or attacks. It catches up on elapsed simulation deadlines after a delayed tick,
 with a per-tick release budget of 32 and a protective ceiling of 256 units
 for malformed custom `DataA`. A release slot is spent even if a pool/spawn
@@ -57,9 +61,12 @@ and optional model-authored Walk animation and looping ability sound.
 
 The member thinker replaces `monster_think`, so ordinary Move/Attack order
 callbacks cannot move a locust. Members instead steer directly using the
-summoned unit's authored MoveSpeed: they circle the moving caster without an
-enemy, chase eligible enemies before physical hits, and fly back with healing
-credit. The authoritative steering updates both `s.origin2` and `s.origin`,
+summoned unit's authored MoveSpeed: when idle they roam continuously through a
+**wide, changing-radius cloud** around the moving caster, rather than fixed
+points on a tight 100-unit orbit. Independent, deterministic phases and
+incommensurate heading/radial oscillations use the authored `Area` as a limit.
+Exact retail paths remain provisional. They chase eligible enemies before
+physical hits and fly back with healing credit. The authoritative steering updates both `s.origin2` and `s.origin`,
 plus height and linkage, for networked client presentation. The authored
 `Walk` sequence advances in the member thinker if present; custom units
 without that animation still move normally. The attacker occupancy cap is
@@ -96,3 +103,16 @@ explicit Walk animation advancement, without adding a save field or any
 client-specific gameplay branch. Synthetic tests cover idle/caster-follow
 movement, target pursuit at a full reservation cap, and return healing.
 The exact retail orbit paths remain unverified.
+
+## Retail screenshot follow-up: idle flight and expiry
+
+Two comparison screenshots show locusts spread broadly over the nearby area,
+with members still travelling even without visible targets. The idle steering
+now changes each member's radius and heading continuously; it is a visual
+approximation, not a recovered retail AI formula. A second defect had allowed
+`BTLF` to kill locusts into the default Death/corpse lifecycle, despite their
+custom thinker not advancing that lifecycle. Locust lifetime and final removal
+are exclusively controller-owned, so the swarm leaves no stationary corpses.
+Expiry preserves return healing until arrival or the existing eight-second
+upper bound, then forcibly removes remaining members. This fixes cleanup for
+`AUls` and `AOls` without new save fields or client-side gameplay code.

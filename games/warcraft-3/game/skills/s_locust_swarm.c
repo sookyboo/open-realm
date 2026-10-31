@@ -6,7 +6,9 @@
 #define LOCUST_REACQUIRE_MS 250u
 #define LOCUST_MAX_ATTACKERS_PER_TARGET 256u
 #define LOCUST_RECALL_GRACE_MS 8000u
-#define LOCUST_ORBIT_RADIUS 100.0f
+/* Idle flight is a loose, continually changing cloud, not a fixed ring.
+ * Fractions are presentation approximations; Area remains the authored limit. */
+#define LOCUST_IDLE_RADIUS_FRACTION 0.78f
 /* The locust's real model has Walk and Death but no Attack sequence. */
 static umove_t locust_walk_move = { .animation = "walk" };
 
@@ -22,17 +24,18 @@ static bool locust_member_in_swarm(edict_t *member, edict_t *controller) {
            state->controller_spawn_time == controller->spawn_time;
 }
 
-static void locust_member_die(edict_t *member) {
-    if (!member || !member->inuse || M_IsDead(member)) return;
-    if (member->die) member->die(member, member->owner);
-    else unit_die(member, member->owner);
+/* Swarm expiry and recall are RemoveUnit-like, not KillUnit: ordinary unit
+ * Death/corpse handling needs monster_think, which members replace. Queue
+ * removal after entity iteration to avoid stale reads in the current tick. */
+static void locust_member_retire(edict_t *member) {
+    if (member && member->inuse) G_DeferFreeEdict(member);
 }
 
 static void locust_swarm_end(edict_t *controller) {
     locustSwarm_t *swarm = G_GetLocustSwarm(controller);
     if (swarm) swarm->active = false;
     FILTER_EDICTS(member, locust_member_in_swarm(member, controller))
-        locust_member_die(member);
+        locust_member_retire(member);
     G_FreeEdict(controller);
 }
 
@@ -42,8 +45,9 @@ static void locust_swarm_begin_recall(edict_t *controller, locustSwarm_t *swarm)
     swarm->recall_deadline_ms = G_Time() + LOCUST_RECALL_GRACE_MS;
     FILTER_EDICTS(member, locust_member_in_swarm(member, controller)) {
         locustMember_t *state = G_GetLocustMember(member);
-        if (state->damage_credit > 0.0f) locust_begin_return(member, state, controller->owner);
-        else locust_member_die(member);
+        if (state->damage_credit > 0.0f && !M_IsDead(member) && !G_IsDeferredFree(member))
+            locust_begin_return(member, state, controller->owner);
+        else locust_member_retire(member);
     }
 }
 
@@ -64,11 +68,13 @@ static void locust_spawn_one(edict_t *controller, locustSwarm_t *swarm) {
     locustMember_t *member;
     point.x += cosf(angle) * 48.0f;
     point.y += sinf(angle) * 48.0f;
-    locust = S_SummonAbilityAt(caster, swarm->ability, swarm->unit_id, &point,
-                               (float)(swarm->end_ms - G_Time()) / 1000.0f);
+    /* Do not install BTLF: its status expiry would kill a locust separately
+     * from its controller, leaving a frozen corpse and losing return credit.
+     * The shared swarm lifecycle owns the entire member lifetime. */
+    locust = S_SummonAbilityAt(caster, swarm->ability, swarm->unit_id, &point, 0.0f);
     if (!locust) return;
     member = G_AddLocustMember(locust);
-    if (!member) { locust_member_die(locust); return; }
+    if (!member) { locust_member_retire(locust); return; }
     member->controller = controller;
     member->controller_spawn_time = controller->spawn_time;
     member->release_index = swarm->released;
@@ -100,7 +106,8 @@ void locust_swarm_think(edict_t *controller) {
     if (swarm->active && now >= swarm->end_ms) locust_swarm_begin_recall(controller, swarm);
     if (swarm->recalling) {
         bool any_alive = false;
-        FILTER_EDICTS(member, locust_member_in_swarm(member, controller) && !M_IsDead(member)) any_alive = true;
+        FILTER_EDICTS(member, locust_member_in_swarm(member, controller) &&
+                      !M_IsDead(member) && !G_IsDeferredFree(member)) any_alive = true;
         if (!any_alive || now >= swarm->recall_deadline_ms) {
             locust_swarm_end(controller);
             return;
@@ -119,7 +126,8 @@ void locust_swarm_think(edict_t *controller) {
 
 static uint32_t locust_target_occupancy(edict_t *controller, edict_t *target) {
     uint32_t count = 0;
-    FILTER_EDICTS(member, locust_member_in_swarm(member, controller) && S_SpellIsAliveTarget(member)) {
+    FILTER_EDICTS(member, locust_member_in_swarm(member, controller) &&
+                  !G_IsDeferredFree(member) && S_SpellIsAliveTarget(member)) {
         locustMember_t const *state = G_GetLocustMember(member);
         if (state->state == LOCUST_ATTACKING && state->target == target &&
             state->target_spawn_time == target->spawn_time) count++;
@@ -189,16 +197,20 @@ void locust_member_think(edict_t *member) {
     locustSwarm_t *swarm;
     uint32_t now = G_Time();
     float distance, reach;
-    if (!member || !member->inuse || M_IsDead(member)) return;
+    if (!member || !member->inuse || G_IsDeferredFree(member)) return;
+    /* A locust killed in combat must not retain a frozen Death pose: its
+     * dedicated thinker has replaced the normal corpse lifecycle. The death
+     * event has already been dispatched by unit_die. */
+    if (M_IsDead(member)) { locust_member_retire(member); return; }
     if (!state || !(controller = state->controller) ||
         !locust_reference_valid(controller, state->controller_spawn_time) ||
         !(swarm = G_GetLocustSwarm(controller)) || (!swarm->active && !swarm->recalling)) {
-        locust_member_die(member);
+        locust_member_retire(member);
         return;
     }
     caster = controller->owner;
     if (!locust_reference_valid(caster, swarm->caster_spawn_time) || M_IsDead(caster)) {
-        locust_member_die(member);
+        locust_member_retire(member);
         return;
     }
     /* This member's think replaces monster_think, including its animation
@@ -207,7 +219,7 @@ void locust_member_think(edict_t *member) {
         M_MoveFrame(member);
 
     if (swarm->recalling && state->state != LOCUST_RETURNING) {
-        if (state->damage_credit <= 0.0f) { locust_member_die(member); return; }
+        if (state->damage_credit <= 0.0f) { locust_member_retire(member); return; }
         locust_begin_return(member, state, caster);
     }
     if (state->state == LOCUST_RETURNING) {
@@ -217,7 +229,7 @@ void locust_member_think(edict_t *member) {
             if (state->damage_credit > 0.0f)
                 S_SpellHeal(caster, state->damage_credit * swarm->heal_factor);
             state->damage_credit = 0.0f;
-            if (swarm->recalling) { locust_member_die(member); return; }
+            if (swarm->recalling) { locust_member_retire(member); return; }
             state->state = LOCUST_SEEKING;
             state->next_acquire_ms = now;
         }
@@ -251,14 +263,22 @@ void locust_member_think(edict_t *member) {
         }
     }
     if (state->state != LOCUST_ATTACKING || !state->target) {
-        /* Keep the swarm visibly in motion even when no enemies are nearby.
-         * Stable per-member phase offsets avoid clumping on the caster. */
-        float const angle = (float)state->release_index * 2.39996323f +
-                            (float)(now - swarm->start_ms) * 0.0012f;
-        float const radius = MAX(LOCUST_ORBIT_RADIUS, caster->collision + 64.0f);
-        vec2_t const orbit = { caster->s.origin2.x + cosf(angle) * radius,
-                               caster->s.origin2.y + sinf(angle) * radius };
-        locust_steer(member, &orbit);
+        /* Retail locusts continuously range around the caster rather than
+         * occupying equally spaced points on a small, fixed-radius ring.
+         * Two incommensurate oscillations provide independent, deterministic
+         * heading/range changes per release index, with no new save state. */
+        float const phase = (float)state->release_index * 2.39996323f;
+        float const seconds = (float)(now - swarm->start_ms) * 0.001f;
+        float const max_radius = MAX(0.0f, swarm->area * LOCUST_IDLE_RADIUS_FRACTION);
+        float const min_radius = MIN(max_radius, MAX(48.0f, caster->collision + 40.0f));
+        float const range_fraction = 0.1f + 0.75f *
+            (0.5f + 0.5f * sinf(seconds * 0.43f + phase * 0.73f));
+        float const radius = min_radius + (max_radius - min_radius) * range_fraction;
+        float const angle = phase + seconds * (0.50f + 0.12f * sinf(phase * 1.31f)) +
+            0.5f * sinf(seconds * 0.27f + phase * 1.7f);
+        vec2_t const roaming = { caster->s.origin2.x + cosf(angle) * radius,
+                                 caster->s.origin2.y + sinf(angle) * radius };
+        locust_steer(member, &roaming);
         return;
     }
 

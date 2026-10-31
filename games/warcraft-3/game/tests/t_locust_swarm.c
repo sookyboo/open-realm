@@ -67,12 +67,6 @@ static uint32_t locust_all_members(void) {
     return count;
 }
 
-static uint32_t locust_dead_members(void) {
-    uint32_t count = 0;
-    FILTER_EDICTS(ent, ent->inuse && G_GetLocustMember(ent) && M_IsDead(ent)) count++;
-    return count;
-}
-
 TEST(wc3_spell, locust_swarm_release_uses_authored_schedule_and_current_caster_position) {
     locustFix_t fix = locust_setup();
     abilityitem_t item = S_AbilityItem(LS_ABILITY);
@@ -108,7 +102,8 @@ TEST(wc3_spell, locust_swarm_release_uses_authored_schedule_and_current_caster_p
     T_EQ(first->summon_ability, LS_ABILITY);
     T_EQ(first->class_id, LS_UNIT);
     T_EQ(first->owner, fix.caster);
-    T_NOT_NULL(unit_findstatus(first, MAKEFOURCC('B','T','L','F')));
+    /* The controller, not individual BTLF timers, owns swarm lifetime. */
+    T_NULL(unit_findstatus(first, MAKEFOURCC('B','T','L','F')));
     /* Moving the caster must not cancel the persistent controller. */
     fix.caster->s.origin2 = (vec2_t){ 720, 720 };
     level.time = 1249; G_RunEntities();
@@ -143,9 +138,9 @@ TEST(wc3_spell, locust_swarm_expiry_and_owner_recycling_remove_only_owned_member
     level.time = 1500; G_RunEntities();
     T_EQ(locust_member_count(controller), 3u);
     level.time = 6000; G_RunEntities();
+    G_RunDeferredFrees();
     T_ASSERT(!controller->inuse);
-    T_EQ(locust_dead_members(), 3u);
-    T_EQ(locust_all_members(), 3u); /* death presentation owns edict retirement */
+    T_EQ(locust_all_members(), 0u); /* no frozen corpse entities */
     level.time = 7000;
     T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
     controller = locust_controller(fix.caster);
@@ -156,8 +151,9 @@ TEST(wc3_spell, locust_swarm_expiry_and_owner_recycling_remove_only_owned_member
     /* A caster pointer with the wrong generation must not own the swarm. */
     fix.caster->spawn_time++;
     level.time = 7101; G_RunEntities();
+    G_RunDeferredFrees();
     T_ASSERT(!controller->inuse);
-    T_ASSERT(locust_all_members() >= 1u); /* member cleanup follows its own think */
+    T_EQ(locust_all_members(), 0u);
 cleanup:
     locust_done(fix);
 }
@@ -253,6 +249,71 @@ TEST(wc3_spell, locust_swarm_idle_members_fly_around_moving_caster) {
     fix.caster->s.origin2 = (vec2_t){ 650, 650 };
     level.time = 1450; G_RunEntities();
     T_ASSERT(Vector2_distance(&locust->s.origin2, &after) > 0.1f);
+cleanup:
+    locust_done(fix);
+}
+
+/* Retail footage shows members dispersed far beyond a small fixed orbit and
+ * continuously changing direction/radius without opponents nearby. */
+TEST(wc3_spell, locust_swarm_idle_flight_roams_broadly_without_stalling) {
+    locustFix_t fix = locust_setup();
+    abilityitem_t item = S_AbilityItem(LS_ABILITY);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item);
+    edict_t *controller, *locust;
+    vec2_t old_position;
+    float greatest_radius = 0.0f, least_radius = FLT_MAX;
+    uint32_t moved_steps = 0;
+    T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
+    controller = locust_controller(fix.caster);
+    T_NOT_NULL(controller);
+    if (!controller) goto cleanup;
+    level.time = 1250; G_RunEntities();
+    locust = locust_test_member(controller, 0);
+    T_NOT_NULL(locust);
+    if (!locust) goto cleanup;
+    locust->unitinfo.MoveSpeed = 300.0f;
+    old_position = locust->s.origin2;
+    for (uint32_t step = 1; step <= 35; step++) {
+        float radius;
+        level.time = 1250 + step * 100;
+        G_RunEntities();
+        if (Vector2_distance(&old_position, &locust->s.origin2) > 0.1f) moved_steps++;
+        old_position = locust->s.origin2;
+        radius = Vector2_distance(&locust->s.origin2, &fix.caster->s.origin2);
+        greatest_radius = MAX(radius, greatest_radius);
+        least_radius = MIN(radius, least_radius);
+        T_ASSERT(radius <= G_GetLocustSwarm(controller)->area + 15.0f);
+        T_EQ(G_GetLocustMember(locust)->state, 1u);
+    }
+    T_ASSERT(moved_steps >= 30u);
+    T_ASSERT(greatest_radius > 110.0f);
+    T_ASSERT(greatest_radius - least_radius > 20.0f);
+cleanup:
+    locust_done(fix);
+}
+
+/* Combat deaths should still dispatch death events normally, but without
+ * monster_think the model must be retired rather than frozen as a corpse. */
+TEST(wc3_spell, locust_swarm_combat_death_does_not_leave_frozen_model) {
+    locustFix_t fix = locust_setup();
+    abilityitem_t item = S_AbilityItem(LS_ABILITY);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item);
+    edict_t *controller, *locust;
+    T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
+    controller = locust_controller(fix.caster);
+    T_NOT_NULL(controller);
+    if (!controller) goto cleanup;
+    level.time = 1250; G_RunEntities();
+    locust = locust_test_member(controller, 0);
+    T_NOT_NULL(locust);
+    if (!locust) goto cleanup;
+    unit_die(locust, NULL);
+    T_ASSERT(M_IsDead(locust));
+    level.time = 1350;
+    locust_member_think(locust);
+    T_ASSERT(G_IsDeferredFree(locust));
+    G_RunDeferredFrees();
+    T_ASSERT(!locust->inuse);
 cleanup:
     locust_done(fix);
 }
@@ -526,7 +587,7 @@ TEST(wc3_spell, locust_swarm_expiry_recalls_then_heals_without_redeploying) {
     G_RunDeferredFrees();
     T_EQ(G_GetLocustSwarm(controller)->released, released_before_expiry);
     T_FEQ(fix.caster->health.value, 408.625f, 0.01f);
-    T_ASSERT(M_IsDead(member_unit)); /* ordinary death presentation owns retirement */
+    T_ASSERT(!member_unit->inuse); /* credited member is removed after healing */
     level.time = 1400; G_RunEntities();
     G_RunDeferredFrees();
     T_ASSERT(!controller->inuse); /* controller exits after final returned locust */
@@ -553,7 +614,7 @@ TEST(wc3_spell, locust_swarm_recast_replaces_existing_swarm_only) {
     T_ASSERT(replacement && replacement != old);
     T_ASSERT(!old->inuse);
     G_RunDeferredFrees();
-    T_EQ(locust_dead_members(), 1u);
+    T_EQ(locust_all_members(), 0u);
     if (replacement) {
         T_ASSERT(replacement->spawn_time != old_generation || replacement != old);
         level.time = 1000; G_RunEntities();
@@ -581,7 +642,7 @@ TEST(wc3_spell, locust_swarm_spell_relocation_and_death_cancel_immediately) {
     S_SpellRelocateUnit(fix.caster, LS_ABILITY, &destination);
     T_ASSERT(!controller->inuse);
     G_RunDeferredFrees();
-    T_ASSERT(locust_dead_members() >= 1u);
+    T_EQ(locust_all_members(), 0u);
     level.time = 1000;
     T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
     controller = locust_controller(fix.caster);
@@ -592,7 +653,7 @@ TEST(wc3_spell, locust_swarm_spell_relocation_and_death_cancel_immediately) {
     unit_die(fix.caster, NULL);
     T_ASSERT(!controller->inuse);
     G_RunDeferredFrees();
-    T_ASSERT(locust_dead_members() >= 1u);
+    T_EQ(locust_all_members(), 0u);
 cleanup:
     locust_done(fix);
 }
@@ -638,8 +699,7 @@ TEST(wc3_save, locust_swarm_recall_phase_and_deadline_round_trip) {
         level.time = 9400; G_RunEntities();
         G_RunDeferredFrees();
         T_ASSERT(!controller->inuse);
-        T_EQ(locust_dead_members(), 1u);
-        T_EQ(locust_all_members(), 1u); /* death presentation owns edict retirement */
+        T_EQ(locust_all_members(), 0u); /* recall grace removes all remaining members */
     }
     remove(filename);
 cleanup:
