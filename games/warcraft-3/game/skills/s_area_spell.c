@@ -323,6 +323,9 @@ static void carrion_swarm_spawn_missile(edict_t *caster, uint32_t code, uint32_t
     edict_t *missile;
     carrionWave_t *state;
     channel_t *cast;
+    vec3_t endpoint;
+    float horizontal_distance;
+    float spatial_distance;
 
 #if BZ_COMPAT_WORKAROUNDS
     /* RoC 1.0 omits AUcs MissileArt and Missilespeed; the 1.29 row authors
@@ -374,7 +377,15 @@ static void carrion_swarm_spawn_missile(edict_t *caster, uint32_t code, uint32_t
     if (!cast) { G_FreeEdict(missile); return; }
     cast->owner_spawn_time = caster->spawn_time;
     cast->origin = Vector2_mad(&caster->s.origin2, travel, &direction);
-    missile->velocity = speed / 1000.0f;
+    endpoint = MAKE(vec3_t, cast->origin.x, cast->origin.y,
+                    CM_GetHeightAtPoint(cast->origin.x, cast->origin.y));
+    horizontal_distance = Vector2_distance(&caster->s.origin2, &cast->origin);
+    spatial_distance = Vector3_distance(&caster->s.origin, &endpoint);
+    /* The shared missile mover travels in 3D toward the support surface. Scale
+     * its velocity so authored Missilespeed remains the horizontal ground
+     * speed even when caster and destination terrain elevations differ. */
+    missile->velocity = speed / 1000.0f *
+        (horizontal_distance > 0.0f ? spatial_distance / horizontal_distance : 1.0f);
     missile->movetype = MOVETYPE_FLYMISSILE;
     missile->aiflags |= AI_PROJECTILE_FIXED_TARGET;
     missile->currentmove = &carrion_wave_visual_move;

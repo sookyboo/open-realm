@@ -1656,9 +1656,13 @@ TEST(wc3_game, armor_icon_tooltip_shows_rifleman_defense_details) {
     char tip[256], body[1536];
     frameDef_t icon = { 0 };
     edict_t *rifleman;
+    bool const combat_constants_loaded = game.constants.combatConstantsLoaded;
 
     reset_entities();
     setup_test_world();
+    /* Exercise the stock prose fallback; the matrix-specific tooltip path is
+     * covered separately and may be active from the test game's config. */
+    game.constants.combatConstantsLoaded = false;
     rifleman = alloc_test_unit(MAKEFOURCC('h','r','i','f'), 64.0f, 64.0f);
     rifleman->unit_state->defense_type = 1;
     rifleman->unit_state->armor_value = 6.0f;
@@ -1684,6 +1688,7 @@ TEST(wc3_game, armor_icon_tooltip_shows_rifleman_defense_details) {
                            G_UnitArmorValue(rifleman), rifleman->unitinfo.MoveSpeed, 0);
     T_STREQ(icon.Tip, "Armor: 6 |cff00ff00+5|r");
     T_ASSERT(icon.Ubertip && strstr(icon.Ubertip, "Bonus Armor: |cff00ff00+5|r") != NULL);
+    game.constants.combatConstantsLoaded = combat_constants_loaded;
 }
 
 TEST(wc3_game, armor_icon_formats_negative_values_without_rounding_toward_zero) {

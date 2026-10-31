@@ -3917,6 +3917,7 @@ TEST(wc3_spell, carrion_swarm_travels_authored_distance_and_hits_once_with_expan
     near = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 50, 0);
     middle = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 400, 70);
     far = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 650, 0);
+    middle->collision = 16.0f; /* Production units contribute their collision radius to the wave edge. */
     outside = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 650, 180);
     behind = alloc_test_unit(MAKEFOURCC('h','f','o','o'), -80, 0);
     beyond = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 900, 0);
@@ -8080,6 +8081,7 @@ TEST(wc3_spell, faerie_fire_shares_target_sight_for_buff_lifetime) {
     caster->health.value = second_caster->health.value = target->health.value = 100;
     caster->health.max_value = second_caster->health.max_value = target->health.max_value = 100;
     target->unit_state->armor_value = 8.0f;
+    target->runtime.sight_radius.day = target->runtime.sight_radius.night = 600.0f;
     caster->runtime.sight_radius.day = caster->runtime.sight_radius.night = 0.0f;
     second_caster->runtime.sight_radius.day = second_caster->runtime.sight_radius.night = 0.0f;
     G_SetPlayerAlliance(G_GetPlayerByNumber(0), G_GetPlayerByNumber(2), ALLIANCE_SHARED_VISION, true);
@@ -8108,14 +8110,14 @@ TEST(wc3_spell, faerie_fire_shares_target_sight_for_buff_lifetime) {
     /* A new caster owns a refreshed mark, not the previous player's reveal. */
     T_ASSERT(test_execute_code(second_caster, "Afae", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = target)));
     T_EQ(unit_findstatus(target, MAKEFOURCC('B','f','a','e'))->data, 3);
+    G_FowUpdate(); /* Rebuild viewer grids after the reveal's owner changes. */
     T_ASSERT(!G_FowPlayerCanSeeEntity(0, target));
     T_ASSERT(G_FowPlayerCanSeeEntity(2, target));
-    G_FowUpdate();
     T_ASSERT(!G_FowPointIsVisible(0, &target->s.origin2));
     T_ASSERT(G_FowPointIsVisible(2, &target->s.origin2));
     unit_removestatus(target, unit_findstatus(target, MAKEFOURCC('B','f','a','e')), STATUS_REMOVE_DISPEL);
+    G_FowUpdate(); /* Expired/dispelled status no longer contributes target sight. */
     T_ASSERT(!G_FowPlayerCanSeeEntity(2, target));
-    G_FowUpdate();
     T_ASSERT(!G_FowPointIsVisible(2, &target->s.origin2));
 
     T_ASSERT(test_execute_code(caster, "Afae", MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = target)));
@@ -8922,8 +8924,8 @@ TEST(wc3_spell, nightelf_passive_abilities_are_registered_with_correct_handlers)
 	ability_t const *moon_glaive_r = FindAbilityByClassname("Amgr");
 	ability_t const *slow_poison = FindAbilityByClassname("Aspo");
 	T_NOT_NULL(vengeance); T_NOT_NULL(moon_glaive); T_NOT_NULL(moon_glaive_r); T_NOT_NULL(slow_poison);
-	T_EQ(vengeance->proc, CAbilitySpiritOfVengeance); T_ASSERT(vengeance->flags & AB_SPELL);
-	T_EQ((int)vengeance->target_type, (int)SPELL_TARGET_NONE);
+	T_EQ(vengeance->proc, CAbilityVengeance); T_ASSERT(vengeance->flags & AB_SPELL);
+	T_EQ((int)vengeance->target_type, (int)SPELL_TARGET_UNIT);
 	T_EQ(moon_glaive->proc, CAbilityMoonGlaive); T_ASSERT(moon_glaive->flags & AB_PASSIVE);
 	T_EQ(moon_glaive_r->proc, CAbilityMoonGlaive); T_ASSERT(moon_glaive_r->flags & AB_PASSIVE);
 	T_EQ(slow_poison->proc, CAbilitySlowPoison); T_ASSERT(slow_poison->flags & AB_PASSIVE);

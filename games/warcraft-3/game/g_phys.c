@@ -37,6 +37,10 @@ void G_PushEntity(edict_t *ent, float distance, vec2_t const *direction) {
 
 void G_PushEntity3(edict_t *ent, float distance, vec3_t const *direction) {
     ent->s.origin = Vector3_mad(&ent->s.origin, distance, direction);
+    /* Keep the shared 2D gameplay position in sync with the rendered 3D
+     * projectile position. Warcraft spell missiles use origin2 for swept
+     * collision and targeting while physics advances origin in 3D. */
+    ent->s.origin2 = MAKE(vec2_t, ent->s.origin.x, ent->s.origin.y);
     if (ent->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
     gi.LinkEntity(ent);
 }
