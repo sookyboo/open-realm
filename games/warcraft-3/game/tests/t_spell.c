@@ -11116,3 +11116,80 @@ TEST(wc3_spell, phoenix_death_creates_egg_that_hatches_on_authored_deadline) {
 }
 
 #endif /* BZ_TESTS */
+
+/* Obsidian support: recipients are selected from real world entities in stable
+ * encounter order, with unit-type masks applied before the six-unit cap. */
+TEST(wc3_spell, obsidian_essence_caps_organic_allies_and_skips_mechanical_units) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X7\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
+        "C;Y1;X3;K\"Area1\"\nC;Y1;X4;K\"DataA1\"\n"
+        "C;Y1;X5;K\"targs\"\nC;Y1;X6;K\"Cost1\"\nC;Y1;X7;K\"Dur1\"\n"
+        "C;Y2;X1;K\"Arpl\"\nC;Y2;X2;K\"Arpl\"\n"
+        "C;Y2;X3;K\"500\"\nC;Y2;X4;K\"33\"\n"
+        "C;Y2;X5;K\"ground,air,friend,self,organic,vulnerable,invulnerable\"\n"
+        "C;Y2;X6;K\"2\"\nC;Y2;X7;K\"1\"\nE\n";
+    slkTestData_t *rows, *old;
+    edict_t *caster, *allies[8], *mechanical;
+    uint32_t changed = 0;
+
+    reset_entities(); setup_test_world();
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    caster = alloc_test_unit(MAKEFOURCC('u','o','b','s'), 0, 0);
+    caster->s.player = 0; caster->svflags |= SVF_MONSTER;
+    caster->health.value = caster->health.max_value;
+    FOR_LOOP(i, 8) {
+        allies[i] = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64 + 32 * i, 0);
+        allies[i]->s.player = 0; allies[i]->svflags |= SVF_MONSTER;
+        allies[i]->targtype = TARG_GROUND;
+        allies[i]->health.value = 50; allies[i]->health.max_value = 200;
+    }
+    mechanical = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 320, 0);
+    mechanical->s.player = 0; mechanical->svflags |= SVF_MONSTER;
+    mechanical->targtype = TARG_MECHANICAL;
+    mechanical->health.value = 50; mechanical->health.max_value = 200;
+    T_ASSERT(test_execute_code(caster, "Arpl", MAKE(spellTarget_t, .type = SPELL_TARGET_NONE)));
+    FOR_LOOP(i, 8) if (allies[i]->health.value > 50) changed++;
+    T_EQ(changed, 6u);
+    T_FEQ(mechanical->health.value, 50.0f, 0.01f);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, destroyer_absorb_mana_is_an_active_friendly_unit_spell) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X4\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
+        "C;Y1;X3;K\"targs\"\nC;Y1;X4;K\"DataB1\"\n"
+        "C;Y2;X1;K\"Aabs\"\nC;Y2;X2;K\"Aabs\"\n"
+        "C;Y2;X3;K\"player,vulnerable,invulnerable\"\n"
+        "C;Y2;X4;K\"99999\"\nE\n";
+    slkTestData_t *rows, *old;
+    abilityitem_t absorb = S_AbilityItem(FS_SLKKey("Aabs"));
+    abilityCall_t call;
+    spellTarget_t st;
+    edict_t *caster, *ally, *enemy;
+    T_NOT_NULL(absorb.ability);
+    if (!absorb.ability) return;
+    T_EQ(absorb.ability->proc, CAbilityAbsorb);
+    T_EQ(absorb.ability->target_type, SPELL_TARGET_UNIT);
+    reset_entities(); setup_test_world();
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    caster = alloc_test_unit(MAKEFOURCC('u','b','s','p'), 0, 0);
+    ally = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64, 0);
+    enemy = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 64, 64);
+    caster->s.player = ally->s.player = 0; enemy->s.player = 1;
+    caster->svflags |= SVF_MONSTER;
+    ally->svflags |= SVF_MONSTER;
+    enemy->svflags |= SVF_MONSTER;
+    caster->mana.max_value = 100; caster->mana.value = 0;
+    ally->mana.max_value = ally->mana.value = 80;
+    enemy->mana.max_value = enemy->mana.value = 80;
+    st = MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = ally);
+    call = MAKE(abilityCall_t, .item = &absorb, .target = &st);
+    T_ASSERT(CAbilityAbsorb(caster, A_VALIDATE, &call));
+    st.entity = enemy;
+    T_ASSERT(!CAbilityAbsorb(caster, A_VALIDATE, &call));
+    st.entity = caster;
+    T_ASSERT(!CAbilityAbsorb(caster, A_VALIDATE, &call));
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
