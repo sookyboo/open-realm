@@ -29,6 +29,17 @@ static uint32_t siphon_mana_lightning_index(uint32_t code, uint32_t rank) {
     return life && mana ? 0u : life ? 1u : 2u;
 }
 
+/* Life Drain can author both health and mana transfer. Stop a full-health
+ * caster only when no authored mana transfer can still benefit them. */
+static bool life_drain_recipient_full(edict_t const *caster, edict_t const *target,
+                                      uint32_t code, uint32_t rank) {
+    bool const health_full = caster->health.value >= caster->health.max_value;
+    bool const mana_full = S_SpellData(code, rank, 2) <= 0.0f ||
+                           caster->mana.value >= caster->mana.max_value ||
+                           target->mana.value <= 0.0f;
+    return health_full && mana_full;
+}
+
 /* The existing lightning slot is saved with its unique handle.  Reuse the
  * thinker's already-serialized variation field to remember just that handle,
  * without extending the edict/save/network contracts.  Never delete a beam
@@ -107,6 +118,14 @@ void siphon_mana_think(edict_t *ent) {
     float amount, before;
     if (!S_SpellChannelActive(ent) || !S_SpellIsAliveTarget(target) || !S_SpellAllowsTarget(code, caster, target) ||
         !S_SpellTargetInRange(caster, target, ent->collision)) { siphon_mana_end(ent); return; }
+    /* Life Drain has nothing left to transfer once its caster is fully healed.
+     * End before damaging the victim, so the target is not drained after the
+     * recipient reaches its authored health cap. */
+    if (siphon_mana_is_life_drain(code) && !S_SpellIsFriend(caster, target) &&
+        life_drain_recipient_full(caster, target, code, rank)) {
+        siphon_mana_end(ent);
+        return;
+    }
     if (now < ent->freetime) return;
     if (S_SpellIsFriend(caster, target)) {
         amount = MIN(MAX(0, caster->health.value - 1), S_SpellData(code, rank, 4) * ent->velocity);
@@ -118,6 +137,8 @@ void siphon_mana_think(edict_t *ent) {
     } else {
         before = target->health.value;
         amount = MIN(before, S_SpellData(code, rank, 1) * ent->velocity);
+        if (siphon_mana_is_life_drain(code) && S_SpellData(code, rank, 2) <= 0.0f)
+            amount = MIN(amount, MAX(0.0f, caster->health.max_value - caster->health.value));
         if (amount > 0 && S_SpellDamage(target, caster, (int)amount))
             S_SpellHeal(caster, MAX(0, before - target->health.value));
         /* Damage may kill the target or dispatch a trigger that interrupts this
@@ -125,6 +146,11 @@ void siphon_mana_think(edict_t *ent) {
          * let a retired thinker affect a replacement cast in the same pulse. */
         if (!S_SpellChannelActive(ent) || !S_SpellIsAliveTarget(target) ||
             S_SpellChannelTarget(ent) != target) {
+            siphon_mana_end(ent);
+            return;
+        }
+        if (siphon_mana_is_life_drain(code) &&
+            life_drain_recipient_full(caster, target, code, rank)) {
             siphon_mana_end(ent);
             return;
         }

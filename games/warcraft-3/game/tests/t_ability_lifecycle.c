@@ -1053,6 +1053,75 @@ TEST(wc3_ability_lifecycle, life_drain_transfers_health_from_manaless_target) {
     T_ASSERT(cast); T_FEQ(hp, 970, .001f); T_FEQ(healed, 530, .001f);
 }
 
+/* Life Drain ends when its recipient is full, transfers only the remaining
+ * health needed, and leaves ordinary movement available after completion. */
+TEST(wc3_ability_lifecycle, life_drain_ends_at_full_health_and_allows_movement) {
+    edict_t *caster = review_setup(), *enemy = review_unit(1, 100);
+    slkTestData_t *rows = parse_slk_string(review_slk), *old = G_SetSLKRows("AbilityData", rows);
+    vec2_t destination = { 300.0f, 0.0f };
+    edict_t *thinker;
+    caster->health.value = 990.0f;
+    T_ASSERT(S_CastUnitTargetSpell(caster, FS_SLKKey("ANdr"), enemy));
+    thinker = review_thinker(caster);
+    T_NOT_NULL(thinker);
+    T_ASSERT(S_SpellIsChanneling(caster));
+    level.time += 1000;
+    if (thinker) G_RunEntity(thinker);
+    T_FEQ(caster->health.value, 1000.0f, .001f);
+    T_FEQ(enemy->health.value, 990.0f, .001f);
+    T_ASSERT(!S_SpellIsChanneling(caster));
+    T_ASSERT(!thinker || !thinker->inuse);
+    order_move(caster, Waypoint_add(&destination));
+    T_FEQ(caster->goalentity->s.origin2.x, destination.x, .001f);
+    T_ASSERT(caster->currentmove && caster->currentmove->think != ai_stand);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* A player Move order interrupts the live Life Drain channel immediately and
+ * retires its beam thinker on the next simulation update. */
+TEST(wc3_ability_lifecycle, life_drain_movement_order_cancels_channel) {
+    edict_t *caster = review_setup(), *enemy = review_unit(1, 100);
+    slkTestData_t *rows = parse_slk_string(review_slk), *old = G_SetSLKRows("AbilityData", rows);
+    vec2_t destination = { 300.0f, 0.0f };
+    edict_t *thinker, *waypoint;
+    caster->health.value = 900.0f;
+    T_ASSERT(S_CastUnitTargetSpell(caster, FS_SLKKey("ANdr"), enemy));
+    thinker = review_thinker(caster);
+    T_NOT_NULL(thinker);
+    T_ASSERT(S_SpellIsChanneling(caster));
+    waypoint = Waypoint_add(&destination);
+    T_NOT_NULL(waypoint);
+    order_move(caster, waypoint);
+    T_ASSERT(!S_SpellIsChanneling(caster));
+    T_ASSERT(caster->goalentity == waypoint);
+    T_ASSERT(caster->currentmove && caster->currentmove->think != ai_stand);
+    if (thinker && thinker->inuse) G_RunEntity(thinker);
+    T_ASSERT(!thinker || !thinker->inuse);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* Natural duration completion must release the channel lock just like the
+ * full-health condition, so the next player Move order can take effect. */
+TEST(wc3_ability_lifecycle, life_drain_duration_completion_allows_movement) {
+    edict_t *caster = review_setup(), *enemy = review_unit(1, 100);
+    slkTestData_t *rows = parse_slk_string(review_slk), *old = G_SetSLKRows("AbilityData", rows);
+    vec2_t destination = { 300.0f, 0.0f };
+    edict_t *thinker;
+    caster->health.value = 900.0f;
+    T_ASSERT(S_CastUnitTargetSpell(caster, FS_SLKKey("ANdr"), enemy));
+    thinker = review_thinker(caster);
+    T_NOT_NULL(thinker);
+    T_ASSERT(S_SpellIsChanneling(caster));
+    level.time += 8000;
+    if (thinker) G_RunEntity(thinker);
+    T_ASSERT(!S_SpellIsChanneling(caster));
+    T_ASSERT(!thinker || !thinker->inuse);
+    order_move(caster, Waypoint_add(&destination));
+    T_FEQ(caster->goalentity->s.origin2.x, destination.x, .001f);
+    T_ASSERT(caster->currentmove && caster->currentmove->think != ai_stand);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 /* The channel's next pulse must not drain either resource after a stun. */
 TEST(wc3_ability_lifecycle, siphon_mana_stun_before_tick_preserves_resources) {
     edict_t *caster = review_setup(), *enemy = review_unit(1, 100);
