@@ -27,6 +27,22 @@ static void UI_FormatTooltipLevel(cstring_t code, cstring_t tip, cstring_t ubert
     uint32_t lumber_cost = balance ? (uint32_t)MAX(0, balance->lumberCost) : 0;
     uint32_t food_cost = balance ? (uint32_t)MAX(0, balance->foodUsed) : 0;
 
+    /* Morph abilities are priced by the positive difference between their
+     * authored source and destination unit rows. Resolve that from AbilityData
+     * so the tooltip follows map overrides and custom morph forms. */
+    if (class_id && (!balance || balance->id != class_id)) {
+        AbilityData_t const *morph = G_AbilityData(class_id);
+        uint32_t const source_id = morph ? morph->level[0].data[0].id : 0;
+        uint32_t const target_id = morph ? morph->level[0].unitID : 0;
+        UnitBalance_t const *source = source_id ? G_UnitBalance(source_id) : NULL;
+        UnitBalance_t const *target = target_id ? G_UnitBalance(target_id) : NULL;
+        if (morph && source && source->id == source_id && target && target->id == target_id) {
+            gold_cost = (uint32_t)MAX(0, target->goldCost - source->goldCost);
+            lumber_cost = (uint32_t)MAX(0, target->lumberCost - source->lumberCost);
+            food_cost = (uint32_t)MAX(0, target->foodUsed - source->foodUsed);
+        }
+    }
+
     /* Item command buttons use ItemData.slk costs rather than UnitBalance.
      * This is primarily consumed by neutral shops but also keeps generic item
      * command presentation data-driven for custom maps. */

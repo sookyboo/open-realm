@@ -315,6 +315,10 @@ static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool researc
     if ((!tip || !*tip) && strcmp(code, art_code)) {
         tip = FindConfigValue(code, G_ResearchField(STR_TIP, research && !upgrade_research));
     }
+    /* Some stock abilities, including Destroyer Form (Aave), author a Name
+     * but omit Tip and Ubertip. Keep their command buttons discoverable by
+     * using that authored display name as the tooltip heading. */
+    if (!tip || !*tip) tip = FindConfigValue(code, "Name");
     /* Feedback is a passive Spell Breaker ability and some data sets omit
      * its command-card presentation row. Keep the indicator visible with the
      * stock passive icon when no authored art is available. */
@@ -633,6 +637,25 @@ static void G_AddPassiveEffectIndicators(edict_t *ent, gameCommandButton_t *butt
         G_AddPassiveEffectIndicator(ent, buttons, max_buttons, count, spell_immunity[i], spell_immunity[i]);
 }
 
+/* Unit morph commands are available only on their authored source form. Some
+ * destination unit rows retain the shared morph ability in UnitAbilities;
+ * don't expose an unusable button after the transform has completed. */
+static bool G_AbilityCommandMatchesMorphSource(edict_t const *ent, uint32_t rawcode) {
+    AbilityData_t const *data = G_AbilityData(rawcode);
+    uint32_t const source_id = data ? data->level[0].data[0].id : 0;
+    uint32_t const target_id = data ? data->level[0].unitID : 0;
+    UnitBalance_t const *source;
+    UnitBalance_t const *target;
+
+    if (!ent || !source_id || !target_id) return true;
+    source = G_UnitBalance(source_id);
+    target = G_UnitBalance(target_id);
+    /* Non-morph abilities may use DataA and UnitID independently. Treat them
+     * as morph metadata only when both references identify actual unit rows. */
+    if (!source || source->id != source_id || !target || target->id != target_id) return true;
+    return ent->class_id == source_id;
+}
+
 static void G_AddAbilityCommandButtons(edict_t *ent, gameCommandButton_t *buttons, uint8_t max_buttons,
                                        uint8_t *count, cstring_t code) {
     ability_t const *ability = FindAbilityForCommand(code);
@@ -658,6 +681,7 @@ static void G_AddAbilityCommandButtons(edict_t *ent, gameCommandButton_t *button
         ((ability->proc == CAbilityRoar && strcmp(code, "Aroa")) ||
          ability->proc == CAbilityRejuvination)) return;
     memcpy(&rawcode, code, sizeof(rawcode));
+    if (!G_AbilityCommandMatchesMorphSource(ent, rawcode)) return;
     if (!G_IsUnitAbilityAvailable(ent, rawcode)) {
         if (G_IsRepairDiagnosticRawcode(code)) G_RepairCommandTrace(ent, code, "filtered-unavailable", ability, false, false);
         return;

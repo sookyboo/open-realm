@@ -52,6 +52,9 @@ cstring_t config_files[] = {
     "Units\\CampaignAbilityStrings.txt",
     "Units\\MiscData.txt",
     "Units\\UndeadUpgradeStrings.txt",
+    /* OpenRealm-owned presentation data supplements fields absent from stock
+     * MPQs. Stock/map-authored rows earlier in this list retain precedence. */
+    "Units\\OpenRealmAbilityStrings.txt",
     NULL
 };
 
