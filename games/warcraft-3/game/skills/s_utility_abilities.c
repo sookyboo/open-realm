@@ -116,24 +116,35 @@ uint32_t S_AncientRetaliationAttackMask(edict_t const *unit) {
 
 static bool charm_validate(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
     edict_t *target = st.entity;
-    uint32_t level = S_SpellLevel(caster, spell->code);
-    uint32_t max_level = (uint32_t)S_SpellData(spell->code, level, 1);
+    uint32_t spell_level = S_SpellLevel(caster, spell->code);
+    uint32_t max_level = (uint32_t)S_SpellData(spell->code, spell_level, 1);
 
     if (!S_SpellIsAliveTarget(target) || !S_SpellIsEnemy(caster, target) ||
-        S_UnitIsResistant(target)) return false;
-    if (max_level && (!target->data.UnitBalance || target->data.UnitBalance->level > max_level)) return false;
-    return true;
+        S_UnitIsResistant(target) || !target->data.UnitBalance) return false;
+    /* DataA is the maximum *creep* level, not a cap on enemy player units.
+     * Honor the neutral player's type as well as the stock hostile/passive
+     * slots so map-authored neutral owners follow the same restriction. */
+    if (max_level && target->s.player < MAX_PLAYERS && level.mapinfo &&
+        level.mapinfo->players[target->s.player].playerType == kPlayerTypeNeutral &&
+        target->data.UnitBalance->level > max_level) return false;
+    return S_SpellAllowsTarget(spell->code, caster, target);
 }
 
 static void charm_execute(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
     edict_t *target = st.entity;
-    (void)spell;
 
+    /* An old owner's Shift queue and combat/channel targets must not execute
+     * under the new owner. In contrast, calling stand() alone can immediately
+     * start the next queued order. Stop before changing owner/player stats. */
+    order_stop_cleanup(target);
+    G_ClearActiveUnitOrder(target);
+    target->goalentity = NULL;
     G_SetUnitPlayer(target, caster->s.player);
     target->owner = caster;
     target->combatentity = NULL;
-    if (target->stand)
-        target->stand(target);
+    /* BNch is not a persistent status: its TargetArt comes from ANch/ACch
+     * and should end with one authored animation cycle, not with ownership. */
+    G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_TARGET, 0, target, "overhead", true);
 }
 
 /* ---- Eat Tree (Aeat): consume a tree for healing ------------------------- */

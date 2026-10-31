@@ -80,3 +80,62 @@ and summon lifecycle, and Life Drain attached visuals/lightning/looping audio
 are separate planned changes. See
 [ability coverage](architecture/ability-coverage.md) and
 [spell presentation](ability-and-item-effects.md).
+
+## Charm (`ANch`, `ACch`) — Patch 2
+
+Charm transfers an eligible unit to the caster's player permanently. The
+standard `ANch` data is a single-rank, 150-mana, 45-second cooldown,
+700-range spell; `DataA=5` is **maximum neutral-creep level**, not the
+maximum level of a player-owned ordinary unit. The authored target mask is
+`enemy,neutral,organic,nonhero,air,ground`. This patch leaves the common
+mana, cooldown and range validation in the spell entry points and uses
+`S_SpellAllowsTarget` for the authored mask and spell-immunity checks. The
+existing Resistant Skin / Hero exclusion remains. A missing UnitBalance row
+continues to be rejected rather than accepting an unknown target level.
+
+A neutral unit's owner is identified by the map player type, including the
+normal Neutral Hostile slot and any map-defined neutral slot. With authored
+`DataA=5`, a level-6 neutral creep is rejected before spending mana, but a
+level-9 unit owned by an ordinary enemy player is still eligible. The caster
+and target must remain live enemies. These rules are also used for the
+registered `ACch` alias (and share the Charm handler with applicable item
+abilities), with the concrete ability code selecting the art and data.
+
+### Ownership and presentation
+
+A successful cast first cancels the target's existing combat, channel and
+queued orders through `order_stop_cleanup`, clears the active order record,
+and discards the old movement target. Unlike plain `stand()`, this
+cannot start an old owner's next Shift order under the new owner. Then
+`G_SetUnitPlayer` performs ownership and food accounting, which already
+handles neutral-creep guard state and change-owner events. No new save field
+or network contract is necessary.
+
+Immediately after transfer, Charm emits one temporary `WC3_EFFECT_TARGET`
+using the executing ability's authored `TargetArt`, attached at `overhead`.
+The MPQ audit identifies `CharmTarget.mdl` (looping `Stand`, 0–1333 ms); the
+existing generic **temporary** effect move frees the effect after one
+animation sequence rather than retaining it as a persistent `BNch` status.
+`MOVETYPE_LINK` and the target's spawn-generation guard keep the effect
+attached to the original unit even when the unit moves or an entity slot is
+reused. No Charm-specific thinker, duration constant, or made-up sound alias
+is introduced. The precise retail effect lifetime remains observational
+parity work.
+
+### Verification
+
+The production-cast tests in `game/tests/t_charm.c` use non-stock 37 mana
+and a `DataA=5` cap. They exercise the neutral-vs-player distinction,
+invalid dead/Hero/Resistant/magic-immune/mechanical targets, no mana on
+failed casts, pre-transfer order cleanup, exactly one temporary overhead
+model, no persistent Charm status, and effect retirement without undoing
+ownership. `tests/resources-src/Units/NeutralAbilityFunc.txt` supplies
+source-controlled test paths for `ANch` and `ACch` instead of relying on a
+local MPQ installation.
+
+Run the normal build and `make test` in the consuming repository; **the patch
+author did not compile or run tests locally**. The effect test establishes
+model selection, lifecycle and attachment ownership, not pixel-level
+rendering. Further work for Dark Ranger is Black Arrow and Life Drain; visual
+sound bindings, ribbon timing and unusual Charm ownership interactions
+remain subject to retail verification.
