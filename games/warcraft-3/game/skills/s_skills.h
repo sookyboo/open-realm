@@ -614,6 +614,8 @@ bool S_SpellBounceTargetAllowed(edict_t *caster, uint32_t code, edict_t const *f
 bool S_SpellTargetVisited(edict_t *const *visited, uint32_t count, edict_t const *target);
 void S_SpellCommitRelocation(edict_t *unit, vec2_t const *position);
 void S_SpellRelocateUnit(edict_t *unit, uint32_t code, vec2_t const *position);
+/* Cancels an active Locust Swarm on explicit spell relocation or caster death. */
+void S_LocustSwarmCancelForCaster(edict_t *caster);
 cstring_t S_SpellBuffToken(cstring_t list, uint32_t index);
 heroabilitystatus_t *S_SpellApplyTimedStatus(edict_t *target, cstring_t buff, uint32_t level, float duration);
 edict_t *S_SpellStatusSource(heroabilitystatus_t const *slot);

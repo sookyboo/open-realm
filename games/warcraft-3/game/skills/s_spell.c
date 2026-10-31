@@ -1596,6 +1596,10 @@ void S_SpellRelocateUnit(edict_t *unit, uint32_t code, vec2_t const *position) {
 
     if (!unit || !position) return;
     source = unit->s.origin2;
+    /* An explicit spell teleport ends the old caster-owned swarm; normal
+     * movement and raw script repositioning are not treated as teleports. */
+    if (Vector2_distance(&source, position) > 0.001f)
+        S_LocustSwarmCancelForCaster(unit);
     G_SpawnAbilityEffectAtPoint(code, WC3_EFFECT_SPECIAL, 0, &source, true);
     S_SpellCommitRelocation(unit, position);
     G_SpawnAbilityEffectAtPoint(code, WC3_EFFECT_SPECIAL, 0, &unit->s.origin2, true);

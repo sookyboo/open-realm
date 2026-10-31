@@ -1,4 +1,5 @@
 #include "g_local.h"
+#include "skills/s_skills.h"
 #ifdef WC3_SC2API
 #include "sc2api/sc2api_server.h"
 #endif
@@ -481,6 +482,7 @@ void unit_die(edict_t *self, edict_t *attacker) {
     bool summon_explodes, script_explodes, phoenix_to_egg;
 
     if (!self || (self->svflags & SVF_DEADMONSTER)) return;
+    S_LocustSwarmCancelForCaster(self);
 #ifdef WC3_SC2API
     WC3_SC2API_RecordDeath(self);
 #endif

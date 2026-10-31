@@ -1766,9 +1766,10 @@ typedef struct {
     component_t component;
     uint32_t caster_spawn_time, ability, level;
     uint32_t start_ms, end_ms, next_release_ms, release_interval_ms;
+    uint32_t recall_deadline_ms;
     uint32_t total, released, unit_id;
     float area, target_cap, heal_factor, return_threshold;
-    bool active;
+    bool active, recalling;
 } locustSwarm_t;
 
 typedef struct {
@@ -3316,6 +3317,7 @@ void impale_wave_think(edict_t *wave);
 void locust_swarm_think(edict_t *controller);
 void locust_member_think(edict_t *member);
 void S_LocustSwarmAttackLanded(edict_t *attacker, edict_t *target, float actual_damage);
+void S_LocustSwarmCancelForCaster(edict_t *caster);
 float S_ImpaleLiftOffset(edict_t const *unit);
 void S_ImpaleLiftUpdate(edict_t *unit);
 bool S_ImpaleIsAirborne(edict_t const *unit);

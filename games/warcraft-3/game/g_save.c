@@ -164,7 +164,8 @@ static uint32_t const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
 /* Version 132 persists independent Impale victim lifts. */
 /* Version 133 persists Impale airborne vulnerability and interruptibility. */
 /* Version 134 persists Locust target attack deadlines and return damage credit. */
-static uint32_t const save_version = 134;
+/* Version 135 persists Locust expiry recall phase, deadline and caster cancellation. */
+static uint32_t const save_version = 135;
 #define SAVE_STREAM_BUFFER (1u << 20) // bytes; save files are several MB of field writes, so a large stdio buffer avoids per-4 KB syscalls
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
@@ -994,9 +995,11 @@ static field_t const locust_swarm_fields[] = {
     TF(locustSwarm_t, end_ms, F_INT), TF(locustSwarm_t, next_release_ms, F_INT),
     TF(locustSwarm_t, release_interval_ms, F_INT), TF(locustSwarm_t, total, F_INT),
     TF(locustSwarm_t, released, F_INT), TF(locustSwarm_t, unit_id, F_INT),
+    TF(locustSwarm_t, recall_deadline_ms, F_INT),
     TF(locustSwarm_t, area, F_FLOAT), TF(locustSwarm_t, target_cap, F_FLOAT),
     TF(locustSwarm_t, heal_factor, F_FLOAT), TF(locustSwarm_t, return_threshold, F_FLOAT),
     TF(locustSwarm_t, active, F_INT),
+    TF(locustSwarm_t, recalling, F_INT),
     { NULL, 0, 0, 0, 0, 0 }
 };
 

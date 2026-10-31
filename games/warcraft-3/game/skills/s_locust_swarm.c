@@ -5,6 +5,9 @@
 #define LOCUST_RETURNING 3u
 #define LOCUST_REACQUIRE_MS 250u
 #define LOCUST_MAX_ATTACKERS_PER_TARGET 256u
+#define LOCUST_RECALL_GRACE_MS 8000u
+
+static void locust_begin_return(edict_t *member, locustMember_t *state, edict_t *caster);
 
 static bool locust_reference_valid(edict_t *ent, uint32_t spawn_time) {
     return ent && ent->inuse && ent->spawn_time == spawn_time;
@@ -28,6 +31,26 @@ static void locust_swarm_end(edict_t *controller) {
     FILTER_EDICTS(member, locust_member_in_swarm(member, controller))
         locust_member_die(member);
     G_FreeEdict(controller);
+}
+
+static void locust_swarm_begin_recall(edict_t *controller, locustSwarm_t *swarm) {
+    swarm->active = false;
+    swarm->recalling = true;
+    swarm->recall_deadline_ms = G_Time() + LOCUST_RECALL_GRACE_MS;
+    FILTER_EDICTS(member, locust_member_in_swarm(member, controller)) {
+        locustMember_t *state = G_GetLocustMember(member);
+        if (state->damage_credit > 0.0f) locust_begin_return(member, state, controller->owner);
+        else locust_member_die(member);
+    }
+}
+
+void S_LocustSwarmCancelForCaster(edict_t *caster) {
+    uint32_t const count = globals.num_edicts;
+    FOR_LOOP(i, count) {
+        edict_t *controller = &globals.edicts[i];
+        if (controller->inuse && controller->think == locust_swarm_think && controller->owner == caster)
+            locust_swarm_end(controller);
+    }
 }
 
 static void locust_spawn_one(edict_t *controller, locustSwarm_t *swarm) {
@@ -60,11 +83,20 @@ void locust_swarm_think(edict_t *controller) {
     locustSwarm_t *swarm = G_GetLocustSwarm(controller);
     edict_t *caster = controller->owner;
     uint32_t now = G_Time();
-    if (!swarm || !swarm->active || !locust_reference_valid(caster, swarm->caster_spawn_time) ||
-        M_IsDead(caster) || now >= swarm->end_ms) {
+    if (!swarm || !locust_reference_valid(caster, swarm->caster_spawn_time) || M_IsDead(caster)) {
         locust_swarm_end(controller);
         return;
     }
+    if (swarm->active && now >= swarm->end_ms) locust_swarm_begin_recall(controller, swarm);
+    if (swarm->recalling) {
+        bool any_alive = false;
+        FILTER_EDICTS(member, locust_member_in_swarm(member, controller) && !M_IsDead(member)) any_alive = true;
+        if (!any_alive || now >= swarm->recall_deadline_ms) {
+            locust_swarm_end(controller);
+            return;
+        }
+    }
+    if (!swarm->active) return;
     controller->s.origin = caster->s.origin;
     controller->s.origin2 = caster->s.origin2;
     gi.LinkEntity(controller);
@@ -124,7 +156,7 @@ void locust_member_think(edict_t *member) {
     if (!member || !member->inuse || M_IsDead(member)) return;
     if (!state || !(controller = state->controller) ||
         !locust_reference_valid(controller, state->controller_spawn_time) ||
-        !(swarm = G_GetLocustSwarm(controller)) || !swarm->active) {
+        !(swarm = G_GetLocustSwarm(controller)) || (!swarm->active && !swarm->recalling)) {
         locust_member_die(member);
         return;
     }
@@ -139,12 +171,21 @@ void locust_member_think(edict_t *member) {
             if (state->damage_credit > 0.0f)
                 S_SpellHeal(caster, state->damage_credit * swarm->heal_factor);
             state->damage_credit = 0.0f;
+            if (swarm->recalling) { locust_member_die(member); return; }
             state->state = LOCUST_SEEKING;
             state->next_acquire_ms = now;
         }
         return;
     }
     target = state->target;
+    if (swarm->recalling) {
+        if (state->damage_credit <= 0.0f) { locust_member_die(member); return; }
+        if (Vector2_distance(&member->s.origin2, &caster->s.origin2) <= MAX(48.0f, member->collision + caster->collision)) {
+            S_SpellHeal(caster, state->damage_credit * swarm->heal_factor);
+            locust_member_die(member);
+        } else if (state->state != LOCUST_RETURNING) locust_begin_return(member, state, caster);
+        return;
+    }
     if (!locust_reference_valid(target, state->target_spawn_time) || !S_SpellIsAliveTarget(target) ||
         !S_SpellIsEnemy(caster, target) ||
         Vector2_distance(&target->s.origin2, &caster->s.origin2) > swarm->area ||
@@ -240,6 +281,7 @@ BZ_ABILITY_PROC(CAbilityLocustSwarm) {
     abilityitem_t const *spell = call ? call->item : NULL;
     if (msg == A_VALIDATE) return locust_swarm_validate(ent, spell);
     if (msg == A_EXECUTE && locust_swarm_validate(ent, spell)) {
+        S_LocustSwarmCancelForCaster(ent);
         locust_swarm_cast(ent, spell);
         return true;
     }

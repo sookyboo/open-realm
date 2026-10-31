@@ -1234,3 +1234,5 @@ section order differs from version 115, so version 115 saves are rejected. The
 wire format is unchanged. Version 117 adds the Pillage building ledger and Avatar
 original-scale field. Version 118 adds the launch-time attacker incarnation to each
 basic attack missile; mismatched earlier versions are rejected.
+
+Version 134 adds the Locust Swarm controller's recall flag and bounded recall deadline. A save taken after the authored `Dur` expires must restore the same returning members and outstanding heal credit, without resuming release or attacks. The previous version is rejected by the exact-format check. See [Locust Swarm](locust-swarm.md).
