@@ -1105,6 +1105,7 @@ BZ_ABILITY_PROC(CAbilityDeathPact) {
 #define ID_BEAR_FORM_ABILITY MAKEFOURCC('A','b','r','f')
 #define ID_BEAR_FORM_NIGHT_ELF MAKEFOURCC('e','d','o','c')
 #define ID_BEAR_FORM_BEAR MAKEFOURCC('e','d','c','m')
+#define ID_DESTROYER_FORM MAKEFOURCC('A','a','v','e')
 static void bear_form_morph_end(edict_t *unit) { unit_stand(unit); }
 static umove_t bear_form_morph = { "morph", NULL, bear_form_morph_end, CAbilityMetamorphosis };
 static umove_t bear_form_morph_alternate = { "morph alternate", NULL, bear_form_morph_end, CAbilityMetamorphosis };
@@ -1113,8 +1114,53 @@ static bool metamorphosis_ability(uint32_t code) {
     return G_AbilityCode(code) == MAKEFOURCC('A','E','m','e');
 }
 
+/* Destroyer Form is an irreversible, purchased upgrade of the existing unit.
+ * The spell's DataA and UnitID describe the source/destination: unlike
+ * Metamorphosis it must never enqueue a morph_end reversion thinker. */
+static bool destroyer_form_cost(edict_t *caster, uint32_t code, uint32_t *target,
+                                int32_t *gold, int32_t *lumber, int32_t *food) {
+    AbilityData_t const *ability;
+    UnitBalance_t const *source, *destination;
+    gameClient_t *owner;
+    uint32_t form;
+    if (!caster || !caster->unit_state ||
+        !(ability = G_AbilityData(code)) || !ability->id ||
+        caster->class_id != ability->level[0].data[0].id ||
+        !(form = ability->level[0].unitID) ||
+        !(source = caster->data.UnitBalance) ||
+        !(destination = G_UnitBalance(form)) ||
+        !(owner = G_GetPlayerClientByNumber(caster->s.player)) ||
+        owner->ps.number != caster->s.player ||
+        !G_UnitAbilityResearchAvailable(caster, code)) return false;
+    *target = form;
+    *gold = MAX(0, destination->goldCost - source->goldCost);
+    *lumber = MAX(0, destination->lumberCost - source->lumberCost);
+    *food = MAX(0, destination->foodUsed - source->foodUsed);
+    return owner->ps.stats[PLAYERSTATE_RESOURCE_GOLD] >= (uint32_t)*gold &&
+           owner->ps.stats[PLAYERSTATE_RESOURCE_LUMBER] >= (uint32_t)*lumber &&
+           G_PlayerHasFoodFor(owner, *food);
+}
+
+static bool destroyer_form_execute(edict_t *caster, uint32_t code) {
+    uint32_t target;
+    int32_t gold, lumber, food;
+    gameClient_t *owner;
+    if (!destroyer_form_cost(caster, code, &target, &gold, &lumber, &food)) return false;
+    owner = G_GetPlayerClientByNumber(caster->s.player);
+    if (!G_TransformUnitType(caster, target)) return false;
+    owner->ps.stats[PLAYERSTATE_RESOURCE_GOLD] -= (uint16_t)gold;
+    owner->ps.stats[PLAYERSTATE_RESOURCE_LUMBER] -= (uint16_t)lumber;
+    caster->mana.value = 0.0f;
+    G_RefreshResourceBar(G_GetPlayerEntityByNumber(caster->s.player));
+    return true;
+}
+
 static void AbilityMetamorphosis_Execute(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
     (void)st;
+    if (spell->code == ID_DESTROYER_FORM) {
+        destroyer_form_execute(caster, spell->code);
+        return;
+    }
     if (spell->code == ID_BEAR_FORM_ABILITY) {
         bool const entering_bear_form = caster->class_id != ID_BEAR_FORM_BEAR;
         uint32_t const target_form = entering_bear_form ? ID_BEAR_FORM_BEAR : ID_BEAR_FORM_NIGHT_ELF;
@@ -1183,6 +1229,12 @@ static void AbilityMetamorphosis_Execute(edict_t *caster, spellTarget_t st, abil
 }
 
 BZ_ABILITY_PROC(CAbilityMetamorphosis) {
+    if (msg == A_VALIDATE && call && call->item && call->item->code == ID_DESTROYER_FORM) {
+        uint32_t target;
+        int32_t gold, lumber, food;
+        return CAbilitySimpleSpell(ent, msg, call) &&
+            destroyer_form_cost(ent, call->item->code, &target, &gold, &lumber, &food);
+    }
     if (msg == A_TOGGLE_ON && call && call->item && call->item->code == ID_BEAR_FORM_ABILITY)
         return ent && ent->class_id == ID_BEAR_FORM_BEAR;
     if (msg == A_VALIDATE && call && call->item && metamorphosis_ability(call->item->code)) {
