@@ -3905,7 +3905,7 @@ TEST(wc3_spell, carrion_swarm_travels_authored_distance_and_hits_once_with_expan
         "[AUcs]\nMissileArt=TestUI\\Models\\anim_projectile.mdx\nMissilespeed=1000\n";
     static UnitBalance_t const no_regen = { .healthRegenType = "none" };
     slkTestData_t *rows, *old;
-    edict_t *caster, *near, *middle, *far, *outside, *wave = NULL;
+    edict_t *caster, *near, *middle, *far, *outside, *behind, *beyond, *wave = NULL;
 
     reset_entities(); setup_test_world();
     T_ASSERT(G_TestPushAbilityConfig(ability_config));
@@ -3918,7 +3918,15 @@ TEST(wc3_spell, carrion_swarm_travels_authored_distance_and_hits_once_with_expan
     middle = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 400, 70);
     far = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 650, 0);
     outside = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 650, 180);
+    behind = alloc_test_unit(MAKEFOURCC('h','f','o','o'), -80, 0);
+    beyond = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 900, 0);
     caster->s.player = 0;
+    behind->s.player = beyond->s.player = 1;
+    behind->targtype = beyond->targtype = TARG_GROUND;
+    behind->svflags |= SVF_MONSTER; beyond->svflags |= SVF_MONSTER;
+    behind->health.value = behind->health.max_value = 1000;
+    beyond->health.value = beyond->health.max_value = 1000;
+    behind->data.UnitBalance = beyond->data.UnitBalance = (UnitBalance_t *)&no_regen;
     near->s.player = middle->s.player = far->s.player = outside->s.player = 1;
     near->targtype = middle->targtype = far->targtype = outside->targtype = TARG_GROUND;
     near->svflags |= SVF_MONSTER; middle->svflags |= SVF_MONSTER;
@@ -3948,6 +3956,10 @@ TEST(wc3_spell, carrion_swarm_travels_authored_distance_and_hits_once_with_expan
     T_ASSERT(wave->inuse);
     level.time += FRAMETIME; G_RunEntities();
     T_FEQ(G_GetCarrionWave(wave)->travelled, 100.0f, 0.001f);
+    /* Neither a future section nor the extension behind the caster is hit. */
+    T_FEQ(far->health.value, 1000, 0.001f);
+    T_FEQ(behind->health.value, 1000, 0.001f);
+    T_FEQ(beyond->health.value, 1000, 0.001f);
     FOR_LOOP(i, 6) { level.time += FRAMETIME; G_RunEntities(); }
     T_FEQ(near->health.value, 950, 0.001f);
     T_FEQ(middle->health.value, 950, 0.001f);
@@ -3955,6 +3967,8 @@ TEST(wc3_spell, carrion_swarm_travels_authored_distance_and_hits_once_with_expan
     T_FEQ(middle->health.value, 950, 0.001f);
     T_FEQ(far->health.value, 950, 0.001f);
     T_FEQ(outside->health.value, 1000, 0.001f);
+    T_FEQ(behind->health.value, 1000, 0.001f);
+    T_FEQ(beyond->health.value, 1000, 0.001f);
     /* The wave advances past the short clicked point and still reaches x=650. */
     FOR_LOOP(i, 10) { level.time += FRAMETIME; G_RunEntities(); }
     T_FEQ(near->health.value, 950, 0.001f);

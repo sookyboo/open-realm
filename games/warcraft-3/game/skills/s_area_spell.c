@@ -190,24 +190,37 @@ static bool shockwave_hits(edict_t *target, shockwaveContext_t const *ctx) {
     return along >= 0.0f && along <= ctx->length && fabsf(across) <= ctx->width;
 }
 
-static void carrion_wave_hit(edict_t *wave, edict_t *caster, carrionWave_t *state,
-                             edict_t *target, vec2_t const *start, float step) {
-    vec2_t offset, closest;
-    float t, along, across, width, damage;
-    int applied;
-    if (!S_SpellAllowsAreaTarget(state->ability, caster, target) ||
+/* Return the distance along *this frame's finite sweep*. A target outside
+ * either end cannot be damaged merely because it lies close to the infinite
+ * line through the projectile. The authored width expands with distance. */
+static bool carrion_wave_candidate(edict_t *wave, edict_t *caster, carrionWave_t *state,
+                                   edict_t *target, vec2_t const *start, float step,
+                                   float *out_along) {
+    vec2_t offset;
+    float along, across, width;
+
+    if (!S_SpellIsAliveTarget(target) || target == caster ||
+        !S_SpellAllowsAreaTarget(state->ability, caster, target) ||
         !S_SpellIsEnemy(caster, target) || G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) ||
-        carrion_wave_visited(wave, target)) return;
+        carrion_wave_visited(wave, target)) return false;
+
     offset = Vector2_sub(&target->s.origin2, start);
-    t = carrion_clamp(Vector2_dot(&offset, &state->direction) / MAX(step, 0.001f), 0.0f, 1.0f);
-    closest = (vec2_t){start->x + state->direction.x * step * t,
-                       start->y + state->direction.y * step * t};
-    offset = Vector2_sub(&target->s.origin2, &closest);
+    along = Vector2_dot(&offset, &state->direction);
+    /* Test the bounded swept interval before the lateral corridor. A wide
+     * wave must not hit units behind its current position or past its end. */
+    if (along < 0.0f || along > step) return false;
     across = offset.x * state->direction.y - offset.y * state->direction.x;
-    along = state->travelled + step * t;
     width = state->initial_width + (state->final_width - state->initial_width) *
-        carrion_clamp(along / MAX(0.001f, state->travel_distance), 0.0f, 1.0f);
-    if (fabsf(across) > width + MAX(0.0f, target->collision)) return;
+        carrion_clamp((state->travelled + along) / MAX(0.001f, state->travel_distance), 0.0f, 1.0f);
+    if (fabsf(across) > width + MAX(0.0f, target->collision)) return false;
+    *out_along = along;
+    return true;
+}
+
+static void carrion_wave_hit(edict_t *wave, edict_t *caster, carrionWave_t *state,
+                             edict_t *target) {
+    float damage;
+    int applied;
     if (state->capped && state->remaining_damage <= 0.0f) return;
     damage = state->capped ? MIN(state->damage_per_target, state->remaining_damage) : state->damage_per_target;
     applied = (int)damage;
@@ -237,7 +250,9 @@ void carrion_wave_think(edict_t *wave) {
     target_count = globals.num_edicts;
     for (i = 0; i < target_count; i++) {
         edict_t *target = &globals.edicts[i];
-        if (S_SpellIsAliveTarget(target)) carrion_wave_hit(wave, caster, state, target, &start, step);
+        float along;
+        if (carrion_wave_candidate(wave, caster, state, target, &start, step, &along))
+            carrion_wave_hit(wave, caster, state, target);
     }
     state->travelled += step;
     state->previous_position = wave->s.origin2;
