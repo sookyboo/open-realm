@@ -210,7 +210,8 @@ Brawler) through the existing critical/evasion hooks, `ANdh` (Drunken Haze) and
 authored area buff and status-owned `BNht` target visual, and `ANca` (Cleaving
 Attack) through melee physical splash with authored secondary-hit art and target
 mask. See [Pit Lord](../pit-lord.md) for implementation details and the
-remaining Rain of Fire presentation, burn-dispel parity, and Doom visual verification.
+Rain of Fire wave/shard art and loop/wave sounds, with remaining burn-dispel
+parity, exact retail impact/sound cadence, and Doom visual verification.
 
 The current selected-block implementation also covers `AHfa` (Searing Arrows)
 through the missile attack hook, `AEar` (Trueshot Aura) through the ranged

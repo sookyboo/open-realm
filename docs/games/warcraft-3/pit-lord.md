@@ -1,4 +1,4 @@
-# Pit Lord (`Nplh`) — Howl, Cleave, Rain of Fire and Doom (Patches 1, 2 and 4)
+# Pit Lord (`Nplh`) — Howl, Cleave, Rain of Fire and Doom (Patches 1–4)
 
 ## Source evidence and scope
 
@@ -6,7 +6,8 @@ The stock MPQ/MDX inspection supplied for this task identifies `Nplh` with
 `ANrf` (Rain of Fire), `ANht` (Howl of Terror), `ANca` (Cleaving Attack) and
 `ANdo` (Doom). Patch 1 implements Howl target presentation and secondary-hit Cleave
 presentation/eligibility. Patch 2 implements Rain of Fire wave and burning
-gameplay. Rain of Fire presentation is reserved for Patch 3. Patch 4 implements Doom gameplay and target/death art.
+gameplay. Patch 3 supplies Rain of Fire's data-selected wave art and sounds.
+Patch 4 implements Doom gameplay and target/death art.
 
 | Ability | Stock presentation data | Runtime ownership |
 | --- | --- | --- |
@@ -103,19 +104,43 @@ and caster incarnations via `S_SpellIdentityThinker`; each tick revalidates
 the target, and a recycled caster slot cannot claim the original burn.
 These thinkers do not follow the caster's current channel or hero level.
 
-**Deferred presentation and buff-status parity:** Patch 3 will bind `XErf`
-impact art, the wave and looping sounds, and `BNrd`/`BNrf` status visuals
-where supported. In Patch 2 the burn damage is independent of the generic
-16-slot status inventory: a full inventory cannot silently cancel paid
-spell damage, but dispelling the visual buff is **not yet wired** to the
-independent burn thinker. Exact original burn/dispel and overlapping-cast
-stacking restrictions warrant retail verification. `DataC` remains reserved
-for the presentation patch and does not change hit counts.
+**Patch 3 — presentation:** Each completed wave resolves `AbilityData.EfctID`
+(stock `XErf`) and spawns `DataC` temporary, non-channel-owned
+`EffectArt` instances at bounded points in the authored area. The stock
+`XErf` effect object names `RainOfFireTarget.mdl` (one nonlooping `Birth`,
+about 3.3 seconds). A local unsigned integer sequence derived from the wave's
+saved identity and remaining wave count spreads the visuals across the area,
+without consuming global combat RNG or changing area damage. It caps malformed
+custom-data visual counts at 64 per wave to protect the entity pool. A missing
+model does not affect any damage or burning.
+
+The effect object's `EffectSound` (stock `RainOfFireWave`) is played **once
+per wave** at the selected ground point; an explicit ability sound takes
+precedence for custom maps. The separate `EffectSoundLooped` (stock
+`RainOfFireLoop`) is attached to the existing channel thinker. On Stop,
+interruption, death, replacement cast or natural completion, removal of that
+thinker stops the loop. Already-landed temporary Birth effects and independent
+burn thinkers finish after the channel ends. Both sound aliases are resolved
+through the existing `AbilitySounds` table and server-side sound registration;
+no ability-specific path is hardcoded. The MPQ report confirms the aliases,
+but one-sound-per-wave versus one-per-shard cadence and exact scatter pattern
+remain retail-observation questions.
+
+`BNrd`/`BNrf` are the authored `BuffID` values but the supplied asset report
+identifies **no target model mapping for either**. The presentation patch does
+not invent persistent target art or create a buff merely for its icon. Burning
+damage remains independent of the generic 16-slot status inventory: a full
+inventory cannot silently cancel paid spell damage, but dispelling the visual
+buff is **not yet wired** to the independent burn thinker. Exact original
+burn/dispel and overlapping-cast stacking restrictions warrant retail
+verification. `DataC` changes presentation count, not gameplay hit count.
 
 Regression tests use nonstock `DataA/B/D/E/F` values to verify initial and
 subsequent wave deadlines, friendly fire, building reduction, area
 exclusion, per-wave cap, independent burning after channel interruption
-and burn-thinker save/load. No retail MPQ is required by those fixtures.
+and burn-thinker save/load. Patch 3 adds model/sound resolver tests that
+provide synthetic `XErf` and `AbilitySounds` SLK rows, plus a no-model damage
+regression. No retail MPQ is required by those fixtures.
 
 ## Doom (`ANdo`) — Patch 4
 

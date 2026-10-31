@@ -2254,17 +2254,19 @@ TEST(wc3_ability_lifecycle, jass_removebuffs_preserves_undispellable_and_mixed_r
  * one wave every three seconds. Use deliberately nonstock DataA/B/E/F so
  * hardcoded stock values cannot satisfy the regression. */
 static char const rain_of_fire_slk[] =
-    "ID;PWXL;N;EBB;Y2;X13\n"
+    "ID;PWXL;N;EBB;Y2;X14\n"
     "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
     "C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Dur1\"\nC;Y1;X6;K\"Area1\"\n"
     "C;Y1;X7;K\"DataA1\"\nC;Y1;X8;K\"DataB1\"\n"
     "C;Y1;X9;K\"DataC1\"\nC;Y1;X10;K\"DataD1\"\n"
     "C;Y1;X11;K\"DataE1\"\nC;Y1;X12;K\"DataF1\"\nC;Y1;X13;K\"Cost1\"\n"
+    "C;Y1;X14;K\"EfctID1\"\n"
     "C;Y2;X1;K\"ANrf\"\nC;Y2;X2;K\"ANrf\"\nC;Y2;X3;K1\n"
     "C;Y2;X4;K\"air,ground,structure,enemy\"\n"
     "C;Y2;X5;K2\nC;Y2;X6;K130\nC;Y2;X7;K4\n"
     "C;Y2;X8;K25\nC;Y2;X9;K3\nC;Y2;X10;K0.5\n"
-    "C;Y2;X11;K7\nC;Y2;X12;K50\nC;Y2;X13;K0\nE\n";
+    "C;Y2;X11;K7\nC;Y2;X12;K50\nC;Y2;X13;K0\n"
+    "C;Y2;X14;K\"XErf\"\nE\n";
 
 static edict_t *rain_of_fire_test_setup(slkTestData_t **rows, slkTestData_t **old) {
     edict_t *caster = review_setup();
@@ -2276,6 +2278,118 @@ static edict_t *rain_of_fire_test_setup(slkTestData_t **rows, slkTestData_t **ol
 static void rain_of_fire_test_done(slkTestData_t *rows, slkTestData_t *old) {
     G_SetSLKRows("AbilityData", old);
     free_slk_rows(rows);
+}
+
+static int rain_fire_capture_sound_index(cstring_t path) {
+    strlcpy(blizzard_sound_path, path ? path : "", sizeof(blizzard_sound_path));
+    return path && strstr(path, "loop.wav") ? 92 : 91;
+}
+static int rain_fire_capture_sound_index_alias(cstring_t path, cstring_t alias) {
+    (void)alias;
+    return rain_fire_capture_sound_index(path);
+}
+
+/* Effect data is supplied by the synthetic SLK fixture, not an installed
+ * Warcraft archive. Wave impact models and sounds are selected by XErf; their
+ * lifetime is separate from the caster-owned channel loop sound. */
+TEST(wc3_ability_lifecycle, pit_lord_rain_of_fire_uses_xerf_shards_wave_audio_and_channel_loop) {
+    static char const effect_slk[] =
+        "ID;PWXL;N;E\nB;X4;Y2;D0\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"EffectArt\"\n"
+        "C;Y1;X3;K\"Effectsound\"\nC;Y1;X4;K\"Effectsoundlooped\"\n"
+        "C;Y2;X1;K\"XErf\"\n"
+        "C;Y2;X2;K\"TestUI\\Models\\quad_sprite.mdx\"\n"
+        "C;Y2;X3;K\"RainWaveTest\"\nC;Y2;X4;K\"RainLoopTest\"\nE\n";
+    static char const sound_slk[] =
+        "ID;PWXL;N;E\nB;X5;Y3;D0\n"
+        "C;Y1;X1;K\"SoundLabel\"\nC;Y1;X2;K\"FileNames\"\n"
+        "C;Y1;X3;K\"DirectoryBase\"\nC;Y1;X4;K\"Volume\"\n"
+        "C;Y1;X5;K\"Flags\"\n"
+        "C;Y2;X1;K\"RainWaveTest\"\nC;Y2;X2;K\"wave.wav\"\n"
+        "C;Y2;X3;K\"TestUI\\Sounds\\\"\nC;Y2;X4;K127\n"
+        "C;Y2;X5;K\"IGNOREUSERNAME\"\n"
+        "C;Y3;X1;K\"RainLoopTest\"\nC;Y3;X2;K\"loop.wav\"\n"
+        "C;Y3;X3;K\"TestUI\\Sounds\\\"\nC;Y3;X4;K127\n"
+        "C;Y3;X5;K\"IGNOREUSERNAME\"\nE\n";
+    slkTestData_t *rows, *old;
+    edict_t *caster = rain_of_fire_test_setup(&rows, &old);
+    edict_t *enemy = review_unit(1, 300), *thinker;
+    slkTestData_t *effects = parse_slk_string(effect_slk);
+    slkTestData_t *sounds = parse_slk_string(sound_slk);
+    slkTestData_t *old_effects = G_SetSLKRows("AbilityBuffData", effects);
+    slkTestData_t *old_sounds = G_SetSLKRows("AbilitySounds", sounds);
+    int (*old_model_index)(cstring_t) = gi.ModelIndex;
+    int (*old_sound_index)(cstring_t) = gi.SoundIndex;
+    __typeof__(gi.SoundIndexAlias) old_sound_alias = gi.SoundIndexAlias;
+    __typeof__(gi.SoundPolicy) old_sound_policy = gi.SoundPolicy;
+    vec2_t point = { 300, 0 };
+
+    flame_strike_model_count = 0;
+    blizzard_sound_calls = 0;
+    blizzard_sound_path[0] = '\0';
+    gi.ModelIndex = flame_strike_capture_model;
+    gi.SoundIndex = rain_fire_capture_sound_index;
+    gi.SoundIndexAlias = rain_fire_capture_sound_index_alias;
+    gi.SoundPolicy = review_capture_sound_policy;
+    T_EQ(G_AbilityEffectCode(FS_SLKKey("ANrf"), 1), FS_SLKKey("XErf"));
+    T_ASSERT(S_CastPointTargetSpell(caster, FS_SLKKey("ANrf"), &point));
+    thinker = review_thinker(caster);
+    T_NOT_NULL(thinker);
+    if (thinker) {
+        /* Three authored shards from DataC1=3, not DataA1=4 waves. */
+        T_EQ(flame_strike_model_count, 3u);
+        FOR_LOOP(i, 3)
+            T_STREQ(flame_strike_models[i], "TestUI\\Models\\quad_sprite.mdx");
+        T_EQ(blizzard_sound_calls, 1u);
+        T_EQ(blizzard_sound_index, 91);
+        T_EQ(thinker->s.sound, 92u); /* loop clip, not one-shot wave clip */
+        T_STREQ(blizzard_sound_path, "TestUI\\Sounds\\wave.wav");
+        level.time = 1500;
+        G_RunEntity(thinker);
+        T_EQ(flame_strike_model_count, 6u);
+        T_EQ(blizzard_sound_calls, 2u); /* one wave sound, not one per shard */
+        T_FEQ(enemy->health.value, 950, .001f);
+        S_SpellCancelChannel(caster);
+        G_RunEntity(thinker);
+        T_ASSERT(!thinker->inuse); /* freeing the carrier also stops looped audio */
+        T_EQ(flame_strike_model_count, 6u); /* no new impacts on cancellation */
+    }
+    gi.ModelIndex = old_model_index;
+    gi.SoundIndex = old_sound_index;
+    gi.SoundIndexAlias = old_sound_alias;
+    gi.SoundPolicy = old_sound_policy;
+    G_SetSLKRows("AbilityBuffData", old_effects); free_slk_rows(effects);
+    G_SetSLKRows("AbilitySounds", old_sounds); free_slk_rows(sounds);
+    rain_of_fire_test_done(rows, old);
+}
+
+TEST(wc3_ability_lifecycle, pit_lord_rain_of_fire_still_deals_damage_without_effect_art) {
+    char slk[sizeof(rain_of_fire_slk)];
+    slkTestData_t *rows, *old;
+    edict_t *caster = rain_of_fire_test_setup(&rows, &old);
+    edict_t *enemy = review_unit(1, 300);
+    edict_t *thinker;
+    vec2_t point = { 300, 0 };
+    slkTestData_t *without_art, *previous;
+    int (*old_model_index)(cstring_t) = gi.ModelIndex;
+    memcpy(slk, rain_of_fire_slk, sizeof(slk));
+    char *effect = strstr(slk, "XErf");
+    T_NOT_NULL(effect);
+    if (!effect) { rain_of_fire_test_done(rows, old); return; }
+    memcpy(effect, "XZzz", 4);
+    without_art = parse_slk_string(slk);
+    previous = G_SetSLKRows("AbilityData", without_art);
+    flame_strike_model_count = 0;
+    gi.ModelIndex = flame_strike_capture_model;
+    T_ASSERT(S_CastPointTargetSpell(caster, FS_SLKKey("ANrf"), &point));
+    thinker = review_thinker(caster);
+    T_NOT_NULL(thinker);
+    T_EQ(flame_strike_model_count, 0u);
+    T_FEQ(enemy->health.value, 975, .001f);
+    if (thinker) { S_SpellCancelChannel(caster); G_RunEntity(thinker); }
+    gi.ModelIndex = old_model_index;
+    G_SetSLKRows("AbilityData", previous); free_slk_rows(without_art);
+    rain_of_fire_test_done(rows, old);
 }
 
 TEST(wc3_ability_lifecycle, pit_lord_rain_of_fire_uses_wave_interval_cap_friendly_fire_and_building_multiplier) {

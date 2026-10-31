@@ -465,6 +465,53 @@ static void rain_of_fire_spawn_burn(edict_t *wave, edict_t *target, uint32_t ran
     burn->think = rain_of_fire_burn_think;
 }
 
+/* Rain of Fire's XErf EffectArt is an impact with a finite Birth sequence.
+ * DataC is the number of visible shards per wave; presentation must not
+ * consume the simulation RNG or determine which targets take damage. A
+ * local integer sequence gives stable, save-friendly spatial distribution.
+ * Clamp malformed custom map counts to avoid exhausting the edict pool. */
+#define RAIN_FIRE_MAX_VISUAL_SHARDS 64u
+
+static uint32_t rain_of_fire_visual_random(uint32_t *seed) {
+    *seed = *seed * 1664525u + 1013904223u;
+    return *seed;
+}
+
+static void rain_of_fire_wave_presentation(edict_t *wave) {
+    uint32_t const rank = MAX(1u, wave->variation);
+    uint32_t const effect_code = G_AbilityEffectCode(wave->class_id, rank);
+    uint32_t const art_code = G_AbilityEffectArt(wave->class_id, WC3_EFFECT_EFFECT, 0)
+        ? wave->class_id : effect_code;
+    float const authored = S_SpellData(wave->class_id, rank, 3);
+    uint32_t const shards = !isfinite(authored) || authored <= 0.0f ? 0 :
+        (uint32_t)MIN(authored, (float)RAIN_FIRE_MAX_VISUAL_SHARDS);
+    uint32_t seed = wave->spawn_time ^ ((uint32_t)wave->s.number * 2654435761u) ^
+        (wave->resources * 2246822519u);
+    cstring_t art = G_AbilityEffectArt(art_code, WC3_EFFECT_EFFECT, 0);
+
+    /* RainOfFireWave belongs to the effect object, not to ANrf's caster.
+     * One wave sound is preferable to replaying a full sample for every
+     * simultaneous shard. Ability-specific overrides retain precedence. */
+    if (G_AbilityEffectSoundIndex(wave->class_id, false))
+        G_PlayAbilityEffectSound(wave->class_id, &wave->s.origin2);
+    else if (effect_code != wave->class_id)
+        G_PlayAbilityEffectSound(effect_code, &wave->s.origin2);
+
+    if (!art || !*art || wave->collision <= 0.0f) return;
+    FOR_LOOP(i, shards) {
+        float const angle = (float)((double)rain_of_fire_visual_random(&seed) / 4294967296.0) *
+            (2.0f * (float)M_PI);
+        float const radius = sqrtf((float)((double)rain_of_fire_visual_random(&seed) / 4294967296.0)) *
+            wave->collision;
+        vec2_t point = wave->s.origin2;
+        point.x += cosf(angle) * radius;
+        point.y += sinf(angle) * radius;
+        /* A one-shot Birth should finish even if the channel is cancelled.
+         * Never give the impact entity the channel thinker as its owner. */
+        G_SpawnAbilityEffectAtPoint(art_code, WC3_EFFECT_EFFECT, 0, &point, true);
+    }
+}
+
 static void rain_of_fire_wave_damage(edict_t *wave) {
     uint32_t const rank = MAX(1u, wave->variation);
     float amount = (float)wave->damage;
@@ -495,7 +542,10 @@ void rain_of_fire_think(edict_t *ent) {
      * Absolute deadlines keep frame jitter from slowing subsequent waves. */
     while (ent->freetime <= now) {
         if (!ent->resources) { S_SpellEndChannel(ent); return; }
+        /* Authoritative damage/burn thinkers take allocation precedence over
+         * optional model entities if the shared edict pool is tight. */
         rain_of_fire_wave_damage(ent);
+        rain_of_fire_wave_presentation(ent);
         ent->resources--;
         ent->freetime += interval;
         if (!ent->resources) break;
@@ -649,6 +699,13 @@ BZ_SIMPLE_SPELL_PROC(AbilityRainOfFire) {
     thinker->s.origin2 = st.point;
     thinker->s.origin.x = st.point.x;
     thinker->s.origin.y = st.point.y;
+    thinker->s.origin.z = CM_GetHeightAtPoint(st.point.x, st.point.y);
+    thinker->s.sound = (uint16_t)G_AbilityEffectSoundIndex(spell->code, true);
+    if (!thinker->s.sound) {
+        uint32_t const effect_code = G_AbilityEffectCode(spell->code, level);
+        if (effect_code != spell->code)
+            thinker->s.sound = (uint16_t)G_AbilityEffectSoundIndex(effect_code, true);
+    }
     thinker->collision = MAX(0.0f, S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level));
     thinker->damage = (uint32_t)MAX(0.0f, S_SpellData(spell->code, level, 2));
     thinker->resources = waves;
