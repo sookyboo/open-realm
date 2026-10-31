@@ -1777,7 +1777,7 @@ typedef struct {
     uint32_t controller_spawn_time;
     edict_t *target; /* F_EDICT; generation checked by target_spawn_time */
     uint32_t target_spawn_time;
-    uint32_t state, next_acquire_ms;
+    uint32_t state, next_acquire_ms, next_attack_ms, release_index;
     float damage_credit;
 } locustMember_t;
 

@@ -163,7 +163,8 @@ static uint32_t const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
 /* Version 131 persists the Locust Swarm controller and member state. */
 /* Version 132 persists independent Impale victim lifts. */
 /* Version 133 persists Impale airborne vulnerability and interruptibility. */
-static uint32_t const save_version = 133;
+/* Version 134 persists Locust target attack deadlines and return damage credit. */
+static uint32_t const save_version = 134;
 #define SAVE_STREAM_BUFFER (1u << 20) // bytes; save files are several MB of field writes, so a large stdio buffer avoids per-4 KB syscalls
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
@@ -1006,6 +1007,8 @@ static field_t const locust_member_fields[] = {
     TF(locustMember_t, target_spawn_time, F_INT),
     TF(locustMember_t, state, F_INT),
     TF(locustMember_t, next_acquire_ms, F_INT),
+    TF(locustMember_t, next_attack_ms, F_INT),
+    TF(locustMember_t, release_index, F_INT),
     TF(locustMember_t, damage_credit, F_FLOAT),
     { NULL, 0, 0, 0, 0, 0 }
 };

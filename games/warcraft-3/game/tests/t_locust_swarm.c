@@ -19,6 +19,8 @@ static char const locust_test_slk[] =
     "C;Y2;X8;K2\nC;Y2;X9;K0.5\nC;Y2;X10;K13\nC;Y2;X11;K\"hfoo\"\n"
     "C;Y2;X12;K420\nC;Y2;X13;K0\nC;Y2;X14;K0\nE\n";
 
+static UnitWeapons_t const locust_test_weapon = { .attacksEnabled = 1 };
+
 typedef struct { slkTestData_t *rows, *old; edict_t *caster; } locustFix_t;
 
 static locustFix_t locust_setup(void) {
@@ -168,7 +170,7 @@ TEST(wc3_save, locust_swarm_controller_and_members_survive_mid_release_save) {
     T_NOT_NULL(controller);
     if (!controller) goto cleanup;
     level.time = 1300; G_RunEntities();
-    T_EQ(locust_member_count(controller), 1u);
+    T_EQ(locust_member_count(controller), 2u);
     T_ASSERT(WriteGame(filename));
     state = G_GetLocustSwarm(controller);
     state->released = 0;
@@ -180,11 +182,204 @@ TEST(wc3_save, locust_swarm_controller_and_members_survive_mid_release_save) {
     state = G_GetLocustSwarm(controller);
     T_NOT_NULL(state);
     if (!state) goto cleanup;
-    T_EQ(state->released, 1u);
+    T_EQ(state->released, 2u);
     T_EQ(state->next_release_ms, 1500u);
-    T_EQ(locust_member_count(controller), 1u);
+    T_EQ(locust_member_count(controller), 2u);
     level.time = 1750; G_RunEntities();
     T_EQ(locust_member_count(controller), 3u);
+    remove(filename);
+cleanup:
+    locust_done(fix);
+}
+
+/* Locust combat is deliberately driven through the actual summon/member
+ * production callbacks; targets are ordinary attackable units with known
+ * health, rather than a mocked spell damage receiver. */
+static edict_t *locust_test_enemy(float x, float y) {
+    edict_t *ent = alloc_test_unit(MAKEFOURCC('h','f','o','o'), x, y);
+    ent->s.player = 1;
+    ent->svflags |= SVF_MONSTER;
+    ent->targtype = TARG_GROUND;
+    ent->health.value = ent->health.max_value = 300.0f;
+    ent->unit_state->armor_value = 0.0f;
+    return ent;
+}
+
+static edict_t *locust_test_member(edict_t const *controller, uint32_t index) {
+    FILTER_EDICTS(ent, ent->inuse && G_GetLocustMember(ent) &&
+                  G_GetLocustMember(ent)->controller == controller &&
+                  G_GetLocustMember(ent)->release_index == index) {
+        ent->data.UnitWeapons = (UnitWeapons_t *)&locust_test_weapon;
+        ent->unit_state->attack1.type = ATK_NORMAL;
+        ent->unit_state->attack1.targetsAllowed = WC3_TARGET_FLAG_GROUND;
+        ent->unit_state->attack1.damageBase = 25.0f;
+        ent->unit_state->attack1.sidesPerDie = 1;
+        ent->unit_state->attack1.range = 90.0f;
+        ent->unit_state->attack1.cooldown = 1.0f;
+        return ent;
+    }
+    return NULL;
+}
+
+TEST(wc3_spell, locust_swarm_reserves_only_authored_attackers_per_target) {
+    locustFix_t fix = locust_setup();
+    abilityitem_t item = S_AbilityItem(LS_ABILITY);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item);
+    edict_t *controller, *first, *second, *third, *near, *far;
+    locustMember_t *a, *b, *c;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
+    controller = locust_controller(fix.caster);
+    T_NOT_NULL(controller);
+    if (!controller) goto cleanup;
+    level.time = 1900; locust_swarm_think(controller);
+    first = locust_test_member(controller, 0);
+    second = locust_test_member(controller, 1);
+    third = locust_test_member(controller, 2);
+    T_NOT_NULL(first); T_NOT_NULL(second); T_NOT_NULL(third);
+    if (!first || !second || !third) goto cleanup;
+    near = locust_test_enemy(330, 256);
+    far = locust_test_enemy(410, 256);
+    G_GetLocustSwarm(controller)->return_threshold = 999.0f;
+    G_GetLocustSwarm(controller)->area = 600.0f;
+    level.time = 2000;
+    locust_member_think(first);
+    locust_member_think(second);
+    locust_member_think(third);
+    a = G_GetLocustMember(first);
+    b = G_GetLocustMember(second);
+    c = G_GetLocustMember(third);
+    T_EQ(a->state, 2u);
+    T_EQ(b->state, 2u);
+    T_EQ(c->state, 2u);
+    /* All three would prefer the closer enemy, but DataC=2. */
+    T_ASSERT(a->target == near);
+    T_ASSERT(b->target == near);
+    T_ASSERT(c->target == far);
+    /* A disappearing target drops its reservation safely. */
+    G_FreeEdict(near);
+    level.time = 2300;
+    locust_member_think(first);
+    T_ASSERT(!a->target || a->target != near);
+cleanup:
+    locust_done(fix);
+}
+
+TEST(wc3_spell, locust_swarm_heals_from_actual_attack_damage_after_return) {
+    locustFix_t fix = locust_setup();
+    abilityitem_t item = S_AbilityItem(LS_ABILITY);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item);
+    edict_t *controller, *locust, *enemy;
+    locustMember_t *member;
+    float hp_before, hp_lost, heal;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    fix.caster->health.value = 400.0f;
+    T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
+    controller = locust_controller(fix.caster);
+    T_NOT_NULL(controller);
+    if (!controller) goto cleanup;
+    level.time = 1300; locust_swarm_think(controller);
+    locust = locust_test_member(controller, 0);
+    T_NOT_NULL(locust);
+    if (!locust) goto cleanup;
+    locust->unit_state->attack1.damageBase = 25.0f;
+    locust->unit_state->attack1.numberOfDice = 0;
+    locust->unit_state->attack1.cooldown = 1.0f;
+    locust->unit_state->attack1.range = 90.0f;
+    enemy = locust_test_enemy(locust->s.origin2.x + 32.0f, locust->s.origin2.y);
+    member = G_GetLocustMember(locust);
+    G_GetLocustSwarm(controller)->return_threshold = 1.0f;
+    hp_before = enemy->health.value;
+    level.time = 1400; locust_member_think(locust);
+    hp_lost = hp_before - enemy->health.value;
+    T_ASSERT(hp_lost > 0.0f);
+    T_EQ(member->state, 3u); /* return flight begins after actual damage */
+    heal = hp_lost * 0.5f; /* synthetic ability DataD */
+    T_FEQ(member->damage_credit, hp_lost, 0.01f);
+    for (uint32_t step = 1; step <= 24 && member->state == 3u; step++) {
+        level.time = 1400 + step * 100;
+        locust_member_think(locust);
+    }
+    T_EQ(member->state, 1u);
+    T_FEQ(member->damage_credit, 0.0f, 0.001f);
+    T_FEQ(fix.caster->health.value, 400.0f + heal, 0.02f);
+cleanup:
+    locust_done(fix);
+}
+
+TEST(wc3_spell, locust_swarm_invulnerable_and_allied_targets_do_not_grant_healing) {
+    locustFix_t fix = locust_setup();
+    abilityitem_t item = S_AbilityItem(LS_ABILITY);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item);
+    edict_t *controller, *locust, *immune, *ally, *valid;
+    locustMember_t *member;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
+    controller = locust_controller(fix.caster);
+    T_NOT_NULL(controller);
+    if (!controller) goto cleanup;
+    level.time = 1250; locust_swarm_think(controller);
+    locust = locust_test_member(controller, 0);
+    T_NOT_NULL(locust);
+    if (!locust) goto cleanup;
+    immune = locust_test_enemy(locust->s.origin2.x + 25, locust->s.origin2.y);
+    G_SetUnitFlag(immune, UNIT_FLAG_INVULNERABLE, true);
+    ally = locust_test_enemy(locust->s.origin2.x + 35, locust->s.origin2.y);
+    ally->s.player = 0;
+    valid = locust_test_enemy(locust->s.origin2.x + 45, locust->s.origin2.y);
+    member = G_GetLocustMember(locust);
+    member->next_acquire_ms = 1400;
+    member->damage_credit = 0.0f;
+    level.time = 1400; locust_member_think(locust);
+    T_ASSERT(member->target != immune && member->target != ally);
+    T_FEQ(immune->health.value, 300.0f, 0.001f);
+    T_FEQ(ally->health.value, 300.0f, 0.001f);
+cleanup:
+    locust_done(fix);
+}
+
+TEST(wc3_save, locust_swarm_member_target_and_return_credit_survive_save_load) {
+    locustFix_t fix = locust_setup();
+    abilityitem_t item = S_AbilityItem(LS_ABILITY);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item);
+    cstring_t filename = Test_TempPath("wc3-locust-combat-save.bin");
+    edict_t *controller, *locust, *enemy;
+    locustMember_t *member;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
+    controller = locust_controller(fix.caster);
+    T_NOT_NULL(controller);
+    if (!controller) goto cleanup;
+    level.time = 1250; locust_swarm_think(controller);
+    locust = locust_test_member(controller, 0);
+    T_NOT_NULL(locust);
+    if (!locust) goto cleanup;
+    enemy = locust_test_enemy(400, 256);
+    member = G_GetLocustMember(locust);
+    member->state = 2u;
+    member->target = enemy;
+    member->target_spawn_time = enemy->spawn_time;
+    member->damage_credit = 12.5f;
+    member->next_attack_ms = 2345;
+    T_ASSERT(WriteGame(filename));
+    member->state = 0u;
+    member->target = NULL;
+    member->damage_credit = 0.0f;
+    T_ASSERT(ReadGame(filename));
+    member = G_GetLocustMember(locust);
+    T_NOT_NULL(member);
+    if (member) {
+        T_EQ(member->state, 2u);
+        T_ASSERT(member->target == enemy);
+        T_EQ(member->target_spawn_time, enemy->spawn_time);
+        T_FEQ(member->damage_credit, 12.5f, 0.001f);
+        T_EQ(member->next_attack_ms, 2345u);
+    }
+    T_ASSERT(locust->think == locust_member_think);
     remove(filename);
 cleanup:
     locust_done(fix);

@@ -1,4 +1,4 @@
-# Crypt Lord Locust Swarm — Patch 5 (controller and release)
+# Crypt Lord Locust Swarm — Patches 5–6 (controller, combat and return)
 
 ## Source and contract
 
@@ -61,5 +61,7 @@ custom return fields. It tests delayed release, caster movement, catch-up,
 identity cleanup, and save/load midway through release. The fixture is
 synthetic and does not require the user's Warcraft archives.
 
-No compiler or tests were run while authoring this patch. The owner should
+Patch 6 adds tests for attacker reservations, normal physical damage and
+return healing, invulnerable/allied target rejection and a member mid-flight
+save/load round-trip. No compiler or tests were run while authoring this patch. The owner should
 run the test suite and verify real `uloc` visuals/flight after Patch 6–8.

@@ -5372,6 +5372,7 @@ TEST(wc3_save, impale_wave_and_hit_marker_round_trip) {
     state->previous_distance = 200;
     state->start_ms = 1000;
     state->caster_spawn_time = caster->spawn_time;
+    state->uninterruptible = 1;
     state->ability = wave->class_id;
     state->level = 2;
     marker = G_Spawn();
@@ -5402,6 +5403,7 @@ TEST(wc3_save, impale_wave_and_hit_marker_round_trip) {
         T_FEQ(state->distance, 600, 0.001f);
         T_FEQ(state->previous_distance, 200, 0.001f);
         T_EQ(state->caster_spawn_time, 500);
+        T_EQ(state->uninterruptible, 1u);
     }
     T_ASSERT(marker->owner == wave);
     T_ASSERT(marker->goalentity == victim);
@@ -5435,6 +5437,7 @@ TEST(wc3_save, impale_victim_lift_and_stun_survive_save) {
     lift->end_ms = 2800;
     lift->peak_height = 120.0f;
     lift->start_offset = 12.0f;
+    lift->vulnerable = 1;
     M_CheckGround(victim);
     offset = S_ImpaleLiftOffset(victim);
     T_ASSERT(offset > 0.0f);
@@ -5450,6 +5453,8 @@ TEST(wc3_save, impale_victim_lift_and_stun_survive_save) {
         T_EQ(lift->end_ms, 2800u);
         T_FEQ(lift->peak_height, 120.0f, 0.001f);
         T_FEQ(lift->start_offset, 12.0f, 0.001f);
+        T_EQ(lift->vulnerable, 1u);
+        T_ASSERT(S_ImpaleAirborneVulnerable(victim));
     }
     T_FEQ(victim->unitinfo.FlyHeight, 25.0f, 0.001f);
     T_FEQ(S_ImpaleLiftOffset(victim), offset, 0.01f);

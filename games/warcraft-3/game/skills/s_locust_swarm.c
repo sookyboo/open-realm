@@ -4,6 +4,7 @@
 #define LOCUST_ATTACKING 2u
 #define LOCUST_RETURNING 3u
 #define LOCUST_REACQUIRE_MS 250u
+#define LOCUST_MAX_ATTACKERS_PER_TARGET 256u
 
 static bool locust_reference_valid(edict_t *ent, uint32_t spawn_time) {
     return ent && ent->inuse && ent->spawn_time == spawn_time;
@@ -44,6 +45,7 @@ static void locust_spawn_one(edict_t *controller, locustSwarm_t *swarm) {
     if (!member) { locust_member_die(locust); return; }
     member->controller = controller;
     member->controller_spawn_time = controller->spawn_time;
+    member->release_index = swarm->released;
     member->state = LOCUST_SEEKING;
     member->next_acquire_ms = G_Time();
     locust->owner = caster;
@@ -83,15 +85,21 @@ static uint32_t locust_target_occupancy(edict_t *controller, edict_t *target) {
     return count;
 }
 
+static bool locust_target_full(edict_t *controller, locustSwarm_t const *swarm, edict_t *target) {
+    return locust_target_occupancy(controller, target) >=
+           (uint32_t)MAX(1.0f, MIN((float)LOCUST_MAX_ATTACKERS_PER_TARGET, swarm->target_cap));
+}
+
 static edict_t *locust_find_target(edict_t *member, locustSwarm_t *swarm) {
     edict_t *caster = member->owner, *best = NULL;
     float best_distance = FLT_MAX;
     FILTER_EDICTS(target, target != caster && S_SpellIsAliveTarget(target) &&
                   S_SpellIsEnemy(caster, target) &&
+                  !G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) &&
+                  !unit_hasstatusstate(target, WC3_STATUS_STATE_INVULNERABLE) &&
                   S_SpellAllowsAreaTarget(swarm->ability, caster, target)) {
         float distance = Vector2_distance(&target->s.origin2, &caster->s.origin2);
-        if (distance > swarm->area || locust_target_occupancy(G_GetLocustMember(member)->controller, target) >=
-                                      (uint32_t)MAX(1.0f, swarm->target_cap)) continue;
+        if (distance > swarm->area || locust_target_full(G_GetLocustMember(member)->controller, swarm, target)) continue;
         if (!best || distance < best_distance ||
             (distance == best_distance && target->s.number < best->s.number)) {
             best = target;
@@ -140,7 +148,7 @@ void locust_member_think(edict_t *member) {
     if (!locust_reference_valid(target, state->target_spawn_time) || !S_SpellIsAliveTarget(target) ||
         !S_SpellIsEnemy(caster, target) ||
         Vector2_distance(&target->s.origin2, &caster->s.origin2) > swarm->area ||
-        locust_target_occupancy(controller, target) > (uint32_t)MAX(1.0f, swarm->target_cap)) {
+        locust_target_full(controller, swarm, target)) {
         state->target = NULL;
         state->target_spawn_time = 0;
         state->state = LOCUST_SEEKING;
@@ -156,7 +164,25 @@ void locust_member_think(edict_t *member) {
             state->state = LOCUST_ATTACKING;
             state->target = target;
             state->target_spawn_time = target->spawn_time;
+            state->next_attack_ms = now;
         }
+    }
+    if (state->state == LOCUST_ATTACKING && state->target &&
+        locust_reference_valid(state->target, state->target_spawn_time) && now >= state->next_attack_ms) {
+        unitAttack_t const *weapon = S_LocustAttackWeapon(member, state->target);
+        float actual;
+        if (!weapon || !S_AttackCanTarget(member, state->target)) {
+            state->state = LOCUST_SEEKING;
+            state->target = NULL;
+            state->target_spawn_time = 0;
+            state->next_acquire_ms = now + LOCUST_REACQUIRE_MS;
+            return;
+        }
+        state->next_attack_ms = now + (uint32_t)MAX(100.0f, weapon->cooldown * 1000.0f);
+        actual = S_LocustAttackHit(member, state->target);
+        state->damage_credit += actual;
+        if (state->damage_credit >= swarm->return_threshold && state->damage_credit > 0.0f)
+            locust_begin_return(member, state, caster);
     }
 }
 

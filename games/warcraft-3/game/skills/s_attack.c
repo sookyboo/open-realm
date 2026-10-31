@@ -614,6 +614,35 @@ void S_ResolveAttackHit(edict_t *attacker, edict_t *target, int damage) {
     }
 }
 
+/* Target-compatible weapon data is shared by the damage roll and swarm
+ * steering, including custom locust units with only Attack 2 enabled. */
+unitAttack_t const *S_LocustAttackWeapon(edict_t const *locust, edict_t const *target) {
+    return attack_profile(locust, target);
+}
+
+/* Locust Swarm attacks use the same weapon selection, damage roll, armor,
+ * evasion, shields and primary-hit callbacks as an ordinary weapon hit.
+ * HP delta (capped by the victim's pre-hit life) is the healing source, not
+ * the nominal roll. This also counts no damage when a hit misses or is
+ * negated; a reallocated target slot can never award another entity's HP. */
+float S_LocustAttackHit(edict_t *locust, edict_t *target) {
+    uint32_t spawn_time;
+    float health_before, health_after;
+    int damage;
+    if (!locust || !target || !locust->inuse || !target->inuse ||
+        !locust->unit_state || !S_AttackCanTarget(locust, target) ||
+        !S_SpellIsEnemy(locust, target) ||
+        G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) ||
+        unit_hasstatusstate(target, WC3_STATUS_STATE_INVULNERABLE)) return 0.0f;
+    spawn_time = target->spawn_time;
+    health_before = MAX(0.0f, target->health.value);
+    damage = G_AttackDamage(locust, target, (int)ai_rolldamage1(locust, 1));
+    if (damage <= 0) return 0.0f;
+    S_ResolveAttackHit(locust, target, damage);
+    if (!target->inuse || target->spawn_time != spawn_time) return 0.0f;
+    health_after = MAX(0.0f, target->health.value);
+    return MAX(0.0f, MIN(health_before, health_before - health_after));
+}
 
 static bool artillery_splash_target_allowed(edict_t *attacker, edict_t *target, uint32_t mask, uint32_t targets_allowed) {
     uint32_t flag;
