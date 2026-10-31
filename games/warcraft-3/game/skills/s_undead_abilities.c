@@ -181,6 +181,12 @@ static void undead_replenish_execute(edict_t *caster, abilityitem_t const *spell
     cost = MAX(0.0f, S_SpellNumber(spell->code, ABILITY_NUMBER_COST, level));
     buff = S_SpellBuffId(spell->code, level);
     if (amount <= 0.0f) return;
+    /* Caster and overhead art are different authored fields. Spawn them once
+     * per cast, not once per recipient. The transient effect owner handles
+     * model Birth/Death presentation and cleanup. */
+    G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_CASTER, 0, caster, "origin", true);
+    G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_SPECIAL, 0, caster, "overhead", true);
+    G_PlayAbilityEffectSound(spell->code, &caster->s.origin2);
     FILTER_EDICTS(target, undead_replenish_eligible(caster, target, spell->code, health) &&
                   Vector2_distance(&target->s.origin2, &caster->s.origin2) <= area) {
         float duration;
@@ -195,6 +201,7 @@ static void undead_replenish_execute(edict_t *caster, abilityitem_t const *spell
         if (recipients > 0 && recipients < 5) caster->mana.value -= cost;
         if (health) S_SpellHeal(target, amount);
         else target->mana.value = MIN(target->mana.max_value, target->mana.value + amount);
+        G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_TARGET, 0, target, NULL, true);
         recipients++;
     }
 }
