@@ -272,7 +272,11 @@ static umove_t absorb_mana_missile_move = { "stand", NULL, absorb_mana_missile_h
 
 BZ_ABILITY_PROC(CAbilityAbsorb) {
     uint32_t const code = call && call->item ? call->item->code : 0;
-    edict_t *target = call && call->target && call->target->type == SPELL_TARGET_UNIT ?
+    edict_t *target;
+    /* spell_approach_range uses the same union slot as target and deliberately
+     * invokes the proc with no caster. Do not interpret that float as a pointer. */
+    if (msg == A_SPELL_APPROACH_RANGE) return true;
+    target = call && call->target && call->target->type == SPELL_TARGET_UNIT ?
         call->target->entity : NULL;
     switch (msg) {
     case A_VALIDATE: return absorb_mana_validate(ent, target, code);

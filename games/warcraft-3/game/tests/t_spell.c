@@ -11170,6 +11170,9 @@ TEST(wc3_spell, destroyer_absorb_mana_is_an_active_friendly_unit_spell) {
     if (!absorb.ability) return;
     T_EQ(absorb.ability->proc, CAbilityAbsorb);
     T_EQ(absorb.ability->target_type, SPELL_TARGET_UNIT);
+    call = MAKE(abilityCall_t, .item = &absorb, .spell_approach_range = 70.0f);
+    T_ASSERT(CAbilityAbsorb(NULL, A_SPELL_APPROACH_RANGE, &call));
+    T_FEQ(call.spell_approach_range, 70.0f, 0.001f);
     reset_entities(); setup_test_world();
     rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
     caster = alloc_test_unit(MAKEFOURCC('u','b','s','p'), 0, 0);
