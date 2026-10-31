@@ -465,6 +465,11 @@ cstring_t G_AbilityBuffArt(uint32_t buff_id) {
         return "ReplaceableTextures\\CommandButtons\\BTNTrueshotAura.blp";
     if (buff_id == MAKEFOURCC('B','s','p','o'))
         return "ReplaceableTextures\\CommandButtons\\BTNSlowPoison.blp";
+    /* Bfro's Buffart is authored in CommonAbilityFunc.txt rather than the
+     * AbilityBuffData row. Keep its status icon available in data sets where
+     * the common function table is not exposed to the HUD lookup. */
+    if (buff_id == MAKEFOURCC('B','f','r','o'))
+        return "ReplaceableTextures\\CommandButtons\\BTNFrost.blp";
     return NULL;
 }
 

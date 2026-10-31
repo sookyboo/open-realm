@@ -16,12 +16,21 @@
 #define ID_DRUNKEN_BRAWLER MAKEFOURCC('A', 'N', 'd', 'b')
 #define ID_SEARING_ARROWS MAKEFOURCC('A', 'H', 'f', 'a')
 #define ID_COLD_ARROWS MAKEFOURCC('A', 'H', 'c', 'a')
+#define ID_FROST_ATTACK MAKEFOURCC('A', 'f', 'r', 'a')
 #define ID_POISON_ARROWS MAKEFOURCC('A', 'E', 'p', 'a')
 #define ID_TRUESHOT_AURA MAKEFOURCC('A', 'E', 'a', 'r')
 #define ID_SLOW_AURA MAKEFOURCC('A', 'a', 's', 'l')
 #define ID_COMMAND_AURA MAKEFOURCC('A', 'C', 'a', 'c')
 #define ID_COMMAND_AURA_NEUTRAL MAKEFOURCC('A', 'O', 'a', 'c')
 #define ID_WAR_DRUMS MAKEFOURCC('A', 'a', 'k', 'b')
+
+/* TFT Frost Attack (Afra) is implemented by the passive-ability class and
+ * inherits APas as its base code. Preserve its alias identity for attack
+ * damage and status application. */
+static bool cold_attack_ability(uint32_t code) {
+    uint32_t const base = G_AbilityCode(code);
+    return code == ID_FROST_ATTACK || base == ID_FROST_ATTACK || base == ID_COLD_ARROWS;
+}
 
 #define ID_REGEN_LIFE_ORC MAKEFOURCC('A', 'o', 'a', 'r')
 #define ID_REGEN_LIFE_BLIGHT MAKEFOURCC('A', 'a', 'b', 'r')
@@ -1269,7 +1278,7 @@ bool S_ColdArrowsIssueOrder(edict_t *attacker, edict_t *target, uint32_t ability
     heroabilitystatus_t *status;
     uint32_t level;
 
-    if (!attacker || !target || G_AbilityCode(ability) != ID_COLD_ARROWS ||
+    if (!attacker || !target || !cold_attack_ability(ability) ||
         !G_UnitAbilityLevel(attacker, ability) || !S_AttackCanTarget(attacker, target) ||
         !attacker->unit_state || attacker->unit_state->attack1.weapon != WPN_MISSILE) return false;
     level = G_UnitAbilityLevel(attacker, ability);
@@ -1297,14 +1306,23 @@ int S_ColdArrowsDamage(edict_t *attacker, edict_t *target, int damage) {
         uint32_t const source = status->source_ability ? status->source_ability : status->code;
         if (!status->level || (status->timestamp && status->timestamp <= G_Time()) ||
             !(status->buff_flags & WC3_STATUS_BUFF_ONE_SHOT_ATTACK) ||
-            G_AbilityCode(source) != ID_COLD_ARROWS) continue;
+            !cold_attack_ability(source)) continue;
         manual = status;
         code = source;
         level = status->rank ? status->rank : status->level;
         break;
     }
+    /* TFT Frost Tower owns Afra as a passive attack ability. Unlike the Sea
+     * Witch's Frost Arrows, it has no selected autocast state. */
+    if (!level) {
+        uint32_t const frost_level = G_UnitAbilityLevel(attacker, ID_FROST_ATTACK);
+        if (frost_level) {
+            code = ID_FROST_ATTACK;
+            level = frost_level;
+        }
+    }
     if (!level && attacker->unit_state->autocast &&
-        G_AbilityCode(attacker->unit_state->autocast) == ID_COLD_ARROWS &&
+        cold_attack_ability(attacker->unit_state->autocast) &&
         G_UnitAutocastIsOn(attacker, attacker->unit_state->autocast)) {
         code = attacker->unit_state->autocast;
         level = G_UnitAbilityLevel(attacker, code);
@@ -1316,7 +1334,9 @@ int S_ColdArrowsDamage(edict_t *attacker, edict_t *target, int damage) {
     }
     if (manual) unit_removestatus(attacker, manual, STATUS_REMOVE_SCRIPT);
     buff_list = S_SpellBuffId(code, level);
-    buff = S_SpellBuffToken(buff_list, 1);
+    /* Afra authors only Bfro. Cold Arrows aliases such as ANfa author a
+     * two-entry list whose second entry is the visible slow status. */
+    buff = S_SpellBuffToken(buff_list, G_AbilityCode(code) == ID_FROST_ATTACK ? 0 : 1);
     if (!buff) buff = "Bcsd";
     S_SpellApplyTimedTargetStatus(target, code, level, buff,
         S_SpellResistantDuration(code, level, target));
@@ -1334,7 +1354,7 @@ cstring_t S_SearingArrowsMissileArt(edict_t *attacker) {
         if (!status->level || !(status->buff_flags & WC3_STATUS_BUFF_ONE_SHOT_ATTACK) ||
             (status->timestamp && status->timestamp <= G_Time())) continue;
         code = status->source_ability ? status->source_ability : status->code;
-        if (G_AbilityCode(code) == ID_SEARING_ARROWS || G_AbilityCode(code) == ID_COLD_ARROWS) {
+        if (G_AbilityCode(code) == ID_SEARING_ARROWS || cold_attack_ability(code)) {
             level = status->rank ? status->rank : status->level;
             break;
         }
@@ -1342,7 +1362,7 @@ cstring_t S_SearingArrowsMissileArt(edict_t *attacker) {
     }
     if (!code && attacker->unit_state->autocast &&
         (G_AbilityCode(attacker->unit_state->autocast) == ID_SEARING_ARROWS ||
-         G_AbilityCode(attacker->unit_state->autocast) == ID_COLD_ARROWS) &&
+         cold_attack_ability(attacker->unit_state->autocast)) &&
         G_UnitAutocastIsOn(attacker, attacker->unit_state->autocast)) {
         code = attacker->unit_state->autocast;
         level = G_UnitAbilityLevel(attacker, code);

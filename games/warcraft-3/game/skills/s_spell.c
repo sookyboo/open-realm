@@ -1757,7 +1757,8 @@ static void status_apply_authored_modifiers(heroabilitystatus_t *slot, uint32_t 
     switch (slot->code) {
     case MAKEFOURCC('B','c','r','i'): case MAKEFOURCC('B','b','l','o'):
     case MAKEFOURCC('B','s','l','o'): case MAKEFOURCC('B','c','s','d'):
-    case MAKEFOURCC('B','f','z','y'): case MAKEFOURCC('B','U','h','f'):
+    case MAKEFOURCC('B','f','r','o'): case MAKEFOURCC('B','f','z','y'):
+    case MAKEFOURCC('B','U','h','f'):
     case MAKEFOURCC('B','u','h','f'): case MAKEFOURCC('B','s','p','o'):
     case MAKEFOURCC('B','i','n','f'): case MAKEFOURCC('B','f','a','e'):
     case MAKEFOURCC('B','H','t','c'): case MAKEFOURCC('B','N','h','t'):
@@ -1803,6 +1804,12 @@ static void status_apply_authored_modifiers(heroabilitystatus_t *slot, uint32_t 
         if (!ability) ability = MAKEFOURCC('A','H','c','a');
         status_authored_modifier(slot, WC3_STATUS_MOD_MOVE_SPEED_PERCENT, -S_SpellData(ability, rank, 2));
         status_authored_modifier(slot, WC3_STATUS_MOD_ATTACK_SPEED_PERCENT, -S_SpellData(ability, rank, 3));
+        break;
+    case MAKEFOURCC('B','f','r','o'):
+        /* TFT Frost Attack (Afra) uses Bfro and authors duration, but the
+         * classic slow magnitudes are intrinsic to this buff. */
+        status_authored_modifier(slot, WC3_STATUS_MOD_MOVE_SPEED_PERCENT, -0.5f);
+        status_authored_modifier(slot, WC3_STATUS_MOD_ATTACK_SPEED_PERCENT, -0.25f);
         break;
     case MAKEFOURCC('B','i','n','f'):
         if (!ability) ability = MAKEFOURCC('A','i','n','f');
