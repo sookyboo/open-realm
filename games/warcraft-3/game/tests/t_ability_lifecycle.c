@@ -9,7 +9,7 @@ void setup_test_world(void);
 slkTestData_t *parse_slk_string(char const *text);
 void free_slk_rows(slkTestData_t *rows);
 
-static UnitAbilities_t review_abilities = { .abilList = "AHfs,AHbz,AHdr,ANdr,AEtq,AHtb,AHre,AUfn,AHwe,Acan,AHmt" };
+static UnitAbilities_t review_abilities = { .abilList = "AHfs,AHbz,AHdr,ANdr,AEtq,AHtb,AHre,AUfn,AHwe,Acan,AHmt,ANrf" };
 static char blizzard_effect_model[MAX_PATHLEN];
 
 static int review_capture_model(cstring_t model) {
@@ -2247,3 +2247,149 @@ TEST(wc3_ability_lifecycle, jass_removebuffs_preserves_undispellable_and_mixed_r
 }
 
 #endif
+
+
+#ifdef BZ_TESTS
+/* The real Pit Lord's three-second channel must contain multiple waves, not
+ * one wave every three seconds. Use deliberately nonstock DataA/B/E/F so
+ * hardcoded stock values cannot satisfy the regression. */
+static char const rain_of_fire_slk[] =
+    "ID;PWXL;N;EBB;Y2;X13\n"
+    "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+    "C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Dur1\"\nC;Y1;X6;K\"Area1\"\n"
+    "C;Y1;X7;K\"DataA1\"\nC;Y1;X8;K\"DataB1\"\n"
+    "C;Y1;X9;K\"DataC1\"\nC;Y1;X10;K\"DataD1\"\n"
+    "C;Y1;X11;K\"DataE1\"\nC;Y1;X12;K\"DataF1\"\nC;Y1;X13;K\"Cost1\"\n"
+    "C;Y2;X1;K\"ANrf\"\nC;Y2;X2;K\"ANrf\"\nC;Y2;X3;K1\n"
+    "C;Y2;X4;K\"air,ground,structure,enemy\"\n"
+    "C;Y2;X5;K2\nC;Y2;X6;K130\nC;Y2;X7;K4\n"
+    "C;Y2;X8;K25\nC;Y2;X9;K3\nC;Y2;X10;K0.5\n"
+    "C;Y2;X11;K7\nC;Y2;X12;K50\nC;Y2;X13;K0\nE\n";
+
+static edict_t *rain_of_fire_test_setup(slkTestData_t **rows, slkTestData_t **old) {
+    edict_t *caster = review_setup();
+    *rows = parse_slk_string(rain_of_fire_slk);
+    *old = G_SetSLKRows("AbilityData", *rows);
+    caster->unit_state->ranks[0] = MAKE(heroability_t, .code = FS_SLKKey("ANrf"), .level = 1);
+    return caster;
+}
+static void rain_of_fire_test_done(slkTestData_t *rows, slkTestData_t *old) {
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
+}
+
+TEST(wc3_ability_lifecycle, pit_lord_rain_of_fire_uses_wave_interval_cap_friendly_fire_and_building_multiplier) {
+    slkTestData_t *rows, *old;
+    edict_t *caster = rain_of_fire_test_setup(&rows, &old);
+    edict_t *enemy = review_unit(1, 300);
+    edict_t *ally = review_unit(0, 310);
+    edict_t *building = review_unit(1, 320);
+    edict_t *outside = review_unit(1, 700);
+    edict_t *thinker;
+    vec2_t point = { 300, 0 };
+    building->s.flags |= EF_BUILDING;
+    building->targtype = TARG_STRUCTURE;
+    T_ASSERT(S_CastPointTargetSpell(caster, FS_SLKKey("ANrf"), &point));
+    thinker = review_thinker(caster);
+    T_NOT_NULL(thinker);
+    if (!thinker) { rain_of_fire_test_done(rows, old); return; }
+    T_EQ(thinker->resources, 3u); /* first of four waves fires immediately */
+    T_EQ(thinker->freetime, 1500u);
+    T_FEQ(enemy->health.value, 984, .001f);
+    T_FEQ(ally->health.value, 984, .001f);
+    T_FEQ(building->health.value, 992, .001f);
+    T_FEQ(outside->health.value, 1000, .001f);
+    level.time = 1499; G_RunEntity(thinker);
+    T_FEQ(enemy->health.value, 984, .001f);
+    level.time = 1500; G_RunEntity(thinker);
+    T_EQ(thinker->resources, 2u);
+    T_FEQ(enemy->health.value, 968, .001f);
+    level.time = 2000; G_RunEntity(thinker);
+    T_EQ(thinker->resources, 1u);
+    level.time = 2500; G_RunEntity(thinker);
+    T_EQ(thinker->resources, 0u);
+    level.time = 3000; G_RunEntity(thinker);
+    T_ASSERT(!thinker->inuse);
+    T_ASSERT(!S_SpellIsChanneling(caster));
+    T_FEQ(enemy->health.value, 936, .001f);
+    T_FEQ(ally->health.value, 936, .001f);
+    T_FEQ(building->health.value, 968, .001f);
+    rain_of_fire_test_done(rows, old);
+}
+
+TEST(wc3_ability_lifecycle, pit_lord_rain_of_fire_burns_survive_channel_interrupt_and_stack_per_wave) {
+    slkTestData_t *rows, *old;
+    edict_t *caster = rain_of_fire_test_setup(&rows, &old);
+    edict_t *enemy = review_unit(1, 300);
+    edict_t *thinker, *first = NULL, *second = NULL;
+    vec2_t point = { 300, 0 };
+    T_ASSERT(S_CastPointTargetSpell(caster, FS_SLKKey("ANrf"), &point));
+    thinker = review_thinker(caster);
+    T_NOT_NULL(thinker);
+    if (!thinker) { rain_of_fire_test_done(rows, old); return; }
+    T_FEQ(enemy->health.value, 975, .001f);
+    FILTER_EDICTS(b, b->think == rain_of_fire_burn_think && b->goalentity == enemy) first = b;
+    T_NOT_NULL(first);
+    level.time = 1500; G_RunEntity(thinker);
+    FILTER_EDICTS(b, b->think == rain_of_fire_burn_think && b->goalentity == enemy && b != first) second = b;
+    T_NOT_NULL(second);
+    T_FEQ(enemy->health.value, 950, .001f);
+    S_SpellCancelChannel(caster);
+    G_RunEntity(thinker);
+    T_ASSERT(!thinker->inuse);
+    T_ASSERT(!S_SpellIsChanneling(caster));
+    level.time = 2000;
+    if (first) G_RunEntity(first);
+    if (second) G_RunEntity(second);
+    T_FEQ(enemy->health.value, 943, .001f); /* first landed wave burns */
+    level.time = 2500;
+    if (first) G_RunEntity(first);
+    if (second) G_RunEntity(second);
+    T_FEQ(enemy->health.value, 936, .001f); /* second wave burns separately */
+    level.time = 3000;
+    if (first && first->inuse) G_RunEntity(first);
+    if (second && second->inuse) G_RunEntity(second);
+    T_ASSERT(first && first->inuse);
+    T_FEQ(enemy->health.value, 929, .001f);
+    level.time = 3500;
+    if (second && second->inuse) G_RunEntity(second);
+    T_ASSERT(second && second->inuse);
+    T_FEQ(enemy->health.value, 922, .001f);
+    level.time = 4000;
+    if (first && first->inuse) G_RunEntity(first);
+    T_ASSERT(!first || !first->inuse);
+    T_FEQ(enemy->health.value, 915, .001f);
+    level.time = 4500;
+    if (second && second->inuse) G_RunEntity(second);
+    T_ASSERT(!second || !second->inuse);
+    T_FEQ(enemy->health.value, 908, .001f);
+    rain_of_fire_test_done(rows, old);
+}
+
+TEST(wc3_ability_lifecycle, pit_lord_rain_of_fire_burn_survives_save_load_without_recasting) {
+    cstring_t filename = Test_TempPath("rain-of-fire-burn-save.bin");
+    slkTestData_t *rows, *old;
+    edict_t *caster = rain_of_fire_test_setup(&rows, &old);
+    edict_t *enemy = review_unit(1, 300), *burn = NULL, *thinker;
+    vec2_t point = { 300, 0 };
+    T_ASSERT(S_CastPointTargetSpell(caster, FS_SLKKey("ANrf"), &point));
+    thinker = review_thinker(caster);
+    FILTER_EDICTS(b, b->think == rain_of_fire_burn_think && b->goalentity == enemy) burn = b;
+    T_NOT_NULL(burn);
+    if (!burn) { rain_of_fire_test_done(rows, old); return; }
+    S_SpellCancelChannel(caster);
+    if (thinker) G_RunEntity(thinker);
+    T_ASSERT(WriteGame(filename));
+    burn->think = NULL; burn->resources = 0; burn->goalentity = NULL;
+    T_ASSERT(ReadGame(filename));
+    T_ASSERT(burn->think == rain_of_fire_burn_think);
+    T_EQ(burn->resources, 3u);
+    T_ASSERT(S_SpellChannelTarget(burn) == enemy);
+    level.time = burn->freetime;
+    G_RunEntity(burn);
+    T_FEQ(enemy->health.value, 968.0f, .001f);
+    T_EQ(burn->resources, 2u);
+    remove(filename);
+    rain_of_fire_test_done(rows, old);
+}
+#endif /* BZ_TESTS */

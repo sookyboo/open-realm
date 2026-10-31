@@ -60,35 +60,6 @@ static void carrion_wave_finish(edict_t *wave) {
 
 void carrion_wave_think(edict_t *wave);
 
-/* Deal ent->damage to every enemy within ent->collision of ent.  maxtotal > 0
- * caps the combined damage of this burst (WC3 "Max Damage" / "Maximum Damage per
- * Wave"): when damage*targets would exceed it, the per-target damage is scaled
- * down so the total lands on the cap. */
-static void area_spell_damage(edict_t *ent, float maxtotal) {
-    edict_t *caster = ent->owner;
-    float radius = ent->collision;
-    float damage = (float)ent->damage;
-    uint32_t ntargets = 0;
-
-#define AREA_HITS(t) ((t)->inuse && (t) != caster && S_SpellIsAliveTarget(t) && \
-                      S_SpellIsEnemy(caster, t) &&                              \
-                      (G_UnitTargetType(t) == TARG_GROUND || G_UnitTargetType(t) == TARG_AIR || G_UnitIsStructure(t)) && \
-                      Vector2_distance(&(t)->s.origin2, &ent->s.origin2) <= radius)
-
-    if (maxtotal > 0.0f) {
-        FILTER_EDICTS(target, AREA_HITS(target)) {
-            ntargets++;
-        }
-        if (ntargets > 0 && damage * (float)ntargets > maxtotal) {
-            damage = MAX(1.0f, maxtotal / (float)ntargets);
-        }
-    }
-    FILTER_EDICTS(target, AREA_HITS(target)) {
-        S_SpellDamage(target, caster, (uint32_t)damage);
-    }
-#undef AREA_HITS
-}
-
 static bool blizzard_hits(edict_t *ent, edict_t *target) {
     edict_t *caster = ent->owner;
     return target->inuse && target != caster && S_SpellIsAliveTarget(target) &&
@@ -423,17 +394,113 @@ static void shockwave_spawn_missile(edict_t *caster, uint32_t code, vec2_t const
     G_StartProjectilePresentation(missile);
 }
 
-void rain_of_fire_think(edict_t *ent) {
-    uint32_t now = G_Time();
+/* Rain of Fire has a separate three-second burn for *each landed wave*.
+ * These small save-safe thinkers do not belong to the caster's channel. A
+ * canceled cast stops future waves, but completed hits continue burning.
+ * Identity storage prevents slot reuse from redirecting burn damage. */
+#define RAIN_FIRE_BURN_TICK_MS 1000u
+#define RAIN_FIRE_BURN_TICKS   3u
 
-    if (!S_SpellChannelActive(ent)) { S_SpellEndChannel(ent); return; }
-    if (ent->freetime && now < ent->freetime) return;
-    area_spell_damage(ent, 0.0f);
-    if (!--ent->resources) {
-        S_SpellEndChannel(ent);
+void rain_of_fire_burn_think(edict_t *burn) {
+    edict_t *target = S_SpellChannelTarget(burn);
+    edict_t *source = S_SpellChannelOwner(burn);
+    uint32_t const now = G_Time();
+    if (!target || !S_SpellIsAliveTarget(target) || !burn->resources) {
+        G_FreeEdict(burn);
         return;
     }
-    ent->freetime = now + (uint32_t)(MAX(0.1f, ent->velocity) * 1000.0f);
+    while (burn->resources && now >= burn->freetime) {
+        /* Advance before damage: death callbacks can retire this target. */
+        burn->resources--;
+        burn->freetime += RAIN_FIRE_BURN_TICK_MS;
+        if (burn->damage > 0) S_SpellDamage(target, source, (int)burn->damage);
+        if (!burn->inuse) return;
+        if (!S_SpellIsAliveTarget(target) ||
+            target->spawn_time != G_GetChannel(burn)->target_spawn_time) break;
+    }
+    if (!burn->resources || !S_SpellIsAliveTarget(target)) G_FreeEdict(burn);
+}
+
+static bool rain_of_fire_hits(edict_t const *wave, edict_t *target) {
+    cstring_t mask;
+    bool structure;
+    uint32_t type;
+    uint32_t const rank = MAX(1u, wave->variation);
+    if (!S_SpellIsAliveTarget(target) ||
+        (G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) ||
+         unit_hasstatusstate(target, WC3_STATUS_STATE_INVULNERABLE)) ||
+        S_UnitIsCycloned(target) || S_UnitSpellImmune(target) ||
+        Vector2_distance(&target->s.origin2, &wave->s.origin2) > wave->collision) return false;
+    structure = G_UnitIsStructure(target);
+    type = G_UnitTargetType(target);
+    /* Stock Rain of Fire deliberately deals friendly fire even if the ability
+     * row names enemies. Preserve authored unit-type restrictions, but do not
+     * route this special-case through the normal hostile-area relationship
+     * filter. Caster, allies, enemies and neutrals can all be hit. */
+    mask = G_AbilityLevel(wave->class_id, rank)->targs;
+    if (mask && (S_SpellTargetHasToken(mask, "air", NULL) ||
+                 S_SpellTargetHasToken(mask, "ground", NULL) ||
+                 S_SpellTargetHasToken(mask, "structure", NULL))) {
+        if (!(S_SpellTargetHasToken(mask, "air", NULL) && type == TARG_AIR) &&
+            !(S_SpellTargetHasToken(mask, "ground", NULL) && type == TARG_GROUND) &&
+            !(S_SpellTargetHasToken(mask, "structure", NULL) && structure)) return false;
+    }
+    if (mask && S_SpellTargetHasToken(mask, "organic", NULL) && target->targtype == TARG_MECHANICAL)
+        return false;
+    if (mask && S_SpellTargetHasToken(mask, "mechanical", NULL) && target->targtype != TARG_MECHANICAL)
+        return false;
+    return true;
+}
+
+static void rain_of_fire_spawn_burn(edict_t *wave, edict_t *target, uint32_t rank) {
+    float const dps = S_SpellData(wave->class_id, rank, 5);
+    edict_t *burn;
+    if (dps < 1.0f || !S_SpellIsAliveTarget(target)) return;
+    burn = S_SpellIdentityThinker(wave->owner, wave->class_id, target);
+    if (!burn) return;
+    burn->svflags |= SVF_NOCLIENT;
+    burn->damage = (uint32_t)dps;
+    burn->resources = RAIN_FIRE_BURN_TICKS;
+    burn->freetime = G_Time() + RAIN_FIRE_BURN_TICK_MS;
+    burn->think = rain_of_fire_burn_think;
+}
+
+static void rain_of_fire_wave_damage(edict_t *wave) {
+    uint32_t const rank = MAX(1u, wave->variation);
+    float amount = (float)wave->damage;
+    float const limit = wave->velocity;
+    float const building_multiplier = MAX(0.0f, S_SpellData(wave->class_id, rank, 4));
+    uint32_t count = 0;
+
+    FILTER_EDICTS(target, rain_of_fire_hits(wave, target)) count++;
+    if (!count) return;
+    /* DataF caps the pre-building-reduction damage across this wave. Stock
+     * caps take effect above five targets; do not round each hit *up* and
+     * exceed the cap after integer damage conversion. */
+    if (limit > 0.0f && amount * (float)count > limit)
+        amount = limit / (float)count;
+    FILTER_EDICTS(target, rain_of_fire_hits(wave, target)) {
+        float const scaled = amount * (G_UnitIsStructure(target) ? building_multiplier : 1.0f);
+        if (scaled >= 1.0f && S_SpellDamage(target, wave->owner, (int)scaled) &&
+            !M_IsDead(target) && !G_UnitIsStructure(target))
+            rain_of_fire_spawn_burn(wave, target, rank);
+    }
+}
+
+void rain_of_fire_think(edict_t *ent) {
+    uint32_t const now = G_Time();
+    uint32_t const interval = (uint32_t)MAX(1.0f, ent->wait * 1000.0f);
+    if (!S_SpellChannelActive(ent)) { S_SpellEndChannel(ent); return; }
+    /* The final wave still occupies one interval of the authored channel.
+     * Absolute deadlines keep frame jitter from slowing subsequent waves. */
+    while (ent->freetime <= now) {
+        if (!ent->resources) { S_SpellEndChannel(ent); return; }
+        rain_of_fire_wave_damage(ent);
+        ent->resources--;
+        ent->freetime += interval;
+        if (!ent->resources) break;
+        if (!S_SpellChannelActive(ent)) { S_SpellEndChannel(ent); return; }
+    }
 }
 
 /* Starfall: self-centered periodic area damage.  AbilityData stores the
@@ -569,15 +636,26 @@ BZ_SIMPLE_SPELL_PROC(AbilityShockwave) {
  * Ubertip="Calls down waves of fire that damage enemy units in a target area."
  */
 BZ_SIMPLE_SPELL_PROC(AbilityRainOfFire) {
-    uint32_t level = S_SpellLevel(caster, spell->code);
+    uint32_t const level = S_SpellLevel(caster, spell->code);
+    uint32_t const waves = (uint32_t)MAX(1.0f, S_SpellData(spell->code, level, 1));
+    float const duration = S_SpellDuration(spell->code, level, false);
+    float const cast_interval = S_SpellNumber(spell->code, ABILITY_NUMBER_CAST, level);
+    /* The Pit Lord's three-second Dur spans every wave, not the interval
+     * between waves. Creep aliases may omit Dur and author a Cast interval. */
+    float const interval = duration > 0.0f ? duration / (float)waves :
+        (cast_interval > 0.0f ? cast_interval : 1.0f);
     edict_t *thinker = S_SpellChannelThinker(caster, spell->code);
+    if (!thinker) return;
     thinker->s.origin2 = st.point;
     thinker->s.origin.x = st.point.x;
     thinker->s.origin.y = st.point.y;
-    thinker->collision = S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level);
-    thinker->damage = (uint32_t)MAX(1.0f, S_SpellData(spell->code, level, 2));
-    thinker->resources = (uint32_t)MAX(1.0f, S_SpellData(spell->code, level, 1));
-    thinker->velocity = MAX(0.1f, S_SpellDuration(spell->code, level, false));
+    thinker->collision = MAX(0.0f, S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level));
+    thinker->damage = (uint32_t)MAX(0.0f, S_SpellData(spell->code, level, 2));
+    thinker->resources = waves;
+    thinker->variation = level;
+    thinker->velocity = MAX(0.0f, S_SpellData(spell->code, level, 6));
+    thinker->wait = MAX(0.001f, interval);
+    thinker->freetime = G_Time();
     thinker->think = rain_of_fire_think;
     rain_of_fire_think(thinker);
 }

@@ -249,6 +249,7 @@ static saveCFunction_t const save_cfunctions[] = {
     SAVE_CFUNCTION(impale_wave_think),
     SAVE_CFUNCTION(locust_swarm_think),
     SAVE_CFUNCTION(locust_member_think),
+    SAVE_CFUNCTION(rain_of_fire_burn_think),
 };
 
 static int SaveCFunctionIndex(void *func) {

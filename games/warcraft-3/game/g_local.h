@@ -4247,6 +4247,7 @@ void blizzard_think(edict_t *);
 void flame_strike_tick(edict_t *);
 void siphon_mana_think(edict_t *);
 void rain_of_fire_think(edict_t *);
+void rain_of_fire_burn_think(edict_t *);
 void starfall_think(edict_t *);
 void death_and_decay_think(edict_t *);
 void tranquility_think(edict_t *);

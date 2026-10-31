@@ -60,7 +60,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | WC3 Dark Ranger Silence, Charm, Black Arrow and Life Drain: targeting, summon/attack lifecycle, authored effects and beam/audio cleanup | [docs/games/warcraft-3/dark-ranger.md](docs/games/warcraft-3/dark-ranger.md) |
 | WC3 Fan of Knives (`AEfk`) target cap, enhanced-physical damage, cast-model FX, and retail parity gaps | [docs/games/warcraft-3/fan-of-knives.md](docs/games/warcraft-3/fan-of-knives.md) |
 | WC3 Carrion Swarm / Crushing Wave finite sweep, optional missile art, damage-cap order, persistence and tests | [docs/games/warcraft-3/carrion-wave.md](docs/games/warcraft-3/carrion-wave.md) |
-| WC3 Pit Lord `ANht`/`BNht` target art, `ANca`/`ACce` physical Cleave eligibility and secondary art | [docs/games/warcraft-3/pit-lord.md](docs/games/warcraft-3/pit-lord.md) |
+| WC3 Pit Lord Howl/Cleave art and eligibility, Rain of Fire wave caps, friendly fire and independent burning | [docs/games/warcraft-3/pit-lord.md](docs/games/warcraft-3/pit-lord.md) |
 | WC3 Wisp Detonate point cast, area dispel/mana/summons, Blight protection and remaining parity gaps | [docs/games/warcraft-3/detonate.md](docs/games/warcraft-3/detonate.md) |
 | WC3 attack damage math, runtime modifiers, armor/type multipliers, projectile impact timing | [docs/games/warcraft-3/attack-damage.md](docs/games/warcraft-3/attack-damage.md) |
 | WC3 Pillage research, primary-hit salvage, per-player fractional rewards and persistence | [docs/games/warcraft-3/pillage.md](docs/games/warcraft-3/pillage.md) |

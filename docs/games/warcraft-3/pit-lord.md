@@ -1,12 +1,12 @@
-# Pit Lord (`Nplh`) — Howl and Cleave (Patch 1)
+# Pit Lord (`Nplh`) — Howl, Cleave and Rain of Fire (Patches 1–2)
 
 ## Source evidence and scope
 
 The stock MPQ/MDX inspection supplied for this task identifies `Nplh` with
 `ANrf` (Rain of Fire), `ANht` (Howl of Terror), `ANca` (Cleaving Attack) and
-`ANdo` (Doom). Patch 1 implements the remaining Howl target presentation and
-secondary-hit Cleave presentation/eligibility. It **does not** complete Rain of
-Fire or Doom; their gameplay and visuals are separate follow-up patches.
+`ANdo` (Doom). Patch 1 implements Howl target presentation and secondary-hit Cleave
+presentation/eligibility. Patch 2 implements Rain of Fire wave and burning
+gameplay. Rain of Fire presentation and Doom are separate follow-up patches.
 
 | Ability | Stock presentation data | Runtime ownership |
 | --- | --- | --- |
@@ -65,3 +65,54 @@ attachment geometry need short visual inspection after user compilation.
 
 No saved persistent fields, callback function registrations or network state
 are added by Patch 1. Existing status and effect serialization applies.
+
+## Rain of Fire (`ANrf`), Patch 2 — gameplay
+
+The stock MPQ report identifies `ANrf` levels 1–3 with `DataA` waves
+(6/8/10), `DataB` wave damage (25/30/35), `DataC` visual shard counts
+(6/7/10), `DataD` building multiplier (0.5), `DataE` burn DPS (5/10/15),
+and `DataF` aggregate damage per wave (125/150/175). `Dur` is the 3-second
+**total channel duration**, not the delay between waves. The Warcraft III
+Pit Lord guide explicitly states that Rain of Fire damages friendly units and
+that landed waves burn for three seconds. Creep aliases `ACrf` and `ACrg`
+use their own authored cells; with missing `Dur`, the implementation uses
+positive `Cast` as the wave interval, or a one-second conservative fallback.
+
+Execution starts with one wave at cast time and schedules further waves at
+`Dur / DataA` intervals using an absolute `freetime` deadline. `resources`
+holds remaining waves, `variation` the cast rank, `damage` the wave damage,
+`velocity` the cap, and `wait` the interval. The last wave retains its
+channel until the authored duration elapses. Cancellation, stun, death or
+a different cast retires the wave thinker; a retired thinker cannot stop a
+new channel because the shared serial guard remains authoritative.
+
+Each wave finds live, in-world, non-invulnerable, non-cycloned, non-spell-
+immune targets inside its radius. Rain of Fire intentionally ignores the
+friend/enemy relationship part of the ordinary target mask, but continues
+to honor its authored target *types*. This can damage the caster, allied
+units and enemies alike. After counting eligible targets, `DataF` scales the
+per-target damage down if needed; `DataD` is applied to structures **after**
+this cap. Integer hit amounts are truncated rather than rounded up above
+the cap. Spell immunity and the central spell-damage boundary still apply.
+
+A successful hit on a surviving non-structure with a positive `DataE`
+creates one independent, save-safe burn thinker. Each landed wave can
+therefore contribute its own three one-second damage ticks, including when
+an earlier cast is interrupted. The burn thinker stores fixed DPS, target
+and caster incarnations via `S_SpellIdentityThinker`; each tick revalidates
+the target, and a recycled caster slot cannot claim the original burn.
+These thinkers do not follow the caster's current channel or hero level.
+
+**Deferred presentation and buff-status parity:** Patch 3 will bind `XErf`
+impact art, the wave and looping sounds, and `BNrd`/`BNrf` status visuals
+where supported. In Patch 2 the burn damage is independent of the generic
+16-slot status inventory: a full inventory cannot silently cancel paid
+spell damage, but dispelling the visual buff is **not yet wired** to the
+independent burn thinker. Exact original burn/dispel and overlapping-cast
+stacking restrictions warrant retail verification. `DataC` remains reserved
+for the presentation patch and does not change hit counts.
+
+Regression tests use nonstock `DataA/B/D/E/F` values to verify initial and
+subsequent wave deadlines, friendly fire, building reduction, area
+exclusion, per-wave cap, independent burning after channel interruption
+and burn-thinker save/load. No retail MPQ is required by those fixtures.
