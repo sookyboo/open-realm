@@ -812,6 +812,11 @@ bool G_OrderDefinitionInfo(uint32_t index, uint32_t *id, cstring_t  *name, uint3
 
 static uint32_t unit_spell_code_for_order(edict_t const *unit, cstring_t order) {
     if (!unit || !order) return 0;
+    if ((!strcmp(order, "burrow") || !strcmp(order, "unburrow")) &&
+        (unit->class_id == MAKEFOURCC('u','c','r','y') || unit->class_id == MAKEFOURCC('u','c','r','m'))) {
+        uint32_t const code = MAKEFOURCC('A','b','u','r');
+        return G_UnitAbilityResearchAvailable(unit, code) ? code : 0;
+    }
     ability_t const *ordered = FindAbilityByOrder(order);
     if (ordered && (ordered->flags & AB_SPELL) && ordered->classname) {
         uint32_t code = 0;
@@ -2535,6 +2540,12 @@ uint32_t G_UnitAbilityLevel(edict_t const *ent, uint32_t abilcode) {
     if (ent->class_id == MAKEFOURCC('e','d','c','m') &&
         abilcode == MAKEFOURCC('A','r','o','a') && gi.CvarString &&
         atoi(gi.CvarString("fs_expansion", "0")) != 0) return 1;
+    /* The burrowed Crypt Fiend unit row may omit Abur; its shared ability
+     * remains available so the player can issue Unburrow. */
+    if ((ent->class_id == MAKEFOURCC('u','c','r','y') ||
+         ent->class_id == MAKEFOURCC('u','c','r','m')) &&
+        abilcode == MAKEFOURCC('A','b','u','r') &&
+        G_UnitAbilityResearchAvailable(ent, abilcode)) return 1;
     memcpy(id, &abilcode, 4);
     return G_ActorHasSkill(ent, id) ? 1 : 0;
 }

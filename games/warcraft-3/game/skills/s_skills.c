@@ -535,7 +535,7 @@ static ability_t abilitylist[] = {
     { "Advm", CAbilityDispelMagic, AB_SPELL, SPELL_TARGET_POINT },  /* Devour Magic */
     { "Aabr", CAbilityAuraRegenLife, AB_PASSIVE | AB_INNATE },  /* Aura of Blight */
     { "Aabs", CAbilityAbsorb, AB_SPELL, SPELL_TARGET_UNIT },  /* Absorb Mana */
-    { "Abur", CAbilityCreepSleep, AB_PASSIVE | AB_INNATE },  /* Burrow */
+    { "Abur", CAbilityCryptFiendBurrow, AB_SPELL, SPELL_TARGET_NONE, crypt_fiend_burrow_orders },  /* Crypt Fiend Burrow */
     { "Amtc", CAbilityCargoHold, AB_PASSIVE },  /* Cargo Hold */
     { "Atru", CAbilityTrueSight, AB_PASSIVE },  /* True Sight */
     { "Auns", CAbilityUnsummon, AB_SPELL | AB_CHANNEL, SPELL_TARGET_UNIT },  /* Unsummon Building */

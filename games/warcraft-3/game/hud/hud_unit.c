@@ -969,8 +969,10 @@ uint8_t G_GetCommandButtons(edict_t *ent, gameCommandButton_t *buttons, uint8_t 
         }
     }
     /* Crypt Fiend Abur is classified as a passive because it also carries
-     * lifecycle state, but TFT presents it as a research-gated command. */
-    if (ent->class_id == MAKEFOURCC('u','c','r','y') && G_ActorHasSkill(ent, "Abur") &&
+     * lifecycle state, but TFT presents it as a research-gated command. The
+     * transformed unit may omit Abur from its authored list. */
+    if ((ent->class_id == MAKEFOURCC('u','c','r','y') ||
+         ent->class_id == MAKEFOURCC('u','c','r','m')) &&
         G_UnitAbilityResearchVisible(ent, MAKEFOURCC('A','b','u','r')) &&
         !G_HasCommandRawcode(buttons, count, MAKEFOURCC('A','b','u','r'))) {
         uint8_t const idx = count;

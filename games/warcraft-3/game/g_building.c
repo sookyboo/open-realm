@@ -452,7 +452,8 @@ static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
     /* Crypt Fiend Burrow is a TFT-only command unlocked by Rubu. Abur is
      * otherwise registered as a passive lifecycle ability, so keep this
      * unit-specific research rule separate from generic spell requirements. */
-    if (unit && unit->class_id == MAKEFOURCC('u','c','r','y') &&
+    if (unit && (unit->class_id == MAKEFOURCC('u','c','r','y') ||
+                 unit->class_id == MAKEFOURCC('u','c','r','m')) &&
         ability_id == MAKEFOURCC('A','b','u','r')) {
         bool const expansion = gi.CvarString && atoi(gi.CvarString("fs_expansion", "0")) != 0;
         gameClient_t *fiend_owner;

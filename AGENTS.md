@@ -66,6 +66,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | WC3 attack damage math, runtime modifiers, armor/type multipliers, projectile impact timing | [docs/games/warcraft-3/attack-damage.md](docs/games/warcraft-3/attack-damage.md) |
 | WC3 Pillage research, primary-hit salvage, per-player fractional rewards and persistence | [docs/games/warcraft-3/pillage.md](docs/games/warcraft-3/pillage.md) |
 | WC3 Night Elf Moon Glaive (`Remg`), mbounce weapon dispatch, damage-loss chain, research ownership, remaining FX gaps | [docs/games/warcraft-3/moon-glaive.md](docs/games/warcraft-3/moon-glaive.md) |
+| WC3 Crypt Fiend Burrow (`Abur`/`Rubu`), `ucry`/`ucrm` transform and verification gaps | [docs/games/warcraft-3/crypt-fiend-burrow.md](docs/games/warcraft-3/crypt-fiend-burrow.md) |
 | WC3 group Attack, target chase, collision range, and remaining combat-movement gaps | [docs/games/warcraft-3/group-attack-chase-gaps.md](docs/games/warcraft-3/group-attack-chase-gaps.md) |
 | WC3 naval movement, FLOAT/AMPH water pathing, collision domains, bridge semantics | [docs/games/warcraft-3/naval-movement.md](docs/games/warcraft-3/naval-movement.md) |
 | WC3 alarm/captain AI natives and full-screen model cinematic compatibility | [docs/games/warcraft-3/campaign-ai-model-cinematic.md](docs/games/warcraft-3/campaign-ai-model-cinematic.md) |
