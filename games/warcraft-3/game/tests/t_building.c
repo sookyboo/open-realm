@@ -1821,6 +1821,78 @@ TEST(wc3_building, dragon_turtle_hardened_skin_shows_disabled_passive_indicator)
     G_TestPopAbilityConfig();
 }
 
+TEST(wc3_building, destroyer_command_card_keeps_all_four_retail_abilities) {
+    static char const abilities_slk[] =
+        "ID;PWXL;N;EBB;Y2;X4\n"
+        "C;Y1;X1;K\"Aave\"\nC;Y1;X2;K\"DataA1\"\n"
+        "C;Y1;X3;K\"UnitID1\"\nC;Y1;X4;K\"levels\"\n"
+        "C;Y2;X1;K\"Aave\"\nC;Y2;X2;K\"uobs\"\n"
+        "C;Y2;X3;K\"ubsp\"\nC;Y2;X4;K\"1\"\nE\n";
+    static char const balance_slk[] =
+        "ID;PWXL;N;EBB;Y3;X1\n"
+        "C;Y1;X1;K\"unitBalanceID\"\n"
+        "C;Y2;X1;K\"uobs\"\nC;Y3;X1;K\"ubsp\"\nE\n";
+    static char const ability_config[] =
+        "[Aave]\nArt=BTNDestroyerForm.blp\nButtonpos=3,0\nTip=Destroyer Form\n"
+        "[Advm]\nArt=BTNDevourMagic.blp\nButtonpos=0,2\nTip=Devour Magic\n"
+        "[Afak]\nArt=BTNOrbOfDeathOn.blp\nButtonpos=1,2\nTip=Orb of Annihilation\n"
+        "[Aabs]\nArt=BTNAbsorbMana.blp\nTip=Absorb Mana\n"
+        "[ACmi]\nArt=PASBTNMagicImmunity.blp\nButtonpos=2,2\nTip=Spell Immunity\n";
+    static UnitAbilities_t const destroyer_abilities = {
+        .abilList = "Advm,Afak,Aave,Aabs,ACmi"
+    };
+    slkTestData_t *ability_rows, *old_abilities;
+    slkTestData_t *balance_rows, *old_balance;
+    UnitBalance_t destroyer_balance = { .id = MAKEFOURCC('u','b','s','p') };
+    gameCommandButton_t buttons[16];
+    edict_t *destroyer;
+    uint8_t count;
+    bool has_devour = false, has_orb = false, has_immunity = false, has_absorb = false;
+    bool has_morph = false;
+
+    reset_entities(); setup_test_world();
+    ability_rows = parse_slk_string(abilities_slk);
+    old_abilities = G_SetSLKRows("AbilityData", ability_rows);
+    balance_rows = parse_slk_string(balance_slk);
+    old_balance = G_SetSLKRows("UnitBalance", balance_rows);
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
+    destroyer = alloc_test_unit(MAKEFOURCC('u','b','s','p'), 0, 0);
+    destroyer->data.UnitAbilities = (UnitAbilities_t *)&destroyer_abilities;
+    destroyer->data.UnitBalance = &destroyer_balance;
+    count = G_GetCommandButtons(destroyer, buttons, 16);
+    FOR_LOOP(i, count) {
+        if (!strcmp(buttons[i].command, "Advm")) {
+            has_devour = true;
+            T_EQ(buttons[i].x, 0);
+            T_EQ(buttons[i].y, 2);
+        }
+        if (!strcmp(buttons[i].command, "Afak")) {
+            has_orb = true;
+            T_EQ(buttons[i].x, 1);
+            T_EQ(buttons[i].y, 2);
+        }
+        if (!strcmp(buttons[i].command, "ACmi")) {
+            has_immunity = true;
+            T_EQ(buttons[i].x, 2);
+            T_EQ(buttons[i].y, 2);
+        }
+        if (!strcmp(buttons[i].command, "Aabs")) {
+            has_absorb = true;
+            T_EQ(buttons[i].x, 3);
+            T_EQ(buttons[i].y, 2);
+        }
+        has_morph |= !strcmp(buttons[i].command, "Aave");
+    }
+    T_ASSERT(has_devour);
+    T_ASSERT(has_orb);
+    T_ASSERT(has_immunity);
+    T_ASSERT(has_absorb);
+    T_ASSERT(!has_morph);
+    G_TestPopAbilityConfig();
+    G_SetSLKRows("AbilityData", old_abilities); free_slk_rows(ability_rows);
+    G_SetSLKRows("UnitBalance", old_balance); free_slk_rows(balance_rows);
+}
+
 TEST(wc3_building, naga_royal_guard_resistant_skin_shows_disabled_passive_indicator) {
     static UnitAbilities_t const naga_royal_guard_abilities = {
         .abilList = "ACsk"

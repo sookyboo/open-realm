@@ -640,7 +640,9 @@ static void G_AddPassiveEffectIndicators(edict_t *ent, gameCommandButton_t *butt
 /* Unit morph commands are available only on their authored source form. Some
  * destination unit rows retain the shared morph ability in UnitAbilities;
  * don't expose an unusable button after the transform has completed. */
-static bool G_AbilityCommandMatchesMorphSource(edict_t const *ent, uint32_t rawcode) {
+static bool G_AbilityCommandMatchesMorphSource(edict_t const *ent, uint32_t rawcode,
+                                               ability_t const *ability) {
+    if (!ability || ability->proc != CAbilityMetamorphosis) return true;
     AbilityData_t const *data = G_AbilityData(rawcode);
     uint32_t const source_id = data ? data->level[0].data[0].id : 0;
     uint32_t const target_id = data ? data->level[0].unitID : 0;
@@ -681,7 +683,7 @@ static void G_AddAbilityCommandButtons(edict_t *ent, gameCommandButton_t *button
         ((ability->proc == CAbilityRoar && strcmp(code, "Aroa")) ||
          ability->proc == CAbilityRejuvination)) return;
     memcpy(&rawcode, code, sizeof(rawcode));
-    if (!G_AbilityCommandMatchesMorphSource(ent, rawcode)) return;
+    if (!G_AbilityCommandMatchesMorphSource(ent, rawcode, ability)) return;
     if (!G_IsUnitAbilityAvailable(ent, rawcode)) {
         if (G_IsRepairDiagnosticRawcode(code)) G_RepairCommandTrace(ent, code, "filtered-unavailable", ability, false, false);
         return;
