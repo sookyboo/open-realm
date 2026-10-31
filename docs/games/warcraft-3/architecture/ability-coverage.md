@@ -16,6 +16,21 @@ type definitions. Unknown or unsupported codes may resolve to explicit local
 stubs for recognition/passive coverage, but command-card discovery requires a
 an explicit command or an executable `AB_SPELL` definition so a stub cannot create a dead button.
 
+## Obsidian Statue and Destroyer (`Arpl` / `Arpm` / `Aave` / `Afak` / `Advm` / `Aabs`)
+
+The Statue support cast respects authored AoE masks, six-recipient caps,
+per-recipient cost and timed buff suppression; caster/overhead/target art is
+spawned through the shared effect contract. Destroyer Form is a permanent,
+resource-paid same-edict transform with the common model's morph sequence.
+Orb has manual/autocast mana expenditure, bonus damage and missile art, but its
+area splash remains incomplete. Devour Magic restores per hostile unit and does
+not remove terrain blight; its travel missile remains unimplemented. Absorb
+Mana is an active targeted homing mana transfer.
+
+See [Obsidian Statue and Destroyer](../obsidian-statue-destroyer.md) for
+mechanical contracts, confirmed MPQ mappings, regression tests and unresolved
+retail visual/impact timing.
+
 ## Orc Pillage (`Asal` / `Ropg`)
 
 Pillage is a passive attack-damage consumer, not a spell cast. `Asal` remains
@@ -300,7 +315,7 @@ is applied. All three abilities share the `melee_status_execute` path.
 | `ACtb` | Hurl Boulder | Partial | Shares `CAbilityThunderBolt`; projectile stun and authored damage use own SLK row. Art remains. |
 | `Adis` | Dispel Magic | Partial | Area timed-status dispel and DataB summoned damage via `CAbilityDispelMagic`. Honors `S_StatusIsUndispellable` and skips summoned-unit damage for Animate Dead aliases. Tree targs / Adcn+Adsm aliases remain. |
 | `Adch` | Disenchant | Partial | Shares `CAbilityDispelMagic`; DataB summoned damage from own row. Enemy-only targs filter remains. |
-| `Advm` | Devour Magic | Partial | Shares `CAbilityDispelMagic`; per-buff DataA/DataB heals and DataE summoned damage. DataF and ACde alias remain. |
+| `Advm` | Devour Magic | Partial | Shares `CAbilityDispelMagic`; per-hostile-unit DataA/DataB restoration and DataE summoned damage. Authored missile travel and alias validation remain. |
 | `AUcb` | Carrion Beetles | Partial | Manual corpse targeting and right-click autocast create permanent DataC beetles, consume a corpse only after successful creation, and enforce per-Crypt-Lord living-beetle cap from DataE. See [Carrion Beetles](../carrion-beetles.md). |
 | `Asps` | Spell Steal | Partial | Transfers explicitly classified Inner Fire, Bloodlust, and Faerie Fire statuses after destination allocation succeeds. Other buff families remain unsupported until their callback, periodic, source, and presentation restoration is safe. |
 | `ANfl` | Forked Lightning | Partial | Unit-target cone from the caster through the selected target; hits up to `DataB` alive enemies within the authored range and `Area`-scaled cone, each for authored `DataA` damage, with a direct lightning bolt from caster to each target. Current selection prefers the closest eligible targets; exact retail ordering and visual parity remain to verify. |

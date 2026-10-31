@@ -54,6 +54,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | WC3 custom doodad `.w3d` models, animation ownership and Rexxar Forcewall presentation | [docs/games/warcraft-3/doodad-animation.md](docs/games/warcraft-3/doodad-animation.md) |
 | WC3 data model (SLK, unit stats, combat) | [docs/wc3-data-model.md](docs/wc3-data-model.md) |
 | WC3 optional SC2API Raw agent transport, observations, actions and stepping | [docs/games/warcraft-3/sc2api-agent-interface.md](docs/games/warcraft-3/sc2api-agent-interface.md) |
+| WC3 Obsidian Statue (`Arpl`/`Arpm`) and Destroyer (`Aave`/`Afak`/`Advm`/`Aabs`): data, effects, morph and remaining parity gaps | [docs/games/warcraft-3/obsidian-statue-destroyer.md](docs/games/warcraft-3/obsidian-statue-destroyer.md) |
 | WC3 Devour (`Adev`/`ACdv`): off-world digestion, death ejection, data fields, save lifecycle and tests | [docs/games/warcraft-3/devour.md](docs/games/warcraft-3/devour.md) |
 | WC3 Mountain Giant War Club (`Agra`): tree targeting, Attack 2, 15 swings, animation, persistence and remaining retail gaps | [docs/games/warcraft-3/mountain-giant-war-club.md](docs/games/warcraft-3/mountain-giant-war-club.md) |
 | WC3 critter wandering (`Awan`): idle scheduling, Move ownership events, flee, building clearance, save fields, scheduler-path tests | [docs/games/warcraft-3/critter-ai.md](docs/games/warcraft-3/critter-ai.md) |
