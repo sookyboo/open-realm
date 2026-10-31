@@ -117,6 +117,92 @@ static void building_queue_capture_write(pfWriteType_t type, void const *value) 
 
 static void building_test_unicast(edict_t *ent) { (void)ent; }
 
+static bool building_find_command(gameCommandButton_t const *buttons, uint8_t count,
+                                 cstring_t command, gameCommandButton_t *out) {
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, command)) {
+        if (out) *out = buttons[i];
+        return true;
+    }
+    return false;
+}
+
+TEST(wc3_building, meat_wagon_research_indicators_are_borderless_and_dim_until_unlocked) {
+    static UnitAbilities_t const abilities = { .abilList = "Apts,Aexh" };
+    static UnitBalance_t const balance = { .upgrades = "" };
+    static char const theme_data[] = "[Default]\nCommandButtonDisabledArtPath=ReplaceableTextures\\CommandButtonsDisabled\\\n";
+    void (*old_write)(pfWriteType_t, void const *) = gi.Write;
+    int (*old_image_index)(cstring_t) = gi.ImageIndex;
+    stbIniCache_t old_theme = game.config.theme;
+    gameClient_t *old_ui_client = ui_current_client;
+    gameClient_t *client;
+    edict_t *wagon;
+    gameCommandButton_t buttons[16], disease, exhume;
+    uint8_t count;
+    stbIniCache_t custom = {0};
+    playerTechState_t old_tech[MAX_PLAYER_TECH_STATE];
+
+    reset_entities(); setup_test_world();
+    client = &game.clients[0]; client->ps.number = 0;
+    memcpy(old_tech, client->tech, sizeof(old_tech));
+    memset(client->tech, 0, sizeof(client->tech));
+    G_SetPlayerTechMaxAllowed(client, MAKEFOURCC('R','u','p','c'), 1);
+    G_SetPlayerTechMaxAllowed(client, MAKEFOURCC('R','u','e','x'), 1);
+    T_ASSERT(Stb_IniCacheLoadBuffer(&custom, theme_data));
+    wagon = alloc_test_unit(MAKEFOURCC('u','m','t','w'), 64, 64);
+    wagon->s.player = 0;
+    wagon->data.UnitAbilities = &abilities;
+    wagon->data.UnitBalance = &balance;
+    wagon->unit_state->ranks[0] = MAKE(heroability_t, .code = MAKEFOURCC('A','p','t','s'), .level = 1);
+    wagon->unit_state->ranks[1] = MAKE(heroability_t, .code = MAKEFOURCC('A','e','x','h'), .level = 1);
+    count = G_GetCommandButtons(wagon, buttons, 16);
+    T_ASSERT(building_find_command(buttons, count, "Apts", &disease));
+    T_ASSERT(building_find_command(buttons, count, "Aexh", &exhume));
+    T_ASSERT(disease.indicator && disease.disabled && disease.indicator_dimmed);
+    T_ASSERT(exhume.indicator && exhume.disabled && exhume.indicator_dimmed);
+    T_NOT_NULL(strstr(disease.ubertip, "Requires:"));
+    T_NOT_NULL(strstr(disease.ubertip, "Disease Cloud"));
+    T_NOT_NULL(strstr(exhume.ubertip, "Requires:"));
+    T_NOT_NULL(strstr(exhume.ubertip, "Exhume Corpses"));
+
+    /* Serialization must keep these as plain textures and choose authored
+     * disabled art only while the corresponding research remains locked. */
+    game.config.theme = custom;
+    UI_SetCurrentClient(client);
+    G_SelectEntity(client, wagon);
+    gi.Write = building_capture_write;
+    gi.ImageIndex = building_test_image_index;
+    building_command_frame_seen = false;
+    UI_WriteCommandButtonFrame(&disease);
+    T_ASSERT(building_command_frame_seen);
+    T_EQ(building_command_frame.flags.type, FT_TEXTURE);
+    T_STREQ(building_image_path, "ReplaceableTextures\\CommandButtonsDisabled\\DISBTNPlagueCloud.blp");
+    building_command_frame_seen = false;
+    UI_WriteCommandButtonFrame(&exhume);
+    T_ASSERT(building_command_frame_seen);
+    T_EQ(building_command_frame.flags.type, FT_TEXTURE);
+
+    G_SetPlayerTechResearched(client, MAKEFOURCC('R','u','p','c'), 1);
+    G_SetPlayerTechResearched(client, MAKEFOURCC('R','u','e','x'), 1);
+    count = G_GetCommandButtons(wagon, buttons, 16);
+    T_ASSERT(building_find_command(buttons, count, "Apts", &disease));
+    T_ASSERT(building_find_command(buttons, count, "Aexh", &exhume));
+    T_ASSERT(disease.indicator && !disease.indicator_dimmed);
+    T_ASSERT(exhume.indicator && !exhume.indicator_dimmed);
+    T_ASSERT(!strstr(disease.ubertip, "Requires:"));
+    T_ASSERT(!strstr(exhume.ubertip, "Requires:"));
+    UI_WriteCommandButtonFrame(&disease);
+    T_STREQ(building_image_path, disease.art);
+    UI_WriteCommandButtonFrame(&exhume);
+    T_STREQ(building_image_path, exhume.art);
+
+    gi.Write = old_write;
+    gi.ImageIndex = old_image_index;
+    UI_SetCurrentClient(old_ui_client);
+    memcpy(client->tech, old_tech, sizeof(old_tech));
+    game.config.theme = old_theme;
+    Stb_IniCacheFree(&custom);
+}
+
 /* Counts svc_layout payloads that open the command bar: the only writer of
  * that pair during spell targeting setup is UI_AddCancelButton. */
 static void building_layout_capture_write(pfWriteType_t type, void const *value) {
@@ -2448,6 +2534,8 @@ TEST(wc3_building, undead_caster_training_gates_banshee_and_necromancer_tiers) {
     buildingCasterRows_t caster_rows;
     gameClient_t *client;
     edict_t *banshee, *necromancer;
+    gameCommandButton_t buttons[16];
+    uint8_t count;
     UnitBalance_t banshee_balance = { .upgrades = "Ruba" };
     UnitBalance_t necromancer_balance = { .upgrades = "Rune" };
     UnitAbilities_t banshee_abilities = { .abilList = "Aam2,Aps2,Aams,Apos" };
@@ -2481,12 +2569,33 @@ TEST(wc3_building, undead_caster_training_gates_banshee_and_necromancer_tiers) {
     T_ASSERT(G_UnitAbilityResearchVisible(necromancer, MAKEFOURCC('A','u','h','f')));
     T_ASSERT(!G_UnitAbilityResearchAvailable(necromancer, MAKEFOURCC('A','u','h','f')));
     T_ASSERT(!G_UnitAbilityResearchVisible(necromancer, MAKEFOURCC('A','c','r','i')));
+    count = G_GetCommandButtons(necromancer, buttons, 16);
+    {
+        bool found = false;
+        FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Auhf")) {
+            found = true;
+            T_ASSERT(buttons[i].disabled);
+            T_NOT_NULL(strstr(buttons[i].ubertip, "Requires:"));
+            T_NOT_NULL(strstr(buttons[i].ubertip, "Necromancer Adept Training"));
+        }
+        T_ASSERT(found);
+    }
 
     G_SetPlayerTechResearched(client, banshee_training, 1);
     G_SetPlayerTechResearched(client, necromancer_training, 1);
     T_ASSERT(G_UnitAbilityResearchAvailable(banshee, MAKEFOURCC('A','a','m','2')));
     T_ASSERT(G_UnitAbilityResearchAvailable(banshee, MAKEFOURCC('A','a','m','s')));
     T_ASSERT(G_UnitAbilityResearchAvailable(necromancer, MAKEFOURCC('A','u','h','f')));
+    count = G_GetCommandButtons(necromancer, buttons, 16);
+    {
+        bool found = false;
+        FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Auhf")) {
+            found = true;
+            T_ASSERT(!buttons[i].disabled);
+            T_ASSERT(!strstr(buttons[i].ubertip, "Requires:"));
+        }
+        T_ASSERT(found);
+    }
 
     G_SetPlayerTechMaxAllowed(client, banshee_training, 2);
     G_SetPlayerTechMaxAllowed(client, necromancer_training, 2);

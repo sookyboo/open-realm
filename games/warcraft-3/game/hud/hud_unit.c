@@ -593,7 +593,8 @@ static void G_AddDiseaseCloudIndicator(edict_t *ent, gameCommandButton_t *button
         buttons[index].disabled = 1;
         buttons[index].indicator = 1;
         buttons[index].indicator_dimmed = G_GetPlayerTechResearchedLevel(owner, research) <= 0;
-        G_AddResearchRequirementTooltip(&buttons[index], research, 1);
+        if (buttons[index].indicator_dimmed)
+            G_AddResearchRequirementTooltip(&buttons[index], research, 1);
     }
 }
 
@@ -614,7 +615,8 @@ static void G_AddExhumeCorpsesIndicator(edict_t *ent, gameCommandButton_t *butto
         buttons[index].disabled = 1;
         buttons[index].indicator = 1;
         buttons[index].indicator_dimmed = !G_UnitAbilityResearchAvailable(ent, ability);
-        G_AddResearchRequirementTooltip(&buttons[index], MAKEFOURCC('R','u','e','x'), 1);
+        if (buttons[index].indicator_dimmed)
+            G_AddResearchRequirementTooltip(&buttons[index], MAKEFOURCC('R','u','e','x'), 1);
     }
 }
 
