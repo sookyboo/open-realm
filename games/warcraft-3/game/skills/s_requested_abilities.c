@@ -1141,6 +1141,27 @@ static bool destroyer_form_cost(edict_t *caster, uint32_t code, uint32_t *target
            G_PlayerHasFoodFor(owner, *food);
 }
 
+static void destroyer_morph_end(edict_t *unit) { unit_stand(unit); }
+static umove_t destroyer_form_morph = { "morph", NULL, destroyer_morph_end, CAbilityMetamorphosis };
+
+/* The Statue and Destroyer resolve to one model. Lock the untagged Morph
+ * sequence while selecting alternate geosets for the destination's stand,
+ * walk and attack. The animation-end owner restores normal unit orders. */
+static void destroyer_form_play_morph(edict_t *unit) {
+    animation_t const *morph;
+    if (!unit) return;
+    G_AddUnitAnimationProperties(unit, "alternate", false);
+    unit_setmove(unit, &destroyer_form_morph);
+    morph = unit->animation;
+    G_AddUnitAnimationProperties(unit, "alternate", true);
+    if (!morph) {
+        unit_stand(unit);
+        return;
+    }
+    unit->animation = morph;
+    unit->s.frame = morph->interval[0];
+}
+
 static bool destroyer_form_execute(edict_t *caster, uint32_t code) {
     uint32_t target;
     int32_t gold, lumber, food;
@@ -1151,6 +1172,7 @@ static bool destroyer_form_execute(edict_t *caster, uint32_t code) {
     owner->ps.stats[PLAYERSTATE_RESOURCE_GOLD] -= (uint16_t)gold;
     owner->ps.stats[PLAYERSTATE_RESOURCE_LUMBER] -= (uint16_t)lumber;
     caster->mana.value = 0.0f;
+    destroyer_form_play_morph(caster);
     G_RefreshResourceBar(G_GetPlayerEntityByNumber(caster->s.player));
     return true;
 }
