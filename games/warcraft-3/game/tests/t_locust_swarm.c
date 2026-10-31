@@ -225,6 +225,113 @@ static edict_t *locust_test_member(edict_t const *controller, uint32_t index) {
     return NULL;
 }
 
+/* Regression: the member's own thinker replaces monster_think, so simply
+ * issuing a Move order leaves spawned locusts immobile. Even with no targets,
+ * orbit steering must write both the simulation and render positions. */
+TEST(wc3_spell, locust_swarm_idle_members_fly_around_moving_caster) {
+    locustFix_t fix = locust_setup();
+    abilityitem_t item = S_AbilityItem(LS_ABILITY);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item);
+    edict_t *controller, *locust;
+    vec2_t before, after;
+    T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
+    controller = locust_controller(fix.caster);
+    T_NOT_NULL(controller);
+    if (!controller) goto cleanup;
+    level.time = 1250; G_RunEntities();
+    locust = locust_test_member(controller, 0);
+    T_NOT_NULL(locust);
+    if (!locust) goto cleanup;
+    locust->unitinfo.MoveSpeed = 300.0f;
+    before = locust->s.origin2;
+    level.time = 1350; G_RunEntities();
+    after = locust->s.origin2;
+    T_ASSERT(Vector2_distance(&after, &before) > 0.1f);
+    T_FEQ(locust->s.origin.x, after.x, 0.001f);
+    T_FEQ(locust->s.origin.y, after.y, 0.001f);
+    T_EQ(G_GetLocustMember(locust)->state, 1u); /* no enemy to acquire */
+    fix.caster->s.origin2 = (vec2_t){ 650, 650 };
+    level.time = 1450; G_RunEntities();
+    T_ASSERT(Vector2_distance(&locust->s.origin2, &after) > 0.1f);
+cleanup:
+    locust_done(fix);
+}
+
+TEST(wc3_spell, locust_swarm_chases_out_of_reach_enemy_and_keeps_last_reservation) {
+    locustFix_t fix = locust_setup();
+    abilityitem_t item = S_AbilityItem(LS_ABILITY);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item);
+    edict_t *controller, *locust, *enemy;
+    locustMember_t *state;
+    vec2_t before;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
+    controller = locust_controller(fix.caster);
+    T_NOT_NULL(controller);
+    if (!controller) goto cleanup;
+    level.time = 1250; G_RunEntities();
+    locust = locust_test_member(controller, 0);
+    T_NOT_NULL(locust);
+    if (!locust) goto cleanup;
+    locust->unitinfo.MoveSpeed = 250.0f;
+    G_GetLocustSwarm(controller)->target_cap = 1.0f;
+    G_GetLocustSwarm(controller)->return_threshold = 999.0f;
+    enemy = locust_test_enemy(475, 256);
+    before = locust->s.origin2;
+    level.time = 1350; locust_member_think(locust);
+    state = G_GetLocustMember(locust);
+    T_NOT_NULL(state);
+    if (!state) goto cleanup;
+    T_EQ(state->state, 2u);
+    T_ASSERT(state->target == enemy);
+    T_ASSERT(Vector2_distance(&locust->s.origin2, &enemy->s.origin2) <
+             Vector2_distance(&before, &enemy->s.origin2));
+    /* Occupancy=1 and cap=1 is VALID for the locust that owns the slot. */
+    level.time = 1450; locust_member_think(locust);
+    T_EQ(state->state, 2u);
+    T_ASSERT(state->target == enemy);
+cleanup:
+    locust_done(fix);
+}
+
+TEST(wc3_spell, locust_swarm_return_flight_moves_without_monster_think) {
+    locustFix_t fix = locust_setup();
+    abilityitem_t item = S_AbilityItem(LS_ABILITY);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item);
+    edict_t *controller, *locust;
+    locustMember_t *state;
+    vec2_t before;
+    T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
+    controller = locust_controller(fix.caster);
+    T_NOT_NULL(controller);
+    if (!controller) goto cleanup;
+    level.time = 1250; G_RunEntities();
+    locust = locust_test_member(controller, 0);
+    T_NOT_NULL(locust);
+    if (!locust) goto cleanup;
+    locust->unitinfo.MoveSpeed = 300.0f;
+    state = G_GetLocustMember(locust);
+    state->state = 3u;
+    state->damage_credit = 20.0f;
+    fix.caster->health.value = 400.0f;
+    locust->s.origin2 = (vec2_t){ 600, 256 };
+    locust->s.origin.x = 600;
+    locust->s.origin.y = 256;
+    before = locust->s.origin2;
+    level.time = 1350; locust_member_think(locust);
+    T_ASSERT(Vector2_distance(&locust->s.origin2, &fix.caster->s.origin2) <
+             Vector2_distance(&before, &fix.caster->s.origin2));
+    for (uint32_t i = 0; i < 20 && state->state == 3u; i++) {
+        level.time += 100;
+        locust_member_think(locust);
+    }
+    T_EQ(state->state, 1u);
+    T_FEQ(fix.caster->health.value, 410.0f, 0.05f);
+cleanup:
+    locust_done(fix);
+}
+
 TEST(wc3_spell, locust_swarm_reserves_only_authored_attackers_per_target) {
     locustFix_t fix = locust_setup();
     abilityitem_t item = S_AbilityItem(LS_ABILITY);

@@ -55,8 +55,15 @@ ordinary physical attack damage, damage-credit healing, expiry recall, caster
 death/teleport cleanup, recast replacement, the `AOls` Voodoo Spirits alias,
 and optional model-authored Walk animation and looping ability sound.
 
-The implementation uses ordinary movement and attack orders, so the unit
-model's available `Walk` sequence is selected by the shared movement system.
+The member thinker replaces `monster_think`, so ordinary Move/Attack order
+callbacks cannot move a locust. Members instead steer directly using the
+summoned unit's authored MoveSpeed: they circle the moving caster without an
+enemy, chase eligible enemies before physical hits, and fly back with healing
+credit. The authoritative steering updates both `s.origin2` and `s.origin`,
+plus height and linkage, for networked client presentation. The authored
+`Walk` sequence advances in the member thinker if present; custom units
+without that animation still move normally. The attacker occupancy cap is
+checked on *acquisition*, not against a member's own valid reservation.
 It does not create a separate locust missile: attacks apply through the shared
 physical attack resolver. The controller resolves `SoundLooping` through the
 generic ability sound path. Whether retail uses a separate `LocustMissile.mdx`
@@ -78,3 +85,14 @@ normal physical damage and return healing, invulnerable/allied target rejection
 and a member mid-flight save/load round-trip. These fixtures are synthetic and
 do not require Warcraft archives. Retail orbit and missile presentation remain
 visual verification gaps.
+
+## Movement fix after Patch 8
+
+The source shipped with Patches 5–8 overrode `monster_think` but issued
+normal attack/return orders. Those orders did not have their normal movement
+callbacks stepped, and seeking members had no idle movement at all. The
+follow-up fix gives `locust_member_think` authoritative flight steering and
+explicit Walk animation advancement, without adding a save field or any
+client-specific gameplay branch. Synthetic tests cover idle/caster-follow
+movement, target pursuit at a full reservation cap, and return healing.
+The exact retail orbit paths remain unverified.

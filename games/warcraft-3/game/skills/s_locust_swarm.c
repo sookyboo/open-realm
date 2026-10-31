@@ -6,6 +6,9 @@
 #define LOCUST_REACQUIRE_MS 250u
 #define LOCUST_MAX_ATTACKERS_PER_TARGET 256u
 #define LOCUST_RECALL_GRACE_MS 8000u
+#define LOCUST_ORBIT_RADIUS 100.0f
+/* The locust's real model has Walk and Death but no Attack sequence. */
+static umove_t locust_walk_move = { .animation = "walk" };
 
 static void locust_begin_return(edict_t *member, locustMember_t *state, edict_t *caster);
 
@@ -75,7 +78,14 @@ static void locust_spawn_one(edict_t *controller, locustSwarm_t *swarm) {
     locust->summon_ability = swarm->ability;
     locust->think = locust_member_think;
     locust->s.player = caster->s.player;
-    if (locust->stand) locust->stand(locust);
+    /* Replacing monster_think also replaces its animation advancement.
+     * Play the authored Walk loop explicitly; custom summons with no Walk
+     * sequence still move, but do not acquire an invented animation. */
+    if (G_GetUnitAnimation(locust, "Walk")) {
+        locust->currentmove = &locust_walk_move;
+        G_SetUnitAnimation(locust, "walk");
+        if (locust->animation) locust->s.frame = locust->animation->interval[0];
+    }
     swarm->released++;
 }
 
@@ -129,7 +139,8 @@ static edict_t *locust_find_target(edict_t *member, locustSwarm_t *swarm) {
                   S_SpellIsEnemy(caster, target) &&
                   !G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) &&
                   !unit_hasstatusstate(target, WC3_STATUS_STATE_INVULNERABLE) &&
-                  S_SpellAllowsAreaTarget(swarm->ability, caster, target)) {
+                  S_SpellAllowsAreaTarget(swarm->ability, caster, target) &&
+                  S_AttackCanTarget(member, target) && S_LocustAttackWeapon(member, target)) {
         float distance = Vector2_distance(&target->s.origin2, &caster->s.origin2);
         if (distance > swarm->area || locust_target_full(G_GetLocustMember(member)->controller, swarm, target)) continue;
         if (!best || distance < best_distance ||
@@ -141,11 +152,35 @@ static edict_t *locust_find_target(edict_t *member, locustSwarm_t *swarm) {
     return best;
 }
 
+/* Swarm members own their think callback, so conventional Move/Attack orders
+ * cannot translate them: those orders are stepped by monster_think, which a
+ * locust no longer runs. Steer each flying member in simulation coordinates,
+ * and publish both network position fields to the universal client. */
+static float locust_steer(edict_t *locust, vec2_t const *destination) {
+    vec2_t delta = Vector2_sub(destination, &locust->s.origin2);
+    float const distance = Vector2_len(&delta);
+    float speed = locust->unitinfo.MoveSpeed;
+    float step;
+    if (speed <= 0.0f && locust->data.UnitBalance)
+        speed = locust->data.UnitBalance->speed;
+    if (!isfinite(speed) || speed <= 0.0f || distance <= 0.001f) return distance;
+    step = MIN(distance, speed * (float)FRAMETIME / 1000.0f);
+    locust->s.origin2.x += delta.x * (step / distance);
+    locust->s.origin2.y += delta.y * (step / distance);
+    locust->s.origin.x = locust->s.origin2.x;
+    locust->s.origin.y = locust->s.origin2.y;
+    locust->s.angle = atan2f(delta.y, delta.x);
+    M_CheckGround(locust);
+    gi.LinkEntity(locust);
+    return distance - step;
+}
+
 static void locust_begin_return(edict_t *member, locustMember_t *state, edict_t *caster) {
+    (void)member;
+    (void)caster;
     state->state = LOCUST_RETURNING;
     state->target = NULL;
     state->target_spawn_time = 0;
-    if (caster && caster->inuse) order_move(member, caster);
 }
 
 void locust_member_think(edict_t *member) {
@@ -153,6 +188,7 @@ void locust_member_think(edict_t *member) {
     edict_t *controller, *caster, *target;
     locustSwarm_t *swarm;
     uint32_t now = G_Time();
+    float distance, reach;
     if (!member || !member->inuse || M_IsDead(member)) return;
     if (!state || !(controller = state->controller) ||
         !locust_reference_valid(controller, state->controller_spawn_time) ||
@@ -165,9 +201,19 @@ void locust_member_think(edict_t *member) {
         locust_member_die(member);
         return;
     }
+    /* This member's think replaces monster_think, including its animation
+     * clock. Do not depend on normal unit order/move callbacks. */
+    if (member->currentmove == &locust_walk_move && member->animation)
+        M_MoveFrame(member);
+
+    if (swarm->recalling && state->state != LOCUST_RETURNING) {
+        if (state->damage_credit <= 0.0f) { locust_member_die(member); return; }
+        locust_begin_return(member, state, caster);
+    }
     if (state->state == LOCUST_RETURNING) {
         float const arrival = MAX(48.0f, member->collision + caster->collision);
-        if (Vector2_distance(&member->s.origin2, &caster->s.origin2) <= arrival) {
+        distance = locust_steer(member, &caster->s.origin2);
+        if (distance <= arrival) {
             if (state->damage_credit > 0.0f)
                 S_SpellHeal(caster, state->damage_credit * swarm->heal_factor);
             state->damage_credit = 0.0f;
@@ -177,19 +223,15 @@ void locust_member_think(edict_t *member) {
         }
         return;
     }
+
     target = state->target;
-    if (swarm->recalling) {
-        if (state->damage_credit <= 0.0f) { locust_member_die(member); return; }
-        if (Vector2_distance(&member->s.origin2, &caster->s.origin2) <= MAX(48.0f, member->collision + caster->collision)) {
-            S_SpellHeal(caster, state->damage_credit * swarm->heal_factor);
-            locust_member_die(member);
-        } else if (state->state != LOCUST_RETURNING) locust_begin_return(member, state, caster);
-        return;
-    }
-    if (!locust_reference_valid(target, state->target_spawn_time) || !S_SpellIsAliveTarget(target) ||
-        !S_SpellIsEnemy(caster, target) ||
-        Vector2_distance(&target->s.origin2, &caster->s.origin2) > swarm->area ||
-        locust_target_full(controller, swarm, target)) {
+    /* Only check the attacker cap when ACQUIRING a new target. A member
+     * already holding the final allowed reservation is not over capacity. */
+    if (state->state == LOCUST_ATTACKING &&
+        (!locust_reference_valid(target, state->target_spawn_time) ||
+         !S_SpellIsAliveTarget(target) || !S_SpellIsEnemy(caster, target) ||
+         !S_AttackCanTarget(member, target) ||
+         Vector2_distance(&target->s.origin2, &caster->s.origin2) > swarm->area)) {
         state->target = NULL;
         state->target_spawn_time = 0;
         state->state = LOCUST_SEEKING;
@@ -201,29 +243,58 @@ void locust_member_think(edict_t *member) {
     if (state->state == LOCUST_SEEKING && now >= state->next_acquire_ms) {
         target = locust_find_target(member, swarm);
         state->next_acquire_ms = now + LOCUST_REACQUIRE_MS;
-        if (target && S_OrderAttack(member, target)) {
+        if (target && S_AttackCanTarget(member, target) && S_LocustAttackWeapon(member, target)) {
             state->state = LOCUST_ATTACKING;
             state->target = target;
             state->target_spawn_time = target->spawn_time;
             state->next_attack_ms = now;
         }
     }
-    if (state->state == LOCUST_ATTACKING && state->target &&
-        locust_reference_valid(state->target, state->target_spawn_time) && now >= state->next_attack_ms) {
-        unitAttack_t const *weapon = S_LocustAttackWeapon(member, state->target);
-        float actual;
-        if (!weapon || !S_AttackCanTarget(member, state->target)) {
-            state->state = LOCUST_SEEKING;
-            state->target = NULL;
-            state->target_spawn_time = 0;
-            state->next_acquire_ms = now + LOCUST_REACQUIRE_MS;
-            return;
-        }
-        state->next_attack_ms = now + (uint32_t)MAX(100.0f, weapon->cooldown * 1000.0f);
-        actual = S_LocustAttackHit(member, state->target);
+    if (state->state != LOCUST_ATTACKING || !state->target) {
+        /* Keep the swarm visibly in motion even when no enemies are nearby.
+         * Stable per-member phase offsets avoid clumping on the caster. */
+        float const angle = (float)state->release_index * 2.39996323f +
+                            (float)(now - swarm->start_ms) * 0.0012f;
+        float const radius = MAX(LOCUST_ORBIT_RADIUS, caster->collision + 64.0f);
+        vec2_t const orbit = { caster->s.origin2.x + cosf(angle) * radius,
+                               caster->s.origin2.y + sinf(angle) * radius };
+        locust_steer(member, &orbit);
+        return;
+    }
+
+    target = state->target;
+    if (!locust_reference_valid(target, state->target_spawn_time)) return;
+    unitAttack_t const *weapon = S_LocustAttackWeapon(member, target);
+    if (!weapon || !S_AttackCanTarget(member, target)) {
+        state->target = NULL;
+        state->target_spawn_time = 0;
+        state->state = LOCUST_SEEKING;
+        return;
+    }
+    reach = MAX(32.0f, weapon->range + target->collision);
+    distance = Vector2_distance(&member->s.origin2, &target->s.origin2);
+    if (distance > reach) {
+        locust_steer(member, &target->s.origin2);
+        return;
+    }
+    if (now >= state->next_attack_ms) {
+        uint32_t const member_generation = member->spawn_time;
+        uint32_t const target_generation = target->spawn_time;
+        float const cooldown = MAX(0.1f, weapon->cooldown);
+        float actual = S_LocustAttackHit(member, target);
+        /* Combat callbacks may synchronously retire an attacker or victim. */
+        if (!member->inuse || member->spawn_time != member_generation || M_IsDead(member)) return;
+        state = G_GetLocustMember(member);
+        if (!state) return;
+        state->next_attack_ms = now + (uint32_t)MAX(100.0f, cooldown * 1000.0f);
         state->damage_credit += actual;
         if (state->damage_credit >= swarm->return_threshold && state->damage_credit > 0.0f)
             locust_begin_return(member, state, caster);
+        else if (!target->inuse || target->spawn_time != target_generation || M_IsDead(target)) {
+            state->target = NULL;
+            state->target_spawn_time = 0;
+            state->state = LOCUST_SEEKING;
+        }
     }
 }
 
