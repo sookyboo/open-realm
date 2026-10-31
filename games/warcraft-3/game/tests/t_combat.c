@@ -2809,6 +2809,57 @@ TEST(wc3_combat, animationless_ranged_attack_enters_recovery_after_launch) {
     T_ASSERT(u->goalentity == target);
 }
 
+TEST(wc3_combat, long_ranged_attack_animation_does_not_delay_weapon_cadence) {
+    animation_t long_attack = { .name = "Attack Upgrade Second", .interval = { 1000, 5000 } };
+    edict_t *u;
+    edict_t *target;
+    edict_t *missile = NULL;
+    int frame;
+
+    setup_test_world(); reset_entities();
+    u = make_combat_unit(MAKEFOURCC('u','z','g','2'), 535.0f, 0.0f, 0.0f);
+    target = make_combat_unit(MAKEFOURCC('h','f','o','o'), 420.0f, 64.0f, 0.0f);
+    u->goalentity = target;
+    u->unit_state->attack1.type = ATK_NORMAL;
+    u->unit_state->attack1.targetsAllowed = WC3_TARGET_FLAG_GROUND;
+    u->unit_state->attack1.range = 700.0f;
+    u->unit_state->attack1.weapon = WPN_MISSILE;
+    u->unit_state->attack1.cooldown = 1.0f;
+    u->unit_state->attack1.damagePoint = 0.1f;
+    u->unit_state->attack1.backswingPoint = 0.5f;
+    u->unit_state->attack1.projectile.speed = 900;
+    target->targtype = TARG_GROUND;
+
+    attack_ranged(u);
+    /* Model an authored attack sequence much longer than the weapon cadence. */
+    u->animation = &long_attack;
+    level.time += 100; /* Advance to the authored damage point. */
+    u->wait = 0.1f;
+    u->currentmove->think(u);
+
+    FILTER_EDICTS(ent, ent->owner == u && ent->movetype == MOVETYPE_FLYMISSILE) {
+        missile = ent;
+        break;
+    }
+    T_NOT_NULL(missile);
+    T_ASSERT(missile != NULL);
+    if (!missile) return;
+
+    /* Recovery begins at release even though the finite attack clip remains. */
+    T_STREQ(u->currentmove->animation, "stand ready");
+    T_FEQ(u->wait, 0.9f, 0.02f);
+    T_ASSERT(u->goalentity == target);
+
+    /* The next attack begins from cooldown/backswing timing, well before the
+     * four-second animation would naturally reach its endfunc. */
+    for (frame = 0; frame < 100 && strcmp(u->currentmove->animation, "attack range"); frame++) {
+        level.time += FRAMETIME;
+        u->currentmove->think(u);
+    }
+    T_STREQ(u->currentmove->animation, "attack range");
+    T_FEQ(u->wait, 0.1f, 0.02f);
+}
+
 
 TEST(wc3_combat, artillery_uses_ranged_attack_state) {
     UnitWeapons_t weapons = { .attacksEnabled = 3, .minimumAttackRange = 0.0f };

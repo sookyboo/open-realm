@@ -893,10 +893,13 @@ static void throw_missile(edict_t *ent) {
         .area_targets = ent->data.UnitWeapons ? (atk == &ent->unit_state->attack2 ? ent->data.UnitWeapons->attack2.areaTargets : ent->data.UnitWeapons->attack1.areaTargets) : 0,
     });
     S_WarClubConsumeAttack(ent);
-    /* See damage_target(): if the model has no finite attack sequence there
-     * will be no animation-end callback to start recovery, so do it at the
-     * projectile launch point instead. */
-    if (S_AttackCanTarget(ent, ent->goalentity) && !attack_animation_can_finish(ent))
+    /* A ranged attack's next-shot timing comes from weapon cooldown and
+     * backswing, not from the length of its selected animation sequence.
+     * Enter recovery at release for every model: waiting for a long finite
+     * clip's endfunc can otherwise stretch a 1-second weapon cadence to the
+     * full animation length. The recovery move may interrupt the attack clip,
+     * then starts the next attack when both authored timing gates have elapsed. */
+    if (S_AttackCanTarget(ent, ent->goalentity))
         attack_ranged_cooldown(ent);
 //    gi.WriteByte (svc_temp_entity);
 //    gi.WriteByte(TE_MISSILE);
@@ -1253,6 +1256,12 @@ void attack_melee(edict_t *self) {
     S_PermanentInvisibilityReveal(self);
     attack_set_cooldown(self, ACTIVE_ATTACK(self)->cooldown / divisor);
     unit_setmove(self, &attack_move_melee);
+    /* unit_setmove selects the new animation but M_MoveFrame would otherwise
+     * spend its first simulation tick snapping a stale frame from the prior
+     * sequence back to this one. Start the visible swing at its authored first
+     * frame immediately so its motion stays aligned with damagePoint. */
+    if (self->animation && self->animation->interval[1] > self->animation->interval[0])
+        self->s.frame = self->animation->interval[0];
     self->wait = ACTIVE_ATTACK(self)->damagePoint / divisor;
 }
 
