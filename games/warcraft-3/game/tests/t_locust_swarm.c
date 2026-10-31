@@ -8,7 +8,7 @@
 /* DataA=3, DataB=0.25, Dur=5 and UnitID=hfoo intentionally differ from
  * stock AUls 20/0.2/30/uloc. The cast must use the production ability row. */
 static char const locust_test_slk[] =
-    "ID;PWXL;N;EBB;Y2;X14\n"
+    "ID;PWXL;N;EBB;Y4;X14\n"
     "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
     "C;Y1;X4;K\"targs\"\nC;Y1;X5;K\"Dur1\"\nC;Y1;X6;K\"DataA1\"\n"
     "C;Y1;X7;K\"DataB1\"\nC;Y1;X8;K\"DataC1\"\nC;Y1;X9;K\"DataD1\"\n"
@@ -17,7 +17,11 @@ static char const locust_test_slk[] =
     "C;Y2;X1;K\"AUls\"\nC;Y2;X2;K\"AUls\"\nC;Y2;X3;K1\n"
     "C;Y2;X4;K\"\"\nC;Y2;X5;K5\nC;Y2;X6;K3\nC;Y2;X7;K0.25\n"
     "C;Y2;X8;K2\nC;Y2;X9;K0.5\nC;Y2;X10;K13\nC;Y2;X11;K\"hfoo\"\n"
-    "C;Y2;X12;K420\nC;Y2;X13;K0\nC;Y2;X14;K0\nE\n";
+    "C;Y2;X12;K420\nC;Y2;X13;K0\nC;Y2;X14;K0\n"
+    "C;Y3;X1;K\"AOls\"\nC;Y3;X2;K\"AOls\"\nC;Y3;X3;K1\n"
+    "C;Y3;X4;K\"\"\nC;Y3;X5;K8\nC;Y3;X6;K2\nC;Y3;X7;K0.5\n"
+    "C;Y3;X8;K1\nC;Y3;X9;K0.25\nC;Y3;X10;K7\nC;Y3;X11;K\"hfoo\"\n"
+    "C;Y3;X12;K300\nC;Y3;X13;K0\nC;Y3;X14;K0\nE\n";
 
 static UnitWeapons_t const locust_test_weapon = { .attacksEnabled = 1 };
 
@@ -493,6 +497,7 @@ TEST(wc3_save, locust_swarm_recall_phase_and_deadline_round_trip) {
     cstring_t filename = Test_TempPath("wc3-locust-recalling.bin");
     edict_t *controller, *member_unit;
     locustSwarm_t *swarm;
+    locustMember_t *member;
     T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
     controller = locust_controller(fix.caster);
     T_NOT_NULL(controller);
@@ -501,8 +506,12 @@ TEST(wc3_save, locust_swarm_recall_phase_and_deadline_round_trip) {
     member_unit = locust_test_member(controller, 0);
     T_NOT_NULL(member_unit);
     if (!member_unit) goto cleanup;
+    member = G_GetLocustMember(member_unit);
+    T_NOT_NULL(member);
+    if (!member) goto cleanup;
     /* Keep a member out of return reach to snapshot the mid-recall thinker. */
     member_unit->s.origin2 = (vec2_t){ 900, 900 };
+    member->damage_credit = 10.0f;
     G_GetLocustSwarm(controller)->end_ms = 1300;
     level.time = 1300; locust_swarm_think(controller);
     swarm = G_GetLocustSwarm(controller);
@@ -522,10 +531,77 @@ TEST(wc3_save, locust_swarm_recall_phase_and_deadline_round_trip) {
         level.time = 9400; G_RunEntities();
         G_RunDeferredFrees();
         T_ASSERT(!controller->inuse);
-        T_EQ(locust_all_members(), 0u);
+        T_EQ(locust_dead_members(), 1u);
+        T_EQ(locust_all_members(), 1u); /* death presentation owns edict retirement */
     }
     remove(filename);
 cleanup:
     locust_done(fix);
 }
+
+/* The same simulation handles the campaign alias, but its actual row (not
+ * AUls's three-count fixture) must determine release timing and parameters. */
+TEST(wc3_spell, voodoo_spirits_alias_uses_own_swarm_data) {
+    locustFix_t fix = locust_setup();
+    uint32_t const alias = MAKEFOURCC('A','O','l','s');
+    abilityitem_t item = S_AbilityItem(alias);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item);
+    edict_t *controller;
+    locustSwarm_t *state;
+    T_NOT_NULL(item.ability);
+    if (!item.ability) goto cleanup;
+    T_ASSERT(item.ability->proc == CAbilityLocustSwarm);
+    fix.caster->unit_state->ranks[0] = MAKE(heroability_t, .code = alias, .level = 1);
+    T_ASSERT(S_AbilityMessage(fix.caster, A_VALIDATE, &call));
+    T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
+    controller = locust_controller(fix.caster);
+    T_NOT_NULL(controller);
+    if (!controller) goto cleanup;
+    state = G_GetLocustSwarm(controller);
+    T_NOT_NULL(state);
+    if (!state) goto cleanup;
+    T_EQ(state->ability, alias);
+    T_EQ(state->total, 2u);
+    T_EQ(state->release_interval_ms, 500u);
+    T_FEQ(state->target_cap, 1.0f, 0.001f);
+    T_FEQ(state->area, 300.0f, 0.001f);
+    T_FEQ(state->heal_factor, 0.25f, 0.001f);
+    T_FEQ(state->return_threshold, 7.0f, 0.001f);
+    level.time = 1000; G_RunEntities();
+    T_EQ(locust_member_count(controller), 1u);
+    level.time = 1500; G_RunEntities();
+    T_EQ(locust_member_count(controller), 2u);
+cleanup:
+    locust_done(fix);
+}
+
+/* Locust visual setup must not invent an animation for custom UnitIDs with no
+ * available Walk sequence, and must not stop release when art is unavailable. */
+TEST(wc3_spell, locust_swarm_member_walk_presentation_is_optional) {
+    locustFix_t fix = locust_setup();
+    abilityitem_t item = S_AbilityItem(LS_ABILITY);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item);
+    edict_t *controller;
+    bool found = false;
+    T_ASSERT(S_AbilityMessage(fix.caster, A_EXECUTE, &call));
+    controller = locust_controller(fix.caster);
+    T_NOT_NULL(controller);
+    if (!controller) goto cleanup;
+    level.time = 1250; G_RunEntities();
+    FILTER_EDICTS(locust, locust->inuse && G_GetLocustMember(locust) &&
+                  G_GetLocustMember(locust)->controller == controller) {
+        found = true;
+        T_ASSERT(locust->think == locust_member_think);
+        if (G_GetUnitAnimation(locust, "Walk")) {
+            T_NOT_NULL(locust->currentmove);
+            T_NOT_NULL(locust->animation);
+            T_ASSERT(G_AnimationHasPrimary(locust->animation, "walk"));
+        }
+        break;
+    }
+    T_ASSERT(found);
+cleanup:
+    locust_done(fix);
+}
+
 #endif
