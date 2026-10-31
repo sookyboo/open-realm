@@ -2,6 +2,13 @@
 
 #define IMPALE_HIT_ID MAKEFOURCC('I', 'm', 'p', 'H')
 
+/* Impale's configured SpecialArt is a one-shot *miss* spike, while BUim
+ * TargetArt is the one-shot *hit* spike. The art report establishes their
+ * identities but not retail emission spacing. Keep this provisional spacing
+ * local to presentation; the simulation sweep below remains authoritative. */
+#define IMPALE_SPIKE_SPACING 64.0f
+#define IMPALE_SPIKES_PER_TICK_LIMIT 32u
+
 /* DataD is the airborne phase, independently timed from Dur/HeroDur stun.
  * The exact retail elevation curve is not observable from the available
  * game data. This deliberately conservative sinusoid is presentation only. */
@@ -77,11 +84,42 @@ static void impale_end_wave(edict_t *wave) {
     G_FreeEdict(wave);
 }
 
-static void impale_spawn_spikes(impaleWave_t const *state, float start, float end) {
-    float distance;
-    for (distance = start; distance < end; distance += 48.0f) {
-        vec2_t point = Vector2_mad(&state->direction, distance, &state->origin);
-        (void)G_SpawnAbilityEffectAtPoint(state->ability, WC3_EFFECT_SPECIAL, 0, &point, true);
+/* Resolve spike presentation from the already recorded authoritative hits.
+ * Samples overlapping an impact use BUim.TargetArt; empty samples use the
+ * ability's SpecialArt. Art capacity never changes gameplay hit processing. */
+static bool impale_sample_hit(edict_t const *wave, impaleWave_t const *state, float distance) {
+    FOR_LOOP(i, globals.num_edicts) {
+        edict_t const *mark = &globals.edicts[i];
+        vec2_t offset;
+        float along;
+        if (!mark->inuse || mark->class_id != IMPALE_HIT_ID || mark->owner != wave ||
+            mark->damage != wave->spawn_time) continue;
+        offset = Vector2_sub(&mark->s.origin2, &state->origin);
+        along = Vector2_dot(&offset, &state->direction);
+        if (fabsf(along - distance) < IMPALE_SPIKE_SPACING * 0.5f) return true;
+    }
+    return false;
+}
+
+static void impale_present_sweep(edict_t *wave, impaleWave_t const *state,
+                                 float start, float end_distance) {
+    float sample;
+    if (!G_AbilityEffectArt(state->ability, WC3_EFFECT_SPECIAL, 0)) return;
+    sample = (floorf(start / IMPALE_SPIKE_SPACING) + 1.0f) * IMPALE_SPIKE_SPACING;
+    if (state->distance < IMPALE_SPIKE_SPACING && end_distance >= state->distance)
+        sample = state->distance;
+    FOR_LOOP(i, IMPALE_SPIKES_PER_TICK_LIMIT) {
+        edict_t *effect;
+        vec2_t point;
+        if (!isfinite(sample) || sample > end_distance || sample > state->distance) break;
+        if (!impale_sample_hit(wave, state, sample)) {
+            point = Vector2_mad(&state->origin, sample, &state->direction);
+            effect = G_SpawnAbilityEffectAtPoint(state->ability, WC3_EFFECT_SPECIAL, 0,
+                                                 &point, true);
+            if (effect) effect->s.angle = atan2f(state->direction.y, state->direction.x);
+        }
+        if (sample + IMPALE_SPIKE_SPACING <= sample) break;
+        sample += IMPALE_SPIKE_SPACING;
     }
 }
 
@@ -106,9 +144,19 @@ static bool impale_hit(edict_t *wave, impaleWave_t const *state, edict_t *target
     mark->goalentity = target;
     mark->damage = wave->spawn_time;
     mark->resources = target->spawn_time;
-    S_SpellDamage(target, caster, (int)state->damage);
+    mark->s.origin2 = target->s.origin2; /* immutable presentation impact */
     buff = S_SpellBuffId(state->ability, state->level);
     if (!buff || strlen(buff) < 4) buff = "BUim"; /* RoC/custom missing BuffID */
+    /* The tall hit spike is authored on BUim, not on AUim. Anchor its one-shot
+     * Birth on the ground at impact; otherwise the spike follows a lifting
+     * victim. Spawn before damage so a lethal hit still has its visual. */
+    {
+        uint32_t buff_code = FS_SLKKey(buff);
+        edict_t *effect = G_SpawnAbilityEffectAtPoint(buff_code, WC3_EFFECT_TARGET, 0,
+                                                      &target->s.origin2, true);
+        if (effect) effect->s.angle = atan2f(state->direction.y, state->direction.x);
+    }
+    S_SpellDamage(target, caster, (int)state->damage);
     if (!target->inuse || target->spawn_time != target_spawn_time || M_IsDead(target)) return true;
     stun_duration = S_SpellHeroDuration(state->ability, state->level, target);
     /* The shared timed-status API uses zero duration for permanent status.
@@ -144,7 +192,6 @@ void impale_wave_think(edict_t *wave) {
     start = state->previous_distance;
     if (end < start) end = start;
     if (end > start) {
-        impale_spawn_spikes(state, start, end);
         /* Snapshot count before any hits spawn markers; only preexisting units
          * are eligible for this frame's sweep. Nearest-first ordering gives
          * deterministic progress when status or death callbacks spawn units. */
@@ -185,8 +232,9 @@ void impale_wave_think(edict_t *wave) {
             have_previous = true;
         }
     }
+    if (end > start) impale_present_sweep(wave, state, start, end);
     state->previous_distance = end;
-    wave->s.origin2 = Vector2_mad(&state->direction, end, &state->origin);
+    wave->s.origin2 = Vector2_mad(&state->origin, end, &state->direction);
     if (elapsed >= state->duration || end >= state->distance)
         impale_end_wave(wave);
 }
@@ -235,7 +283,8 @@ BZ_ABILITY_PROC(CAbilityImpale) {
     state->caster_spawn_time = ent->spawn_time;
     state->ability = spell->code;
     state->level = level;
-    G_PlayAbilityEffectSound(spell->code, &ent->s.origin2);
     wave->think = impale_wave_think;
+    /* The caster model owns its authored sound events. */
+    G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_CASTER, 0, ent, NULL, true);
     return true;
 }

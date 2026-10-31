@@ -5383,12 +5383,14 @@ TEST(wc3_save, impale_wave_and_hit_marker_round_trip) {
     marker->goalentity = victim;
     marker->damage = wave->spawn_time;
     marker->resources = victim->spawn_time;
+    marker->s.origin2 = (vec2_t){ 100, 0 }; /* saved hit art location */
     T_ASSERT(WriteGame(filename));
     wave->owner = NULL;
     wave->think = NULL;
     state->ability = state->level = 0;
     state->previous_distance = 0;
     marker->owner = marker->goalentity = NULL;
+    marker->s.origin2 = (vec2_t){ 0, 0 };
     T_ASSERT(ReadGame(filename));
     T_ASSERT(wave->think == impale_wave_think);
     T_ASSERT(wave->owner == caster);
@@ -5405,6 +5407,8 @@ TEST(wc3_save, impale_wave_and_hit_marker_round_trip) {
     T_ASSERT(marker->goalentity == victim);
     T_EQ(marker->damage, 700);
     T_EQ(marker->resources, 600);
+    T_FEQ(marker->s.origin2.x, 100.0f, 0.001f);
+    T_FEQ(marker->s.origin2.y, 0.0f, 0.001f);
     remove(filename);
 }
 

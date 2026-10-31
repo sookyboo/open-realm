@@ -288,4 +288,134 @@ TEST(wc3_spell, impale_hero_duration_is_distinct_from_normal_stun) {
     T_ASSERT(!unit_hasstatusstate(normal, WC3_STATUS_STATE_STUNNED));
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
+
+/* Tests use the real G_SpawnAbilityEffect* path and minimal generated MDX
+ * fixtures in tests.mpq, not locally extracted retail models. The ability
+ * and buff identities have different art: AUim's special/miss effect must
+ * never be substituted for the BUim target/hit effect. */
+static cstring_t const impale_visual_config =
+    "[AUim]\n"
+    "CasterArt=TestUI\\Models\\anim_oneshot.mdx\n"
+    "SpecialArt=TestUI\\Models\\anim_projectile.mdx\n"
+    "[ACmp]\n"
+    "CasterArt=TestUI\\Models\\anim_oneshot.mdx\n"
+    "SpecialArt=TestUI\\Models\\anim_projectile.mdx\n";
+
+static cstring_t const impale_buff_visual_slk =
+    "ID;PWXL;N;EBB;Y2;X3\n"
+    "C;Y1;X1;K\"alias\"\n"
+    "C;Y1;X2;K\"code\"\n"
+    "C;Y1;X3;K\"TargetArt\"\n"
+    "C;Y2;X1;K\"BUim\"\n"
+    "C;Y2;X2;K\"BUim\"\n"
+    "C;Y2;X3;K\"TestUI\\Models\\anim_pulse.mdx\"\nE\n";
+
+static uint32_t impale_count_visuals(uint32_t model, edict_t const *target,
+                                      float min_x, float max_x) {
+    uint32_t count = 0;
+    FILTER_EDICTS(effect, effect->s.model == model && effect->goalentity == target &&
+                  effect->s.origin2.x >= min_x && effect->s.origin2.x <= max_x)
+        count++;
+    return count;
+}
+
+TEST(wc3_spell, impale_cast_hit_and_miss_models_follow_wave_timing) {
+    slkTestData_t *rows = parse_slk_string(impale_slk), *old;
+    slkTestData_t *buff_rows = parse_slk_string(impale_buff_visual_slk), *old_buff;
+    edict_t *caster, *first, *second, *ally;
+    uint32_t caster_model, miss_model, hit_model;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    old_buff = G_SetSLKRows("AbilityBuffData", buff_rows);
+    T_ASSERT(G_TestPushAbilityConfig(impale_visual_config));
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    first = impale_unit(80, 0, 1, TARG_GROUND);
+    second = impale_unit(260, 0, 1, TARG_GROUND);
+    ally = impale_unit(180, 0, 0, TARG_GROUND);
+    caster_model = G_RegisterModel("TestUI\\Models\\anim_oneshot.mdx");
+    miss_model = G_RegisterModel("TestUI\\Models\\anim_projectile.mdx");
+    hit_model = G_RegisterModel("TestUI\\Models\\anim_pulse.mdx");
+    T_ASSERT(caster_model && miss_model && hit_model);
+    T_NE(miss_model, hit_model);
+    T_STREQ(G_AbilityEffectArt(MAKEFOURCC('A','U','i','m'), WC3_EFFECT_SPECIAL, 0),
+             "TestUI\\Models\\anim_projectile.mdx");
+    T_STREQ(G_AbilityEffectArt(MAKEFOURCC('B','U','i','m'), WC3_EFFECT_TARGET, 0),
+             "TestUI\\Models\\anim_pulse.mdx");
+
+    level.time = 1000;
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    T_EQ(impale_count_visuals(caster_model, caster, -1, 1), 1u);
+    T_EQ(impale_count_visuals(hit_model, NULL, -1, 600), 0u);
+    T_EQ(impale_count_visuals(miss_model, NULL, -1, 600), 0u);
+
+    level.time = 1100; G_RunEntities(); /* first 100 world units */
+    T_FEQ(first->health.value, 427.0f, 0.001f);
+    T_FEQ(second->health.value, 500.0f, 0.001f);
+    T_EQ(impale_count_visuals(hit_model, NULL, 79, 81), 1u);
+    T_EQ(impale_count_visuals(miss_model, NULL, 63, 65), 0u); /* impact, not miss */
+
+    level.time = 1200; G_RunEntities(); /* 100..200: samples at 128 and 192 */
+    T_FEQ(second->health.value, 500.0f, 0.001f);
+    T_EQ(impale_count_visuals(miss_model, NULL, 127, 129), 1u);
+    T_EQ(impale_count_visuals(miss_model, NULL, 191, 193), 1u);
+    T_FEQ(ally->health.value, 500.0f, 0.001f);
+
+    level.time = 1300; G_RunEntities(); /* second hit, around sample 256 */
+    T_FEQ(second->health.value, 427.0f, 0.001f);
+    T_EQ(impale_count_visuals(hit_model, NULL, 259, 261), 1u);
+    T_EQ(impale_count_visuals(miss_model, NULL, 255, 257), 0u);
+
+    G_TestPopAbilityConfig();
+    G_SetSLKRows("AbilityBuffData", old_buff);
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows); free_slk_rows(buff_rows);
+}
+
+TEST(wc3_spell, impale_creep_alias_resolves_its_own_caster_art) {
+    slkTestData_t *rows = parse_slk_string(impale_slk), *old;
+    edict_t *caster, *victim;
+    uint32_t caster_model;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    T_ASSERT(G_TestPushAbilityConfig(impale_visual_config));
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    victim = impale_unit(150, 0, 1, TARG_GROUND);
+    caster_model = G_RegisterModel("TestUI\\Models\\anim_oneshot.mdx");
+    level.time = 1000;
+    T_ASSERT(impale_cast(caster, "ACmp", (vec2_t){ 700, 0 }));
+    T_EQ(impale_count_visuals(caster_model, caster, -1, 1), 1u);
+    level.time = 1200; G_RunEntities();
+    T_FEQ(victim->health.value, 463.0f, 0.001f);
+    G_TestPopAbilityConfig();
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* Art is optional, including when custom game data explicitly disables it.
+ * The wave must still deal damage, apply BUim stun and schedule DataD lift. */
+TEST(wc3_spell, impale_missing_art_does_not_block_damage_or_lift) {
+    static cstring_t const disabled_art =
+        "[AUim]\nCasterArt=-\nSpecialArt=-\n"
+        "[BUim]\nTargetArt=-\n";
+    slkTestData_t *rows = parse_slk_string(impale_slk), *old;
+    edict_t *caster, *victim;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    T_ASSERT(G_TestPushAbilityConfig(disabled_art));
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    victim = impale_unit(80, 0, 1, TARG_GROUND);
+    level.time = 1000;
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    level.time = 1100; G_RunEntities();
+    T_FEQ(victim->health.value, 427.0f, 0.001f);
+    T_ASSERT(unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    T_NOT_NULL(G_GetImpaleLift(victim));
+    G_TestPopAbilityConfig();
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
 #endif

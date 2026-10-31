@@ -364,4 +364,4 @@ Beastmaster/Rexxar beast summons (`ANsg`, `ANsq`, `ANsw`, `Arsg`, `Arsq`) share 
 
 ### Crypt Lord Impale travelling-wave and lift stages
 
-`AUim` and `ACmp` use a saveable, time-swept line for one-hit damage and authored target masks. `BUim` now owns the timed stun and a separate victim component controls the `DataD` airborne visual offset without overwriting other flight heights; stun and landing expire independently. **Remaining:** verified spike art and version-dependent airborne targeting parity. See [Impale](../impale.md).
+`AUim` and `ACmp` use a saveable, time-swept line for one-hit damage and authored target masks. `BUim` now owns the timed stun and a separate victim component controls the `DataD` airborne visual offset without overwriting other flight heights; stun and landing expire independently. Patch 3 renders authored CasterArt, BUim hit art and progressive SpecialArt miss spikes through temporary MDX entities. Visual sample spacing is provisional. **Remaining:** retail spike spacing and version-dependent airborne targeting parity. See [Impale](../impale.md).
