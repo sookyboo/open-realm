@@ -1370,11 +1370,17 @@ BZ_SIMPLE_SPELL_PROC(AbilityBreathOfFire) {
 BZ_SIMPLE_SPELL_PROC(AbilityHowlOfTerror) {
     uint32_t level = S_SpellLevel(caster, spell->code);
     float radius = S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level);
-    float duration = S_SpellDuration(spell->code, level, false);
     cstring_t buff = S_SpellBuffId(spell->code, level);
     FILTER_EDICTS(target, target != caster && S_SpellIsAliveTarget(target) && S_SpellIsEnemy(caster, target) &&
-                  Vector2_distance(&target->s.origin2, &caster->s.origin2) <= radius)
-        if (buff && strlen(buff) >= 4) S_SpellApplyTimedStatusFromAbility(target, spell->code, level, buff, duration);
+                  S_SpellAllowsAreaTarget(spell->code, caster, target) &&
+                  Vector2_distance(&target->s.origin2, &caster->s.origin2) <= radius) {
+        /* BNht owns the persistent HowlTarget model, not ANht's one-shot
+         * caster burst. Let the status remove its effect on dispel, death,
+         * replacement or expiry, and reuse it on refresh/recast. */
+        if (buff && strlen(buff) >= 4)
+            S_SpellApplyTimedTargetStatus(target, spell->code, level, buff,
+                                          S_SpellHeroDuration(spell->code, level, target));
+    }
     G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_CASTER, 0, caster, NULL, true);
 }
 /* Name=Drunken Haze

@@ -593,13 +593,29 @@ void S_ResolveAttackHitWithArrow(edict_t *attacker, edict_t *target, int damage,
     { uint32_t cleave_code = G_UnitAbilityLevel(attacker, MAKEFOURCC('A','N','c','a')) ?
             MAKEFOURCC('A','N','c','a') : MAKEFOURCC('A','C','c','e');
     uint32_t cleave_level = G_UnitAbilityLevel(attacker, cleave_code);
-    if (cleave_level) {
+    /* Cleave is a melee physical attack modifier. Its authored target mask
+     * (ground/enemy/neutral) also applies to secondary splash victims. */
+    if (cleave_level && S_AttackProfileIsMelee(attack_profile(attacker, target))) {
         float radius = S_SpellNumber(cleave_code, ABILITY_NUMBER_AREA, cleave_level);
         float fraction = S_SpellData(cleave_code, cleave_level, 1);
-        FILTER_EDICTS(other, other != target && S_SpellIsAliveTarget(other) && S_AttackHitAllowed(attacker, target, other) &&
-                      S_SpellIsEnemy(attacker, other) &&
-                      Vector2_distance(&other->s.origin2, &target->s.origin2) <= radius)
+        char name[5];
+        cstring_t attachment;
+        uint32_t base = G_AbilityCode(cleave_code);
+        memcpy(name, &cleave_code, 4); name[4] = '\0';
+        attachment = FindConfigValue(name, "Specialattach");
+        if ((!attachment || !*attachment) && base != cleave_code) {
+            memcpy(name, &base, 4); name[4] = '\0';
+            attachment = FindConfigValue(name, "Specialattach");
+        }
+        /* Stock ANca/ACce use chest; custom rows can override this socket. */
+        if (!attachment || !*attachment) attachment = "chest";
+        FILTER_EDICTS(other, other != target && other != attacker && S_SpellIsAliveTarget(other) &&
+                      S_AttackHitAllowed(attacker, target, other) &&
+                      S_SpellAllowsAreaTarget(cleave_code, attacker, other) &&
+                      Vector2_distance(&other->s.origin2, &target->s.origin2) <= radius) {
+            G_SpawnAbilityEffectTarget(cleave_code, WC3_EFFECT_SPECIAL, 0, other, attachment, true);
             T_Damage(other, attacker, (int)MAX(1.0f, damage * fraction));
+        }
     } }
     S_MoonGlaiveAttack(attacker, target, damage);
     S_SlowPoisonOnHit(attacker, target);

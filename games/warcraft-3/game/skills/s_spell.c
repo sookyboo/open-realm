@@ -491,10 +491,17 @@ bool S_SpellAllowsAreaTarget(uint32_t code, edict_t *caster, edict_t *target) {
     if (S_ImpaleIsAirborne(target) && !S_ImpaleAirborneVulnerable(target)) return false;
     /* Devour is a physical swallowing ability, not a magic projectile. */
     { ability_t const *ability = S_SpellAbilityForCode(code);
+      /* Area target masks are also shared by non-spell mechanics such as
+       * Cleaving Attack; resolve their registered parent class too. */
+      if (!ability) {
+          abilityitem_t item = S_AbilityItem(code);
+          ability = item.ability;
+      }
       /* Taunt changes the target's attack order rather than applying a
        * hostile magical effect. Spell immunity alone does not make a unit
        * ineligible for its authored enemy target mask. */
-      if ((!ability || (ability->proc != CAbilityDevour && ability->proc != CAbilityTaunt)) &&
+      if ((!ability || (ability->proc != CAbilityDevour && ability->proc != CAbilityTaunt &&
+                        ability->proc != CAbilityCleavingAttack)) &&
           S_UnitSpellImmune(target)) return false; }
     ability_level = S_SpellLevel(caster, code);
     targets = G_AbilityLevel(code, ability_level)->targs;

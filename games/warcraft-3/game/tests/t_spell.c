@@ -4517,6 +4517,7 @@ TEST(wc3_spell, howl_of_terror_reduces_enemy_attack_damage_by_authored_25_percen
 	((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
 	((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
 	enemy->svflags |= SVF_MONSTER; victim->svflags |= SVF_MONSTER;
+	enemy->targtype = victim->targtype = TARG_GROUND;
 	enemy->health.value = enemy->health.max_value = 500;
 	victim->health.value = victim->health.max_value = 500;
 	enemy->unit_state->attack1.type = ATK_NORMAL;
@@ -4533,6 +4534,184 @@ TEST(wc3_spell, howl_of_terror_reduces_enemy_attack_damage_by_authored_25_percen
 	S_ResolveAttackHit(enemy, victim, 100);
 	T_FEQ(victim->health.value, 325.0f, 0.001f);
 	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* Stock BNht owns HowlTarget, with no explicit Targetattach: the status
+ * attachment helper uses the origin default. Recasts must not accumulate
+ * target models, and expiration/dispel must retire their identity markers. */
+TEST(wc3_spell, pit_lord_howl_target_art_tracks_status_refresh_and_expiry) {
+    char const slk[] =
+        "ID;PWXL;N;EBB;Y2;X9\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\n"
+        "C;Y1;X4;K\"Dur1\"\nC;Y1;X5;K\"HeroDur1\"\nC;Y1;X6;K\"Area1\"\n"
+        "C;Y1;X7;K\"DataA1\"\nC;Y1;X8;K\"BuffID1\"\nC;Y1;X9;K\"levels\"\n"
+        "C;Y2;X1;K\"ANht\"\nC;Y2;X2;K\"ANht\"\nC;Y2;X3;K\"ground,enemy\"\n"
+        "C;Y2;X4;K\"7\"\nC;Y2;X5;K\"2\"\nC;Y2;X6;K\"250\"\n"
+        "C;Y2;X7;K\"0.30\"\nC;Y2;X8;K\"BNht\"\nC;Y2;X9;K\"1\"\nE\n";
+    static cstring_t const config =
+        "[ANht]\nCasterArt=TestUI\\Models\\anim_pulse.mdx\n"
+        "[BNht]\nTargetArt=TestUI\\Models\\anim_pulse.mdx\n";
+    slkTestData_t *rows, *old;
+    edict_t *caster, *enemy, *ally, *air, *outside, *effect = NULL;
+    abilityitem_t howl;
+    spellTarget_t const st = MAKE(spellTarget_t, .type = SPELL_TARGET_NONE);
+    uint32_t const buff = MAKEFOURCC('B','N','h','t');
+    uint32_t count;
+
+    reset_entities(); setup_test_world(); level.time = 1000;
+    T_ASSERT(G_TestPushAbilityConfig(config));
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    caster = make_hero(MAKEFOURCC('N','p','l','h'), 100, 0, 0, 0);
+    enemy = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 50, 0);
+    ally = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 50, 0);
+    air = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 50, 0);
+    outside = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 50, 0);
+    caster->s.player = ally->s.player = 0;
+    enemy->s.player = air->s.player = outside->s.player = 1;
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    caster->svflags |= SVF_MONSTER;
+    enemy->svflags |= SVF_MONSTER; ally->svflags |= SVF_MONSTER;
+    air->svflags |= SVF_MONSTER; outside->svflags |= SVF_MONSTER;
+    caster->targtype = enemy->targtype = ally->targtype = outside->targtype = TARG_GROUND;
+    air->targtype = TARG_AIR;
+    enemy->s.origin2 = (vec2_t){80, 0};
+    ally->s.origin2 = (vec2_t){60, 0};
+    air->s.origin2 = (vec2_t){70, 0};
+    outside->s.origin2 = (vec2_t){600, 0};
+    enemy->health.value = enemy->health.max_value = 500;
+    ally->health.value = ally->health.max_value = 500;
+    air->health.value = air->health.max_value = 500;
+    outside->health.value = outside->health.max_value = 500;
+    caster->unit_state->ranks[0] = MAKE(heroability_t, .code = MAKEFOURCC('A','N','h','t'), .level = 1);
+    howl = S_AbilityItem(MAKEFOURCC('A','N','h','t'));
+    T_ASSERT(G_RegisterModel("TestUI\\Models\\anim_pulse.mdx") > 0);
+    AbilityHowlOfTerror_Execute(caster, st, &howl);
+    T_ASSERT(S_UnitHasStatus(enemy, buff));
+    T_FEQ(unit_status_modifier_total(enemy, WC3_STATUS_MOD_ATTACK_DAMAGE_PERCENT), -0.30f, 0.001f);
+    T_ASSERT(!S_UnitHasStatus(ally, buff));
+    T_ASSERT(!S_UnitHasStatus(air, buff));
+    T_ASSERT(!S_UnitHasStatus(outside, buff));
+    count = 0;
+    FILTER_EDICTS(found, found->status_effect_code == buff && found->goalentity == enemy) {
+        count++; effect = found;
+    }
+    T_EQ(count, 1u);
+    T_NOT_NULL(effect);
+    if (effect) T_ASSERT(!(effect->s.flags & EF_NAMED_ATTACHMENT));
+    heroabilitystatus_t *status = unit_findstatus(enemy, buff);
+    T_NOT_NULL(status);
+    if (status) {
+        T_ASSERT(status->buff_flags & WC3_STATUS_BUFF_TARGET_ART);
+        T_EQ(status->timestamp, 8000u);
+    }
+    level.time += 1000;
+    AbilityHowlOfTerror_Execute(caster, st, &howl);
+    count = 0;
+    FILTER_EDICTS(found, found->status_effect_code == buff && found->goalentity == enemy) count++;
+    T_EQ(count, 1u);
+    status = unit_findstatus(enemy, buff);
+    T_NOT_NULL(status);
+    if (status) T_EQ(status->timestamp, 9000u);
+    if (status) unit_removestatus(enemy, status, STATUS_REMOVE_DISPEL);
+    count = 0;
+    FILTER_EDICTS(found, found->status_effect_code == buff && found->goalentity == enemy) count++;
+    T_EQ(count, 0u);
+    T_ASSERT(!S_UnitHasStatus(enemy, buff));
+    AbilityHowlOfTerror_Execute(caster, st, &howl);
+    level.time += 7000; unit_updatestatuses(enemy);
+    count = 0;
+    FILTER_EDICTS(found, found->status_effect_code == buff && found->goalentity == enemy) count++;
+    T_EQ(count, 0u);
+    T_ASSERT(!S_UnitHasStatus(enemy, buff));
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+    G_TestPopAbilityConfig();
+}
+
+TEST(wc3_spell, pit_lord_cleave_hits_only_eligible_ground_secondaries_with_chest_art) {
+    char const slk[] =
+        "ID;PWXL;N;EBB;Y2;X7\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"DataA1\"\n"
+        "C;Y1;X4;K\"Area1\"\nC;Y1;X5;K\"targs\"\nC;Y1;X6;K\"levels\"\n"
+        "C;Y1;X7;K\"DataA2\"\n"
+        "C;Y2;X1;K\"ANca\"\nC;Y2;X2;K\"ANca\"\nC;Y2;X3;K\"0.3\"\n"
+        "C;Y2;X4;K\"200\"\nC;Y2;X5;K\"ground,enemy,neutral\"\n"
+        "C;Y2;X6;K\"1\"\nE\n";
+    static cstring_t const config =
+        "[ANca]\nSpecialArt=TestUI\\Models\\anim_pulse.mdx\nSpecialattach=chest\n";
+    edict_t *attacker, *primary, *ground, *immune, *air, *structure, *ally, *far, *effect = NULL;
+    slkTestData_t *rows, *old;
+    uint32_t art_model;
+    uint32_t art_count;
+    reset_entities(); setup_test_world(); level.time = 1000;
+    T_ASSERT(G_TestPushAbilityConfig(config));
+    art_model = G_RegisterModel("TestUI\\Models\\anim_pulse.mdx");
+    rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
+    attacker = make_hero(MAKEFOURCC('N','p','l','h'), 200, 0, 0, 0);
+    primary = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    ground = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    immune = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    air = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    structure = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    ally = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    far = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    attacker->s.player = ally->s.player = 0;
+    primary->s.player = ground->s.player = immune->s.player = air->s.player = structure->s.player = far->s.player = 1;
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    memset(level.alliances, 0, sizeof(level.alliances));
+    edict_t *units[] = { primary, ground, immune, air, structure, ally, far };
+    FOR_LOOP(i, 7) {
+        units[i]->health.value = units[i]->health.max_value = 500;
+        units[i]->svflags |= SVF_MONSTER;
+        units[i]->targtype = TARG_GROUND;
+        units[i]->s.origin2 = (vec2_t){50, 0};
+    }
+    air->targtype = TARG_AIR;
+    structure->targtype = TARG_STRUCTURE; structure->s.flags |= EF_BUILDING;
+    far->s.origin2 = (vec2_t){500, 0};
+    T_NOT_NULL(unit_applystatus(immune, &(status_application_t){
+        .buff = "BImm", .level = 1, .duration = 10.0f,
+        .state_mask = WC3_STATUS_STATE_MAGIC_IMMUNE
+    }));
+    T_ASSERT(S_UnitSpellImmune(immune));
+    attacker->unit_state->ranks[0] = MAKE(heroability_t, .code = MAKEFOURCC('A','N','c','a'), .level = 1);
+    attacker->unit_state->attack1.type = ATK_NORMAL;
+    attacker->unit_state->attack1.weapon = WPN_NORMAL;
+    attacker->unit_state->attack1.targetsAllowed = G_TargetFlagForType(TARG_GROUND);
+    T_ASSERT(art_model > 0);
+    S_ResolveAttackHit(attacker, primary, 100);
+    T_FEQ(primary->health.value, 400, 0.001f);
+    T_FEQ(ground->health.value, 470, 0.001f);
+    T_FEQ(immune->health.value, 470, 0.001f); /* physical splash bypasses spell immunity */
+    T_FEQ(air->health.value, 500, 0.001f);
+    T_FEQ(structure->health.value, 500, 0.001f);
+    T_FEQ(ally->health.value, 500, 0.001f);
+    T_FEQ(far->health.value, 500, 0.001f);
+    art_count = 0;
+    FILTER_EDICTS(found, found->s.model == art_model && found->goalentity == ground) {
+        effect = found; art_count++;
+    }
+    T_EQ(art_count, 1u);
+    T_NOT_NULL(effect);
+    if (effect) {
+        T_ASSERT(effect->s.flags & EF_NAMED_ATTACHMENT);
+        T_EQ(effect->s.hover_value, ground->s.number + 1);
+    }
+    art_count = 0;
+    FILTER_EDICTS(found, found->s.model == art_model && found->goalentity == immune) art_count++;
+    T_EQ(art_count, 1u);
+    FILTER_EDICTS(found, found->s.model == art_model && found->goalentity != ground &&
+                  found->goalentity != immune)
+        T_ASSERT(false); /* no art on air, structure, primary, or ally */
+    /* Cleave belongs to melee weapon hits; a ranged attack must not trigger it. */
+    attacker->unit_state->attack1.weapon = WPN_MISSILE;
+    S_ResolveAttackHit(attacker, primary, 100);
+    T_FEQ(ground->health.value, 470, 0.001f);
+    T_FEQ(immune->health.value, 470, 0.001f);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+    G_TestPopAbilityConfig();
 }
 
 TEST(wc3_spell, selected_hero_ability_contracts_are_registered) {
@@ -9306,6 +9485,9 @@ TEST(wc3_spell, ethereal_secondary_targets_reject_physical_attacks) {
         edict_t *nearby = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 60, 0);
         attacker->s.player = 0; primary->s.player = nearby->s.player = 1;
         attacker->unit_state->attack1.type = ATK_NORMAL;
+        /* Cleave is a melee passive; the shared ranged Huntress fixture
+         * must use a melee weapon in the Cleave iteration. */
+        if (i == 1) attacker->unit_state->attack1.weapon = WPN_NORMAL;
         attacker->unit_state->attack1.targetsAllowed = G_TargetFlagForType(TARG_GROUND);
         attacker->unit_state->attack2.type = ATK_MAGIC;
         attacker->unit_state->attack2.targetsAllowed = G_TargetFlagForType(TARG_GROUND);

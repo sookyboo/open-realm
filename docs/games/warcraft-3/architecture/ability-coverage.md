@@ -207,7 +207,10 @@ authored-`BNms` no-target toggle at the central damage boundary, `AHre` (Resurre
 revival, `ANbf` (Breath of Fire) through point-area damage, `ANdb` (Drunken
 Brawler) through the existing critical/evasion hooks, `ANdh` (Drunken Haze) and
 `ANdo` (Doom) through timed target buffs, `ANht` (Howl of Terror) through its
-authored area buff, and `ANca` (Cleaving Attack) through the attack-hit hook.
+authored area buff and status-owned `BNht` target visual, and `ANca` (Cleaving
+Attack) through melee physical splash with authored secondary-hit art and target
+mask. See [Pit Lord](../pit-lord.md) for implementation details and the
+remaining Rain of Fire / Doom gaps.
 
 The current selected-block implementation also covers `AHfa` (Searing Arrows)
 through the missile attack hook, `AEar` (Trueshot Aura) through the ranged
