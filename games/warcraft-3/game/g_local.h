@@ -1706,7 +1706,10 @@ typedef struct shopStockItem_s {
     X(27, CONSTRUCTION, construction, Construction, construction_t, LIFECYCLE_POOL_CAP, construction_fields) \
     X(28, ITEM, item, Item, item_t, LIFECYCLE_POOL_CAP, item_fields) \
     X(29, PILLAGE, pillage, Pillage, pillage_t, LIFECYCLE_POOL_CAP, scalar_pool_fields) \
-    X(30, CARRION_WAVE, carrion_wave, CarrionWave, carrionWave_t, LIFECYCLE_POOL_CAP, carrion_wave_fields)
+    X(30, CARRION_WAVE, carrion_wave, CarrionWave, carrionWave_t, LIFECYCLE_POOL_CAP, carrion_wave_fields) \
+    X(31, IMPALE_WAVE, impale_wave, ImpaleWave, impaleWave_t, LIFECYCLE_POOL_CAP, impale_wave_fields) \
+    X(32, LOCUST_SWARM, locust_swarm, LocustSwarm, locustSwarm_t, LIFECYCLE_POOL_CAP, locust_swarm_fields) \
+    X(33, LOCUST_MEMBER, locust_member, LocustMember, locustMember_t, LIFECYCLE_POOL_CAP, locust_member_fields)
 
 typedef enum {
 #define G_COMPONENT_ID(id, ID, member, Name, type, cap, fields) COMPONENT_##ID = id,
@@ -1738,6 +1741,34 @@ typedef struct {
     float damage_per_target, remaining_damage;
     bool capped;
 } carrionWave_t;
+
+/* One point-cast Impale wave. Damage and the advancing sweep are simulation
+ * owned; visual spikes, stun and lift have separate lifecycles. */
+typedef struct {
+    component_t component;
+    vec2_t origin, direction;
+    float distance, duration, half_width, damage, previous_distance;
+    uint32_t start_ms, caster_spawn_time, ability, level;
+} impaleWave_t;
+
+typedef struct {
+    component_t component;
+    uint32_t caster_spawn_time, ability, level;
+    uint32_t start_ms, end_ms, next_release_ms, release_interval_ms;
+    uint32_t total, released, unit_id;
+    float area, target_cap, heal_factor, return_threshold;
+    bool active;
+} locustSwarm_t;
+
+typedef struct {
+    component_t component;
+    edict_t *controller; /* F_EDICT; generation checked by controller_spawn_time */
+    uint32_t controller_spawn_time;
+    edict_t *target; /* F_EDICT; generation checked by target_spawn_time */
+    uint32_t target_spawn_time;
+    uint32_t state, next_acquire_ms;
+    float damage_credit;
+} locustMember_t;
 
 /* Shop-owned stock list retained across patron selection and purchases. */
 typedef struct stock_s {
@@ -3270,6 +3301,10 @@ void G_RunTimers(void);
 void G_StartProjectilePresentation(edict_t *ent);
 void G_AdvanceProjectilePresentation(edict_t *ent);
 void carrion_wave_think(edict_t *wave);
+void impale_wave_think(edict_t *wave);
+void locust_swarm_think(edict_t *controller);
+void locust_member_think(edict_t *member);
+void S_LocustSwarmAttackLanded(edict_t *attacker, edict_t *target, float actual_damage);
 bool G_StartProjectileDeathPresentation(edict_t *ent);
 void G_TimerStart(gtimer_t *timer, uint32_t timeout, bool periodic, struct jass_function const *handler);
 void G_TimerPause(gtimer_t *timer);

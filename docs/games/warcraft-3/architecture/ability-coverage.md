@@ -361,3 +361,7 @@ is applied. All three abilities share the `melee_status_execute` path.
    exist.
 
 Beastmaster/Rexxar beast summons (`ANsg`, `ANsq`, `ANsw`, `Arsg`, `Arsq`) share Feral Spirit's magical no-blood death presentation on combat death and timed expiry; regular summoned units retain normal death handling.
+
+### Crypt Lord Impale travelling-wave stage
+
+`AUim` and `ACmp` now use a saveable, time-swept line for one-hit damage and shared authored target masks. Stun, airborne lift, and visual spike parity are **not** implemented in this patch. See [Impale](../impale.md).

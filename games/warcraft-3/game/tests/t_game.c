@@ -5344,6 +5344,70 @@ TEST(wc3_save, homing_spell_projectile_round_trip_preserves_identity_contract) {
     remove(filename);
 }
 
+TEST(wc3_save, impale_wave_and_hit_marker_round_trip) {
+    cstring_t filename = Test_TempPath("wc3-save-impale-wave.bin");
+    edict_t *caster, *victim, *wave, *marker;
+    impaleWave_t *state;
+    reset_entities(); setup_test_world();
+    caster = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    victim = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 100, 0);
+    caster->spawn_time = 500;
+    victim->spawn_time = 600;
+    wave = G_Spawn();
+    T_NOT_NULL(wave);
+    if (!wave) return;
+    wave->owner = caster;
+    wave->class_id = MAKEFOURCC('A','U','i','m');
+    wave->spawn_time = 700;
+    wave->think = impale_wave_think;
+    state = G_AddImpaleWave(wave);
+    T_NOT_NULL(state);
+    if (!state) return;
+    state->origin = (vec2_t){ 0, 0 };
+    state->direction = (vec2_t){ 1, 0 };
+    state->distance = 600;
+    state->duration = 0.6f;
+    state->half_width = 125;
+    state->damage = 73;
+    state->previous_distance = 200;
+    state->start_ms = 1000;
+    state->caster_spawn_time = caster->spawn_time;
+    state->ability = wave->class_id;
+    state->level = 2;
+    marker = G_Spawn();
+    T_NOT_NULL(marker);
+    if (!marker) return;
+    marker->class_id = MAKEFOURCC('I','m','p','H');
+    marker->svflags |= SVF_NOCLIENT;
+    marker->owner = wave;
+    marker->goalentity = victim;
+    marker->damage = wave->spawn_time;
+    marker->resources = victim->spawn_time;
+    T_ASSERT(WriteGame(filename));
+    wave->owner = NULL;
+    wave->think = NULL;
+    state->ability = state->level = 0;
+    state->previous_distance = 0;
+    marker->owner = marker->goalentity = NULL;
+    T_ASSERT(ReadGame(filename));
+    T_ASSERT(wave->think == impale_wave_think);
+    T_ASSERT(wave->owner == caster);
+    state = G_GetImpaleWave(wave);
+    T_NOT_NULL(state);
+    if (state) {
+        T_EQ(state->ability, MAKEFOURCC('A','U','i','m'));
+        T_EQ(state->level, 2);
+        T_FEQ(state->distance, 600, 0.001f);
+        T_FEQ(state->previous_distance, 200, 0.001f);
+        T_EQ(state->caster_spawn_time, 500);
+    }
+    T_ASSERT(marker->owner == wave);
+    T_ASSERT(marker->goalentity == victim);
+    T_EQ(marker->damage, 700);
+    T_EQ(marker->resources, 600);
+    remove(filename);
+}
+
 TEST(wc3_save, flare_reveal_thinker_round_trip_preserves_caster_identity) {
     cstring_t filename = Test_TempPath("wc3-save-flare-reveal-thinker.bin");
     uint32_t const ability = MAKEFOURCC('A', 'f', 'l', 'a');

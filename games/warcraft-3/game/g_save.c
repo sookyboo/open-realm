@@ -159,7 +159,9 @@ static uint32_t const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
 /* Version 126 persists the Mountain Giant War Club weapon alias and swing count. */
 /* Version 128 persists Mana Flare's cooldown deadline in status next_tick. */
 /* Version 129 persists per-caster Phoenix and Egg recast ownership identity. */
-static uint32_t const save_version = 129;
+/* Version 130 persists Impale wave simulation state and callback identity. */
+/* Version 131 persists the Locust Swarm controller and member state. */
+static uint32_t const save_version = 131;
 #define SAVE_STREAM_BUFFER (1u << 20) // bytes; save files are several MB of field writes, so a large stdio buffer avoids per-4 KB syscalls
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
@@ -240,6 +242,9 @@ static saveCFunction_t const save_cfunctions[] = {
     SAVE_CFUNCTION(tornado_think),
     SAVE_CFUNCTION(carrion_wave_think),
     SAVE_CFUNCTION(devour_think),
+    SAVE_CFUNCTION(impale_wave_think),
+    SAVE_CFUNCTION(locust_swarm_think),
+    SAVE_CFUNCTION(locust_member_think),
 };
 
 static int SaveCFunctionIndex(void *func) {
@@ -952,6 +957,44 @@ static field_t const carrion_wave_fields[] = {
     TF(carrionWave_t, damage_per_target, F_FLOAT),
     TF(carrionWave_t, remaining_damage, F_FLOAT),
     TF(carrionWave_t, capped, F_INT),
+    { NULL, 0, 0, 0, 0, 0 }
+};
+
+static field_t const impale_wave_fields[] = {
+    TF(impaleWave_t, origin, F_VECTOR),
+    TF(impaleWave_t, direction, F_VECTOR),
+    TF(impaleWave_t, distance, F_FLOAT),
+    TF(impaleWave_t, duration, F_FLOAT),
+    TF(impaleWave_t, half_width, F_FLOAT),
+    TF(impaleWave_t, damage, F_FLOAT),
+    TF(impaleWave_t, previous_distance, F_FLOAT),
+    TF(impaleWave_t, start_ms, F_INT),
+    TF(impaleWave_t, caster_spawn_time, F_INT),
+    TF(impaleWave_t, ability, F_INT),
+    TF(impaleWave_t, level, F_INT),
+    { NULL, 0, 0, 0, 0, 0 }
+};
+
+static field_t const locust_swarm_fields[] = {
+    TF(locustSwarm_t, caster_spawn_time, F_INT), TF(locustSwarm_t, ability, F_INT),
+    TF(locustSwarm_t, level, F_INT), TF(locustSwarm_t, start_ms, F_INT),
+    TF(locustSwarm_t, end_ms, F_INT), TF(locustSwarm_t, next_release_ms, F_INT),
+    TF(locustSwarm_t, release_interval_ms, F_INT), TF(locustSwarm_t, total, F_INT),
+    TF(locustSwarm_t, released, F_INT), TF(locustSwarm_t, unit_id, F_INT),
+    TF(locustSwarm_t, area, F_FLOAT), TF(locustSwarm_t, target_cap, F_FLOAT),
+    TF(locustSwarm_t, heal_factor, F_FLOAT), TF(locustSwarm_t, return_threshold, F_FLOAT),
+    TF(locustSwarm_t, active, F_INT),
+    { NULL, 0, 0, 0, 0, 0 }
+};
+
+static field_t const locust_member_fields[] = {
+    TF(locustMember_t, controller, F_EDICT, 0, FIELD_NONE),
+    TF(locustMember_t, controller_spawn_time, F_INT),
+    TF(locustMember_t, target, F_EDICT, 0, FIELD_NONE),
+    TF(locustMember_t, target_spawn_time, F_INT),
+    TF(locustMember_t, state, F_INT),
+    TF(locustMember_t, next_acquire_ms, F_INT),
+    TF(locustMember_t, damage_credit, F_FLOAT),
     { NULL, 0, 0, 0, 0, 0 }
 };
 

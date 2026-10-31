@@ -732,32 +732,6 @@ BZ_ABILITY_PROC(CAbilityCarrionScarabs) {
     default: return CAbilityModalSpell(ent, msg, call);
     }
 }
-/* Name=Impale
- * Ubertip="Slams the ground, impaling enemy units in a line and stunning them."
- */
-BZ_SIMPLE_SPELL_PROC(AbilityImpale) {
-    uint32_t level = S_SpellLevel(caster, spell->code);
-    vec2_t offset = Vector2_sub(&st.point, &caster->s.origin2);
-    float distance = Vector2_distance(&caster->s.origin2, &st.point);
-    vec2_t direction;
-    cstring_t buff = spell_buff(spell, level);
-    if (distance <= 0.0f) return;
-    direction = Vector2_scale(&offset, 1.0f / distance);
-    FILTER_EDICTS(target, S_SpellIsAliveTarget(target) && S_SpellIsEnemy(caster, target)) {
-        vec2_t delta = Vector2_sub(&target->s.origin2, &caster->s.origin2);
-        float along = Vector2_dot(&delta, &direction);
-        float across = delta.x * direction.y - delta.y * direction.x;
-        if (along < 0.0f || along > S_SpellData(spell->code, level, 1) ||
-            fabsf(across) > S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level)) continue;
-        S_SpellDamage(target, caster, (int)S_SpellData(spell->code, level, 3));
-        if (!M_IsDead(target) && buff)
-            S_SpellApplyTimedStatus(target, buff, level, S_SpellHeroDuration(spell->code, level, target));
-    }
-}
-/* Name=Locust Swarm
- * Ubertip="Summons a swarm of locusts that damages enemy units and returns life to the caster."
- */
-BZ_SIMPLE_SPELL_PROC(AbilityLocustSwarm) { S_SummonAbilityUnits(caster, spell->code, NULL); }
 /* Name=Black Arrow
  * Ubertip="Adds bonus damage to attacks and summons a skeleton when an attacked unit dies."
  * Untip="Right-click to activate auto-casting."
