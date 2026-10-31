@@ -368,6 +368,17 @@ is applied. All three abilities share the `melee_status_execute` path.
 | `Adri` | Drop Instant | Partial | No-target Unload All Instant now ejects every occupant immediately through the shared cargo-removal path. Exact reference presentation/sound semantics remain. |
 | `Aroo`, `Aro1`, `Aro2` | Root/Uproot | Partial | Current handler is still a legacy `no_pathing`/movetype toggle. Verified behavior requires rooted/uprooted weapon-set bits, rooted turning, uprooted defense, point-target reroot, dynamic structure/pathing state, animation transitions, and rooted/uprooted ability-set swaps. |
 
+## TODO: Audit JASS autocast on/off orders
+
+Audit every autocast ability's authored `Orderon`/`Orderoff` strings against
+the runtime order registry and `unit_issueimmediateorder()` handling. Ensure
+`IssueImmediateOrder` and `IssueImmediateOrderById` can enable and disable the
+same ability state that command-card right-click changes, including concrete
+aliases and no-target autocasts. Add a JASS-order regression test for each
+supported order pair. Obsidian Statue `Arpl` (`replenishlifeon/off`) and `Arpm`
+(`replenishmanaon/off`) were confirmed missing and have now been registered;
+continue the audit across the remaining autocast abilities.
+
 ## Suggested Port Order
 
 1. Finish the common spell plumbing: ability level data, mana/cooldown checks,
