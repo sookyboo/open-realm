@@ -14,6 +14,17 @@
  * game data. This deliberately conservative sinusoid is presentation only. */
 #define IMPALE_LIFT_PEAK 120.0f
 
+bool S_ImpaleIsAirborne(edict_t const *unit) {
+    impaleLift_t const *lift = unit ? G_GetImpaleLift(unit) : NULL;
+    return lift && unit->inuse && !M_IsDead((edict_t *)unit) &&
+        lift->end_ms > lift->start_ms && G_Time() < lift->end_ms;
+}
+
+bool S_ImpaleAirborneVulnerable(edict_t const *unit) {
+    impaleLift_t const *lift = unit ? G_GetImpaleLift(unit) : NULL;
+    return lift && S_ImpaleIsAirborne(unit) && lift->vulnerable != 0;
+}
+
 float S_ImpaleLiftOffset(edict_t const *unit) {
     impaleLift_t const *lift = unit ? G_GetImpaleLift(unit) : NULL;
     uint32_t now;
@@ -29,7 +40,7 @@ float S_ImpaleLiftOffset(edict_t const *unit) {
                 lift->peak_height * sinf((float)M_PI * t));
 }
 
-static void impale_begin_lift(edict_t *target, float air_seconds) {
+static void impale_begin_lift(edict_t *target, float air_seconds, bool vulnerable) {
     impaleLift_t *lift;
     uint32_t duration_ms;
     float previous;
@@ -47,6 +58,9 @@ static void impale_begin_lift(edict_t *target, float air_seconds) {
     lift->end_ms = G_Time() + MIN(duration_ms, UINT32_MAX - G_Time());
     lift->start_offset = previous;
     lift->peak_height = IMPALE_LIFT_PEAK;
+    /* Each hit owns the new airborne state; preserve the old offset, not
+     * the old vulnerability mode, when a second wave lands in mid-air. */
+    lift->vulnerable = vulnerable;
     M_CheckGround(target);
     gi.LinkEntity(target);
 }
@@ -132,6 +146,8 @@ static bool impale_hit(edict_t *wave, impaleWave_t const *state, edict_t *target
     float stun_duration;
     if (!S_SpellIsAliveTarget(target) || !S_SpellIsEnemy(caster, target) ||
         !S_SpellAllowsAreaTarget(state->ability, caster, target) ||
+        G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) ||
+        unit_hasstatusstate(target, WC3_STATUS_STATE_INVULNERABLE) ||
         impale_already_hit(wave, target)) return false;
 
     /* Record the hit before damage. This prevents repeated hits when damage
@@ -172,7 +188,8 @@ static bool impale_hit(edict_t *wave, impaleWave_t const *state, edict_t *target
     }
     /* The authored airborne motion is independent of the stun duration and
      * survives a failed status allocation (or a custom zero-duration stun). */
-    impale_begin_lift(target, S_SpellData(state->ability, state->level, 4));
+    impale_begin_lift(target, S_SpellData(state->ability, state->level, 4),
+                      S_SpellData(state->ability, state->level, 6) > 0.0f);
     return true;
 }
 
@@ -181,7 +198,18 @@ void impale_wave_think(edict_t *wave) {
     edict_t *caster = wave->owner;
     float elapsed, end, start;
     uint32_t count;
-    if (!state || !caster || !caster->inuse || caster->spawn_time != state->caster_spawn_time) {
+    if (!state || !caster || !caster->inuse || M_IsDead(caster) ||
+        caster->spawn_time != state->caster_spawn_time) {
+        impale_end_wave(wave);
+        return;
+    }
+    /* Pre-1.32.6 Impale was interruptible: moving during its travelling
+     * spike phase terminated the remaining sweep. DataE permits modern
+     * or custom waves to keep travelling after the caster changes position.
+     * The caster's cast-time/animation interruption is owned by the shared
+     * spell pipeline, not this already-launched wave. */
+    if (!state->uninterruptible &&
+        Vector2_distance(&caster->s.origin2, &state->origin) > 0.5f) {
         impale_end_wave(wave);
         return;
     }
@@ -210,6 +238,8 @@ void impale_wave_think(edict_t *wave) {
                 float along, across;
                 if (!S_SpellIsAliveTarget(target) || !S_SpellIsEnemy(caster, target) ||
                     !S_SpellAllowsAreaTarget(state->ability, caster, target) ||
+                    G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) ||
+                    unit_hasstatusstate(target, WC3_STATUS_STATE_INVULNERABLE) ||
                     impale_already_hit(wave, target)) continue;
                 delta = Vector2_sub(&target->s.origin2, &state->origin);
                 along = Vector2_dot(&delta, &state->direction) - start;
@@ -283,6 +313,7 @@ BZ_ABILITY_PROC(CAbilityImpale) {
     state->caster_spawn_time = ent->spawn_time;
     state->ability = spell->code;
     state->level = level;
+    state->uninterruptible = S_SpellData(spell->code, level, 5) > 0.0f;
     wave->think = impale_wave_think;
     /* The caster model owns its authored sound events. */
     G_SpawnAbilityEffectTarget(spell->code, WC3_EFFECT_CASTER, 0, ent, NULL, true);

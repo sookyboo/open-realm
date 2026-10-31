@@ -297,6 +297,7 @@ static bool attack_can_target_mask(edict_t const *attacker, edict_t const *targe
     uint32_t flag;
     if (!attacker || G_BuildingIsUnsummoning(attacker) || !target || !target->inuse || attacker == target ||
         !attack_mask_has_weapon(attacker, mask) || S_UnitIsCycloned(target) ||
+        (S_ImpaleIsAirborne(target) && !S_ImpaleAirborneVulnerable(target)) ||
         unit_hasstatusstate(attacker, WC3_STATUS_STATE_ETHEREAL) ||
         (unit_hasstatusstate(target, WC3_STATUS_STATE_ETHEREAL) &&
          !(((mask & 1u) && attacker->unit_state->attack1.type == ATK_MAGIC &&

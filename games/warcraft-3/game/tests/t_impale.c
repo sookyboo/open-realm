@@ -16,7 +16,27 @@ static cstring_t const impale_slk =
     "C;Y3;X4;K400\nC;Y3;X5;K0.4\nC;Y3;X6;K37\nC;Y3;X7;K100\n"
     "C;Y3;X8;K\"BUim\"\nC;Y3;X9;K1\nC;Y3;X10;K1\nC;Y3;X11;K1\nC;Y3;X12;K700\nC;Y3;X13;K0.5\nE\n";
 
+/* Newer editor data (1.32.6+) exposes DataE/Uninterruptible and
+ * DataF/Airborne Units Vulnerable. Separate fixtures ensure legacy missing
+ * columns do not silently inherit the modern defaults. */
+static cstring_t const impale_modern_slk =
+    "ID;PWXL;N;EBB;Y3;X15\n"
+    "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\n"
+    "C;Y1;X4;K\"DataA1\"\nC;Y1;X5;K\"DataB1\"\nC;Y1;X6;K\"DataC1\"\n"
+    "C;Y1;X7;K\"Area1\"\nC;Y1;X8;K\"BuffID1\"\nC;Y1;X9;K\"Dur1\"\n"
+    "C;Y1;X10;K\"HeroDur1\"\nC;Y1;X11;K\"levels\"\nC;Y1;X12;K\"Rng1\"\n"
+    "C;Y1;X13;K\"DataD1\"\nC;Y1;X14;K\"DataE1\"\nC;Y1;X15;K\"DataF1\"\n"
+    "C;Y2;X1;K\"AUim\"\nC;Y2;X2;K\"AUim\"\nC;Y2;X3;K\"ground,enemy,organic\"\n"
+    "C;Y2;X4;K600\nC;Y2;X5;K0.6\nC;Y2;X6;K73\nC;Y2;X7;K80\n"
+    "C;Y2;X8;K\"BUim\"\nC;Y2;X9;K2\nC;Y2;X10;K1\nC;Y2;X11;K1\n"
+    "C;Y2;X12;K700\nC;Y2;X13;K0.8\nC;Y2;X14;K1\nC;Y2;X15;K1\n"
+    "C;Y3;X1;K\"ACmp\"\nC;Y3;X2;K\"ACmp\"\nC;Y3;X3;K\"ground,enemy,organic\"\n"
+    "C;Y3;X4;K400\nC;Y3;X5;K0.4\nC;Y3;X6;K37\nC;Y3;X7;K100\n"
+    "C;Y3;X8;K\"BUim\"\nC;Y3;X9;K1\nC;Y3;X10;K1\nC;Y3;X11;K1\n"
+    "C;Y3;X12;K700\nC;Y3;X13;K0.5\nC;Y3;X14;K1\nC;Y3;X15;K1\nE\n";
+
 static UnitBalance_t const impale_no_regen = { .healthRegenType = "none" };
+static UnitWeapons_t const impale_test_weapon = { .attacksEnabled = 1 };
 
 static edict_t *impale_unit(float x, float y, uint32_t player, TARGTYPE type) {
     edict_t *unit = alloc_test_unit(MAKEFOURCC('h','f','o','o'), x, y);
@@ -196,7 +216,7 @@ TEST(wc3_spell, impale_lift_does_not_erase_other_flight_or_stun_contributors) {
     M_CheckGround(victim);
     base = victim->s.origin.z - S_ImpaleLiftOffset(victim);
     T_FEQ(victim->s.ground_offset, 85.0f + S_ImpaleLiftOffset(victim), 0.01f);
-    level.time = 2000; G_RunEntities();
+    level.time = 2100; G_RunEntities();
     T_NULL(G_GetImpaleLift(victim));
     T_FEQ(victim->s.origin.z, base, 0.01f);
     T_FEQ(victim->unitinfo.FlyHeight, 85.0f, 0.001f);
@@ -418,4 +438,136 @@ TEST(wc3_spell, impale_missing_art_does_not_block_damage_or_lift) {
     G_TestPopAbilityConfig();
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
+
+/* Legacy and modern damage policy is read from the concrete ability's DataF.
+ * A victim is never offered as a new unit-targeted spell target while airborne.
+ * The damage path must still preserve the victim's normal vulnerability after
+ * landing, and keep its ordinary stun duration until Dur/HeroDur expires. */
+TEST(wc3_spell, impale_legacy_airborne_blocks_attacks_damage_and_targeted_spells) {
+    slkTestData_t *rows = parse_slk_string(impale_slk), *old;
+    edict_t *caster, *victim;
+    float health;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    victim = impale_unit(80, 0, 1, TARG_GROUND);
+    caster->data.UnitWeapons = (UnitWeapons_t *)&impale_test_weapon;
+    caster->unit_state->attack1.type = ATK_NORMAL;
+    caster->unit_state->attack1.targetsAllowed = WC3_TARGET_FLAG_GROUND;
+    T_ASSERT(S_AttackCanTarget(caster, victim));
+    level.time = 1000;
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    level.time = 1100; G_RunEntities();
+    T_ASSERT(S_ImpaleIsAirborne(victim));
+    T_ASSERT(!S_ImpaleAirborneVulnerable(victim));
+    T_ASSERT(!S_AttackCanTarget(caster, victim));
+    T_ASSERT(!S_SpellAllowsTarget(FS_SLKKey("AUim"), caster, victim));
+    T_ASSERT(!S_SpellAllowsAreaTarget(FS_SLKKey("AUim"), caster, victim));
+    health = victim->health.value;
+    T_ASSERT(health > 0.0f);
+    level.time = 2000; G_RunEntities();
+    T_ASSERT(!S_ImpaleIsAirborne(victim));
+    T_ASSERT(S_AttackCanTarget(caster, victim));
+    T_ASSERT(S_SpellAllowsAreaTarget(FS_SLKKey("AUim"), caster, victim));
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, impale_modern_airborne_accepts_damage_but_not_new_unit_spells) {
+    slkTestData_t *rows = parse_slk_string(impale_modern_slk), *old;
+    edict_t *caster, *victim, *wave = NULL;
+    float health;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    victim = impale_unit(80, 0, 1, TARG_GROUND);
+    caster->data.UnitWeapons = (UnitWeapons_t *)&impale_test_weapon;
+    caster->unit_state->attack1.type = ATK_NORMAL;
+    caster->unit_state->attack1.targetsAllowed = WC3_TARGET_FLAG_GROUND;
+    T_ASSERT(S_AttackCanTarget(caster, victim));
+    level.time = 1000;
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    FILTER_EDICTS(ent, ent->think == impale_wave_think) { wave = ent; break; }
+    T_NOT_NULL(wave);
+    if (wave) T_EQ(G_GetImpaleWave(wave)->uninterruptible, 1u);
+    level.time = 1100; G_RunEntities();
+    T_ASSERT(S_ImpaleIsAirborne(victim));
+    T_ASSERT(S_ImpaleAirborneVulnerable(victim));
+    T_ASSERT(S_AttackCanTarget(caster, victim));
+    T_ASSERT(!S_SpellAllowsTarget(FS_SLKKey("AUim"), caster, victim));
+    T_ASSERT(S_SpellAllowsAreaTarget(FS_SLKKey("AUim"), caster, victim));
+    health = victim->health.value;
+    T_Damage(victim, caster, 40);
+    T_ASSERT(victim->health.value < health);
+    T_ASSERT(unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    level.time = 2000; G_RunEntities();
+    T_ASSERT(!S_ImpaleIsAirborne(victim));
+    T_ASSERT(unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, impale_authored_interruptibility_controls_midflight_movement) {
+    slkTestData_t *rows = parse_slk_string(impale_slk), *old;
+    edict_t *caster, *victim, *wave = NULL;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    victim = impale_unit(360, 0, 1, TARG_GROUND);
+    level.time = 1000;
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    FILTER_EDICTS(ent, ent->think == impale_wave_think) { wave = ent; break; }
+    T_NOT_NULL(wave);
+    if (wave) T_EQ(G_GetImpaleWave(wave)->uninterruptible, 0u);
+    level.time = 1100; G_RunEntities();
+    caster->s.origin2.y += 10.0f;
+    caster->s.origin.y += 10.0f;
+    level.time = 1200; G_RunEntities();
+    if (wave) T_ASSERT(!wave->inuse);
+    T_FEQ(victim->health.value, 500.0f, 0.001f);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+
+    rows = parse_slk_string(impale_modern_slk);
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    victim = impale_unit(360, 0, 1, TARG_GROUND);
+    level.time = 1000;
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    level.time = 1100; G_RunEntities();
+    caster->s.origin2.y += 10.0f;
+    caster->s.origin.y += 10.0f;
+    level.time = 1400; G_RunEntities();
+    T_FEQ(victim->health.value, 427.0f, 0.001f);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+
+TEST(wc3_spell, impale_does_not_stun_or_lift_invulnerable_targets) {
+    slkTestData_t *rows = parse_slk_string(impale_modern_slk), *old;
+    edict_t *caster, *victim, *valid;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    victim = impale_unit(80, 0, 1, TARG_GROUND);
+    valid = impale_unit(110, 0, 1, TARG_GROUND);
+    G_SetUnitFlag(victim, UNIT_FLAG_INVULNERABLE, true);
+    level.time = 1000;
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    level.time = 1200; G_RunEntities();
+    T_FEQ(victim->health.value, 500, 0.001f);
+    T_ASSERT(!unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    T_NULL(G_GetImpaleLift(victim));
+    T_ASSERT(valid->health.value < 500.0f); /* invulnerable target must not block the sweep */
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 #endif

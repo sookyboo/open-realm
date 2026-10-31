@@ -162,7 +162,8 @@ static uint32_t const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
 /* Version 130 persists Impale wave simulation state and callback identity. */
 /* Version 131 persists the Locust Swarm controller and member state. */
 /* Version 132 persists independent Impale victim lifts. */
-static uint32_t const save_version = 132;
+/* Version 133 persists Impale airborne vulnerability and interruptibility. */
+static uint32_t const save_version = 133;
 #define SAVE_STREAM_BUFFER (1u << 20) // bytes; save files are several MB of field writes, so a large stdio buffer avoids per-4 KB syscalls
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
@@ -966,6 +967,7 @@ static field_t const impale_lift_fields[] = {
     TF(impaleLift_t, end_ms, F_INT),
     TF(impaleLift_t, peak_height, F_FLOAT),
     TF(impaleLift_t, start_offset, F_FLOAT),
+    TF(impaleLift_t, vulnerable, F_INT),
     { NULL, 0, 0, 0, 0, 0 }
 };
 
@@ -981,6 +983,7 @@ static field_t const impale_wave_fields[] = {
     TF(impaleWave_t, caster_spawn_time, F_INT),
     TF(impaleWave_t, ability, F_INT),
     TF(impaleWave_t, level, F_INT),
+    TF(impaleWave_t, uninterruptible, F_INT),
     { NULL, 0, 0, 0, 0, 0 }
 };
 

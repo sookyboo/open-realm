@@ -441,6 +441,7 @@ bool S_SpellAllowsTarget(uint32_t code, edict_t *caster, edict_t *target) {
                S_SpellAllowsCorpseTarget(code, caster, target) &&
                !S_UnitIsInvisibleToPlayer(target, caster->s.player);
     }
+    if (S_ImpaleIsAirborne(target)) return false;
     if (!S_SpellAllowsAreaTarget(code, caster, target)) return false;
     return !(caster && caster->s.player < MAX_PLAYERS &&
              S_UnitIsInvisibleToPlayer(target, caster->s.player));
@@ -487,6 +488,7 @@ bool S_SpellAllowsAreaTarget(uint32_t code, edict_t *caster, edict_t *target) {
     if (!G_UnitIsWorldActive(target) || M_IsDead(target) || S_UnitIsCycloned(target)) {
         return false;
     }
+    if (S_ImpaleIsAirborne(target) && !S_ImpaleAirborneVulnerable(target)) return false;
     /* Devour is a physical swallowing ability, not a magic projectile. */
     { ability_t const *ability = S_SpellAbilityForCode(code);
       /* Taunt changes the target's attack order rather than applying a

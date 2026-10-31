@@ -1,10 +1,11 @@
-# Impale — travelling wave, stun, airborne lift and effect presentation (patches 1–3)
+# Impale — travelling wave, stun, airborne lift and effect presentation, targeting and lifecycle (patches 1–4)
 
 Impale (`AUim`) and the independently authored creep ability (`ACmp`) run through
 `CAbilityImpale` in `skills/s_impale.c`. Patch 1 replaced the old instantaneous
 line-wide hit scan. Patch 2 adds the stun and airborne lift lifecycles. Patch 3 adds caster,
-travelling miss, and BUim hit-model presentation. Version-dependent airborne
-targetability and retail-accurate spike spacing remain future work.
+travelling miss, and BUim hit-model presentation. Patch 4 adds DataE/DataF
+interruptibility and airborne vulnerability plus the unit-spell target lock.
+Retail-accurate spike spacing and lift motion remain future work.
 
 ## Game-data contract
 
@@ -23,6 +24,16 @@ targetability and retail-accurate spike spacing remain future work.
 - `DataD` determines the separate air-time duration for ground and hero units.
   Landing does not end stun, and a shorter custom stun does not prematurely
   end the airborne presentation.
+- `DataE` (Uninterruptible, introduced in 1.32.6) determines whether movement
+  by the original caster cancels the pending wave; legacy data without this
+  column is interruptible. It does **not** change the ordinary cast-point or
+  unit animation scheduler.
+- `DataF` (Airborne Units Vulnerable, introduced in 1.32.6) controls physical
+  attack admission and damage while a victim is airborne. Legacy rows without
+  the column prevent both. New unit-targeted spells remain blocked in either
+  mode until the victim lands; area effects may still damage a vulnerable
+  airborne unit. The editor's source fields are read by the same `AB_Data`
+  ROC/TFT resolver used for other authored data, including custom aliases.
 
 ## Simulation ownership and timing
 
@@ -36,16 +47,24 @@ are processed by projected distance and stable edict index for exact ties.
 
 An invisible `ImpH` identity edict tracks each hit with the wave pointer,
 wave incarnation timestamp, victim pointer and victim incarnation timestamp.
-Markers are retired when their wave finishes or its original caster slot is
-recycled. Multiple waves can hit the same target independently; one wave
-cannot hit it again on later simulation frames.
+Markers are retired when their wave finishes, its caster dies or its original
+caster slot is recycled. Legacy DataE=0 waves also terminate when the caster
+moves more than 0.5 world units from the snapshotted cast origin, while
+DataE=1 waves continue unaffected by movement. Multiple waves can hit the
+same target independently; one wave cannot hit it again on later simulation frames.
 
 The wave remains authoritative if its visual assets are missing. It does not
 use a projectile model and is independent of camera, frame rate and animation
 completion. The victim's `BUim` status owns stun while `COMPONENT_IMPALE_LIFT` (ID 32)
 owns airborne presentation. Unlike ordinary Cyclone, Impale does **not**
-reclassify the victim as `TARG_AIR`, nor make it immune to attacks/spells.
-Full version-aware airborne targetability is deferred to patch 4.
+reclassify the victim as `TARG_AIR`. During its `DataD` interval, the
+`impaleLift_t.vulnerable` snapshot from `DataF` determines whether the common
+weapon acquisition and `T_DamageInternal` paths can affect it. Regardless of
+that flag, the shared unit-targeted spell gate blocks **new** targeted casts
+until the airborne phase ends. It never changes actual unit spell immunity,
+attack category, ownership, or permanently applied invulnerability flags.
+Reapplying a lift while airborne preserves its height offset and selects the
+new hit's DataF policy for the remainder of the new lift.
 
 The lifted position is `terrain/support + FlyHeight + S_ImpaleLiftOffset`.
 This is important: flight, Raven Form, Ensnare and other lift owners continue
@@ -127,3 +146,20 @@ and `ACmp` art selection. No new save contract or callback was introduced
 by patch 3 because the wave's previous distance already persists.
 
 Build and execution of tests are intentionally delegated to the user.
+
+## Patch 4 targetability and compatibility coverage
+
+Blizzard's [Warcraft III 1.32.6 notes](https://news.blizzard.com/en-gb/article/23445051/warcraft-iii-reforged-patch-notes-version-1-32-6)
+explicitly introduce *Uninterruptible* and *Airborne Units Vulnerable*. Unlike
+Cyclone, Impale's airborne phase must not permanently reclassify units. The
+common attack-order target check and damage recipient gate enforce DataF;
+unit-targeted spell casts reject victims still in the air, even if DataF=1.
+The regular area target filter may include airborne victims only when DataF=1.
+
+Tests exercise a legacy row without DataE/F, a modern row with both fields,
+a moving caster, a saved airborne victim and the same target immediately after
+landing. **Known limitations:** exact retail overlap semantics for two distinct
+Impales, whether other spell effects can bypass the airborne target lock, and
+complete old-client cast-animation interruption behaviour still require retail
+traces. The current DataE movement rule intentionally affects only the
+already-launched wave, not engine animations or arbitrary scripted order changes.

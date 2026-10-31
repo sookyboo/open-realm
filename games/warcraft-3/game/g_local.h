@@ -1750,6 +1750,7 @@ typedef struct {
     vec2_t origin, direction;
     float distance, duration, half_width, damage, previous_distance;
     uint32_t start_ms, caster_spawn_time, ability, level;
+    bool uninterruptible;
 } impaleWave_t;
 
 /* Temporary vertical arc for an Impale victim; does not replace authored
@@ -1758,6 +1759,7 @@ typedef struct {
     component_t component;
     uint32_t start_ms, end_ms;
     float start_offset, peak_height;
+    bool vulnerable;
 } impaleLift_t;
 
 typedef struct {
@@ -3316,6 +3318,8 @@ void locust_member_think(edict_t *member);
 void S_LocustSwarmAttackLanded(edict_t *attacker, edict_t *target, float actual_damage);
 float S_ImpaleLiftOffset(edict_t const *unit);
 void S_ImpaleLiftUpdate(edict_t *unit);
+bool S_ImpaleIsAirborne(edict_t const *unit);
+bool S_ImpaleAirborneVulnerable(edict_t const *unit);
 bool G_StartProjectileDeathPresentation(edict_t *ent);
 void G_TimerStart(gtimer_t *timer, uint32_t timeout, bool periodic, struct jass_function const *handler);
 void G_TimerPause(gtimer_t *timer);
