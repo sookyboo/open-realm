@@ -1708,6 +1708,95 @@ TEST(wc3_building, unresearched_unit_ability_remains_visible_but_disabled) {
     building_restore_upgrade_data(old, rows);
 }
 
+TEST(wc3_building, destroyer_form_requires_researched_rusp_before_casting) {
+    static char const ability_slk[] =
+        "ID;PWXL;N;E\nB;X32;Y2;D0\n"
+        "C;X1;Y1;K\"alias\"\nC;X2;K\"code\"\nC;X10;K\"checkDep\"\n"
+        "C;X11;K\"levels\"\nC;X23;K\"DataA1\"\nC;X32;K\"UnitID1\"\n"
+        "C;X1;Y2;K\"Aave\"\nC;X2;K\"Aave\"\nC;X10;K1\nC;X11;K1\n"
+        "C;X23;K\"uobs\"\nC;X32;K\"ubsp\"\nE\n";
+    static char const upgrade_slk[] =
+        "ID;PWXL;N;E\nB;X3;Y2;D0\n"
+        "C;X1;Y1;K\"upgradeid\"\nC;X2;K\"class\"\nC;X3;K\"maxlevel\"\n"
+        "C;X1;Y2;K\"Rusp\"\nC;X2;K\"undead\"\nC;X3;K1\nE\n";
+    static char const balance_slk[] =
+        "ID;PWXL;N;E\nB;X50;Y3;D0\n"
+        "C;X1;Y1;K\"unitBalanceID\"\nC;X2;K\"goldcost\"\n"
+        "C;X3;K\"lumbercost\"\nC;X4;K\"fused\"\nC;X50;K\"upgrades\"\n"
+        "C;X1;Y2;K\"uobs\"\nC;X2;K200\nC;X3;K35\nC;X4;K3\nC;X50;K\"Rusp,Rguv\"\n"
+        "C;X1;Y3;K\"ubsp\"\nC;X2;K200\nC;X3;K35\nC;X4;K3\nE\n";
+    static char const ability_config[] =
+        "[Aave]\nArt=BTNDestroyerForm.blp\nButtonpos=3,0\nTip=Destroyer Form\n";
+    static UnitAbilities_t const abilities = { .abilList = "Aave" };
+    UnitBalance_t source_balance = {
+        .id = MAKEFOURCC('u','o','b','s'), .goldCost = 200,
+        .lumberCost = 35, .foodUsed = 3, .upgrades = "Rusp,Rguv"
+    };
+    slkTestData_t *ability_rows, *old_abilities;
+    slkTestData_t *upgrade_rows, *old_upgrades;
+    slkTestData_t *balance_rows, *old_balance;
+    gameClient_t *owner;
+    edict_t *statue;
+    abilityitem_t item;
+    abilityCall_t call;
+    gameCommandButton_t buttons[16];
+    uint8_t count;
+    bool found = false;
+    uint32_t const destroyer_form = MAKEFOURCC('A','a','v','e');
+    uint32_t const research = MAKEFOURCC('R','u','s','p');
+
+    reset_entities(); setup_test_world();
+    ability_rows = parse_slk_string(ability_slk);
+    old_abilities = G_SetSLKRows("AbilityData", ability_rows);
+    upgrade_rows = parse_slk_string(upgrade_slk);
+    old_upgrades = G_SetSLKRows("UpgradeData", upgrade_rows);
+    balance_rows = parse_slk_string(balance_slk);
+    old_balance = G_SetSLKRows("UnitBalance", balance_rows);
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
+    owner = &game.clients[0];
+    memset(owner->tech, 0, sizeof(owner->tech));
+    owner->ps.stats[PLAYERSTATE_RESOURCE_GOLD] = 1000;
+    owner->ps.stats[PLAYERSTATE_RESOURCE_LUMBER] = 1000;
+    owner->ps.stats[PLAYERSTATE_RESOURCE_FOOD_CAP] = 20;
+    G_SetPlayerTechMaxAllowed(owner, research, 1);
+    statue = alloc_test_unit(MAKEFOURCC('u','o','b','s'), 0, 0);
+    statue->s.player = owner->ps.number;
+    statue->data.UnitAbilities = (UnitAbilities_t *)&abilities;
+    statue->data.UnitBalance = &source_balance;
+    statue->mana.value = 100.0f;
+    item = S_AbilityItem(destroyer_form);
+    call = MAKE(abilityCall_t, .item = &item,
+                .target = &(spellTarget_t){ .type = SPELL_TARGET_NONE });
+
+    T_ASSERT(G_UnitAbilityResearchVisible(statue, destroyer_form));
+    T_ASSERT(!G_UnitAbilityResearchAvailable(statue, destroyer_form));
+    count = G_GetCommandButtons(statue, buttons, 16);
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Aave")) {
+        found = true;
+        T_ASSERT(buttons[i].disabled);
+    }
+    T_ASSERT(found);
+    T_ASSERT(!S_CastNoTargetSpell(statue, destroyer_form));
+    T_ASSERT(!S_AbilityMessage(statue, A_VALIDATE, &call));
+    T_EQ(statue->class_id, MAKEFOURCC('u','o','b','s'));
+
+    G_SetPlayerTechResearched(owner, research, 1);
+    T_ASSERT(G_UnitAbilityResearchAvailable(statue, destroyer_form));
+    T_ASSERT(S_AbilityMessage(statue, A_VALIDATE, &call));
+    count = G_GetCommandButtons(statue, buttons, 16);
+    found = false;
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Aave")) {
+        found = true;
+        T_ASSERT(!buttons[i].disabled);
+    }
+    T_ASSERT(found);
+
+    G_TestPopAbilityConfig();
+    G_SetSLKRows("UnitBalance", old_balance); free_slk_rows(balance_rows);
+    G_SetSLKRows("UpgradeData", old_upgrades); free_slk_rows(upgrade_rows);
+    G_SetSLKRows("AbilityData", old_abilities); free_slk_rows(ability_rows);
+}
+
 TEST(wc3_building, passive_true_sight_and_spell_immunity_show_disabled_indicators) {
     static UnitAbilities_t const effect_abilities = {
         .abilList = "Agyv,Atru,Adtg,Amim,ACmi,ACm2,ACm3"

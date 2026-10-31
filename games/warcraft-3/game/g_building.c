@@ -325,6 +325,7 @@ static stockAbilityUpgradeRequirement_t const stock_ability_requirements[] = {
     { MAKEFOURCC('R', 'e', 's', 'i'), MAKEFOURCC('A', 'a', 'd', 'm'), 1 },
     { MAKEFOURCC('R', 'e', 's', 'c'), MAKEFOURCC('A', 'e', 's', 'n'), 1 }, /* Sentinel */
     { MAKEFOURCC('R', 'e', 'd', 't'), MAKEFOURCC('A', 'r', 'a', 'v'), 1 }, /* Storm Crow Form */
+    { MAKEFOURCC('R', 'u', 's', 'p'), MAKEFOURCC('A', 'a', 'v', 'e'), 1 }, /* Destroyer Form */
 };
 
 static abilityUpgradeRequirement_t G_GetAbilityUpgradeRequirement(
@@ -346,7 +347,8 @@ static abilityUpgradeRequirement_t G_GetAbilityUpgradeRequirement(
     }
 
     if (ability->checkDep || ability->id == MAKEFOURCC('A', 's', 'a', 'l') ||
-        ability->id == MAKEFOURCC('A', 'e', 's', 'n')) {
+        ability->id == MAKEFOURCC('A', 'e', 's', 'n') ||
+        ability->id == MAKEFOURCC('A', 'a', 'v', 'e')) {
         FOR_LOOP(i, (uint32_t)(sizeof(stock_ability_requirements) / sizeof(stock_ability_requirements[0]))) {
             stockAbilityUpgradeRequirement_t const *stock = stock_ability_requirements + i;
             if (upgrade->id != stock->upgrade_id || ability->id != stock->ability_id) continue;
