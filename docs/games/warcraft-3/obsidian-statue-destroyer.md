@@ -56,13 +56,16 @@ The destination begins with zero mana, keeps its JASS identity, is assigned its
 own stats/attack/flight profile, and has no reversion thinker.
 
 Both `uobs` and `ubsp` use
-`Units\\Undead\\ObsidianStatue\\ObsidianStatue.mdx`. The destination has the
-`alternate` unit animation property. The game starts an untagged `Morph`
-animation and restores the destination's alternate Stand/Walk/Attack set after
-the transition. The model also contains `Morph Alternate`, but detailed
-visibility/event tracks have **not** been validated; the exact transition frame
-and duration remain to be proven. Do not infer debris from the presence of
-`rocks1.MDX` or `ObsidianFeather.MDX` in the archive.
+`Units\\Undead\\ObsidianStatue\\ObsidianStatue.mdx`. The destination's
+`alternate` animation property selects Destroyer visuals. The game plays the
+untagged `Morph` sequence while keeping the unit at ground height, then adds
+`alternate` at the authored Crumble2/geoset handoff (about 48.35% through the
+sequence) and raises it to the destination's authored `moveHeight` over the
+remainder. This preserves the stock rubble effect on the ground. The property
+change preserves the active Morph frame instead of restarting into `Morph
+Alternate`; normal alternate Stand/Walk/Attack sequences take over after the
+morph ends. The timing is based on the inspected stock MDX event tracks and
+still warrants an in-game visual check against retail.
 
 ## Destroyer abilities
 

@@ -1141,8 +1141,51 @@ static bool destroyer_form_cost(edict_t *caster, uint32_t code, uint32_t *target
            G_PlayerHasFoodFor(owner, *food);
 }
 
-static void destroyer_morph_end(edict_t *unit) { unit_stand(unit); }
-static umove_t destroyer_form_morph = { "morph", NULL, destroyer_morph_end, CAbilityMetamorphosis };
+/* The stock Obsidian Statue Morph sequence spawns Crumble2 and hands the
+ * statue geoset over to the Destroyer at 24.3s/24.333s of its 23.333-25.333s
+ * sequence. Keep the model grounded through that handoff, then rise for the
+ * remainder of the animation. These are normalized sequence times so custom
+ * model frame rates remain supported. */
+#define DESTROYER_MORPH_GROUND_PROGRESS 0.4835f
+static float destroyer_morph_progress(edict_t const *unit) {
+    uint32_t const start = unit && unit->animation ? unit->animation->interval[0] : 0;
+    uint32_t const end = unit && unit->animation ? unit->animation->interval[1] : 0;
+    if (end <= start) return 1.0f;
+    return MAX(0.0f, MIN(1.0f,
+        ((float)unit->s.frame - (float)start) / (float)(end - start)));
+}
+
+static void destroyer_morph_end(edict_t *unit) {
+    if (!unit) return;
+    G_AddUnitAnimationProperties(unit, "alternate", true);
+    unit->unitinfo.FlyHeight = unit->data.UnitData ? unit->data.UnitData->moveHeight : 0.0f;
+    unit_stand(unit);
+}
+
+static void destroyer_morph_think(edict_t *unit) {
+    float const progress = destroyer_morph_progress(unit);
+    float const rise = MAX(0.0f, MIN(1.0f,
+        (progress - DESTROYER_MORPH_GROUND_PROGRESS) /
+        (1.0f - DESTROYER_MORPH_GROUND_PROGRESS)));
+    float const height = unit->data.UnitData ? unit->data.UnitData->moveHeight : 0.0f;
+    if (progress >= DESTROYER_MORPH_GROUND_PROGRESS) {
+        /* Adding an animation tag re-resolves the current request. Preserve
+         * the Morph clip and frame so the geoset transition does not restart
+         * at the beginning or jump to Morph Alternate. */
+        animation_t const *animation = unit->animation;
+        uint32_t const frame = unit->s.frame;
+        G_AddUnitAnimationProperties(unit, "alternate", true);
+        unit->animation = animation;
+        unit->s.frame = frame;
+        unit->unitinfo.FlyHeight = height * rise;
+    } else {
+        unit->unitinfo.FlyHeight = 0.0f;
+    }
+}
+
+static umove_t destroyer_form_morph = {
+    "morph", destroyer_morph_think, destroyer_morph_end, CAbilityMetamorphosis
+};
 
 /* The Statue and Destroyer resolve to one model. Lock the untagged Morph
  * sequence while selecting alternate geosets for the destination's stand,
@@ -1151,15 +1194,15 @@ static void destroyer_form_play_morph(edict_t *unit) {
     animation_t const *morph;
     if (!unit) return;
     G_AddUnitAnimationProperties(unit, "alternate", false);
+    unit->unitinfo.FlyHeight = 0.0f;
     unit_setmove(unit, &destroyer_form_morph);
     morph = unit->animation;
-    G_AddUnitAnimationProperties(unit, "alternate", true);
     if (!morph) {
+        G_AddUnitAnimationProperties(unit, "alternate", true);
+        unit->unitinfo.FlyHeight = unit->data.UnitData ? unit->data.UnitData->moveHeight : 0.0f;
         unit_stand(unit);
         return;
     }
-    unit->animation = morph;
-    unit->s.frame = morph->interval[0];
 }
 
 static bool destroyer_form_execute(edict_t *caster, uint32_t code) {
