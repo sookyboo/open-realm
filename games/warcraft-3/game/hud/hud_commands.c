@@ -170,8 +170,9 @@ static void UI_WriteAutocastIndicator(gameCommandButton_t const *button, uint32_
 static uint32_t UI_CommandButtonImage(gameCommandButton_t const *button) {
     cstring_t prefix, base;
     PATHSTR path;
+    bool const dimmed = button->indicator ? button->indicator_dimmed : button->disabled;
 
-    if (!button->disabled) return gi.ImageIndex(button->art);
+    if (!dimmed) return gi.ImageIndex(button->art);
     prefix = Theme_PlayerString(ui_current_client, "CommandButtonDisabledArtPath", NULL);
     if (!prefix || !*prefix) {
         fprintf(stderr, "UI_CommandButtonImage: missing CommandButtonDisabledArtPath for %s\n", button->art);
@@ -198,9 +199,18 @@ void UI_WriteCommandButtonFrame(gameCommandButton_t const *button) {
     float const y = 0.4660f + (float)button->y * 0.0440f;
     memset(&frame, 0, sizeof(frame));
     memset(&state, 0, sizeof(state));
-    frame.flags.type = FT_COMMANDBUTTON;
+    /* Passive/research indicators are non-interactive images, not buttons.
+     * Preserve disabled-art shading for locked research without the button bevel. */
+    frame.flags.type = button->indicator ? FT_TEXTURE : FT_COMMANDBUTTON;
     frame.color = COLOR32_WHITE;
     frame.tex.index = UI_CommandButtonImage(button);
+    if (button->indicator) {
+        UI_FormatCommandTooltip(button, tooltip, sizeof(tooltip));
+        frame.tooltip = tooltip;
+        UI_SetFrameRect(&frame, x, y, 0.039f, 0.039f);
+        UI_WriteProxyFrame(&frame, NULL, 0);
+        return;
+    }
     frame.stat = button->active;
     frame.value = button->cooldown;
     state.radialStartTime = button->cooldown_start_time;

@@ -507,6 +507,27 @@ static bool G_HasCommandRawcode(gameCommandButton_t const *buttons, uint8_t coun
     return false;
 }
 
+static void G_AddResearchRequirementTooltip(gameCommandButton_t *button, uint32_t research) {
+    char code[5] = {0};
+    char description[sizeof(button->ubertip)];
+    cstring_t name;
+
+    if (!button || !button->indicator_dimmed || !research) return;
+    memcpy(code, &research, 4);
+    name = FindConfigValue(code, "Name");
+    if (!name || !*name) name = code;
+    strlcpy(description, button->ubertip, sizeof(description));
+    button->ubertip[0] = '\0';
+    strlcpy(button->ubertip, "|cffffcc00Requires:|r|n|cffffcc00 - ",
+            sizeof(button->ubertip));
+    strlcat(button->ubertip, name, sizeof(button->ubertip));
+    strlcat(button->ubertip, "|r", sizeof(button->ubertip));
+    if (description[0]) {
+        strlcat(button->ubertip, "|n", sizeof(button->ubertip));
+        strlcat(button->ubertip, description, sizeof(button->ubertip));
+    }
+}
+
 static void G_AddMagicSentryIndicator(edict_t *ent, gameCommandButton_t *buttons,
                                       uint8_t max_buttons, uint8_t *count) {
     static uint32_t const ability = MAKEFOURCC('A', 'd', 't', 's');
@@ -521,7 +542,7 @@ static void G_AddMagicSentryIndicator(edict_t *ent, gameCommandButton_t *buttons
 
     index = *count;
     G_AddCommandButton(ent, buttons, max_buttons, count, "Adts", false, 0);
-    if (*count > index) buttons[index].disabled = 1;
+    if (*count > index) { buttons[index].disabled = 1; buttons[index].indicator = 1; }
 }
 
 static void G_AddPillageIndicator(edict_t *ent, gameCommandButton_t *buttons,
@@ -538,7 +559,7 @@ static void G_AddPillageIndicator(edict_t *ent, gameCommandButton_t *buttons,
 
     index = *count;
     G_AddCommandButton(ent, buttons, max_buttons, count, "Asal", false, 0);
-    if (*count > index) buttons[index].disabled = 1;
+    if (*count > index) { buttons[index].disabled = 1; buttons[index].indicator = 1; }
 }
 
 static void G_AddDiseaseCloudIndicator(edict_t *ent, gameCommandButton_t *buttons,
@@ -566,7 +587,12 @@ static void G_AddDiseaseCloudIndicator(edict_t *ent, gameCommandButton_t *button
     memcpy(code, &ability, 4);
     index = *count;
     G_AddCommandButton(ent, buttons, max_buttons, count, code, false, 0);
-    if (*count > index) buttons[index].disabled = 1;
+    if (*count > index) {
+        buttons[index].disabled = 1;
+        buttons[index].indicator = 1;
+        buttons[index].indicator_dimmed = G_GetPlayerTechResearchedLevel(owner, research) <= 0;
+        G_AddResearchRequirementTooltip(&buttons[index], research);
+    }
 }
 
 static void G_AddExhumeCorpsesIndicator(edict_t *ent, gameCommandButton_t *buttons,
@@ -582,7 +608,12 @@ static void G_AddExhumeCorpsesIndicator(edict_t *ent, gameCommandButton_t *butto
     memcpy(code, &ability, 4);
     index = *count;
     G_AddCommandButton(ent, buttons, max_buttons, count, code, false, 0);
-    if (*count > index) buttons[index].disabled = 1;
+    if (*count > index) {
+        buttons[index].disabled = 1;
+        buttons[index].indicator = 1;
+        buttons[index].indicator_dimmed = !G_UnitAbilityResearchAvailable(ent, ability);
+        G_AddResearchRequirementTooltip(&buttons[index], MAKEFOURCC('R','u','e','x'));
+    }
 }
 
 static void G_AddPassiveEffectIndicator(edict_t *ent, gameCommandButton_t *buttons,
@@ -596,7 +627,7 @@ static void G_AddPassiveEffectIndicator(edict_t *ent, gameCommandButton_t *butto
     memcpy(code, &button_ability, 4);
     index = *count;
     G_AddCommandButton(ent, buttons, max_buttons, count, code, false, 0);
-    if (*count > index) buttons[index].disabled = 1;
+    if (*count > index) { buttons[index].disabled = 1; buttons[index].indicator = 1; }
 }
 
 static void G_AddPassiveEffectIndicators(edict_t *ent, gameCommandButton_t *buttons,
