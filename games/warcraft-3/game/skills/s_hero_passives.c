@@ -15,6 +15,7 @@
 #define ID_MANA_SHIELD MAKEFOURCC('A', 'N', 'm', 's')
 #define ID_DRUNKEN_BRAWLER MAKEFOURCC('A', 'N', 'd', 'b')
 #define ID_SEARING_ARROWS MAKEFOURCC('A', 'H', 'f', 'a')
+#define ID_DESTROYER_ORB MAKEFOURCC('A', 'f', 'a', 'k')
 #define ID_COLD_ARROWS MAKEFOURCC('A', 'H', 'c', 'a')
 #define ID_FROST_ATTACK MAKEFOURCC('A', 'f', 'r', 'a')
 #define ID_POISON_ARROWS MAKEFOURCC('A', 'E', 'p', 'a')
@@ -1240,32 +1241,44 @@ float S_TrueshotAttackBonus(edict_t *unit) {
         hero_aura_bonus(unit, ID_TRUESHOT_AURA, 1) : 0.0f;
 }
 
+static bool attack_modifier_is_active(uint32_t code) {
+    uint32_t const base = G_AbilityCode(code);
+    return base == ID_SEARING_ARROWS || base == ID_DESTROYER_ORB;
+}
+
+static uint32_t attack_modifier_code(edict_t *attacker, uint32_t *rank,
+                                     heroabilitystatus_t **manual) {
+    uint32_t code;
+    if (!attacker || !attacker->unit_state) return 0;
+    FOR_LOOP(i, MAX_UNIT_STATUSES) {
+        heroabilitystatus_t *status = attacker->unit_state->statuses + i;
+        if (!status->level || !(status->buff_flags & WC3_STATUS_BUFF_ONE_SHOT_ATTACK) ||
+            (status->timestamp && status->timestamp <= G_Time())) continue;
+        code = status->source_ability ? status->source_ability : status->code;
+        if (!attack_modifier_is_active(code)) continue;
+        *rank = status->rank ? status->rank : status->level;
+        if (manual) *manual = status;
+        return code;
+    }
+    code = attacker->unit_state->autocast;
+    if (code && attack_modifier_is_active(code) && G_UnitAutocastIsOn(attacker, code)) {
+        *rank = G_UnitAbilityLevel(attacker, code);
+        return *rank ? code : 0;
+    }
+    return 0;
+}
+
 int S_SearingArrowDamage(edict_t *attacker, int damage) {
-    uint32_t code = ID_SEARING_ARROWS, level = 0;
+    uint32_t code, level = 0;
     heroabilitystatus_t *manual = NULL;
-    if (!attacker || !attacker->unit_state) return damage;
-    FOR_LOOP(i, attacker->unit_state ? MAX_UNIT_STATUSES : 0) {
-        heroabilitystatus_t *st = attacker->unit_state->statuses + i;
-        if (!st->level || (st->timestamp && st->timestamp <= G_Time())) continue;
-        if ((st->buff_flags & WC3_STATUS_BUFF_ONE_SHOT_ATTACK) &&
-            G_AbilityCode(st->source_ability ? st->source_ability : st->code) == ID_SEARING_ARROWS) {
-            manual = st;
-            code = st->source_ability ? st->source_ability : st->code;
-            level = st->rank ? st->rank : st->level;
-            break;
-        }
-    }
-    if (!level && attacker->unit_state && attacker->unit_state->autocast &&
-        G_AbilityCode(attacker->unit_state->autocast) == ID_SEARING_ARROWS &&
-        G_UnitAutocastIsOn(attacker, attacker->unit_state->autocast)) {
-        code = attacker->unit_state->autocast;
-        level = G_UnitAbilityLevel(attacker, code);
-    }
+    if (!attacker || !attacker->unit_state || attacker->unit_state->attack1.weapon != WPN_MISSILE)
+        return damage;
+    code = attack_modifier_code(attacker, &level, &manual);
     if (!level) { level = G_UnitStatusLevel(attacker, ID_POISON_ARROWS); code = ID_POISON_ARROWS; }
-    if (!level || attacker->unit_state->attack1.weapon != WPN_MISSILE) return damage;
+    if (!level) return damage;
     /* Autocast and a manually targeted one-shot use the same authored damage
      * and mana cost. With insufficient mana the weapon still fires normally. */
-    if (G_AbilityCode(code) == ID_SEARING_ARROWS) {
+    if (attack_modifier_is_active(code)) {
         bool const paid = S_SpellSpendMana(attacker, code, level);
         if (manual) unit_removestatus(attacker, manual, STATUS_REMOVE_SCRIPT);
         if (!paid) return damage;
@@ -1346,33 +1359,23 @@ int S_ColdArrowsDamage(edict_t *attacker, edict_t *target, int damage) {
 /* Authored AbilityFunc MissileArt normally supplies this value. Keep the
  * stock Searing Arrow missile available for data sets that omit that field. */
 cstring_t S_SearingArrowsMissileArt(edict_t *attacker) {
-    uint32_t code = 0, level = 0;
+    uint32_t level = 0, code;
+    cstring_t art;
     if (!attacker || !attacker->unit_state || attacker->unit_state->attack1.weapon != WPN_MISSILE)
         return NULL;
-    FOR_LOOP(i, MAX_UNIT_STATUSES) {
-        heroabilitystatus_t const *status = attacker->unit_state->statuses + i;
-        if (!status->level || !(status->buff_flags & WC3_STATUS_BUFF_ONE_SHOT_ATTACK) ||
-            (status->timestamp && status->timestamp <= G_Time())) continue;
-        code = status->source_ability ? status->source_ability : status->code;
-        if (G_AbilityCode(code) == ID_SEARING_ARROWS || cold_attack_ability(code)) {
-            level = status->rank ? status->rank : status->level;
-            break;
-        }
-        code = 0;
-    }
-    if (!code && attacker->unit_state->autocast &&
-        (G_AbilityCode(attacker->unit_state->autocast) == ID_SEARING_ARROWS ||
-         cold_attack_ability(attacker->unit_state->autocast)) &&
+    code = attack_modifier_code(attacker, &level, NULL);
+    if (!code && attacker->unit_state->autocast && cold_attack_ability(attacker->unit_state->autocast) &&
         G_UnitAutocastIsOn(attacker, attacker->unit_state->autocast)) {
         code = attacker->unit_state->autocast;
         level = G_UnitAbilityLevel(attacker, code);
     }
     if (!code || !level || attacker->mana.value < S_SpellNumber(code, ABILITY_NUMBER_COST, level))
         return NULL;
-    {
-        cstring_t art = G_AbilityEffectArt(code, WC3_EFFECT_MISSILE, 0);
-        return art ? art : "Abilities\\Weapons\\SearingArrow\\Missile.mdl";
-    }
+    art = G_AbilityEffectArt(code, WC3_EFFECT_MISSILE, 0);
+    if (art) return art;
+    return G_AbilityCode(code) == ID_DESTROYER_ORB ?
+        "Abilities\\Spells\\Undead\\OrbOfDeath\\AnnihilationMissile.mdl" :
+        "Abilities\\Weapons\\SearingArrow\\Missile.mdl";
 }
 
 static uint32_t mana_shield_buff(uint32_t code, uint32_t level) {

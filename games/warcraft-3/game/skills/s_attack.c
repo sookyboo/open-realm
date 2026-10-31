@@ -1199,7 +1199,9 @@ bool S_SearingArrowsIssueOrder(edict_t *attacker, edict_t *target, uint32_t abil
     status_application_t app;
     heroabilitystatus_t *status;
     uint32_t level;
-    if (!attacker || !target || G_AbilityCode(ability) != MAKEFOURCC('A','H','f','a') ||
+    if (!attacker || !target ||
+        (G_AbilityCode(ability) != MAKEFOURCC('A','H','f','a') &&
+         G_AbilityCode(ability) != MAKEFOURCC('A','f','a','k')) ||
         !G_UnitAbilityLevel(attacker, ability) || !S_AttackCanTarget(attacker, target) ||
         !attacker->unit_state || attacker->unit_state->attack1.weapon != WPN_MISSILE) return false;
     level = G_UnitAbilityLevel(attacker, ability);

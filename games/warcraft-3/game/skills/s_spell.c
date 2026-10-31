@@ -1164,7 +1164,8 @@ static bool spell_unit_target_selected(edict_t *clent, edict_t *target) {
     if (!spell || !spell_item_source_valid(caster, source_item, source_item_spawn_time)) return false;
     if (spell->proc == CAbilityEatTree)
         range = spell_tree_target_range(code, level, caster);
-    /* Searing Arrows is an attack modifier, not a unit-target spell cast. Its
+    /* Searing Arrows and Orb of Annihilation are attack modifiers, not
+     * unit-target spell casts. Their
      * manual target order arms one projectile and spends mana at weapon
      * damage point, so it must bypass cast-time mana/cooldown commit. */
     if (spell->proc == CAbilityFlamingArrows || spell->proc == CAbilityColdArrows ||
@@ -2008,7 +2009,8 @@ void spell_cmd(edict_t *clent) {
     }
 
     /* Toggle abilities bypass the normal pipeline. */
-    if ((spell->flags & AB_TOGGLE) && spell->proc != CAbilityFlamingArrows &&
+    if ((spell->flags & AB_TOGGLE) && code != MAKEFOURCC('A','f','a','k') &&
+        spell->proc != CAbilityFlamingArrows &&
         spell->proc != CAbilityColdArrows && spell->proc != CAbilityBlackArrow &&
         (spell->proc != CAbilityManaFlare || S_AbilityMessage(caster, A_TOGGLE_ON, &toggle_call))) {
         spellTarget_t target = { .type = SPELL_TARGET_NONE };
