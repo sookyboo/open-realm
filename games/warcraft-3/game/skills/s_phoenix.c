@@ -34,13 +34,18 @@ void S_SummonPhoenix(edict_t *caster, uint32_t code) {
     if (!caster || !code) return;
     unit_id = S_SpellUnitId(code, S_SpellLevel(caster, code));
     if (!unit_id) return;
+    /* Recast replaces only this Blood Mage's previous Phoenix. The owner
+     * pointer alone is insufficient: its edict slot may have been recycled. */
     FILTER_EDICTS(old, old->inuse && !M_IsDead(old) && old->s.player == caster->s.player &&
+                  old->owner == caster &&
+                  old->phoenix_owner_spawn_time == caster->spawn_time &&
                   (old->class_id == unit_id ||
                    (unit_id == PHOENIX_UNIT && old->class_id == PHOENIX_EGG && old->phoenix_hatch_ms))) {
         /* Recast replacement is terminal; unlike combat death it must not
          * leave a second, independently hatching Phoenix Egg. */
         if (old->class_id == PHOENIX_UNIT) old->aiflags |= AI_SCRIPT_EXPLODED;
         if (old->die) old->die(old, caster);
+        else unit_die(old, caster);
     }
     loc = caster->s.origin2;
     angle = caster->s.angle;
@@ -49,6 +54,8 @@ void S_SummonPhoenix(edict_t *caster, uint32_t code) {
     SP_FindEmptySpaceAround(caster, unit_id, &loc, &angle);
     created = SP_SpawnAtLocation(unit_id, caster->s.player, &loc);
     if (!created) return;
+    created->owner = caster;
+    created->phoenix_owner_spawn_time = caster->spawn_time;
     G_ActivateUnitFood(created);
     if (created->stand) created->stand(created);
 }
@@ -60,6 +67,8 @@ BZ_ABILITY_PROC(CAbilityPhoenixMorphing) {
         G_UnitAbilityLevel(ent, PHOENIX_MORPH)) {
         edict_t *egg = SP_SpawnAtLocationNoBirth(PHOENIX_EGG, ent->s.player, &ent->s.origin2);
         if (!egg) return false;
+        egg->owner = ent->owner;
+        egg->phoenix_owner_spawn_time = ent->phoenix_owner_spawn_time;
         egg->phoenix_hatch_ms = G_Time() + PHOENIX_HATCH_MS;
         G_ActivateUnitFood(egg);
         if (egg->stand) egg->stand(egg);

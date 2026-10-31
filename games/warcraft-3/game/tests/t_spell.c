@@ -10438,6 +10438,72 @@ TEST(wc3_spell, phoenix_fire_uses_authored_projectile_damage_burn_and_cooldown) 
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+/* AHpx is a per-caster unit, not a per-player singleton. Use a non-stock
+ * UnitID to exercise the same spawned-unit path without Phoenix-only death
+ * and rebirth art. Both casters share one player, so the previous implementation
+ * would incorrectly kill the other caster's unit on recast. */
+TEST(wc3_spell, phoenix_recast_preserves_other_casters_and_old_incarnations) {
+    static cstring_t const slk =
+        "ID;PWXL;N;EBB;Y2;X4\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+        "C;Y1;X4;K\"UnitID1\"\n"
+        "C;Y2;X1;K\"AHpx\"\nC;Y2;X2;K\"AHpx\"\n"
+        "C;Y2;X3;K1\nC;Y2;X4;K\"hfoo\"\nE\n";
+    static UnitAbilities_t const phoenix_ability = { .abilList = "AHpx" };
+    uint32_t const code = MAKEFOURCC('A','H','p','x');
+    slkTestData_t *rows, *old_rows;
+    edict_t *first, *second, *summon_first = NULL, *summon_second = NULL;
+    edict_t *stale, *recast = NULL;
+
+    reset_entities(); setup_test_world();
+    rows = parse_slk_string(slk); old_rows = G_SetSLKRows("AbilityData", rows);
+    first = alloc_test_unit(MAKEFOURCC('H','b','l','m'), 0.0f, 0.0f);
+    second = alloc_test_unit(MAKEFOURCC('H','b','l','m'), 0.0f, 128.0f);
+    first->s.player = second->s.player = 0;
+    first->data.UnitAbilities = second->data.UnitAbilities = &phoenix_ability;
+    first->unit_state->ranks[0] = MAKE(heroability_t, .code = code, .level = 1);
+    second->unit_state->ranks[0] = MAKE(heroability_t, .code = code, .level = 1);
+    /* Distinct spawn incarnations remain meaningful even when the same player
+     * casts both spells and the game later reuses the caster's edict slot. */
+    first->spawn_time = 100;
+    second->spawn_time = 101;
+    T_EQ(S_SpellLevel(first, code), 1u);
+    T_EQ(S_SpellUnitId(code, 1), MAKEFOURCC('h','f','o','o'));
+
+    S_SummonPhoenix(first, code);
+    S_SummonPhoenix(second, code);
+    FILTER_EDICTS(ent, ent->inuse && ent->class_id == MAKEFOURCC('h','f','o','o') && !M_IsDead(ent)) {
+        if (ent->owner == first) summon_first = ent;
+        if (ent->owner == second) summon_second = ent;
+    }
+    T_NOT_NULL(summon_first);
+    T_NOT_NULL(summon_second);
+    if (summon_first && summon_second) {
+        /* A stale caster slot with matching pointer must not match its old
+         * summon. Nor should changing the summoned unit's player ownership
+         * silently delete a captured unit on the next cast. */
+        stale = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 256.0f, 0.0f);
+        stale->owner = first;
+        stale->s.player = 0;
+        stale->phoenix_owner_spawn_time = first->spawn_time - 1;
+        S_SummonPhoenix(first, code);
+        T_ASSERT(M_IsDead(summon_first) || !summon_first->inuse);
+        T_ASSERT(summon_second->inuse && !M_IsDead(summon_second));
+        T_ASSERT(stale->inuse && !M_IsDead(stale));
+        FILTER_EDICTS(ent, ent->inuse && ent != summon_first && ent->class_id == MAKEFOURCC('h','f','o','o') &&
+                      ent->owner == first && ent->phoenix_owner_spawn_time == first->spawn_time &&
+                      !M_IsDead(ent)) { recast = ent; break; }
+        T_NOT_NULL(recast);
+        if (recast) {
+            recast->s.player = 1; /* Simulate control transferred to an enemy. */
+            S_SummonPhoenix(first, code);
+            T_ASSERT(recast->inuse && !M_IsDead(recast));
+        }
+    }
+    reset_entities();
+    G_SetSLKRows("AbilityData", old_rows); free_slk_rows(rows);
+}
+
 TEST(wc3_spell, phoenix_death_creates_egg_that_hatches_on_authored_deadline) {
     static cstring_t const ui_slk =
         "ID;PWXL;N;EBB;Y3;X3\nC;Y1;X1;K\"unitUIID\"\nC;Y1;X2;K\"file\"\nC;Y1;X3;K\"modelScale\"\n"
@@ -10457,14 +10523,18 @@ TEST(wc3_spell, phoenix_death_creates_egg_that_hatches_on_authored_deadline) {
         "C;Y2;X1;K\"hphx\"\nC;Y2;X2;K\"Aphx\"\n"
         "C;Y3;X1;K\"hpxe\"\nC;Y3;X2;K\"Aphx\"\nE\n";
     slkTestData_t *ui, *old_ui, *balance, *old_balance, *data, *old_data, *abilities, *old_abilities;
-    edict_t *phoenix, *egg = NULL, *phoenix_after_rebirth, *killed_egg = NULL;
+    edict_t *caster, *phoenix, *egg = NULL, *phoenix_after_rebirth, *killed_egg = NULL;
 
     reset_entities(); setup_test_world();
     ui = parse_slk_string(ui_slk); old_ui = G_SetSLKRows("UnitUI", ui);
     balance = parse_slk_string(balance_slk); old_balance = G_SetSLKRows("UnitBalance", balance);
     data = parse_slk_string(data_slk); old_data = G_SetSLKRows("UnitData", data);
     abilities = parse_slk_string(abilities_slk); old_abilities = G_SetSLKRows("UnitAbilities", abilities);
+    caster = alloc_test_unit(MAKEFOURCC('H','b','l','m'), 32.0f, 64.0f);
+    caster->s.player = 0;
     phoenix = alloc_test_unit(MAKEFOURCC('h','p','h','x'), 96.0f, 64.0f);
+    phoenix->owner = caster;
+    phoenix->phoenix_owner_spawn_time = caster->spawn_time;
     phoenix->s.player = 0; phoenix->svflags |= SVF_MONSTER; phoenix->die = unit_die;
     T_EQ(G_UnitAbilityLevel(phoenix, MAKEFOURCC('A','p','h','x')), 1u);
 
@@ -10474,6 +10544,8 @@ TEST(wc3_spell, phoenix_death_creates_egg_that_hatches_on_authored_deadline) {
     T_NOT_NULL(egg);
     if (egg) {
         T_EQ(egg->phoenix_hatch_ms, 10000u);
+        T_ASSERT(egg->owner == caster);
+        T_EQ(egg->phoenix_owner_spawn_time, caster->spawn_time);
         T_FEQ(egg->health.value, 200.0f, 0.001f);
         T_ASSERT(phoenix->aiflags & AI_CORPSE_UNRAISABLE);
         T_ASSERT(phoenix->s.renderfx & RF_HIDDEN);
@@ -10483,6 +10555,8 @@ TEST(wc3_spell, phoenix_death_creates_egg_that_hatches_on_authored_deadline) {
         T_STREQ(G_UnitUI(MAKEFOURCC('h','p','h','x'))->modelFile, "TestUI\\Models\\anim_pulse.mdx");
         T_EQ(G_UnitBalance(MAKEFOURCC('h','p','h','x'))->maxHealth, 1250.0f);
         T_EQ(egg->class_id, MAKEFOURCC('h','p','h','x'));
+        T_ASSERT(egg->owner == caster);
+        T_EQ(egg->phoenix_owner_spawn_time, caster->spawn_time);
         T_EQ(egg->phoenix_hatch_ms, 0u);
         T_FEQ(egg->health.value, egg->health.max_value, 0.001f);
     }
