@@ -57,6 +57,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | WC3 Devour (`Adev`/`ACdv`): off-world digestion, death ejection, data fields, save lifecycle and tests | [docs/games/warcraft-3/devour.md](docs/games/warcraft-3/devour.md) |
 | WC3 Mountain Giant War Club (`Agra`): tree targeting, Attack 2, 15 swings, animation, persistence and remaining retail gaps | [docs/games/warcraft-3/mountain-giant-war-club.md](docs/games/warcraft-3/mountain-giant-war-club.md) |
 | WC3 critter wandering (`Awan`): idle scheduling, Move ownership events, flee, building clearance, save fields, scheduler-path tests | [docs/games/warcraft-3/critter-ai.md](docs/games/warcraft-3/critter-ai.md) |
+| WC3 Dark Ranger Silence (`ANsi`/`ACsi`) target masks, authored area burst, overhead buff visual and cleanup | [docs/games/warcraft-3/dark-ranger.md](docs/games/warcraft-3/dark-ranger.md) |
 | WC3 Fan of Knives (`AEfk`) target cap, enhanced-physical damage, cast-model FX, and retail parity gaps | [docs/games/warcraft-3/fan-of-knives.md](docs/games/warcraft-3/fan-of-knives.md) |
 | WC3 Carrion Swarm / Crushing Wave finite sweep, optional missile art, damage-cap order, persistence and tests | [docs/games/warcraft-3/carrion-wave.md](docs/games/warcraft-3/carrion-wave.md) |
 | WC3 Wisp Detonate point cast, area dispel/mana/summons, Blight protection and remaining parity gaps | [docs/games/warcraft-3/detonate.md](docs/games/warcraft-3/detonate.md) |

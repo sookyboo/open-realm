@@ -12,3 +12,11 @@ Buttonpos=1,1
 [ACm3]
 Art=ReplaceableTextures\PassiveButtons\PASBTNGenericSpellImmunity.blp
 Buttonpos=1,2
+
+// Silence uses ability EffectArt for the point burst and buff TargetArt for the overhead lock.
+[ANsi]
+EffectArt=TestUI\Models\anim_oneshot.mdx
+
+[BNsi]
+TargetArt=TestUI\Models\anim_pulse.mdx
+Targetattach=overhead

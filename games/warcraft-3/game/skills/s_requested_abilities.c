@@ -751,9 +751,19 @@ BZ_SIMPLE_SPELL_PROC(AbilitySilence) {
     uint32_t level = S_SpellLevel(caster, spell->code);
     float area = S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level);
     cstring_t buff = spell_buff(spell, level);
+
+    /* The ability's EffectArt is a one-shot ground burst; the buff's TargetArt
+     * is persistent overhead art and belongs to the timed BNsi status. */
+    G_SpawnAbilityEffectAtPoint(spell->code, WC3_EFFECT_EFFECT, 0, &st.point, true);
     FILTER_EDICTS(target, S_SpellIsAliveTarget(target) && S_SpellIsEnemy(caster, target) &&
+                  S_SpellAllowsAreaTarget(spell->code, caster, target) &&
                   Vector2_distance(&target->s.origin2, &st.point) <= area) {
-        if (buff) S_SpellApplyTimedStatus(target, buff, level, S_SpellHeroDuration(spell->code, level, target));
+        heroabilitystatus_t *status = buff ? S_SpellApplyTimedStatusFromAbility(
+            target, spell->code, level, buff, S_SpellHeroDuration(spell->code, level, target)) : NULL;
+        if (status) {
+            status->buff_flags |= WC3_STATUS_BUFF_NEGATIVE | WC3_STATUS_BUFF_MAGICAL;
+            unit_status_enabletargetart(target, status, "overhead");
+        }
     }
 }
 /* Corpse ultimates prefer higher-level units before lower-level ones. Equal-level
