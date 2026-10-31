@@ -3,9 +3,13 @@
 The `Abur` ability is a researched, no-target transformation, not the neutral-creep
 night sleep ability `ACsp`. The original unit `ucry` transforms into the burrowed
 unit `ucrm`, and back again via `burrow`/`unburrow` orders. Research `Rubu`
-permits the command only in TFT mode. The alternate unit row provides movement,
-attack and regeneration properties; the server uses the existing transform path
-rather than maintaining a separate copy of those statistics.
+permits the command only in TFT mode. Both forms use the same
+`Units\\Undead\\CryptFiend\\CryptFiend.mdx` model. Burrowed presentation comes
+from the model's `alternate` animation property, which selects `Stand Alternate`;
+the transition uses the non-looping `Morph` and `Morph Alternate` sequences.
+The alternate unit row provides movement, attack and regeneration properties;
+the server uses the existing transform path rather than maintaining a separate
+copy of those statistics.
 
 ## Verification and remaining fidelity
 

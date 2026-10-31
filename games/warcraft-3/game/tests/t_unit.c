@@ -10,6 +10,7 @@
 #include "../g_local.h"
 #include "../game/skills/s_skills.h"
 
+
 /* Helpers defined in t_utils.c */
 edict_t *alloc_test_unit(uint32_t class_id, float x, float y);
 void reset_entities(void);
@@ -1998,8 +1999,13 @@ TEST(wc3_unit, crypt_fiend_burrow_orders_transform_only_after_tft_research) {
         "C;Y1;X1;K\"unitUIID\"\nC;Y1;X2;K\"file\"\nC;Y1;X3;K\"modelScale\"\nC;Y1;X4;K\"scale\"\n"
         "C;Y2;X1;K\"ucry\"\nC;Y2;X2;K\"Units\\\\Undead\\\\CryptFiend\\\\CryptFiend.mdx\"\nC;Y2;X3;K1\nC;Y2;X4;K1\n"
         "C;Y3;X1;K\"ucrm\"\nC;Y3;X2;K\"Units\\\\Undead\\\\CryptFiend\\\\CryptFiend.mdx\"\nC;Y3;X3;K1\nC;Y3;X4;K1\nE\n";
+    static cstring_t const unit_data_slk =
+        "ID;PWXL;N;EBB;Y2;X3\n"
+        "C;Y1;X1;K\"unitID\"\nC;Y1;X2;K\"targetType\"\nC;Y1;X3;K\"moveType\"\n"
+        "C;Y2;X1;K\"ucry\"\nC;Y2;X2;K\"ground\"\nC;Y2;X3;K\"foot\"\n"
+        "C;Y3;X1;K\"ucrm\"\nC;Y3;X2;K\"ground\"\nC;Y3;X3;K\"foot\"\nE\n";
     cstring_t (*previous_cvar)(cstring_t, cstring_t) = gi.CvarString;
-    slkTestData_t *ability_rows, *old_ability, *ui_rows, *old_ui;
+    slkTestData_t *ability_rows, *old_ability, *ui_rows, *old_ui, *unit_data_rows, *old_unit_data;
     gameClient_t *owner;
     playerTechState_t old_tech[MAX_PLAYER_TECH_STATE];
     edict_t *fiend;
@@ -2014,6 +2020,9 @@ TEST(wc3_unit, crypt_fiend_burrow_orders_transform_only_after_tft_research) {
     ui_rows = parse_slk_string(ui_slk);
     T_NOT_NULL(ui_rows);
     old_ui = G_SetSLKRows("UnitUI", ui_rows);
+    unit_data_rows = parse_slk_string(unit_data_slk);
+    T_NOT_NULL(unit_data_rows);
+    old_unit_data = G_SetSLKRows("UnitData", unit_data_rows);
     memcpy(old_tech, owner->tech, sizeof(old_tech));
     memset(owner->tech, 0, sizeof(owner->tech));
     G_SetPlayerTechMaxAllowed(owner, MAKEFOURCC('R','u','b','u'), 1);
@@ -2036,9 +2045,13 @@ TEST(wc3_unit, crypt_fiend_burrow_orders_transform_only_after_tft_research) {
     T_ASSERT(CAbilityCryptFiendBurrow(fiend, A_VALIDATE, &burrow_call));
     T_ASSERT(CAbilityCryptFiendBurrow(fiend, A_EXECUTE, &burrow_call));
     T_EQ(fiend->class_id, MAKEFOURCC('u','c','r','m'));
+    T_STREQ(fiend->animation_props, "alternate");
+    T_STREQ(fiend->animation_request, "stand");
     T_ASSERT(CAbilityCryptFiendBurrow(fiend, A_VALIDATE, &burrow_call));
     T_ASSERT(CAbilityCryptFiendBurrow(fiend, A_EXECUTE, &burrow_call));
     T_EQ(fiend->class_id, MAKEFOURCC('u','c','r','y'));
+    T_STREQ(fiend->animation_props, "");
+    T_STREQ(fiend->animation_request, "stand");
 
     G_SetPlayerTechResearched(owner, MAKEFOURCC('R','u','b','u'), 0);
     G_SetPlayerTechMaxAllowed(owner, MAKEFOURCC('R','u','b','u'), -1);
@@ -2046,6 +2059,8 @@ TEST(wc3_unit, crypt_fiend_burrow_orders_transform_only_after_tft_research) {
     G_SetSLKRows("AbilityData", old_ability);
     G_SetSLKRows("UnitUI", old_ui);
     free_slk_rows(ui_rows);
+    G_SetSLKRows("UnitData", old_unit_data);
+    free_slk_rows(unit_data_rows);
     free_slk_rows(ability_rows);
     gi.CvarString = previous_cvar;
     memcpy(owner->tech, old_tech, sizeof(old_tech));
