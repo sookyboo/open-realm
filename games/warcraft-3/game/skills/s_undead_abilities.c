@@ -92,17 +92,31 @@ int S_AntiMagicShellAbsorb(edict_t *target, int damage) {
     return damage;
 }
 
-/* Shared area autocast acquire: cast self-spell if a worthy friendly exists in area. */
-static bool undead_area_autocast_acquire(edict_t *caster, uint32_t code, bool needs_hp, bool needs_mana) {
-    uint32_t level = S_SpellLevel(caster, code);
-    float area = S_SpellNumber(code, ABILITY_NUMBER_AREA, level);
-    if (area <= 0.0f) area = UNDEAD_AUTOCAST_RADIUS;
-    FILTER_EDICTS(target, target != caster && S_SpellIsAliveTarget(target) && S_SpellIsFriend(caster, target) &&
-                  Vector2_distance(&target->s.origin2, &caster->s.origin2) <= area) {
-        if (needs_hp && target->health.value < target->health.max_value) return S_CastNoTargetSpell(caster, code);
-        if (needs_mana && target->mana.max_value > 0 && target->mana.value < target->mana.max_value)
-            return S_CastNoTargetSpell(caster, code);
-    }
+/* All area support casts use the same authored targs policy as combat AoE.
+ * FILTER_EDICTS walks stable entity indexes, so a six-recipient limit is
+ * deterministic across peers and independent of pointer/hash iteration. */
+static bool undead_replenish_eligible(edict_t *caster, edict_t *target, uint32_t code,
+                                      bool health) {
+    if (!caster || !target || !S_SpellIsAliveTarget(target) ||
+        !S_SpellIsFriend(caster, target) ||
+        !S_SpellAllowsAreaTarget(code, caster, target)) return false;
+    return health ? target->health.value < target->health.max_value :
+        (target->mana.max_value > 0.0f && target->mana.value < target->mana.max_value);
+}
+
+static float undead_replenish_radius(edict_t *caster, uint32_t code) {
+    float area = S_SpellNumber(code, ABILITY_NUMBER_AREA, S_SpellLevel(caster, code));
+    return area > 0.0f ? area : UNDEAD_AUTOCAST_RADIUS;
+}
+
+/* Area autocast should not spend mana on healthy, ineligible or immune allies. */
+static bool undead_area_autocast_acquire(edict_t *caster, uint32_t code, bool health) {
+    float area;
+    if (!caster) return false;
+    area = undead_replenish_radius(caster, code);
+    FILTER_EDICTS(target, undead_replenish_eligible(caster, target, code, health) &&
+                  Vector2_distance(&target->s.origin2, &caster->s.origin2) <= area)
+        return S_CastNoTargetSpell(caster, code);
     return false;
 }
 
@@ -142,56 +156,48 @@ BZ_ABILITY_PROC(CAbilityReplenish) {
     }
 }
 
-/* ---- Essence of Blight (Arpl) ------------------------------------------------
- * Name=Essence of Blight
- * Ubertip="Restores DataA1 hit points to nearby friendly units."
- * Untip="Right-click to activate auto-casting."
- * DataA = HP restored per unit in area.
- */
-static void replenish_life_execute(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
-    uint32_t level = S_SpellLevel(caster, spell->code);
-    float area = S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level);
-    float amount = S_SpellData(spell->code, level, 1);
-    (void)st;
-    FILTER_EDICTS(target, S_SpellIsAliveTarget(target) && S_SpellIsFriend(caster, target) &&
-                  Vector2_distance(&target->s.origin2, &caster->s.origin2) <= area)
-        S_SpellHeal(target, amount);
+/* ---- Obsidian Statue area restoration (Arpl / Arpm) ------------------------
+ * Spell data supplies the amount and targs mask, with a six-unit recipient
+ * limit. The basic ability cost is committed by s_spell.c before A_EXECUTE.
+ * Additional per-recipient charges and overlap protection are implemented
+ * below rather than inventing a second cast/commit pipeline. */
+#define OBSIDIAN_REPLENISH_MAX_TARGETS 6u
+
+static void undead_replenish_execute(edict_t *caster, abilityitem_t const *spell, bool health) {
+    uint32_t level, recipients = 0;
+    float area, amount;
+    if (!caster || !spell) return;
+    level = S_SpellLevel(caster, spell->code);
+    area = undead_replenish_radius(caster, spell->code);
+    amount = S_SpellData(spell->code, level, health ? 1 : 2);
+    if (amount <= 0.0f) return;
+    FILTER_EDICTS(target, undead_replenish_eligible(caster, target, spell->code, health) &&
+                  Vector2_distance(&target->s.origin2, &caster->s.origin2) <= area) {
+        if (recipients >= OBSIDIAN_REPLENISH_MAX_TARGETS) break;
+        if (health) S_SpellHeal(target, amount);
+        else target->mana.value = MIN(target->mana.max_value, target->mana.value + amount);
+        recipients++;
+    }
 }
 
 BZ_ABILITY_PROC(CAbilityReplenishLife) {
     uint32_t code = call && call->item ? call->item->code : 0;
     switch (msg) {
-    case A_EXECUTE: replenish_life_execute(ent, MAKE(spellTarget_t, .type = SPELL_TARGET_NONE), call ? call->item : NULL); return true;
-    case A_AUTOCAST_ON: return ent && ent->unit_state->autocast == code;
+    case A_EXECUTE: undead_replenish_execute(ent, call ? call->item : NULL, true); return true;
+    case A_AUTOCAST_ON: return ent && ent->unit_state && ent->unit_state->autocast == code;
     case A_AUTOCAST_SET: return true;
-    case A_AUTOCAST_ACQUIRE: return undead_area_autocast_acquire(ent, code, true, false);
+    case A_AUTOCAST_ACQUIRE: return undead_area_autocast_acquire(ent, code, true);
     default: return CAbilitySimpleSpell(ent, msg, call);
     }
-}
-
-/* ---- Spirit Touch (Arpm) -----------------------------------------------------
- * Name=Spirit Touch
- * Ubertip="Restores DataB1 mana to nearby friendly units."
- * Untip="Right-click to activate auto-casting."
- * DataB = mana restored per unit in area.
- */
-static void replenish_mana_execute(edict_t *caster, spellTarget_t st, abilityitem_t const *spell) {
-    uint32_t level = S_SpellLevel(caster, spell->code);
-    float area = S_SpellNumber(spell->code, ABILITY_NUMBER_AREA, level);
-    float amount = S_SpellData(spell->code, level, 2);
-    (void)st;
-    FILTER_EDICTS(target, S_SpellIsAliveTarget(target) && S_SpellIsFriend(caster, target) &&
-                  Vector2_distance(&target->s.origin2, &caster->s.origin2) <= area)
-        target->mana.value = MIN(target->mana.max_value, target->mana.value + amount);
 }
 
 BZ_ABILITY_PROC(CAbilityReplenishMana) {
     uint32_t code = call && call->item ? call->item->code : 0;
     switch (msg) {
-    case A_EXECUTE: replenish_mana_execute(ent, MAKE(spellTarget_t, .type = SPELL_TARGET_NONE), call ? call->item : NULL); return true;
-    case A_AUTOCAST_ON: return ent && ent->unit_state->autocast == code;
+    case A_EXECUTE: undead_replenish_execute(ent, call ? call->item : NULL, false); return true;
+    case A_AUTOCAST_ON: return ent && ent->unit_state && ent->unit_state->autocast == code;
     case A_AUTOCAST_SET: return true;
-    case A_AUTOCAST_ACQUIRE: return undead_area_autocast_acquire(ent, code, false, true);
+    case A_AUTOCAST_ACQUIRE: return undead_area_autocast_acquire(ent, code, false);
     default: return CAbilitySimpleSpell(ent, msg, call);
     }
 }
