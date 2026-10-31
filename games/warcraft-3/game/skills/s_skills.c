@@ -532,7 +532,7 @@ static ability_t abilitylist[] = {
     { "Afak", CAbilityFlamingArrows, AB_SPELL | AB_TOGGLE | AB_AUTOCAST },  /* Orb of Annihilation */
     { "Advm", CAbilityDispelMagic, AB_SPELL, SPELL_TARGET_POINT },  /* Devour Magic */
     { "Aabr", CAbilityAuraRegenLife, AB_PASSIVE | AB_INNATE },  /* Aura of Blight */
-    { "Aabs", CAbilityAbsorb, AB_PASSIVE },  /* Absorb Mana */
+    { "Aabs", CAbilityAbsorb, AB_SPELL, SPELL_TARGET_UNIT },  /* Absorb Mana */
     { "Abur", CAbilityCreepSleep, AB_PASSIVE | AB_INNATE },  /* Burrow */
     { "Amtc", CAbilityCargoHold, AB_PASSIVE },  /* Cargo Hold */
     { "Atru", CAbilityTrueSight, AB_PASSIVE },  /* True Sight */

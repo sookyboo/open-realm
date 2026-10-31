@@ -237,7 +237,61 @@ BZ_ABILITY_PROC(CAbilityCreepAura) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilityReincarnation) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilityOrbAnnihilation) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilityTrueSight) { return CAbilityPassive(ent, msg, call); }
-BZ_ABILITY_PROC(CAbilityAbsorb) { return CAbilityPassive(ent, msg, call); }
+/* Destroyer Absorb Mana: target-owned mana moves to the caster only when
+ * the homing missile reaches a still-eligible friendly unit. */
+static bool absorb_mana_validate(edict_t *caster, edict_t *target, uint32_t code) {
+    return caster && target && target != caster && S_SpellIsAliveTarget(target) &&
+        S_SpellIsFriend(caster, target) && S_SpellAllowsTarget(code, caster, target) &&
+        caster->mana.max_value > caster->mana.value && target->mana.value > 0.0f;
+}
+
+static void absorb_mana_transfer(edict_t *caster, edict_t *target, uint32_t code) {
+    uint32_t level;
+    float capacity, quantity;
+    if (!absorb_mana_validate(caster, target, code)) return;
+    level = S_SpellLevel(caster, code);
+    capacity = MAX(0.0f, caster->mana.max_value - caster->mana.value);
+    quantity = S_SpellData(code, level, 2);
+    if (quantity <= 0.0f) return;
+    quantity = MIN(quantity, MIN(target->mana.value, capacity));
+    target->mana.value -= quantity;
+    caster->mana.value += quantity;
+    G_InvalidateUnitInfoPanel(target);
+    G_InvalidateUnitInfoPanel(caster);
+}
+
+static void absorb_mana_missile_hit(edict_t *missile) {
+    edict_t *caster = S_SpellProjectileOwner(missile);
+    edict_t *target = S_SpellProjectileTarget(missile);
+    if (caster && !M_IsDead(caster) && target)
+        absorb_mana_transfer(caster, target, missile->class_id);
+    G_FreeEdict(missile);
+}
+
+static umove_t absorb_mana_missile_move = { "stand", NULL, absorb_mana_missile_hit, CAbilityAbsorb };
+
+BZ_ABILITY_PROC(CAbilityAbsorb) {
+    uint32_t const code = call && call->item ? call->item->code : 0;
+    edict_t *target = call && call->target && call->target->type == SPELL_TARGET_UNIT ?
+        call->target->entity : NULL;
+    switch (msg) {
+    case A_VALIDATE: return absorb_mana_validate(ent, target, code);
+    case A_EXECUTE: {
+        cstring_t value;
+        float speed;
+        edict_t *missile;
+        if (!absorb_mana_validate(ent, target, code)) return false;
+        value = S_SpellString(code, "Missilespeed", 0);
+        speed = value ? (float)atof(value) : 1500.0f;
+        missile = S_SpawnUnitTargetSpellMissile(ent, code, target,
+                         speed > 0.0f ? speed : 1500.0f, &absorb_mana_missile_move);
+        if (!missile) absorb_mana_transfer(ent, target, code);
+        G_PlayAbilityEffectSound(code, &ent->s.origin2);
+        return true;
+    }
+    default: return CAbilitySimpleSpell(ent, msg, call);
+    }
+}
 BZ_ABILITY_PROC(CAbilityChaos) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilitySpiderAttack) { return CAbilityPassive(ent, msg, call); }
 BZ_ABILITY_PROC(CAbilityMagicImmunity) { return CAbilityPassive(ent, msg, call); }
