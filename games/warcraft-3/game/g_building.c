@@ -384,7 +384,8 @@ float G_UnitUpgradeEffectBonus(edict_t const *unit, uint32_t effect) {
  * their research completes. UpgradeData rlev and the stock compatibility
  * table share this gate for command visibility and direct execution. */
 static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
-                                      bool *visible) {
+                                      bool *visible, uint32_t *research_id,
+                                      int32_t *required_level) {
     gameClient_t *owner;
     AbilityData_t const *ability;
     cstring_t upgrades;
@@ -394,6 +395,8 @@ static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
     bool available = false;
 
     if (visible) *visible = true;
+    if (research_id) *research_id = 0;
+    if (required_level) *required_level = 0;
     /* Skeletal Mastery is an rlev rank-up for the Necromancer's native Raise
      * Dead ability, not an unlock. Keep the level-one command usable from
      * the start in TFT; Rusm still raises it to level two when researched. */
@@ -413,6 +416,8 @@ static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
             if (visible) *visible = false;
             return false;
         }
+        if (research_id) *research_id = MAKEFOURCC('R','e','e','c');
+        if (required_level) *required_level = 1;
         crow_owner = G_GetPlayerClientByNumber(unit->s.player);
         if (!crow_owner || crow_owner->ps.number != unit->s.player) return false;
         maximum = G_GetPlayerTechMaxAllowed(crow_owner, MAKEFOURCC('R','e','e','c'));
@@ -434,6 +439,8 @@ static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
             if (visible) *visible = false;
             return false;
         }
+        if (research_id) *research_id = MAKEFOURCC('R','e','e','b');
+        if (required_level) *required_level = 1;
         bear_owner = G_GetPlayerClientByNumber(unit->s.player);
         if (!bear_owner || bear_owner->ps.number != unit->s.player) return false;
         maximum = G_GetPlayerTechMaxAllowed(bear_owner, MAKEFOURCC('R','e','e','b'));
@@ -451,6 +458,8 @@ static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
             if (visible) *visible = false;
             return false;
         }
+        if (research_id) *research_id = MAKEFOURCC('R','u','e','x');
+        if (required_level) *required_level = 1;
         owner = G_GetPlayerClientByNumber(unit->s.player);
         if (!owner || owner->ps.number != unit->s.player) return false;
         maximum = G_GetPlayerTechMaxAllowed(owner, MAKEFOURCC('R','u','e','x'));
@@ -480,6 +489,8 @@ static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
                 G_GetAbilityUpgradeRequirement(upgrade, ability);
             if (!requirement.matched) continue;
             gated = true;
+            if (research_id) *research_id = upgrade_id;
+            if (required_level) *required_level = requirement.required_level;
             if (!owner || owner->ps.number != unit->s.player) {
                 /* An invalid owner cannot inherit the fallback client. Keep
                  * the command visible, while execution remains unavailable. */
@@ -502,13 +513,19 @@ static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
 }
 
 bool G_UnitAbilityResearchAvailable(edict_t const *unit, uint32_t ability_id) {
-    return G_UnitAbilityResearchState(unit, ability_id, NULL);
+    return G_UnitAbilityResearchState(unit, ability_id, NULL, NULL, NULL);
 }
 
 bool G_UnitAbilityResearchVisible(edict_t const *unit, uint32_t ability_id) {
     bool visible;
-    G_UnitAbilityResearchState(unit, ability_id, &visible);
+    G_UnitAbilityResearchState(unit, ability_id, &visible, NULL, NULL);
     return visible;
+}
+
+bool G_UnitAbilityResearchRequirement(edict_t const *unit, uint32_t ability_id,
+                                      uint32_t *research_id, int32_t *required_level) {
+    G_UnitAbilityResearchState(unit, ability_id, NULL, research_id, required_level);
+    return research_id && *research_id != 0;
 }
 
 static void G_ApplyUpgradeLevelDelta(edict_t *unit, UpgradeData_t const *upgrade,

@@ -3643,6 +3643,8 @@ void G_UpdateBuildingUpgradeAnimation(edict_t *building);
 void G_ApplyPlayerUpgradesToUnit(edict_t *unit);
 bool G_UnitAbilityResearchAvailable(edict_t const *unit, uint32_t ability_id);
 bool G_UnitAbilityResearchVisible(edict_t const *unit, uint32_t ability_id);
+bool G_UnitAbilityResearchRequirement(edict_t const *unit, uint32_t ability_id,
+                                      uint32_t *research_id, int32_t *required_level);
 uint32_t G_GetUnitUpgradeForClass(edict_t const *unit, cstring_t wanted_class);
 bool G_ChargeBuilding(gameClient_t *client, uint32_t building_id);
 void G_RefundBuilding(gameClient_t *client, uint32_t building_id);

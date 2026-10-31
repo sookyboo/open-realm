@@ -507,15 +507,17 @@ static bool G_HasCommandRawcode(gameCommandButton_t const *buttons, uint8_t coun
     return false;
 }
 
-static void G_AddResearchRequirementTooltip(gameCommandButton_t *button, uint32_t research) {
+static void G_AddResearchRequirementTooltip(gameCommandButton_t *button, uint32_t research,
+                                            int32_t required_level) {
     char code[5] = {0};
     char description[sizeof(button->ubertip)];
     cstring_t name;
 
-    if (!button || !button->indicator_dimmed || !research) return;
+    if (!button || !research) return;
     memcpy(code, &research, 4);
     name = FindConfigValue(code, "Name");
     if (!name || !*name) name = code;
+    name = G_CleanTooltipString(G_StringForLevel(name, (uint32_t)MAX(1, required_level)), 0);
     strlcpy(description, button->ubertip, sizeof(description));
     button->ubertip[0] = '\0';
     strlcpy(button->ubertip, "|cffffcc00Requires:|r|n|cffffcc00 - ",
@@ -591,7 +593,7 @@ static void G_AddDiseaseCloudIndicator(edict_t *ent, gameCommandButton_t *button
         buttons[index].disabled = 1;
         buttons[index].indicator = 1;
         buttons[index].indicator_dimmed = G_GetPlayerTechResearchedLevel(owner, research) <= 0;
-        G_AddResearchRequirementTooltip(&buttons[index], research);
+        G_AddResearchRequirementTooltip(&buttons[index], research, 1);
     }
 }
 
@@ -612,7 +614,7 @@ static void G_AddExhumeCorpsesIndicator(edict_t *ent, gameCommandButton_t *butto
         buttons[index].disabled = 1;
         buttons[index].indicator = 1;
         buttons[index].indicator_dimmed = !G_UnitAbilityResearchAvailable(ent, ability);
-        G_AddResearchRequirementTooltip(&buttons[index], MAKEFOURCC('R','u','e','x'));
+        G_AddResearchRequirementTooltip(&buttons[index], MAKEFOURCC('R','u','e','x'), 1);
     }
 }
 
@@ -761,7 +763,13 @@ static void G_AddAbilityCommandButtons(edict_t *ent, gameCommandButton_t *button
         G_RepairCommandTrace(ent, code, "added", ability, true, *count > idx);
     }
     if (*count > idx) {
-        if (!researched) buttons[idx].disabled = 1;
+        if (!researched) {
+            uint32_t research_id = 0;
+            int32_t required_level = 0;
+            buttons[idx].disabled = 1;
+            if (G_UnitAbilityResearchRequirement(ent, rawcode, &research_id, &required_level))
+                G_AddResearchRequirementTooltip(&buttons[idx], research_id, required_level);
+        }
         G_SetCommandCooldown(&(commandCooldownParams_t){ .ent = ent, .code = rawcode, .level = 0, .button = &buttons[idx] });
     }
     if (!(ability->flags & AB_SEPARATE_OFF) || *count >= max_buttons) return;
