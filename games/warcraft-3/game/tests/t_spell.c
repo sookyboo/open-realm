@@ -5424,6 +5424,19 @@ TEST(wc3_spell, creep_orb_of_annihilation_adds_authored_attack_damage) {
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+TEST(wc3_spell, destroyer_afak_does_not_inherit_creep_anak_passive_bonus) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X3\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"DataA1\"\n"
+        "C;Y2;X1;K\"ANak\"\nC;Y2;X2;K\"ANak\"\nC;Y2;X3;K\"19\"\nE\n";
+    slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+    edict_t *attacker = make_hero(MAKEFOURCC('o','g','r','u'), 100, 0, 0, 0);
+    UnitAbilities_t abilities = { .abilList = "Afak" };
+    attacker->data.UnitAbilities = &abilities;
+    T_EQ(S_OrbAnnihilationDamage(attacker, 23), 23);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_spell, defend_data_b_and_e_scale_outgoing_and_magic_attack_damage) {
 	const char slk[] =
 		"ID;PWXL;N;EBB;Y2;X7\n"

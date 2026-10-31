@@ -166,14 +166,14 @@ static bool shockwave_hits(edict_t *target, shockwaveContext_t const *ctx) {
  * line through the projectile. The authored width expands with distance. */
 static bool carrion_wave_candidate(edict_t *wave, edict_t *caster, carrionWave_t *state,
                                    edict_t *target, vec2_t const *start, float step,
-                                   float *out_along) {
+                                   float *out_along, bool visited_cached) {
     vec2_t offset;
     float along, across, width;
 
     if (!S_SpellIsAliveTarget(target) || target == caster ||
         !S_SpellAllowsAreaTarget(state->ability, caster, target) ||
         !S_SpellIsEnemy(caster, target) || G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) ||
-        carrion_wave_visited(wave, target)) return false;
+        (!visited_cached && carrion_wave_visited(wave, target))) return false;
 
     offset = Vector2_sub(&target->s.origin2, start);
     along = Vector2_dot(&offset, &state->direction);
@@ -201,14 +201,27 @@ static void carrion_wave_hit(edict_t *wave, edict_t *caster, carrionWave_t *stat
         state->remaining_damage = MAX(0.0f, state->remaining_damage - (float)applied);
 }
 
+typedef struct {
+    uint32_t index;
+    uint32_t spawn_time;
+    float along;
+} carrionCandidate_t;
+
+static int carrion_candidate_compare(void const *a, void const *b) {
+    carrionCandidate_t const *left = a, *right = b;
+    if (left->along < right->along) return -1;
+    if (left->along > right->along) return 1;
+    return (left->index > right->index) - (left->index < right->index);
+}
+
 void carrion_wave_think(edict_t *wave) {
     carrionWave_t *state = G_GetCarrionWave(wave);
     edict_t *caster;
     vec2_t start;
     float step;
-    uint32_t target_count, i, previous_index = 0;
-    float previous_along = 0.0f;
-    bool have_previous = false;
+    uint32_t count, eligible = 0;
+    carrionCandidate_t *candidates;
+    uint8_t *visited;
     if (!state || !(caster = wave->owner) || !caster->inuse || caster->spawn_time != state->caster_spawn_time) {
         carrion_wave_finish(wave); return;
     }
@@ -218,37 +231,69 @@ void carrion_wave_think(edict_t *wave) {
     start = state->previous_position;
     step = MIN(Vector2_distance(&wave->s.origin2, &start), state->travel_distance - state->travelled);
     if (step <= 0.001f) return;
-    /* Markers allocated for hits are edicts too; keep this collision pass
-     * bounded to the world that existed when the frame began. */
-    target_count = globals.num_edicts;
-    /* Damage caps are consumed by encounters along the sweep, not by edict
-     * allocation order. Repeated nearest selection avoids per-tick heap
-     * allocation and also works when the entity pool is near capacity.
-     * Stable entity index ordering resolves exact-distance ties. */
-    for (;;) {
-        edict_t *nearest = NULL;
-        uint32_t nearest_index = 0;
-        float nearest_along = 0.0f;
-        if (state->capped && state->remaining_damage <= 0.0f) break;
-        for (i = 0; i < target_count; i++) {
+    count = globals.num_edicts;
+    candidates = malloc((size_t)count * sizeof(*candidates));
+    visited = calloc(count, sizeof(*visited));
+    if (candidates && visited) {
+        /* Reconstruct saved per-wave hit identities in a single pass. Markers
+         * allocated during impact cannot affect this frame's candidate set. */
+        FOR_LOOP(i, count) {
+            edict_t const *mark = &globals.edicts[i];
+            if (mark->inuse && mark->class_id == ID_CARRION_WAVE_HIT &&
+                mark->owner == wave && mark->damage == wave->spawn_time &&
+                mark->variation == state->identity && mark->goalentity &&
+                mark->goalentity >= globals.edicts && mark->goalentity < globals.edicts + count &&
+                mark->resources == mark->goalentity->spawn_time)
+                visited[mark->goalentity - globals.edicts] = 1;
+        }
+        FOR_LOOP(i, count) {
             edict_t *target = &globals.edicts[i];
             float along;
-            if (!carrion_wave_candidate(wave, caster, state, target, &start, step, &along)) continue;
-            if (have_previous && (along < previous_along ||
-                (along == previous_along && i <= previous_index))) continue;
-            if (!nearest || along < nearest_along ||
-                (along == nearest_along && i < nearest_index)) {
-                nearest = target;
-                nearest_along = along;
-                nearest_index = i;
-            }
+            if (visited[i] || !carrion_wave_candidate(wave, caster, state, target,
+                                                       &start, step, &along, true)) continue;
+            candidates[eligible++] = (carrionCandidate_t){ i, target->spawn_time, along };
         }
-        if (!nearest) break;
-        carrion_wave_hit(wave, caster, state, nearest);
-        previous_along = nearest_along;
-        previous_index = nearest_index;
-        have_previous = true;
+        qsort(candidates, eligible, sizeof(*candidates), carrion_candidate_compare);
+        FOR_LOOP(i, eligible) {
+            edict_t *target = &globals.edicts[candidates[i].index];
+            float along;
+            if (state->capped && state->remaining_damage <= 0.0f) break;
+            if (!target->inuse || target->spawn_time != candidates[i].spawn_time ||
+                !carrion_wave_candidate(wave, caster, state, target, &start, step, &along, true)) continue;
+            carrion_wave_hit(wave, caster, state, target);
+        }
+    } else {
+        /* Preserve spell delivery on allocation failure. */
+        uint32_t previous_index = 0;
+        float previous_along = 0.0f;
+        bool have_previous = false;
+        for (;;) {
+            edict_t *nearest = NULL;
+            uint32_t nearest_index = 0;
+            float nearest_along = 0.0f;
+            if (state->capped && state->remaining_damage <= 0.0f) break;
+            FOR_LOOP(i, count) {
+                edict_t *target = &globals.edicts[i];
+                float along;
+                if (!carrion_wave_candidate(wave, caster, state, target, &start, step, &along, false)) continue;
+                if (have_previous && (along < previous_along ||
+                    (along == previous_along && i <= previous_index))) continue;
+                if (!nearest || along < nearest_along ||
+                    (along == nearest_along && i < nearest_index)) {
+                    nearest = target;
+                    nearest_along = along;
+                    nearest_index = i;
+                }
+            }
+            if (!nearest) break;
+            carrion_wave_hit(wave, caster, state, nearest);
+            previous_along = nearest_along;
+            previous_index = nearest_index;
+            have_previous = true;
+        }
     }
+    free(candidates);
+    free(visited);
     state->travelled += step;
     state->previous_position = wave->s.origin2;
     wave->think = carrion_wave_think;

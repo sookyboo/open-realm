@@ -137,7 +137,7 @@ static void impale_present_sweep(edict_t *wave, impaleWave_t const *state,
     }
 }
 
-static bool impale_hit(edict_t *wave, impaleWave_t const *state, edict_t *target) {
+static bool impale_hit(edict_t *wave, impaleWave_t const *state, edict_t *target, bool visited_cached) {
     edict_t *mark;
     edict_t *caster = wave->owner;
     cstring_t buff;
@@ -148,7 +148,7 @@ static bool impale_hit(edict_t *wave, impaleWave_t const *state, edict_t *target
         !S_SpellAllowsAreaTarget(state->ability, caster, target) ||
         G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) ||
         unit_hasstatusstate(target, WC3_STATUS_STATE_INVULNERABLE) ||
-        impale_already_hit(wave, target)) return false;
+        (!visited_cached && impale_already_hit(wave, target))) return false;
 
     /* Record the hit before damage. This prevents repeated hits when damage
      * causes immediate unit events, and protects status refresh callbacks. */
@@ -193,11 +193,22 @@ static bool impale_hit(edict_t *wave, impaleWave_t const *state, edict_t *target
     return true;
 }
 
+typedef struct {
+    uint32_t index, spawn_time;
+    float along;
+} impaleCandidate_t;
+
+static int impale_candidate_compare(void const *a, void const *b) {
+    impaleCandidate_t const *left = a, *right = b;
+    if (left->along < right->along) return -1;
+    if (left->along > right->along) return 1;
+    return (left->index > right->index) - (left->index < right->index);
+}
+
 void impale_wave_think(edict_t *wave) {
     impaleWave_t *state = G_GetImpaleWave(wave);
     edict_t *caster = wave->owner;
     float elapsed, end, start;
-    uint32_t count;
     if (!state || !caster || !caster->inuse || M_IsDead(caster) ||
         caster->spawn_time != state->caster_spawn_time) {
         impale_end_wave(wave);
@@ -220,47 +231,92 @@ void impale_wave_think(edict_t *wave) {
     start = state->previous_distance;
     if (end < start) end = start;
     if (end > start) {
-        /* Snapshot count before any hits spawn markers; only preexisting units
-         * are eligible for this frame's sweep. Nearest-first ordering gives
-         * deterministic progress when status or death callbacks spawn units. */
         float const step = end - start;
-        uint32_t previous_index = 0;
-        float previous_along = 0.0f;
-        bool have_previous = false;
-        count = globals.num_edicts;
-        for (;;) {
-            edict_t *best = NULL;
-            uint32_t best_index = 0;
-            float best_along = 0.0f;
+        uint32_t const count = globals.num_edicts;
+        impaleCandidate_t *candidates = malloc((size_t)count * sizeof(*candidates));
+        uint8_t *visited = calloc(count, sizeof(*visited));
+        uint32_t eligible = 0;
+        if (candidates && visited) {
+            FOR_LOOP(i, count) {
+                edict_t const *mark = &globals.edicts[i];
+                if (mark->inuse && mark->class_id == IMPALE_HIT_ID &&
+                    mark->owner == wave && mark->damage == wave->spawn_time &&
+                    mark->goalentity && mark->goalentity >= globals.edicts &&
+                    mark->goalentity < globals.edicts + count &&
+                    mark->resources == mark->goalentity->spawn_time)
+                    visited[mark->goalentity - globals.edicts] = 1;
+            }
             FOR_LOOP(i, count) {
                 edict_t *target = &globals.edicts[i];
                 vec2_t delta;
                 float along, across;
-                if (!S_SpellIsAliveTarget(target) || !S_SpellIsEnemy(caster, target) ||
+                if (visited[i] || !S_SpellIsAliveTarget(target) ||
+                    !S_SpellIsEnemy(caster, target) ||
                     !S_SpellAllowsAreaTarget(state->ability, caster, target) ||
                     G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) ||
-                    unit_hasstatusstate(target, WC3_STATUS_STATE_INVULNERABLE) ||
-                    impale_already_hit(wave, target)) continue;
+                    unit_hasstatusstate(target, WC3_STATUS_STATE_INVULNERABLE)) continue;
                 delta = Vector2_sub(&target->s.origin2, &state->origin);
                 along = Vector2_dot(&delta, &state->direction) - start;
-                if (along < 0.0f || along > step ||
-                    (have_previous && (along < previous_along ||
-                     (along == previous_along && i <= previous_index)))) continue;
+                if (along < 0.0f || along > step) continue;
                 across = delta.x * state->direction.y - delta.y * state->direction.x;
                 if (fabsf(across) > state->half_width + MAX(0.0f, target->collision)) continue;
-                if (!best || along < best_along ||
-                    (along == best_along && i < best_index)) {
-                    best = target;
-                    best_index = i;
-                    best_along = along;
-                }
+                candidates[eligible++] = (impaleCandidate_t){ i, target->spawn_time, along };
             }
-            if (!best) break;
-            if (!impale_hit(wave, state, best)) break;
-            previous_along = best_along;
-            previous_index = best_index;
-            have_previous = true;
+            qsort(candidates, eligible, sizeof(*candidates), impale_candidate_compare);
+            FOR_LOOP(i, eligible) {
+                edict_t *target = &globals.edicts[candidates[i].index];
+                if (!target->inuse || target->spawn_time != candidates[i].spawn_time) continue;
+                /* Previous impacts can remove or move a candidate. Recheck
+                 * its finite swept segment, not only its entity identity. */
+                vec2_t const delta = Vector2_sub(&target->s.origin2, &state->origin);
+                float const along = Vector2_dot(&delta, &state->direction) - start;
+                float const across = delta.x * state->direction.y - delta.y * state->direction.x;
+                if (along < 0.0f || along > step ||
+                    fabsf(across) > state->half_width + MAX(0.0f, target->collision)) continue;
+                impale_hit(wave, state, target, true);
+            }
+        } else {
+            /* Allocation failure must not suppress paid spell damage. The
+             * legacy nearest-first search remains the emergency fallback. */
+            uint32_t previous_index = 0;
+            float previous_along = 0.0f;
+            bool have_previous = false;
+            for (;;) {
+                edict_t *best = NULL;
+                uint32_t best_index = 0;
+                float best_along = 0.0f;
+                FOR_LOOP(i, count) {
+                    edict_t *target = &globals.edicts[i];
+                    vec2_t delta;
+                    float along, across;
+                    if (!S_SpellIsAliveTarget(target) || !S_SpellIsEnemy(caster, target) ||
+                        !S_SpellAllowsAreaTarget(state->ability, caster, target) ||
+                        G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) ||
+                        unit_hasstatusstate(target, WC3_STATUS_STATE_INVULNERABLE) ||
+                        impale_already_hit(wave, target)) continue;
+                    delta = Vector2_sub(&target->s.origin2, &state->origin);
+                    along = Vector2_dot(&delta, &state->direction) - start;
+                    if (along < 0.0f || along > step ||
+                        (have_previous && (along < previous_along ||
+                         (along == previous_along && i <= previous_index)))) continue;
+                    across = delta.x * state->direction.y - delta.y * state->direction.x;
+                    if (fabsf(across) > state->half_width + MAX(0.0f, target->collision)) continue;
+                    if (!best || along < best_along ||
+                        (along == best_along && i < best_index)) {
+                        best = target;
+                        best_index = i;
+                        best_along = along;
+                    }
+                }
+                if (!best) break;
+                if (!impale_hit(wave, state, best, false)) break;
+                previous_along = best_along;
+                previous_index = best_index;
+                have_previous = true;
+            }
         }
+        free(candidates);
+        free(visited);
     }
     if (end > start) impale_present_sweep(wave, state, start, end);
     state->previous_distance = end;

@@ -328,8 +328,13 @@ static void V_AddClientEntity(centity_t const *ent, bool debug_entities) {
     re.oldframe = ent->prev.frame;
     re.health = ent->current.stats[ENT_HEALTH];
     re.effect_flags = ent->current.effect_flags;
-    re.effect_model = cl.models[ent->current.effect];
-    re.model = cl.models[ent->current.model];
+    /* The wire effect field is independently 16-bit, but the negotiated model
+     * pool is limited to MAX_MODELS. Never trust a snapshot model index as an
+     * array subscript without validating it. */
+    re.effect_model = ent->current.effect < MAX_MODELS
+        ? cl.models[ent->current.effect] : NULL;
+    re.model = ent->current.model < MAX_MODELS
+        ? cl.models[ent->current.model] : NULL;
     re.skin = cl.pics[ent->current.image];
     if (ent->current.name) {
         uint32_t i = ent->current.name - 1;
@@ -410,16 +415,17 @@ static void V_AddClientEntity(centity_t const *ent, bool debug_entities) {
 #endif
 #ifdef WOW
     /* model2 is a uint16_t; validate it against the negotiated model pool. */
-    if (ent->current.model2 > 0 && (ent->current.renderfx & RF_ATTACH_OVERHEAD))
+    if (ent->current.model2 > 0 && ent->current.model2 < MAX_MODELS &&
+        (ent->current.renderfx & RF_ATTACH_OVERHEAD))
         re.overhead_model = cl.models[ent->current.model2];
-    else if (ent->current.model2 > 0)
+    else if (ent->current.model2 > 0 && ent->current.model2 < MAX_MODELS)
         re.attachment.model = cl.models[ent->current.model2];
 #endif
 
     CL_ApplyIndicator(&re);
     view_state.entities[view_state.num_entities++] = re;
 
-    if (ent->current.model2 > 0) {
+    if (ent->current.model2 > 0 && ent->current.model2 < MAX_MODELS) {
 #ifdef WOW
         if (re.attachment.model || re.overhead_model) return;
 #endif
@@ -959,6 +965,45 @@ static bool v_test_terrain(void) { return true; }
 static bool v_test_absolute(void) { return false; }
 static float v_test_exact(float x, float y) { (void)y; return x; }
 static float v_test_blurred(float x, float y) { (void)x; (void)y; return 50.0f; }
+
+TEST(client_entities, effect_model_over_255_is_independent_of_model2_and_bounded) {
+    model_t model = { 0 }, effect = { 0 }, attachment = { 0 };
+    centity_t cent = { .prev = { .number = 7, .model = 1 },
+        .current = { .number = 7, .model = 1, .model2 = 3,
+                     .effect = 387, .effect_flags = EFX_MODEL } };
+    model_t *saved_primary = cl.models[1], *saved_effect = cl.models[387];
+    model_t *saved_attachment = cl.models[3];
+    viewDef_t saved_view = cl.viewDef;
+    int const saved_count = view_state.num_entities;
+    renderEntity_t saved_first = { 0 }, saved_second = { 0 };
+    if (saved_count > 0) saved_first = view_state.entities[0];
+    if (saved_count > 1) saved_second = view_state.entities[1];
+    cl.models[1] = &model;
+    cl.models[3] = &attachment;
+    cl.models[387] = &effect;
+    cl.viewDef.lerpfrac = 0.5f;
+    view_state.num_entities = 0;
+    V_AddClientEntity(&cent, false);
+    T_EQ(view_state.num_entities, 2);
+    T_ASSERT(view_state.entities[0].model == &model);
+    T_ASSERT(view_state.entities[0].effect_model == &effect);
+    T_ASSERT(view_state.entities[1].model == &attachment);
+    cent.current.effect = UINT16_MAX;
+    cent.current.model = UINT16_MAX;
+    cent.current.model2 = UINT16_MAX;
+    view_state.num_entities = 0;
+    V_AddClientEntity(&cent, false);
+    T_EQ(view_state.num_entities, 1);
+    T_NULL(view_state.entities[0].effect_model);
+    T_NULL(view_state.entities[0].model);
+    if (saved_count > 0) view_state.entities[0] = saved_first;
+    if (saved_count > 1) view_state.entities[1] = saved_second;
+    view_state.num_entities = saved_count;
+    cl.models[1] = saved_primary;
+    cl.models[3] = saved_attachment;
+    cl.models[387] = saved_effect;
+    cl.viewDef = saved_view;
+}
 
 TEST(client_entities, omitted_scale_defaults_to_one_in_render_path) {
     model_t model = { 0 };

@@ -125,6 +125,11 @@ static int capture_fire_model(cstring_t model) {
     return 77;
 }
 
+static int capture_extended_fire_model(cstring_t model) {
+    strlcpy(_fire_model, model, sizeof(_fire_model));
+    return 387;
+}
+
 static edict_t *make_combat_unit(uint32_t class_id, float hp, float x, float y) {
     static UnitWeapons_t const test_weapons = { .attacksEnabled = 3 };
     edict_t *ent       = alloc_test_unit(class_id, x, y);
@@ -355,6 +360,24 @@ TEST(wc3_combat, tdamage_updates_building_fire_model_and_slot_mask) {
     G_AddHealth(building, 800.0f);
     T_EQ(building->s.effect, 0);
     T_EQ(building->s.effect_flags, 0);
+    gi.ModelIndex = old_model_index;
+}
+
+TEST(wc3_combat, fire_effect_above_255_does_not_overwrite_secondary_model) {
+    edict_t *building, *attacker;
+    int (*old_model_index)(cstring_t) = gi.ModelIndex;
+    reset_entities(); setup_test_world();
+    building = make_combat_unit(MAKEFOURCC('h','b','a','r'), 1000.0f, 0.0f, 0.0f);
+    attacker = make_combat_unit(MAKEFOURCC('h','f','o','o'), 420.0f, 50.0f, 0.0f);
+    building->s.flags |= EF_BUILDING;
+    building->s.model2 = 22; /* unrelated attachment must remain intact */
+    gi.ModelIndex = capture_extended_fire_model;
+    T_Damage(building, attacker, 300);
+    T_EQ(building->s.effect, 387);
+    T_EQ(building->s.model2, 22);
+    G_AddHealth(building, 300.0f);
+    T_EQ(building->s.effect, 0);
+    T_EQ(building->s.model2, 22);
     gi.ModelIndex = old_model_index;
 }
 

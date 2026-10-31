@@ -124,39 +124,64 @@ void locust_swarm_think(edict_t *controller) {
     }
 }
 
-static uint32_t locust_target_occupancy(edict_t *controller, edict_t *target) {
-    uint32_t count = 0;
+/* A snapshot of current reservations costs one pass per acquisition, instead
+ * of rescanning every locust for every potential target in the world. No
+ * persistent cache: recalls, death and entity-slot reuse are always current. */
+static uint16_t *locust_reservations(edict_t *controller, uint32_t count) {
+    uint16_t *occupied = calloc(count, sizeof(*occupied));
+    if (!occupied) return NULL;
     FILTER_EDICTS(member, locust_member_in_swarm(member, controller) &&
                   !G_IsDeferredFree(member) && S_SpellIsAliveTarget(member)) {
         locustMember_t const *state = G_GetLocustMember(member);
-        if (state->state == LOCUST_ATTACKING && state->target == target &&
-            state->target_spawn_time == target->spawn_time) count++;
+        if (state->state == LOCUST_ATTACKING && state->target &&
+            state->target >= globals.edicts &&
+            state->target < globals.edicts + count &&
+            state->target->inuse &&
+            state->target_spawn_time == state->target->spawn_time) {
+            uint32_t const index = (uint32_t)(state->target - globals.edicts);
+            if (occupied[index] != UINT16_MAX) occupied[index]++;
+        }
     }
-    return count;
-}
-
-static bool locust_target_full(edict_t *controller, locustSwarm_t const *swarm, edict_t *target) {
-    return locust_target_occupancy(controller, target) >=
-           (uint32_t)MAX(1.0f, MIN((float)LOCUST_MAX_ATTACKERS_PER_TARGET, swarm->target_cap));
+    return occupied;
 }
 
 static edict_t *locust_find_target(edict_t *member, locustSwarm_t *swarm) {
     edict_t *caster = member->owner, *best = NULL;
+    edict_t *controller = G_GetLocustMember(member)->controller;
+    uint32_t const count = globals.num_edicts;
+    uint16_t *occupied = locust_reservations(controller, count);
+    uint32_t const cap = (uint32_t)MAX(1.0f, MIN((float)LOCUST_MAX_ATTACKERS_PER_TARGET,
+                                                swarm->target_cap));
     float best_distance = FLT_MAX;
-    FILTER_EDICTS(target, target != caster && S_SpellIsAliveTarget(target) &&
-                  S_SpellIsEnemy(caster, target) &&
-                  !G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) &&
-                  !unit_hasstatusstate(target, WC3_STATUS_STATE_INVULNERABLE) &&
-                  S_SpellAllowsAreaTarget(swarm->ability, caster, target) &&
-                  S_AttackCanTarget(member, target) && S_LocustAttackWeapon(member, target)) {
-        float distance = Vector2_distance(&target->s.origin2, &caster->s.origin2);
-        if (distance > swarm->area || locust_target_full(G_GetLocustMember(member)->controller, swarm, target)) continue;
+    /* On allocation failure, count reservations on demand rather than
+     * silently allowing more attackers than the authored target cap. */
+    for (uint32_t i = 0; i < count; i++) {
+        edict_t *target = &globals.edicts[i];
+        uint32_t reservations = 0;
+        float distance;
+        if (target == caster || !S_SpellIsAliveTarget(target) ||
+            !S_SpellIsEnemy(caster, target) ||
+            G_UnitHasFlag(target, UNIT_FLAG_INVULNERABLE) ||
+            unit_hasstatusstate(target, WC3_STATUS_STATE_INVULNERABLE) ||
+            !S_SpellAllowsAreaTarget(swarm->ability, caster, target) ||
+            !S_AttackCanTarget(member, target) || !S_LocustAttackWeapon(member, target)) continue;
+        distance = Vector2_distance(&target->s.origin2, &caster->s.origin2);
+        if (distance > swarm->area) continue;
+        if (occupied) reservations = occupied[i];
+        else FILTER_EDICTS(other, locust_member_in_swarm(other, controller) &&
+                           !G_IsDeferredFree(other) && S_SpellIsAliveTarget(other)) {
+            locustMember_t const *state = G_GetLocustMember(other);
+            if (state->state == LOCUST_ATTACKING && state->target == target &&
+                state->target_spawn_time == target->spawn_time) reservations++;
+        }
+        if (reservations >= cap) continue;
         if (!best || distance < best_distance ||
             (distance == best_distance && target->s.number < best->s.number)) {
             best = target;
             best_distance = distance;
         }
     }
+    free(occupied);
     return best;
 }
 

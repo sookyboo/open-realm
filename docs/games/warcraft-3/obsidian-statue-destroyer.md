@@ -69,6 +69,11 @@ still warrants an in-game visual check against retail.
 
 ## Destroyer abilities
 
+- **Orb damage ownership**: `Afak` is the mana-paid projectile modifier.
+  `S_DestroyerOrbCommitAttack()` adds its `DataA` bonus to the missile only
+  after payment; impacts use that snapshot and must not query `Afak` a second
+  time. `ANak` is a distinct neutral/creep passive handled by
+  `S_OrbAnnihilationDamage()` at hit time. These rawcodes must not be conflated.
 - **Normal weapon**: `AvengerMissile.mdx`, homing, authored weapon speed 900.
 - **`Afak` Orb of Annihilation**: manual one-shot and autocast use the same
   attack-modifier order, spend authored mana and add `DataA` damage on a

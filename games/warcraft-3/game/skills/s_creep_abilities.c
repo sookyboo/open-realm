@@ -563,6 +563,8 @@ BZ_ABILITY_PROC(CAbilitySellUnit) { return CAbilityPassive(ent, msg, call); }
 
 bool S_UnitIsResistant(edict_t const *unit) { return G_UnitIsHero(unit) || unit_has_proc_ability(unit, CAbilityResistantSkin); }
 
+/* ANak is a separate passive Orb ability, not the mana-paid Afak attack
+ * modifier. Afak's shot bonus is already snapshotted in missile->damage. */
 int S_OrbAnnihilationDamage(edict_t *attacker, int damage) {
     uint32_t level = attacker ? G_UnitAbilityLevel(attacker, ID_ORB_ANNIHILATION) : 0;
     return level ? damage + (int)S_SpellData(ID_ORB_ANNIHILATION, level, 1) : damage;

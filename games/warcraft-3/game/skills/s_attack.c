@@ -602,6 +602,8 @@ void S_ResolveAttackHitWithArrow(edict_t *attacker, edict_t *target, int damage,
      * snapshot must not pick up a new Searing/Frost autocast mid-flight. */
     if (!arrow_code)
         damage = S_ColdArrowsDamage(attacker, target, S_SearingArrowDamage(attacker, damage));
+    /* ANak is independent of the mana-paid Afak missile modifier: only the
+     * former belongs in this generic on-hit path. */
     damage = S_OrbAnnihilationDamage(attacker, damage);
     damage = (int)((float)damage * (1.0f + S_TrueshotAttackBonus(attacker) + S_CommandAuraAttackBonus(attacker) +
                                          S_WarDrumsAttackBonus(attacker) + S_RoarDamageBonus(attacker)
