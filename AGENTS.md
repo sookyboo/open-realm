@@ -183,7 +183,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | WC3 Crypt Lord Carrion Beetles AUcb corpse consumption, permanent DataC summons, DataE cap, and autocast | [docs/games/warcraft-3/carrion-beetles.md](docs/games/warcraft-3/carrion-beetles.md) |
 | WC3 Hippogryph couple Acoa/Acoh mount and Adec dismount, UnitID ehpr | [docs/games/warcraft-3/hippogryph-couple.md](docs/games/warcraft-3/hippogryph-couple.md) |
 | WC3 Spirit Link Aspl DataA share / DataB cap, Bspl redirect via T_Damage | [docs/games/warcraft-3/spirit-link.md](docs/games/warcraft-3/spirit-link.md) |
-| WC3 Crypt Lord Impale `AUim`/`ACmp` travelling wave, target filters, hit identity and remaining lift/visual work | [docs/games/warcraft-3/impale.md](docs/games/warcraft-3/impale.md) |
+| WC3 Crypt Lord Impale `AUim`/`ACmp` travelling wave, stun, lift, target filters and hit identity | [docs/games/warcraft-3/impale.md](docs/games/warcraft-3/impale.md) |
 | WC3 Mana Flare Amfl channel, Bmfl armor/DataE, enemy-cast flare hook | [docs/games/warcraft-3/mana-flare.md](docs/games/warcraft-3/mana-flare.md) |
 | WC3 Stasis Trap Asta arm/detect/detonate, DataA–D and Bsta stun | [docs/games/warcraft-3/stasis-trap.md](docs/games/warcraft-3/stasis-trap.md) |
 | WC3 Sentry Ward Aeye/AIsw, Adt1 Rng detect via S_UnitIsDetected | [docs/games/warcraft-3/sentry-ward.md](docs/games/warcraft-3/sentry-ward.md) |

@@ -4,17 +4,17 @@
 #include "../skills/s_skills.h"
 
 static cstring_t const impale_slk =
-    "ID;PWXL;N;EBB;Y3;X12\n"
+    "ID;PWXL;N;EBB;Y3;X13\n"
     "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs\"\n"
     "C;Y1;X4;K\"DataA1\"\nC;Y1;X5;K\"DataB1\"\nC;Y1;X6;K\"DataC1\"\n"
     "C;Y1;X7;K\"Area1\"\nC;Y1;X8;K\"BuffID1\"\nC;Y1;X9;K\"Dur1\"\n"
-    "C;Y1;X10;K\"HeroDur1\"\nC;Y1;X11;K\"levels\"\nC;Y1;X12;K\"Rng1\"\n"
+    "C;Y1;X10;K\"HeroDur1\"\nC;Y1;X11;K\"levels\"\nC;Y1;X12;K\"Rng1\"\nC;Y1;X13;K\"DataD1\"\n"
     "C;Y2;X1;K\"AUim\"\nC;Y2;X2;K\"AUim\"\nC;Y2;X3;K\"ground,enemy,organic\"\n"
     "C;Y2;X4;K600\nC;Y2;X5;K0.6\nC;Y2;X6;K73\nC;Y2;X7;K80\n"
-    "C;Y2;X8;K\"BUim\"\nC;Y2;X9;K2\nC;Y2;X10;K1\nC;Y2;X11;K1\nC;Y2;X12;K700\n"
+    "C;Y2;X8;K\"BUim\"\nC;Y2;X9;K2\nC;Y2;X10;K1\nC;Y2;X11;K1\nC;Y2;X12;K700\nC;Y2;X13;K0.8\n"
     "C;Y3;X1;K\"ACmp\"\nC;Y3;X2;K\"ACmp\"\nC;Y3;X3;K\"ground,enemy,organic\"\n"
     "C;Y3;X4;K400\nC;Y3;X5;K0.4\nC;Y3;X6;K37\nC;Y3;X7;K100\n"
-    "C;Y3;X8;K\"BUim\"\nC;Y3;X9;K1\nC;Y3;X10;K1\nC;Y3;X11;K1\nC;Y3;X12;K700\nE\n";
+    "C;Y3;X8;K\"BUim\"\nC;Y3;X9;K1\nC;Y3;X10;K1\nC;Y3;X11;K1\nC;Y3;X12;K700\nC;Y3;X13;K0.5\nE\n";
 
 static UnitBalance_t const impale_no_regen = { .healthRegenType = "none" };
 
@@ -131,6 +131,161 @@ TEST(wc3_spell, impale_rejects_zero_direction_or_nonpositive_travel_data) {
     T_ASSERT(!S_AbilityMessage(caster, A_EXECUTE, &call));
     FILTER_EDICTS(ent, ent->think == impale_wave_think)
         T_ASSERT(false);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+/* This test drives the real travelling wave, timed status scheduler, physics
+ * height resolver, and monster control lock, rather than a mock stun helper. */
+TEST(wc3_spell, impale_stun_blocks_actions_after_airtime_and_lift_lands) {
+    slkTestData_t *rows = parse_slk_string(impale_slk), *old;
+    edict_t *caster, *victim;
+    float base;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    victim = impale_unit(80, 0, 1, TARG_GROUND);
+    victim->unitinfo.FlyHeight = 30.0f;
+    level.time = 1000; M_CheckGround(victim);
+    base = victim->s.origin.z;
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    level.time = 1100; G_RunEntities();
+    T_ASSERT(unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    T_ASSERT(!S_UnitCanTranslate(victim));
+    T_NOT_NULL(unit_findstatus(victim, MAKEFOURCC('B','U','i','m')));
+    T_NOT_NULL(G_GetImpaleLift(victim));
+    T_FEQ(victim->unitinfo.FlyHeight, 30.0f, 0.001f);
+    level.time = 1300; G_RunEntities();
+    T_ASSERT(victim->s.origin.z > base + 1.0f);
+    T_ASSERT(unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    level.time = 1950; G_RunEntities();
+    T_NULL(G_GetImpaleLift(victim));
+    T_FEQ(victim->s.origin.z, base, 0.01f);
+    T_ASSERT(unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    level.time = 3150; G_RunEntities();
+    T_ASSERT(!unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    T_ASSERT(S_UnitCanTranslate(victim));
+    T_FEQ(victim->unitinfo.FlyHeight, 30.0f, 0.001f);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, impale_lift_does_not_erase_other_flight_or_stun_contributors) {
+    slkTestData_t *rows = parse_slk_string(impale_slk), *old;
+    edict_t *caster, *victim;
+    heroabilitystatus_t *other_stun;
+    float base;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    victim = impale_unit(80, 0, 1, TARG_GROUND);
+    level.time = 1000;
+    other_stun = unit_applystatus(victim, &(status_application_t){
+        .buff = "Bstu", .level = 1, .duration = 5.0f
+    });
+    T_NOT_NULL(other_stun);
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    level.time = 1100; G_RunEntities();
+    T_NOT_NULL(G_GetImpaleLift(victim));
+    level.time = 1250; G_RunEntities();
+    T_ASSERT(S_ImpaleLiftOffset(victim) > 0.0f);
+    /* Cyclone/Ensnare/Raven adjust this same independent flight setting. */
+    victim->unitinfo.FlyHeight = 85.0f;
+    M_CheckGround(victim);
+    base = victim->s.origin.z - S_ImpaleLiftOffset(victim);
+    T_FEQ(victim->s.ground_offset, 85.0f + S_ImpaleLiftOffset(victim), 0.01f);
+    level.time = 2000; G_RunEntities();
+    T_NULL(G_GetImpaleLift(victim));
+    T_FEQ(victim->s.origin.z, base, 0.01f);
+    T_FEQ(victim->unitinfo.FlyHeight, 85.0f, 0.001f);
+    T_ASSERT(unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    level.time = 3100; G_RunEntities(); /* BUim is gone; independent Bstu remains. */
+    T_NULL(unit_findstatus(victim, MAKEFOURCC('B','U','i','m')));
+    T_ASSERT(unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    level.time = 6100; G_RunEntities();
+    T_ASSERT(!unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, impale_second_wave_refreshes_lift_without_height_snap) {
+    slkTestData_t *rows = parse_slk_string(impale_slk), *old;
+    edict_t *caster, *victim;
+    float previous;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    victim = impale_unit(80, 0, 1, TARG_GROUND);
+    level.time = 1000;
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    level.time = 1100; G_RunEntities();
+    level.time = 1300; G_RunEntities();
+    previous = S_ImpaleLiftOffset(victim);
+    T_ASSERT(previous > 0.0f);
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    level.time = 1400; G_RunEntities();
+    T_NOT_NULL(G_GetImpaleLift(victim));
+    T_ASSERT(S_ImpaleLiftOffset(victim) > 0.0f);
+    T_ASSERT(unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, impale_hero_stun_uses_hero_duration_and_lift_cleans_up_on_death) {
+    static UnitBalance_t const hero_balance = { .strength = 18, .healthRegenType = "none" };
+    slkTestData_t *rows = parse_slk_string(impale_slk), *old;
+    edict_t *caster, *hero;
+    float original_height;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    hero = impale_unit(80, 0, 1, TARG_GROUND);
+    hero->data.UnitBalance = (UnitBalance_t *)&hero_balance;
+    level.time = 1000;
+    M_CheckGround(hero);
+    original_height = hero->s.origin.z;
+    T_ASSERT(G_UnitIsHero(hero));
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    level.time = 1100; G_RunEntities();
+    T_ASSERT(unit_hasstatusstate(hero, WC3_STATUS_STATE_STUNNED));
+    T_NOT_NULL(G_GetImpaleLift(hero));
+    level.time = 1300; G_RunEntities();
+    T_ASSERT(hero->s.origin.z > original_height);
+    G_SetHealth(hero, 0.0f);
+    S_ImpaleLiftUpdate(hero);
+    T_NULL(G_GetImpaleLift(hero));
+    T_FEQ(hero->s.origin.z, original_height, 0.01f);
+    /* The other case keeps the hero alive until authored HeroDur=1s. */
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
+TEST(wc3_spell, impale_hero_duration_is_distinct_from_normal_stun) {
+    static UnitBalance_t const hero_balance = { .strength = 18, .healthRegenType = "none" };
+    slkTestData_t *rows = parse_slk_string(impale_slk), *old;
+    edict_t *caster, *hero, *normal;
+    reset_entities(); setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    caster = impale_unit(0, 0, 0, TARG_GROUND);
+    hero = impale_unit(80, 0, 1, TARG_GROUND);
+    normal = impale_unit(90, 0, 1, TARG_GROUND);
+    hero->data.UnitBalance = (UnitBalance_t *)&hero_balance;
+    T_ASSERT(G_UnitIsHero(hero));
+    level.time = 1000;
+    T_ASSERT(impale_cast(caster, "AUim", (vec2_t){ 700, 0 }));
+    level.time = 1100; G_RunEntities();
+    T_ASSERT(unit_hasstatusstate(hero, WC3_STATUS_STATE_STUNNED));
+    T_ASSERT(unit_hasstatusstate(normal, WC3_STATUS_STATE_STUNNED));
+    level.time = 2150; G_RunEntities();
+    T_ASSERT(!unit_hasstatusstate(hero, WC3_STATUS_STATE_STUNNED));
+    T_ASSERT(unit_hasstatusstate(normal, WC3_STATUS_STATE_STUNNED));
+    level.time = 3150; G_RunEntities();
+    T_ASSERT(!unit_hasstatusstate(normal, WC3_STATUS_STATE_STUNNED));
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 #endif

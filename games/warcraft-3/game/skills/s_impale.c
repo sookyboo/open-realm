@@ -2,6 +2,60 @@
 
 #define IMPALE_HIT_ID MAKEFOURCC('I', 'm', 'p', 'H')
 
+/* DataD is the airborne phase, independently timed from Dur/HeroDur stun.
+ * The exact retail elevation curve is not observable from the available
+ * game data. This deliberately conservative sinusoid is presentation only. */
+#define IMPALE_LIFT_PEAK 120.0f
+
+float S_ImpaleLiftOffset(edict_t const *unit) {
+    impaleLift_t const *lift = unit ? G_GetImpaleLift(unit) : NULL;
+    uint32_t now;
+    float t;
+    if (!lift || !unit || !unit->inuse || M_IsDead(unit)) return 0.0f;
+    now = G_Time();
+    if (now >= lift->end_ms || lift->end_ms <= lift->start_ms) return 0.0f;
+    if (now <= lift->start_ms) return MAX(0.0f, lift->start_offset);
+    t = (float)(now - lift->start_ms) / (float)(lift->end_ms - lift->start_ms);
+    /* The initial offset prevents a second hit from snapping an already
+     * lifted unit to its ordinary flight height before starting a new rise. */
+    return MAX(0.0f, lift->start_offset * (1.0f - t) +
+                lift->peak_height * sinf((float)M_PI * t));
+}
+
+static void impale_begin_lift(edict_t *target, float air_seconds) {
+    impaleLift_t *lift;
+    uint32_t duration_ms;
+    float previous;
+    if (!target || !target->inuse || M_IsDead(target) ||
+        !isfinite(air_seconds) || air_seconds <= 0.0f) return;
+    /* Bound milliseconds and preserve a nonzero lifetime for short custom
+     * values; never allow the end deadline to wrap past UINT32_MAX. */
+    duration_ms = (uint32_t)MIN(air_seconds * 1000.0f, (float)(UINT32_MAX / 2));
+    duration_ms = MAX(1u, duration_ms);
+    previous = S_ImpaleLiftOffset(target);
+    lift = G_GetImpaleLift(target);
+    if (!lift) lift = G_AddImpaleLift(target);
+    if (!lift) return;
+    lift->start_ms = G_Time();
+    lift->end_ms = G_Time() + MIN(duration_ms, UINT32_MAX - G_Time());
+    lift->start_offset = previous;
+    lift->peak_height = IMPALE_LIFT_PEAK;
+    M_CheckGround(target);
+    gi.LinkEntity(target);
+}
+
+void S_ImpaleLiftUpdate(edict_t *unit) {
+    impaleLift_t *lift = unit ? G_GetImpaleLift(unit) : NULL;
+    if (!lift) return;
+    if (M_IsDead(unit) || G_Time() >= lift->end_ms ||
+        lift->end_ms <= lift->start_ms) {
+        G_FreeImpaleLift(unit);
+    }
+    M_CheckGround(unit);
+    gi.LinkEntity(unit);
+}
+
+
 /* Target identities are attached to the current wave instead of to the victim:
  * a unit can be hit once by each distinct cast, including simultaneous waves.
  * Edicts are reused; target spawn identity protects those reuse boundaries. */
@@ -23,10 +77,21 @@ static void impale_end_wave(edict_t *wave) {
     G_FreeEdict(wave);
 }
 
+static void impale_spawn_spikes(impaleWave_t const *state, float start, float end) {
+    float distance;
+    for (distance = start; distance < end; distance += 48.0f) {
+        vec2_t point = Vector2_mad(&state->direction, distance, &state->origin);
+        (void)G_SpawnAbilityEffectAtPoint(state->ability, WC3_EFFECT_SPECIAL, 0, &point, true);
+    }
+}
+
 static bool impale_hit(edict_t *wave, impaleWave_t const *state, edict_t *target) {
     edict_t *mark;
     edict_t *caster = wave->owner;
     cstring_t buff;
+    heroabilitystatus_t *status;
+    uint32_t target_spawn_time = target->spawn_time;
+    float stun_duration;
     if (!S_SpellIsAliveTarget(target) || !S_SpellIsEnemy(caster, target) ||
         !S_SpellAllowsAreaTarget(state->ability, caster, target) ||
         impale_already_hit(wave, target)) return false;
@@ -43,9 +108,23 @@ static bool impale_hit(edict_t *wave, impaleWave_t const *state, edict_t *target
     mark->resources = target->spawn_time;
     S_SpellDamage(target, caster, (int)state->damage);
     buff = S_SpellBuffId(state->ability, state->level);
-    if (!M_IsDead(target) && buff)
-        S_SpellApplyTimedStatusFromAbility(target, state->ability, state->level, buff,
-            S_SpellHeroDuration(state->ability, state->level, target));
+    if (!buff || strlen(buff) < 4) buff = "BUim"; /* RoC/custom missing BuffID */
+    if (!target->inuse || target->spawn_time != target_spawn_time || M_IsDead(target)) return true;
+    stun_duration = S_SpellHeroDuration(state->ability, state->level, target);
+    /* The shared timed-status API uses zero duration for permanent status.
+     * An authored zero stun must never create an indefinite BUim lock. */
+    if (isfinite(stun_duration) && stun_duration > 0.0f) {
+        status = S_SpellApplyTimedTargetStatus(target, state->ability, state->level,
+            buff, stun_duration);
+        if (status) status->state_mask |= WC3_STATUS_STATE_STUNNED;
+    }
+    {
+        uint32_t const buff_code = FS_SLKKey(buff);
+        (void)G_SpawnAbilityEffectTarget(buff_code, WC3_EFFECT_EFFECT, 0, target, "sprite", true);
+    }
+    /* The authored airborne motion is independent of the stun duration and
+     * survives a failed status allocation (or a custom zero-duration stun). */
+    impale_begin_lift(target, S_SpellData(state->ability, state->level, 4));
     return true;
 }
 
@@ -65,6 +144,7 @@ void impale_wave_think(edict_t *wave) {
     start = state->previous_distance;
     if (end < start) end = start;
     if (end > start) {
+        impale_spawn_spikes(state, start, end);
         /* Snapshot count before any hits spawn markers; only preexisting units
          * are eligible for this frame's sweep. Nearest-first ordering gives
          * deterministic progress when status or death callbacks spawn units. */
@@ -111,9 +191,8 @@ void impale_wave_think(edict_t *wave) {
         impale_end_wave(wave);
 }
 
-/* Impale's impact stun and lift have separate, longer lifetimes. Patch 1
- * changes how and when the existing BUim status is applied, not its state
- * contribution; patch 2 will implement and test the stun/lift lifecycle. */
+/* The timed BUim stun and DataD lift begin independently at wave impact;
+ * neither persists on the wave once the wave finishes travelling. */
 static bool impale_validate(edict_t *caster, spellTarget_t target, abilityitem_t const *spell) {
     uint32_t level;
     if (!caster || !spell || target.type != SPELL_TARGET_POINT) return false;
@@ -138,9 +217,9 @@ BZ_ABILITY_PROC(CAbilityImpale) {
     wave = G_Spawn();
     if (!wave) return false;
     state = G_AddImpaleWave(wave);
+    if (!state) { G_FreeEdict(wave); return false; }
     wave->class_id = spell->code;
     wave->owner = ent;
-    wave->spawn_time = G_Time();
     wave->s.player = ent->s.player;
     wave->s.origin2 = ent->s.origin2;
     wave->svflags |= SVF_NOCLIENT;
@@ -156,6 +235,7 @@ BZ_ABILITY_PROC(CAbilityImpale) {
     state->caster_spawn_time = ent->spawn_time;
     state->ability = spell->code;
     state->level = level;
+    G_PlayAbilityEffectSound(spell->code, &ent->s.origin2);
     wave->think = impale_wave_think;
     return true;
 }

@@ -263,6 +263,10 @@ void G_RunEntity(edict_t *ent) {
     G_RunConstructionFrame(ent);
     G_RunBuildingUpgradeFrame(ent);
     if (world_active) SAFE_CALL(ent->think, ent);
+    /* Victim lift must advance even while stunned (monster_think returns
+     * before its usual movement/ground-height refresh). */
+    if (ent->inuse && G_GetImpaleLift(ent) && (world_active || M_IsDead(ent)))
+        S_ImpaleLiftUpdate(ent);
     if (world_active) G_RunDestructableAnimation(ent);
     /* Mana regeneration (WC3 'umpr', mana/second), plus a hero's Intelligence
      * regen bonus (MiscGame IntRegenBonus = 0.05 mana/sec per Intelligence;

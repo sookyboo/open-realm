@@ -5408,6 +5408,55 @@ TEST(wc3_save, impale_wave_and_hit_marker_round_trip) {
     remove(filename);
 }
 
+TEST(wc3_save, impale_victim_lift_and_stun_survive_save) {
+    cstring_t filename = Test_TempPath("wc3-save-impale-lift.bin");
+    edict_t *victim;
+    impaleLift_t *lift;
+    heroabilitystatus_t *status;
+    float offset;
+    reset_entities(); setup_test_world();
+    victim = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 80, 0);
+    level.time = 2200;
+    victim->unitinfo.FlyHeight = 25.0f;
+    status = unit_applystatus(victim, &(status_application_t){
+        .buff = "BUim", .level = 1, .duration = 2.0f,
+        .source_ability = MAKEFOURCC('A','U','i','m'),
+        .state_mask = WC3_STATUS_STATE_STUNNED
+    });
+    T_NOT_NULL(status);
+    lift = G_AddImpaleLift(victim);
+    T_NOT_NULL(lift);
+    if (!lift) return;
+    lift->start_ms = 2000;
+    lift->end_ms = 2800;
+    lift->peak_height = 120.0f;
+    lift->start_offset = 12.0f;
+    M_CheckGround(victim);
+    offset = S_ImpaleLiftOffset(victim);
+    T_ASSERT(offset > 0.0f);
+    T_ASSERT(WriteGame(filename));
+    lift->end_ms = 0;
+    victim->unitinfo.FlyHeight = 0.0f;
+    memset(victim->unit_state->statuses, 0, sizeof(victim->unit_state->statuses));
+    T_ASSERT(ReadGame(filename));
+    lift = G_GetImpaleLift(victim);
+    T_NOT_NULL(lift);
+    if (lift) {
+        T_EQ(lift->start_ms, 2000u);
+        T_EQ(lift->end_ms, 2800u);
+        T_FEQ(lift->peak_height, 120.0f, 0.001f);
+        T_FEQ(lift->start_offset, 12.0f, 0.001f);
+    }
+    T_FEQ(victim->unitinfo.FlyHeight, 25.0f, 0.001f);
+    T_FEQ(S_ImpaleLiftOffset(victim), offset, 0.01f);
+    T_ASSERT(unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    level.time = 2900;
+    S_ImpaleLiftUpdate(victim);
+    T_NULL(G_GetImpaleLift(victim));
+    T_ASSERT(unit_hasstatusstate(victim, WC3_STATUS_STATE_STUNNED));
+    remove(filename);
+}
+
 TEST(wc3_save, flare_reveal_thinker_round_trip_preserves_caster_identity) {
     cstring_t filename = Test_TempPath("wc3-save-flare-reveal-thinker.bin");
     uint32_t const ability = MAKEFOURCC('A', 'f', 'l', 'a');

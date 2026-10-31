@@ -1854,6 +1854,7 @@ static uint32_t unit_builtin_status_states(uint32_t code) {
     case MAKEFOURCC('B','s','t','u'):
     case MAKEFOURCC('B','s','t','a'):
     case MAKEFOURCC('B','p','o','s'):
+    case MAKEFOURCC('B','U','i','m'): /* Impale; stun persists after the 1s lift */
         return WC3_STATUS_STATE_STUNNED;
     case MAKEFOURCC('B','U','s','l'):
         return WC3_STATUS_STATE_STUNNED | WC3_STATUS_STATE_SLEEPING;

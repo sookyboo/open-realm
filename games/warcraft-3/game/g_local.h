@@ -1709,7 +1709,8 @@ typedef struct shopStockItem_s {
     X(30, CARRION_WAVE, carrion_wave, CarrionWave, carrionWave_t, LIFECYCLE_POOL_CAP, carrion_wave_fields) \
     X(31, IMPALE_WAVE, impale_wave, ImpaleWave, impaleWave_t, LIFECYCLE_POOL_CAP, impale_wave_fields) \
     X(32, LOCUST_SWARM, locust_swarm, LocustSwarm, locustSwarm_t, LIFECYCLE_POOL_CAP, locust_swarm_fields) \
-    X(33, LOCUST_MEMBER, locust_member, LocustMember, locustMember_t, LIFECYCLE_POOL_CAP, locust_member_fields)
+    X(33, LOCUST_MEMBER, locust_member, LocustMember, locustMember_t, LIFECYCLE_POOL_CAP, locust_member_fields) \
+    X(34, IMPALE_LIFT, impale_lift, ImpaleLift, impaleLift_t, LIFECYCLE_POOL_CAP, impale_lift_fields)
 
 typedef enum {
 #define G_COMPONENT_ID(id, ID, member, Name, type, cap, fields) COMPONENT_##ID = id,
@@ -1750,6 +1751,14 @@ typedef struct {
     float distance, duration, half_width, damage, previous_distance;
     uint32_t start_ms, caster_spawn_time, ability, level;
 } impaleWave_t;
+
+/* Temporary vertical arc for an Impale victim; does not replace authored
+ * FlyHeight, so flight and other height owners remain independent. */
+typedef struct {
+    component_t component;
+    uint32_t start_ms, end_ms;
+    float start_offset, peak_height;
+} impaleLift_t;
 
 typedef struct {
     component_t component;
@@ -3305,6 +3314,8 @@ void impale_wave_think(edict_t *wave);
 void locust_swarm_think(edict_t *controller);
 void locust_member_think(edict_t *member);
 void S_LocustSwarmAttackLanded(edict_t *attacker, edict_t *target, float actual_damage);
+float S_ImpaleLiftOffset(edict_t const *unit);
+void S_ImpaleLiftUpdate(edict_t *unit);
 bool G_StartProjectileDeathPresentation(edict_t *ent);
 void G_TimerStart(gtimer_t *timer, uint32_t timeout, bool periodic, struct jass_function const *handler);
 void G_TimerPause(gtimer_t *timer);
