@@ -76,7 +76,7 @@ static ability_t abilitylist[] = {
     { "AOs2", CAbilityShockwaveCairne, AB_SPELL, SPELL_TARGET_POINT },  /* Shockwave */
     { "AOr3", CAbilityReincarnationCairne, AB_SPELL },  /* Reincarnation */
     { "AOw2", CAbilityWarStompCampaign, AB_SPELL },  /* War Stomp */
-    { "AOls", CAbilityVoodooSpirits, AB_SPELL },  /* Voodoo Spirits */
+    { "AOls", CAbilityLocustSwarm, AB_SPELL },  /* Voodoo Spirits — shared swarm simulation, own data */
 
     /* CommonAbilityStrings.txt */
     { "Aall", CAbilityPassive, AB_PASSIVE },  /* Shop Sharing, Allied Bldg. */

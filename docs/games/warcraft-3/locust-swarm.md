@@ -1,4 +1,4 @@
-# Crypt Lord Locust Swarm — Patches 5–7 (controller, combat and lifecycle)
+# Crypt Lord Locust Swarm — Patches 5–8 (controller, combat, lifecycle and presentation)
 
 ## Source and contract
 
@@ -7,8 +7,12 @@
 30 seconds, 800 range, 20 locusts, 0.2-second release interval, seven attackers
 per target, a 0.75 healing factor and a 20-health return threshold. **Gameplay
 reads the concrete row**, so custom map values override those stock numbers.
-The planned `AOls` Voodoo Spirits conversion remains in Patch 8: it is still
-registered with `CAbilityVoodooSpirits` rather than this AUls controller.
+`AOls` (Voodoo Spirits) now dispatches through `CAbilityLocustSwarm` too, but
+reads its **own** `UnitID`, `Dur`, `Area`, `targs` and `DataA`–`DataE` values;
+it must not inherit stock AUls counts, targeting or healing parameters.
+The swarm applies the authored ability target-category mask alongside the
+locust weapon mask; it intentionally does not exclude ordinary physical hits
+merely because the victim is spell immune.
 
 ## Release lifecycle
 
@@ -38,20 +42,26 @@ allocation fails, preventing infinite retry loops.
 
 The typed pools use component IDs 32 `LOCUST_SWARM` and 33 `LOCUST_MEMBER`;
 ID 31 is Impale and ID 34 is the independent Impale lift. The save version
-is 133; the component schemas serialize the authored schedule,
-controller/member identities, and the target/heal parameters already needed
-by Patch 6. The `locust_swarm_think` callback is registered for save/load.
-The controller is game-owned and invisible (`SVF_NOCLIENT`), not a client-side
-simulation or a Warcraft JASS channel.
+is 135. The component schemas serialize authored schedules, target identities,
+attack deadlines, damage credit and recall phase/deadline. Controller and
+member thinkers are registered for save/load. The controller is game-owned
+and invisible (`SVF_NOCLIENT`), not a client-side simulation or a Warcraft
+JASS channel.
 
 ## Remaining phases
 
-**Patch 5 does not implement locust combat, flight/orbit, seeking, return-to-
-heal or specialized recast/teleport policy.** Existing spawned-unit behaviour
-may still apply until Patch 6 replaces it with dedicated swarm movement.
-Patch 7 will refine return-before-expiry/teleport/recast and cleanup semantics;
-Patch 8 will integrate art, sound, and `AOls` alias behaviour. Do not claim
-stock retail combat parity from a passing release-scheduler test.
+Patches 5–8 implement release, target acquisition, authored attacker caps,
+ordinary physical attack damage, damage-credit healing, expiry recall, caster
+death/teleport cleanup, recast replacement, the `AOls` Voodoo Spirits alias,
+and optional model-authored Walk animation and looping ability sound.
+
+The implementation uses ordinary movement and attack orders, so the unit
+model's available `Walk` sequence is selected by the shared movement system.
+It does not create a separate locust missile: attacks apply through the shared
+physical attack resolver. The controller resolves `SoundLooping` through the
+generic ability sound path. Whether retail uses a separate `LocustMissile.mdx`
+visual, exact orbit path, hit timing, recall grace and heal-threshold ordering
+still needs comparison against retail. Missing art must not suppress simulation.
 
 ## Regression fixtures
 
@@ -61,8 +71,10 @@ custom return fields. It tests delayed release, caster movement, catch-up,
 identity cleanup, and save/load midway through release. The fixture is
 synthetic and does not require the user's Warcraft archives.
 
-Patch 7 adds tests for expiry recall and credited healing, caster death,
-spell teleport, successful recast and mid-recall save/load. Patch 6 adds tests for attacker reservations, normal physical damage and
-return healing, invulnerable/allied target rejection and a member mid-flight
-save/load round-trip. No compiler or tests were run while authoring this patch. The owner should
-run the test suite and verify real `uloc` visuals/flight after Patch 6–8.
+Patch 8 adds alias-data and optional Walk-animation tests. Patch 7 adds tests
+for expiry recall and credited healing, caster death, spell teleport,
+successful recast and mid-recall save/load. Patch 6 tests attacker reservations,
+normal physical damage and return healing, invulnerable/allied target rejection
+and a member mid-flight save/load round-trip. These fixtures are synthetic and
+do not require Warcraft archives. Retail orbit and missile presentation remain
+visual verification gaps.
