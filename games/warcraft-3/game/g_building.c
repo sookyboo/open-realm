@@ -449,6 +449,28 @@ static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
         return researchable && G_GetPlayerTechResearchedLevel(
             bear_owner, MAKEFOURCC('R','e','e','b')) >= 1;
     }
+    /* Crypt Fiend Burrow is a TFT-only command unlocked by Rubu. Abur is
+     * otherwise registered as a passive lifecycle ability, so keep this
+     * unit-specific research rule separate from generic spell requirements. */
+    if (unit && unit->class_id == MAKEFOURCC('u','c','r','y') &&
+        ability_id == MAKEFOURCC('A','b','u','r')) {
+        bool const expansion = gi.CvarString && atoi(gi.CvarString("fs_expansion", "0")) != 0;
+        gameClient_t *fiend_owner;
+        int32_t maximum;
+        if (!expansion) {
+            if (visible) *visible = false;
+            return false;
+        }
+        if (research_id) *research_id = MAKEFOURCC('R','u','b','u');
+        if (required_level) *required_level = 1;
+        fiend_owner = G_GetPlayerClientByNumber(unit->s.player);
+        if (!fiend_owner || fiend_owner->ps.number != unit->s.player) return false;
+        maximum = G_GetPlayerTechMaxAllowed(fiend_owner, MAKEFOURCC('R','u','b','u'));
+        researchable = maximum < 0 || maximum >= 1;
+        if (visible) *visible = researchable;
+        return researchable && G_GetPlayerTechResearchedLevel(
+            fiend_owner, MAKEFOURCC('R','u','b','u')) >= 1;
+    }
     /* Exhume Corpses is a Meat Wagon passive unlocked by Ruex. The stock
      * Wagon upgrade list does not include Ruex, so resolve this research
      * directly instead of letting the passive run as soon as Aexh is present. */

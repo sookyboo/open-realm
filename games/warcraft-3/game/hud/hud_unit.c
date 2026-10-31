@@ -968,6 +968,22 @@ uint8_t G_GetCommandButtons(edict_t *ent, gameCommandButton_t *buttons, uint8_t 
             }
         }
     }
+    /* Crypt Fiend Abur is classified as a passive because it also carries
+     * lifecycle state, but TFT presents it as a research-gated command. */
+    if (ent->class_id == MAKEFOURCC('u','c','r','y') && G_ActorHasSkill(ent, "Abur") &&
+        G_UnitAbilityResearchVisible(ent, MAKEFOURCC('A','b','u','r')) &&
+        !G_HasCommandRawcode(buttons, count, MAKEFOURCC('A','b','u','r'))) {
+        uint8_t const idx = count;
+        G_AddCommandButton(ent, buttons, max_buttons, &count, "Abur", false, 0);
+        if (count > idx && !G_UnitAbilityResearchAvailable(ent, MAKEFOURCC('A','b','u','r'))) {
+            uint32_t research_id = 0;
+            int32_t required_level = 0;
+            buttons[idx].disabled = 1;
+            if (G_UnitAbilityResearchRequirement(ent, MAKEFOURCC('A','b','u','r'),
+                                                  &research_id, &required_level))
+                G_AddResearchRequirementTooltip(&buttons[idx], research_id, required_level);
+        }
+    }
     G_AddMagicSentryIndicator(ent, buttons, max_buttons, &count);
     G_AddPillageIndicator(ent, buttons, max_buttons, &count);
     G_AddDiseaseCloudIndicator(ent, buttons, max_buttons, &count);

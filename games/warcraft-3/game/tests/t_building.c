@@ -8196,6 +8196,71 @@ static cstring_t building_roc_cvar(cstring_t name, cstring_t fallback) {
     return !strcmp(name, "fs_expansion") ? "0" : fallback;
 }
 
+TEST(wc3_building, crypt_fiend_burrow_is_a_tft_research_gated_command) {
+    static UnitAbilities_t const abilities = { .abilList = "Abur" };
+    static cstring_t const ability_config =
+        "[Abur]\nArt=ReplaceableTextures\\CommandButtons\\BTNBurrow.blp\n"
+        "Buttonpos=0,2\nTip=Burrow\n"
+        "[Rubu]\nName=Burrow\n";
+    cstring_t (*previous_cvar)(cstring_t, cstring_t) = gi.CvarString;
+    gameClient_t *owner = &game.clients[0];
+    playerTechState_t old_tech[MAX_PLAYER_TECH_STATE];
+    edict_t *fiend;
+    gameCommandButton_t buttons[16];
+    uint32_t const burrow = MAKEFOURCC('A','b','u','r');
+    uint32_t const research = MAKEFOURCC('R','u','b','u');
+    uint8_t count;
+    bool found;
+
+    reset_entities(); setup_test_world();
+    owner = &game.clients[0]; owner->ps.number = 0;
+    memcpy(old_tech, owner->tech, sizeof(old_tech));
+    memset(owner->tech, 0, sizeof(owner->tech));
+    G_SetPlayerTechMaxAllowed(owner, research, 1);
+    fiend = alloc_test_unit(MAKEFOURCC('u','c','r','y'), 0, 0);
+    fiend->s.player = owner->ps.number;
+    fiend->data.UnitAbilities = &abilities;
+    fiend->unit_state->ranks[0] = MAKE(heroability_t, .code = burrow, .level = 1);
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
+
+    gi.CvarString = building_roc_cvar;
+    T_ASSERT(!G_UnitAbilityResearchVisible(fiend, burrow));
+    count = G_GetCommandButtons(fiend, buttons, 16);
+    found = false;
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Abur")) found = true;
+    T_ASSERT(!found);
+
+    gi.CvarString = building_tft_cvar;
+    T_ASSERT(G_UnitAbilityResearchVisible(fiend, burrow));
+    T_ASSERT(!G_UnitAbilityResearchAvailable(fiend, burrow));
+    count = G_GetCommandButtons(fiend, buttons, 16);
+    found = false;
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Abur")) {
+        found = true;
+        T_ASSERT(buttons[i].disabled);
+        T_NOT_NULL(strstr(buttons[i].ubertip, "Requires:"));
+        T_NOT_NULL(strstr(buttons[i].ubertip, "Burrow"));
+    }
+    T_ASSERT(found);
+
+    G_SetPlayerTechResearched(owner, research, 1);
+    T_ASSERT(G_UnitAbilityResearchAvailable(fiend, burrow));
+    count = G_GetCommandButtons(fiend, buttons, 16);
+    found = false;
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Abur")) {
+        found = true;
+        T_ASSERT(!buttons[i].disabled);
+        T_ASSERT(!strstr(buttons[i].ubertip, "Requires:"));
+    }
+    T_ASSERT(found);
+
+    G_SetPlayerTechResearched(owner, research, 0);
+    G_SetPlayerTechMaxAllowed(owner, research, -1);
+    G_TestPopAbilityConfig();
+    gi.CvarString = previous_cvar;
+    memcpy(owner->tech, old_tech, sizeof(old_tech));
+}
+
 TEST(wc3_building, tft_necromancer_raise_dead_is_available_before_skeletal_mastery) {
     static UnitAbilities_t const abilities = { .abilList = "Arai" };
     static UnitBalance_t const balance = { .upgrades = "Rusm" };
