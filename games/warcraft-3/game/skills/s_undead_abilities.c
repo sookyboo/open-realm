@@ -506,6 +506,29 @@ static float raise_dead_search_range(edict_t const *caster) {
     return caster ? MAX(0.0f, caster->runtime.acquisition_range) : 0.0f;
 }
 
+/* Rusm is a TFT rlev rank-up for the stock Necromancer. Resolve that research
+ * directly as well as honoring the unit's stored ability rank: some map/unit
+ * creation paths can leave the runtime rank stale after the research event. */
+static uint32_t raise_dead_ability_level(edict_t *caster, abilityitem_t const *spell) {
+    uint32_t level = S_SpellLevel(caster, spell->code);
+    uint32_t const mastery = MAKEFOURCC('R','u','s','m');
+    uint32_t const ability_code = MAKEFOURCC('A','r','a','i');
+    bool const expansion = gi.CvarString && atoi(gi.CvarString("fs_expansion", "0")) != 0;
+    gameClient_t *owner;
+    AbilityData_t const *ability;
+    uint32_t researched_rank;
+    if (!caster || spell->code != ability_code ||
+        caster->class_id != MAKEFOURCC('u','n','e','c') || !expansion ||
+        !G_UnitUsesUpgrade(caster, mastery)) return level;
+    owner = G_GetPlayerClientByNumber(caster->s.player);
+    if (!owner || owner->ps.number != caster->s.player) return level;
+    researched_rank = (uint32_t)MAX(0, G_GetPlayerTechResearchedLevel(owner, mastery)) + 1u;
+    ability = G_AbilityData(spell->code);
+    if (ability && ability->id == spell->code && ability->levels > 0)
+        researched_rank = MIN(researched_rank, (uint32_t)ability->levels);
+    return MAX(level, researched_rank);
+}
+
 /* Retail Raise Dead preserves more valuable corpses by preferring the lowest-
  * ranked eligible corpse; distance is only the tie-breaker.  UnitBalance.level
  * is already the engine's corpse-power rank for Resurrection/Animate Dead. */
@@ -570,7 +593,7 @@ static void raise_dead_execute(edict_t *caster, spellTarget_t st, abilityitem_t 
     (void)st;
 
     if (!caster || !spell) return;
-    level = S_SpellLevel(caster, spell->code);
+    level = raise_dead_ability_level(caster, spell);
     range = raise_dead_search_range(caster);
     corpse = raise_dead_corpse(caster, spell->code, range);
     if (!corpse) return;

@@ -7926,6 +7926,66 @@ static cstring_t building_roc_cvar(cstring_t name, cstring_t fallback) {
     return !strcmp(name, "fs_expansion") ? "0" : fallback;
 }
 
+TEST(wc3_building, tft_necromancer_raise_dead_is_available_before_skeletal_mastery) {
+    static UnitAbilities_t const abilities = { .abilList = "Arai" };
+    static UnitBalance_t const balance = { .upgrades = "Rusm" };
+    static cstring_t const skeletal_mastery_slk =
+        "ID;PWXL;N;EBB;Y2;X4\n"
+        "C;Y1;X1;K\"upgradeid\"\nC;Y1;X2;K\"effect1\"\n"
+        "C;Y1;X3;K\"code1\"\nC;Y1;X4;K\"maxlevel\"\n"
+        "C;Y2;X1;K\"Rusm\"\nC;Y2;X2;K\"rlev\"\n"
+        "C;Y2;X3;K\"Arai\"\nC;Y2;X4;K1\nE\n";
+    static cstring_t const ability_config =
+        "[Arai]\nArt=ReplaceableTextures\\CommandButtons\\BTNRaiseDead.blp\n"
+        "Buttonpos=0,0\nTip=Raise Dead\n";
+    cstring_t (*previous_cvar)(cstring_t, cstring_t) = gi.CvarString;
+    gameClient_t *owner;
+    edict_t *necromancer;
+    slkTestData_t *upgrade_rows = parse_slk_string(skeletal_mastery_slk);
+    slkTestData_t *old_upgrade_rows;
+    gameCommandButton_t buttons[16];
+    uint32_t const skeletal_mastery = MAKEFOURCC('R','u','s','m');
+    uint32_t const raise_dead = MAKEFOURCC('A','r','a','i');
+    uint8_t count;
+    bool found = false;
+
+    reset_entities();
+    setup_test_world();
+    old_upgrade_rows = G_SetSLKRows("UpgradeData", upgrade_rows);
+    owner = &game.clients[0];
+    owner->ps.number = 0;
+    G_SetPlayerTechMaxAllowed(owner, skeletal_mastery, 1);
+    necromancer = alloc_test_unit(MAKEFOURCC('u','n','e','c'), 0, 0);
+    necromancer->s.player = owner->ps.number;
+    necromancer->data.UnitAbilities = (UnitAbilities_t *)&abilities;
+    necromancer->data.UnitBalance = (UnitBalance_t *)&balance;
+    gi.CvarString = building_tft_cvar;
+    T_ASSERT(G_TestPushAbilityConfig(ability_config));
+
+    T_EQ(G_UnitAbilityLevel(necromancer, raise_dead), 1u);
+    T_ASSERT(G_UnitAbilityResearchVisible(necromancer, raise_dead));
+    T_ASSERT(G_UnitAbilityResearchAvailable(necromancer, raise_dead));
+    count = G_GetCommandButtons(necromancer, buttons, 16);
+    FOR_LOOP(i, count) if (!strcmp(buttons[i].command, "Arai")) {
+        found = true;
+        T_ASSERT(!buttons[i].disabled);
+    }
+    T_ASSERT(found);
+
+    /* Skeletal Mastery is still recognized as the ability's rank upgrade. */
+    G_SetPlayerTechResearched(owner, skeletal_mastery, 1);
+    T_ASSERT(G_UnitAbilityResearchAvailable(necromancer, raise_dead));
+    T_EQ(G_UnitAbilityLevel(necromancer, raise_dead), 2u);
+
+    G_SetPlayerTechResearched(owner, skeletal_mastery, 0);
+    T_EQ(G_UnitAbilityLevel(necromancer, raise_dead), 1u);
+    G_SetPlayerTechMaxAllowed(owner, skeletal_mastery, -1);
+    G_TestPopAbilityConfig();
+    gi.CvarString = previous_cvar;
+    G_SetSLKRows("UpgradeData", old_upgrade_rows);
+    free_slk_rows(upgrade_rows);
+}
+
 static cstring_t building_spikes_classic_cvar(cstring_t name, cstring_t fallback) {
     return !strcmp(name, "wc3_spiked_barricades_modern") ? "0" : fallback;
 }

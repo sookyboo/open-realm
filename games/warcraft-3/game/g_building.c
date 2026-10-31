@@ -392,6 +392,13 @@ static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
     bool available = false;
 
     if (visible) *visible = true;
+    /* Skeletal Mastery is an rlev rank-up for the Necromancer's native Raise
+     * Dead ability, not an unlock. Keep the level-one command usable from
+     * the start in TFT; Rusm still raises it to level two when researched. */
+    if (unit && unit->class_id == MAKEFOURCC('u','n','e','c') &&
+        ability_id == MAKEFOURCC('A','r','a','i') &&
+        gi.CvarString && atoi(gi.CvarString("fs_expansion", "0")) != 0 &&
+        G_ActorHasSkill(unit, "Arai")) return true;
     /* The Storm Crow morph (edtm) has its own Faerie Fire alias (Afa2),
      * gated by the TFT Enchanted Crows/Mark of the Talon research (Reec).
      * Keep that form-only command hidden in RoC. */

@@ -9601,6 +9601,97 @@ TEST(wc3_spell, raise_dead_uses_two_authored_summon_groups_and_marks_summons) {
 	G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 
+static cstring_t spell_tft_expansion_cvar(cstring_t name, cstring_t fallback) {
+    return !strcmp(name, "fs_expansion") ? "1" : fallback;
+}
+
+TEST(wc3_spell, tft_skeletal_mastery_changes_raise_dead_second_summon_to_mage) {
+    static UnitAbilities_t const abilities = { .abilList = "Arai" };
+    static UnitBalance_t const balance = { .upgrades = "Rusm" };
+    static UnitData_t const corpse_data = { .deathType = 3 };
+    static cstring_t const ability_slk =
+        "ID;PWXL;N;EBB;Y2;X18\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"targs1\"\n"
+        "C;Y1;X4;K\"levels\"\nC;Y1;X5;K\"Dur1\"\nC;Y1;X6;K\"Dur2\"\n"
+        "C;Y1;X7;K\"DataA1\"\nC;Y1;X8;K\"DataB1\"\n"
+        "C;Y1;X9;K\"DataC1\"\nC;Y1;X10;K\"DataD1\"\n"
+        "C;Y1;X11;K\"DataA2\"\nC;Y1;X12;K\"DataB2\"\n"
+        "C;Y1;X13;K\"DataC2\"\nC;Y1;X14;K\"DataD2\"\n"
+        "C;Y1;X15;K\"BuffID1\"\nC;Y1;X16;K\"BuffID2\"\n"
+        "C;Y1;X17;K\"UnitID1\"\nC;Y1;X18;K\"UnitID2\"\n"
+        "C;Y2;X1;K\"Arai\"\nC;Y2;X2;K\"Arai\"\n"
+        "C;Y2;X3;K\"dead\"\nC;Y2;X4;K2\nC;Y2;X5;K30\nC;Y2;X6;K30\n"
+        "C;Y2;X7;K2\nC;Y2;X8;K0\nC;Y2;X9;K\"uske\"\n"
+        "C;Y2;X10;K\"-\"\nC;Y2;X11;K1\nC;Y2;X12;K1\n"
+        "C;Y2;X13;K\"uske\"\nC;Y2;X14;K\"uskm\"\n"
+        "C;Y2;X15;K\"Brai\"\nC;Y2;X16;K\"Brai\"\n"
+        "C;Y2;X17;K\"uske\"\nC;Y2;X18;K\"uske\"\nE\n";
+    static cstring_t const upgrade_slk =
+        "ID;PWXL;N;EBB;Y2;X4\n"
+        "C;Y1;X1;K\"upgradeid\"\nC;Y1;X2;K\"effect1\"\n"
+        "C;Y1;X3;K\"code1\"\nC;Y1;X4;K\"maxlevel\"\n"
+        "C;Y2;X1;K\"Rusm\"\nC;Y2;X2;K\"rlev\"\n"
+        "C;Y2;X3;K\"Arai\"\nC;Y2;X4;K1\nE\n";
+    cstring_t (*previous_cvar)(cstring_t, cstring_t) = gi.CvarString;
+    uint32_t const rai = MAKEFOURCC('A','r','a','i');
+    uint32_t const mastery = MAKEFOURCC('R','u','s','m');
+    slkTestData_t *abilities_rows = parse_slk_string(ability_slk);
+    slkTestData_t *upgrade_rows = parse_slk_string(upgrade_slk);
+    slkTestData_t *old_abilities_rows, *old_upgrade_rows;
+    abilityitem_t item = S_AbilityItem(rai);
+    abilityCall_t call = MAKE(abilityCall_t, .item = &item);
+    edict_t *caster, *corpse;
+    uint32_t warriors = 0, mages = 0;
+
+    reset_entities(); setup_test_world();
+    old_abilities_rows = G_SetSLKRows("AbilityData", abilities_rows);
+    old_upgrade_rows = G_SetSLKRows("UpgradeData", upgrade_rows);
+    gi.CvarString = spell_tft_expansion_cvar;
+    game.clients[0].connected = true;
+    game.clients[0].ps.number = 0;
+    G_SetPlayerTechMaxAllowed(&game.clients[0], mastery, 1);
+    caster = alloc_test_unit(MAKEFOURCC('u','n','e','c'), 500, 500);
+    caster->s.player = 0;
+    caster->data.UnitAbilities = (UnitAbilities_t *)&abilities;
+    caster->data.UnitBalance = (UnitBalance_t *)&balance;
+    caster->runtime.acquisition_range = 800.0f;
+
+    corpse = alloc_test_unit(MAKEFOURCC('u','d','e','a'), 600, 500);
+    corpse->data.UnitData = (UnitData_t *)&corpse_data;
+    corpse->health.value = 0; corpse->health.max_value = 100;
+    corpse->svflags |= SVF_MONSTER | SVF_DEADMONSTER;
+    T_ASSERT(S_AbilityMessage(caster, A_EXECUTE, &call));
+    FILTER_EDICTS(unit, unit->inuse && unit->summon_ability == rai) {
+        if (unit->class_id == MAKEFOURCC('u','s','k','e')) warriors++;
+        if (unit->class_id == MAKEFOURCC('u','s','k','m')) mages++;
+    }
+    T_EQ(warriors, 2u);
+    T_EQ(mages, 0u);
+
+    G_SetPlayerTechResearched(&game.clients[0], mastery, 1);
+    T_EQ(G_UnitAbilityLevel(caster, rai), 2u);
+    /* A map-created unit can retain a stale runtime rank; researched TFT
+     * mastery must still select the authored Warrior + Mage groups. */
+    T_EQ(G_UnitSetAbilityLevel(caster, rai, 1), 1u);
+    corpse = alloc_test_unit(MAKEFOURCC('u','d','e','a'), 620, 500);
+    corpse->data.UnitData = (UnitData_t *)&corpse_data;
+    corpse->health.value = 0; corpse->health.max_value = 100;
+    corpse->svflags |= SVF_MONSTER | SVF_DEADMONSTER;
+    T_ASSERT(S_AbilityMessage(caster, A_EXECUTE, &call));
+    warriors = mages = 0;
+    FILTER_EDICTS(unit, unit->inuse && unit->summon_ability == rai) {
+        if (unit->class_id == MAKEFOURCC('u','s','k','e')) warriors++;
+        if (unit->class_id == MAKEFOURCC('u','s','k','m')) mages++;
+    }
+    T_EQ(warriors, 3u);
+    T_EQ(mages, 1u);
+
+    G_SetSLKRows("UpgradeData", old_upgrade_rows);
+    G_SetSLKRows("AbilityData", old_abilities_rows);
+    free_slk_rows(upgrade_rows); free_slk_rows(abilities_rows);
+    gi.CvarString = previous_cvar;
+}
+
 TEST(wc3_spell, raise_dead_roc_missing_unit_id_spawns_authored_skeleton_count) {
 #if BZ_COMPAT_WORKAROUNDS
 	const char slk[] =
