@@ -1236,3 +1236,8 @@ original-scale field. Version 118 adds the launch-time attacker incarnation to e
 basic attack missile; mismatched earlier versions are rejected.
 
 Version 133 adds per-locust combat state, target reservations, attack deadlines and healing credit. Version 134 adds the Locust Swarm controller's recall flag and bounded recall deadline. Version 135 adds the `AOls` Voodoo Spirits alias and does not change serialized gameplay fields. A save taken during recall restores the same returning members and outstanding heal credit, without resuming release or attacks. The previous versions are rejected by the exact-format check. See [Locust Swarm](locust-swarm.md).
+
+Version 136 extends `attackMissile_t` with `arrow_ability` and `arrow_level` for
+Black Arrow attack snapshotting. These fields survive save/load independently
+of later caster autocast, mana or ability-level changes; previous saves are
+rejected rather than migrated. See [Dark Ranger](dark-ranger.md).

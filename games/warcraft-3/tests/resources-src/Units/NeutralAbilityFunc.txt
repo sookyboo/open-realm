@@ -29,3 +29,12 @@ Targetattach=overhead
 [ACch]
 TargetArt=TestUI\Models\anim_oneshot.mdx
 Targetattach=overhead
+
+// Dark Ranger Black Arrow: missile selection is made when the shot launches.
+[ANba]
+MissileArt=TestUI\Models\anim_projectile.mdx
+Missilespeed=790
+
+[ACbk]
+MissileArt=TestUI\Models\anim_projectile.mdx
+Missilespeed=590

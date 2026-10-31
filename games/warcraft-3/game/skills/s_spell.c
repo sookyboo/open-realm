@@ -1160,8 +1160,11 @@ static bool spell_unit_target_selected(edict_t *clent, edict_t *target) {
     /* Searing Arrows is an attack modifier, not a unit-target spell cast. Its
      * manual target order arms one projectile and spends mana at weapon
      * damage point, so it must bypass cast-time mana/cooldown commit. */
-    if (spell->proc == CAbilityFlamingArrows || spell->proc == CAbilityColdArrows) {
-        bool const accepted = spell->proc == CAbilityColdArrows
+    if (spell->proc == CAbilityFlamingArrows || spell->proc == CAbilityColdArrows ||
+        spell->proc == CAbilityBlackArrow) {
+        bool const accepted = spell->proc == CAbilityBlackArrow
+            ? S_BlackArrowIssueOrder(caster, target, code) :
+            spell->proc == CAbilityColdArrows
             ? S_ColdArrowsIssueOrder(caster, target, code)
             : S_SearingArrowsIssueOrder(caster, target, code);
         if (accepted) spell_order_accepted(caster, spell);
@@ -1992,7 +1995,7 @@ void spell_cmd(edict_t *clent) {
 
     /* Toggle abilities bypass the normal pipeline. */
     if ((spell->flags & AB_TOGGLE) && spell->proc != CAbilityFlamingArrows &&
-        spell->proc != CAbilityColdArrows &&
+        spell->proc != CAbilityColdArrows && spell->proc != CAbilityBlackArrow &&
         (spell->proc != CAbilityManaFlare || S_AbilityMessage(caster, A_TOGGLE_ON, &toggle_call))) {
         spellTarget_t target = { .type = SPELL_TARGET_NONE };
         spell_message(caster, A_EXECUTE, &item, &target);

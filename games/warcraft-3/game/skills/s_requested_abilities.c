@@ -213,17 +213,80 @@ void morph_end(edict_t *thinker) {
     G_FreeEdict(thinker);
 }
 
-int S_BlackArrowDamage(edict_t *attacker, int damage) {
-    uint32_t level = G_UnitStatusLevel(attacker, MAKEFOURCC('A','N','b','a'));
-    return level ? damage + (int)S_SpellData(MAKEFOURCC('A','N','b','a'), level, 1) : damage;
+/* Black Arrow is a per-hit attack modifier. Never consult a mutable
+ * autocast toggle at impact: the shot's ability and rank are selected and
+ * paid for at its weapon damage point, then carried on the missile. */
+static bool black_arrow_ability(uint32_t code) {
+    abilityitem_t const item = S_AbilityItem(code);
+    return item.ability && item.ability->proc == CAbilityBlackArrow;
 }
 
-void S_BlackArrowDeath(edict_t *attacker, edict_t *target) {
-    uint32_t level = G_UnitStatusLevel(attacker, MAKEFOURCC('A','N','b','a'));
-    if (level && target && M_IsDead(target))
-        S_SummonAbilityAt(attacker, MAKEFOURCC('A','N','b','a'),
-                          S_SpellUnitId(MAKEFOURCC('A','N','b','a'), level), &target->s.origin2,
-                          S_SpellData(MAKEFOURCC('A','N','b','a'), level, 3));
+bool S_BlackArrowIssueOrder(edict_t *attacker, edict_t *target, uint32_t ability) {
+    heroabilitystatus_t *status;
+    uint32_t level;
+    if (!attacker || !target || !attacker->unit_state || !black_arrow_ability(ability) ||
+        !G_UnitAbilityLevel(attacker, ability) || !S_AttackCanTarget(attacker, target) ||
+        !S_SpellIsEnemy(attacker, target) ||
+        !S_SpellAllowsTarget(ability, attacker, target)) return false;
+    level = G_UnitAbilityLevel(attacker, ability);
+    status = unit_applystatus(attacker, &(status_application_t){
+        .buff = GetClassName(ability), .level = level, .source_ability = ability,
+        .rank = level, .buff_flags = WC3_STATUS_BUFF_ONE_SHOT_ATTACK
+    });
+    if (!status) return false;
+    if (S_OrderAttack(attacker, target)) return true;
+    unit_removestatus(attacker, status, STATUS_REMOVE_SCRIPT);
+    return false;
+}
+
+bool S_BlackArrowPrepareAttack(edict_t *attacker, edict_t *target,
+                               uint32_t *ability, uint32_t *rank) {
+    heroabilitystatus_t *manual = NULL;
+    uint32_t code = 0, level = 0;
+    if (ability) *ability = 0;
+    if (rank) *rank = 0;
+    if (!attacker || !target || !attacker->unit_state || !ability || !rank) return false;
+    FOR_LOOP(i, MAX_UNIT_STATUSES) {
+        heroabilitystatus_t *status = attacker->unit_state->statuses + i;
+        uint32_t const source = status->source_ability ? status->source_ability : status->code;
+        if (!status->level || !(status->buff_flags & WC3_STATUS_BUFF_ONE_SHOT_ATTACK) ||
+            (status->timestamp && status->timestamp <= G_Time()) ||
+            !black_arrow_ability(source)) continue;
+        manual = status;
+        code = source;
+        level = status->rank ? status->rank : status->level;
+        break;
+    }
+    if (!code && attacker->unit_state->autocast &&
+        black_arrow_ability(attacker->unit_state->autocast) &&
+        G_UnitAutocastIsOn(attacker, attacker->unit_state->autocast)) {
+        code = attacker->unit_state->autocast;
+        level = G_UnitAbilityLevel(attacker, code);
+    }
+    /* An armed manual attack is one attempt even if the target has become
+     * ineligible, mana is empty or the weapon swing was evaded. */
+    if (manual) unit_removestatus(attacker, manual, STATUS_REMOVE_SCRIPT);
+    if (!code || !level || !G_UnitAbilityLevel(attacker, code) ||
+        !S_AttackCanTarget(attacker, target) || !S_SpellIsEnemy(attacker, target) ||
+        !S_SpellAllowsAreaTarget(code, attacker, target) ||
+        !S_SpellSpendMana(attacker, code, level)) return false;
+    *ability = code;
+    *rank = level;
+    return true;
+}
+
+int S_BlackArrowDamageForShot(uint32_t ability, uint32_t level, int damage) {
+    return ability && level && black_arrow_ability(ability) ?
+        damage + (int)S_SpellData(ability, level, 1) : damage;
+}
+
+/* Patch 4 will replace immediate-kill detection with an authored timed
+ * victim marker. Until then only the *actual empowered shot* may summon. */
+void S_BlackArrowDeathForShot(edict_t *attacker, edict_t *target,
+                             uint32_t ability, uint32_t level) {
+    if (attacker && target && ability && level && black_arrow_ability(ability) && M_IsDead(target))
+        S_SummonAbilityAt(attacker, ability, S_SpellUnitId(ability, level),
+                          &target->s.origin2, S_SpellData(ability, level, 3));
 }
 
 static void death_coil_projectile_hit(edict_t *missile);
@@ -737,7 +800,16 @@ BZ_ABILITY_PROC(CAbilityCarrionScarabs) {
  * Untip="Right-click to activate auto-casting."
  * Unubertip="Right-click to deactivate auto-casting."
  */
-BZ_SIMPLE_SPELL_PROC(AbilityBlackArrow) { toggle_status_execute(caster, st, spell); }
+BZ_ABILITY_PROC(CAbilityBlackArrow) {
+    uint32_t const code = call && call->item ? call->item->code : 0;
+    bool const active = ent && ent->unit_state && ent->unit_state->autocast == code;
+    switch (msg) {
+    case A_TOGGLE_ON: return active;
+    case A_AUTOCAST_ON: return active;
+    case A_AUTOCAST_SET: return true;
+    default: return CAbilitySimpleSpell(ent, msg, call);
+    }
+}
 /* Name=Poison Arrows
  * Ubertip="Adds <AHfa,DataA1> bonus fire damage to an attack against enemies, but drains mana with each shot fired."
  * Untip="Right-click to activate auto-casting."

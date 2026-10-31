@@ -139,3 +139,47 @@ model selection, lifecycle and attachment ownership, not pixel-level
 rendering. Further work for Dark Ranger is Black Arrow and Life Drain; visual
 sound bindings, ribbon timing and unusual Charm ownership interactions
 remain subject to retail verification.
+
+## Black Arrow (`ANba`, `ACbk`) — Patch 3
+
+Black Arrow is an **attack modifier**, not an indefinitely applied damage
+status. Both the hero ability and the creep/melee alias resolve to
+`CAbilityBlackArrow`; the command card uses `SPELL_TARGET_UNIT` for manual
+targeting. Autocast is the unit's existing single selected autocast alias.
+Manual targeting arms a one-shot attack status, just like the existing
+Searing/Frost Arrow paths, without committing spell mana on click or walking.
+
+At a committed weapon damage point, `S_BlackArrowPrepareAttack` resolves the
+manual one-shot first and otherwise checks the selected Black Arrow autocast.
+It checks ability ownership, attackability, the authored target mask, and
+available mana; then consumes the one-shot marker and charges the alias's
+`Cost` **once**. A rejected or unaffordable empowered shot remains an ordinary
+attack. This works for the melee `ACbk` variant without requiring a ranged
+weapon. No Black Arrow damage is conferred simply by learning the ability.
+
+Ranged attacks select the ability's `MissileArt` at launch and override the
+base weapon `Missilespeed` only when an authored positive value exists. The
+stock `ANba` MPQ row uses `BlackArrowMissile.mdl` and speed 1050. The attack
+missile component persists the selected concrete ability alias and level,
+which are read at impact, even if autocast changes, mana runs out, or the
+Hero learns a new rank while the missile is airborne. It inherits the
+existing target-defense/armor-on-impact policy. Primary-hit resolution of
+ordinary, missile-splash and artillery weapons accepts the same snapshot;
+secondary splash damage never gains the Black Arrow bonus. One empowered
+attack cannot simultaneously acquire Searing/Cold autocast effects at impact.
+Existing Searing/Frost Arrow impact-selection behaviour remains outside this
+patch's scope.
+
+Until Patch 4's victim marker is implemented, Dark Minion creation still
+requires a lethal **Black Arrow hit**. Unlike the original implementation,
+an ordinary attack no longer creates skeletons merely because a toggle was
+active. Patch 4 will implement the short lived on-victim Black Arrow mark,
+corpse eligibility, and death from other causes while marked. No unverified
+conversion effect is synthesized by this patch.
+
+`attackMissile_t` gains `arrow_ability` and `arrow_level`, both serialized
+through the normal missile pool. The save format is bumped to 136 according to
+repository save-compatibility policy; older saves are rejected. New tests
+cover manual and autocast selection, authored cost and bonus, target masks,
+a surviving launch snapshot, missile visuals/speed, and missile-field
+round-tripping. Builds and test execution remain with the integrator.

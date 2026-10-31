@@ -172,17 +172,20 @@ void SV_Physics_Toss(edict_t *ent) {
                 edict_t *primary = ent->goalentity;
                 if (fixed_target && primary &&
                     (!primary->inuse || primary->spawn_time != cast->target_spawn_time)) primary = NULL;
-                S_ResolveArtilleryPointHit(attacker, primary, &impact, ent->damage, G_GetArtillery(ent));
+                S_ResolveArtilleryPointHitWithArrow(attacker, primary, &impact, ent->damage,
+                    G_GetArtillery(ent), ent->missile->arrow_ability, ent->missile->arrow_level);
             } else if (G_GetArtillery(ent)) {
                 /* Unit-target Missile Splash follows the victim, unlike fixed
                  * artillery. Its authored attack type and splash bands were
                  * captured on the projectile at the launch damage point. */
                 vec2_t const impact = ent->goalentity->s.origin2;
-                S_ResolveMissileSplashHit(attacker, ent->goalentity, &impact, ent->damage, G_GetArtillery(ent));
+                S_ResolveMissileSplashHitWithArrow(attacker, ent->goalentity, &impact, ent->damage,
+                    G_GetArtillery(ent), ent->missile->arrow_ability, ent->missile->arrow_level);
             } else {
                 int const damage = G_AttackDamageWithType(attacker, ent->goalentity, ent->damage,
                                                           ent->missile->attack_type);
-                S_ResolveAttackHit(attacker, ent->goalentity, damage);
+                S_ResolveAttackHitWithArrow(attacker, ent->goalentity, damage,
+                                             ent->missile->arrow_ability, ent->missile->arrow_level);
             }
             G_FreeEdict(ent);
         }

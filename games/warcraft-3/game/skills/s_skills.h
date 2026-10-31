@@ -489,9 +489,13 @@ uint32_t S_EnforceSummonedUnitTypeLimit(edict_t *caster, uint32_t unit_id, uint3
 bool S_UnitHasStatus(edict_t const *unit, uint32_t code);
 bool S_UnitPolymorphed(edict_t const *unit);
 void S_PolymorphRemove(edict_t *unit);
-int S_BlackArrowDamage(edict_t *attacker, int damage);
-void S_BlackArrowDeath(edict_t *attacker, edict_t *target);
+bool S_BlackArrowIssueOrder(edict_t *attacker, edict_t *target, uint32_t ability);
+bool S_BlackArrowPrepareAttack(edict_t *attacker, edict_t *target, uint32_t *ability, uint32_t *rank);
+int S_BlackArrowDamageForShot(uint32_t ability, uint32_t level, int damage);
+void S_BlackArrowDeathForShot(edict_t *attacker, edict_t *target, uint32_t ability, uint32_t level);
 void S_ResolveAttackHit(edict_t *attacker, edict_t *target, int damage);
+void S_ResolveAttackHitWithArrow(edict_t *attacker, edict_t *target, int damage,
+                                 uint32_t arrow_code, uint32_t arrow_level);
 /* Primary attack damage only; secondary/spell/retaliation damage must not Pillage. */
 void S_PillageOnAttackDamage(edict_t *attacker, edict_t *target, float health_removed);
 bool S_AttackHitAllowed(edict_t const *attacker, edict_t const *primary, edict_t const *target);
@@ -501,6 +505,10 @@ void S_ResolveArtilleryPointHit(edict_t *attacker, edict_t *primary, vec2_t cons
                                 struct artillery_s const *profile);
 void S_ResolveMissileSplashHit(edict_t *attacker, edict_t *primary, vec2_t const *impact, int raw_damage,
                                struct artillery_s const *profile);
+void S_ResolveMissileSplashHitWithArrow(edict_t *attacker, edict_t *primary, vec2_t const *impact, int raw_damage,
+                                        struct artillery_s const *profile, uint32_t arrow_code, uint32_t arrow_level);
+void S_ResolveArtilleryPointHitWithArrow(edict_t *attacker, edict_t *primary, vec2_t const *impact, int raw_damage,
+                                         struct artillery_s const *profile, uint32_t arrow_code, uint32_t arrow_level);
 bool S_OrderAttackGround(edict_t *unit, vec2_t const *point);
 void S_ReincarnationOnDeath(edict_t *unit);
 bool S_HumanCanAttack(edict_t const *unit);

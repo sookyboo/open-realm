@@ -88,6 +88,8 @@ typedef struct {
     uint32_t model;
     uint32_t damage;
     uint32_t attack_type;
+    uint32_t arrow_ability;
+    uint32_t arrow_level;
     unitAttack_t const *attack;
     uint32_t area_targets;
     /* Aline's researched follow-through is snapshotted only for normal
@@ -177,6 +179,8 @@ void fire_rocket(edict_t *ent, rocketDesc_t const *desc) {
     G_InitMissile(rocket);
     rocket->missile->attack_type = desc->attack_type;
     rocket->missile->owner_spawn_time = ent->spawn_time;
+    rocket->missile->arrow_ability = desc->arrow_ability;
+    rocket->missile->arrow_level = desc->arrow_level;
     if (desc->fixed_target) {
         rocket->aiflags |= AI_PROJECTILE_FIXED_TARGET;
         channel_t *cast = G_AddChannel(rocket);
@@ -540,15 +544,23 @@ bool S_AttackHitAllowed(edict_t const *attacker, edict_t const *primary, edict_t
            (!unit_hasstatusstate(target, WC3_STATUS_STATE_ETHEREAL) || attack_profile(attacker, primary)->type == ATK_MAGIC);
 }
 
-void S_ResolveAttackHit(edict_t *attacker, edict_t *target, int damage) {
-    if (!S_AttackHitAllowed(attacker, target, target)) return;
+void S_ResolveAttackHitWithArrow(edict_t *attacker, edict_t *target, int damage,
+                                 uint32_t arrow_code, uint32_t arrow_level) {
+    /* A missile can reach a corpse after another hit has killed its target.
+     * Such a hit must not produce a second Dark Minion. */
+    if (!attacker || !target || M_IsDead(target) ||
+        !S_AttackHitAllowed(attacker, target, target)) return;
     if (S_EvasionRoll(target)) return;
     { float const miss = S_CurseMissChance(attacker); if (miss > 0.0f && (float)(rand() % 100) < miss * 100.0f) return; }
     S_HumanBreakInvisibility(attacker);
     S_PermanentInvisibilityReveal(attacker);
-    damage = S_OrbAnnihilationDamage(attacker,
-        S_ColdArrowsDamage(attacker, target,
-            S_SearingArrowDamage(attacker, S_BlackArrowDamage(attacker, S_CriticalStrikeDamage(attacker, damage)))));
+    damage = S_CriticalStrikeDamage(attacker, damage);
+    damage = S_BlackArrowDamageForShot(arrow_code, arrow_level, damage);
+    /* Only one arrow modifier owns an empowered attack. A Black Arrow
+     * snapshot must not pick up a new Searing/Frost autocast mid-flight. */
+    if (!arrow_code)
+        damage = S_ColdArrowsDamage(attacker, target, S_SearingArrowDamage(attacker, damage));
+    damage = S_OrbAnnihilationDamage(attacker, damage);
     damage = (int)((float)damage * (1.0f + S_TrueshotAttackBonus(attacker) + S_CommandAuraAttackBonus(attacker) +
                                          S_WarDrumsAttackBonus(attacker) + S_RoarDamageBonus(attacker)
                                          + unit_status_modifier_total(attacker, WC3_STATUS_MOD_ATTACK_DAMAGE_PERCENT)
@@ -583,7 +595,7 @@ void S_ResolveAttackHit(edict_t *attacker, edict_t *target, int damage) {
                       Vector2_distance(&other->s.origin2, &target->s.origin2) <= radius)
             T_Damage(other, attacker, (int)MAX(1.0f, damage * fraction));
     } }
-    S_BlackArrowDeath(attacker, target);
+    S_BlackArrowDeathForShot(attacker, target, arrow_code, arrow_level);
     S_MoonGlaiveAttack(attacker, target, damage);
     S_SlowPoisonOnHit(attacker, target);
     S_OrbOnHit(attacker, target);
@@ -612,6 +624,10 @@ void S_ResolveAttackHit(edict_t *attacker, edict_t *target, int damage) {
                 S_SpellDamage(attacker, target, (int)barricades);
         }
     }
+}
+
+void S_ResolveAttackHit(edict_t *attacker, edict_t *target, int damage) {
+    S_ResolveAttackHitWithArrow(attacker, target, damage, 0, 0);
 }
 
 /* Target-compatible weapon data is shared by the damage roll and swarm
@@ -657,7 +673,8 @@ static bool artillery_splash_target_allowed(edict_t *attacker, edict_t *target, 
  * homing unit on arrival. Both use the authored rings and only the primary
  * victim receives attack-hit listeners. */
 static void resolve_splash_point_hit(edict_t *attacker, edict_t *primary, vec2_t const *impact, int raw_damage,
-                                     struct artillery_s const *profile, bool missile_splash) {
+                                     struct artillery_s const *profile, bool missile_splash,
+                                     uint32_t arrow_code, uint32_t arrow_level) {
     float max_radius;
     bool primary_hit = false;
 
@@ -683,21 +700,21 @@ static void resolve_splash_point_hit(edict_t *attacker, edict_t *primary, vec2_t
         damage = attack_damage_type(attacker, other, (int)MAX(1.0f, (float)raw_damage * factor), profile->attack_type);
         if (other == primary) {
             primary_hit = true;
-            S_ResolveAttackHit(attacker, other, damage);
+            S_ResolveAttackHitWithArrow(attacker, other, damage, arrow_code, arrow_level);
         } else {
             T_Damage(other, attacker, damage);
         }
     }
     if (missile_splash && !primary_hit && primary && primary->inuse && primary != attacker && !M_IsDead(primary)) {
         int const damage = attack_damage_type(attacker, primary, raw_damage, profile->attack_type);
-        S_ResolveAttackHit(attacker, primary, damage);
+        S_ResolveAttackHitWithArrow(attacker, primary, damage, arrow_code, arrow_level);
     }
     /* A direct, researched tree attack is legal even if the weapon's splash
      * target mask omits TREE. Follow-through never damages trees. */
     if (!primary_hit && primary && G_DestructableIsAttackable(primary) &&
         primary->targtype == TARG_TREE && profile->tree_attack_allowed) {
-        S_ResolveAttackHit(attacker, primary,
-            attack_damage_type(attacker, primary, raw_damage, profile->attack_type));
+        S_ResolveAttackHitWithArrow(attacker, primary,
+            attack_damage_type(attacker, primary, raw_damage, profile->attack_type), arrow_code, arrow_level);
     }
     /* Impaling Bolt is a separate band extending *behind* the original unit
      * target, along the projectile's captured launch direction. Do not apply
@@ -729,12 +746,24 @@ static void resolve_splash_point_hit(edict_t *attacker, edict_t *primary, vec2_t
 
 void S_ResolveArtilleryPointHit(edict_t *attacker, edict_t *primary, vec2_t const *impact, int raw_damage,
                                 struct artillery_s const *profile) {
-    resolve_splash_point_hit(attacker, primary, impact, raw_damage, profile, false);
+    resolve_splash_point_hit(attacker, primary, impact, raw_damage, profile, false, 0, 0);
+}
+
+void S_ResolveArtilleryPointHitWithArrow(edict_t *attacker, edict_t *primary, vec2_t const *impact,
+                                        int raw_damage, struct artillery_s const *profile,
+                                        uint32_t arrow_code, uint32_t arrow_level) {
+    resolve_splash_point_hit(attacker, primary, impact, raw_damage, profile, false, arrow_code, arrow_level);
 }
 
 void S_ResolveMissileSplashHit(edict_t *attacker, edict_t *primary, vec2_t const *impact, int raw_damage,
                                struct artillery_s const *profile) {
-    resolve_splash_point_hit(attacker, primary, impact, raw_damage, profile, true);
+    resolve_splash_point_hit(attacker, primary, impact, raw_damage, profile, true, 0, 0);
+}
+
+void S_ResolveMissileSplashHitWithArrow(edict_t *attacker, edict_t *primary, vec2_t const *impact,
+                                       int raw_damage, struct artillery_s const *profile,
+                                       uint32_t arrow_code, uint32_t arrow_level) {
+    resolve_splash_point_hit(attacker, primary, impact, raw_damage, profile, true, arrow_code, arrow_level);
 }
 
 void S_ResolveArtilleryHit(edict_t *attacker, edict_t *target, int raw_damage) {
@@ -776,7 +805,10 @@ static void damage_target(edict_t *ent) {
     umove_t const *move = ent->currentmove;
     edict_t *target = ent->goalentity;
     attack_set_backswing_deadline(ent);
-    S_ResolveAttackHit(ent, ent->goalentity, G_AttackDamage(ent, ent->goalentity, ai_rolldamage1(ent, 1)));
+    uint32_t arrow_code = 0, arrow_level = 0;
+    S_BlackArrowPrepareAttack(ent, target, &arrow_code, &arrow_level);
+    S_ResolveAttackHitWithArrow(ent, target,
+        G_AttackDamage(ent, target, ai_rolldamage1(ent, 1)), arrow_code, arrow_level);
     /* Count committed weapon swings, not issued orders or approach frames.
      * Damage (including the final Siege strike) has been resolved before the
      * club expires and changes the effective profile. */
@@ -808,14 +840,28 @@ static void throw_missile(edict_t *ent) {
     M_GetEntityMatrix(&ent->s, &matrix);
     vec3_t origin = Matrix4_multiply_vector3(&matrix, &atk->origin);
     vec2_t impact = other->s.origin2;
-    cstring_t missile_art = S_SearingArrowsMissileArt(ent);
+    uint32_t arrow_code = 0, arrow_level = 0;
+    cstring_t missile_art;
+    float missile_speed = atk->projectile.speed;
+    S_BlackArrowPrepareAttack(ent, other, &arrow_code, &arrow_level);
+    missile_art = arrow_code ? G_AbilityEffectArt(arrow_code, WC3_EFFECT_MISSILE, 0) :
+                               S_SearingArrowsMissileArt(ent);
+    if (arrow_code) {
+        /* The authored Black Arrow ability overrides the normal ranged
+         * projectile speed when configured, without mutating weapon data. */
+        cstring_t const speed_text = S_SpellString(arrow_code, "Missilespeed", 0);
+        float const configured = speed_text ? (float)atof(speed_text) : 0.0f;
+        if (isfinite(configured) && configured > 0.0f) missile_speed = configured;
+    }
     attack_set_backswing_deadline(ent);
     fire_rocket(ent, &(rocketDesc_t) {
         .start = origin,
         .target = other,
         .fixed_target = (atk->weapon == WPN_ARTILLERY || atk->weapon == WPN_ALINE) ? &impact : NULL,
-        .speed = atk->projectile.speed,
+        .speed = missile_speed,
         .model = missile_art ? G_RegisterModel(missile_art) : atk->projectile.model,
+        .arrow_ability = arrow_code,
+        .arrow_level = arrow_level,
         .damage = damage,
         .attack_type = atk->type,
         .attack = atk,

@@ -2338,6 +2338,8 @@ typedef struct {
 typedef struct {
     uint32_t attack_type;
     uint32_t owner_spawn_time;
+    uint32_t arrow_ability; /* empowered shot's concrete alias; 0 for ordinary attacks */
+    uint32_t arrow_level; /* launch-time rank, unaffected by later learning/toggles */
     bool reflected;
 } attackMissile_t;
 

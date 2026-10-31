@@ -165,7 +165,7 @@ static uint32_t const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
 /* Version 133 persists Impale airborne vulnerability and interruptibility. */
 /* Version 134 persists Locust target attack deadlines and return damage credit. */
 /* Version 135 persists Locust expiry recall phase, deadline and caster cancellation. */
-static uint32_t const save_version = 135;
+static uint32_t const save_version = 136;
 #define SAVE_STREAM_BUFFER (1u << 20) // bytes; save files are several MB of field writes, so a large stdio buffer avoids per-4 KB syscalls
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
@@ -1097,6 +1097,8 @@ static field_t const inventory_fields[] = {
 static field_t const missile_fields[] = {
     TF(attackMissile_t, attack_type, F_INT),
     TF(attackMissile_t, owner_spawn_time, F_INT),
+    TF(attackMissile_t, arrow_ability, F_INT),
+    TF(attackMissile_t, arrow_level, F_INT),
     TF(attackMissile_t, reflected, F_INT),
     { NULL, 0, 0, 0, 0, 0 }
 };
@@ -3548,6 +3550,8 @@ TEST(wc3_save, all_sparse_pools_restore_records_and_entity_references) {
     unit->harvest->lumber = 19;
     unit->inventory->slots[2] = target;
     unit->missile->attack_type = ATK_PIERCE;
+    unit->missile->arrow_ability = MAKEFOURCC('A','N','b','a');
+    unit->missile->arrow_level = 3;
     unit->missile->reflected = true;
     unit->sound->owner_pending = 17;
     G_GetConstruction(unit)->progress = 13.5f;
@@ -3619,6 +3623,8 @@ TEST(wc3_save, all_sparse_pools_restore_records_and_entity_references) {
     T_EQ(unit->harvest->lumber, 19);
     T_ASSERT(G_InventoryItem(unit, 2) == target);
     T_EQ(unit->missile->attack_type, ATK_PIERCE);
+    T_EQ(unit->missile->arrow_ability, MAKEFOURCC('A','N','b','a'));
+    T_EQ(unit->missile->arrow_level, 3u);
     T_ASSERT(unit->missile->reflected);
     T_EQ(unit->sound->owner_pending, 17);
     T_ASSERT(G_GetConstruction(unit));

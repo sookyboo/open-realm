@@ -208,7 +208,7 @@ static ability_t abilitylist[] = {
     { "ANdb", CAbilityDrunkenBrawler, AB_PASSIVE },  /* Drunken Brawler */
     { "ANdh", CAbilityDrunkenHaze, AB_SPELL, SPELL_TARGET_UNIT },  /* Drunken Haze */
     { "ANsi", CAbilitySilence, AB_SPELL, SPELL_TARGET_POINT },  /* Silence */
-    { "ANba", CAbilityBlackArrow, AB_SPELL | AB_TOGGLE | AB_AUTOCAST },  /* Black Arrow */
+    { "ANba", CAbilityBlackArrow, AB_SPELL | AB_TOGGLE | AB_AUTOCAST, SPELL_TARGET_UNIT },  /* Black Arrow */
     { "ANch", CAbilityCharm, AB_SPELL, SPELL_TARGET_UNIT },  /* Charm */
     { "ANto", CAbilityTornado, AB_SPELL | AB_CHANNEL, SPELL_TARGET_POINT },  /* Tornado */
     { "Abgm", CAbilityBlightedGoldMine, 0 },  /* Blighted Gold Mine Ability */
