@@ -11194,30 +11194,43 @@ TEST(wc3_spell, destroyer_absorb_mana_is_an_active_friendly_unit_spell) {
 
 TEST(wc3_spell, obsidian_statue_spirit_touch_jass_autocast_orders_toggle_state) {
     const char slk[] =
-        "ID;PWXL;N;EBB;Y2;X2\n"
+        "ID;PWXL;N;EBB;Y3;X2\n"
         "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\n"
-        "C;Y2;X1;K\"Arpm\"\nC;Y2;X2;K\"Arpm\"\nE\n";
-    uint32_t const code = MAKEFOURCC('A','r','p','m');
+        "C;Y2;X1;K\"Arpm\"\nC;Y2;X2;K\"Arpm\"\n"
+        "C;Y3;X1;K\"Arpl\"\nC;Y3;X2;K\"Arpl\"\nE\n";
+    uint32_t const mana_code = MAKEFOURCC('A','r','p','m');
+    uint32_t const life_code = MAKEFOURCC('A','r','p','l');
     slkTestData_t *rows, *old;
-    ability_t const *on = FindAbilityByOrder("replenishmanaon");
-    ability_t const *off = FindAbilityByOrder("replenishmanaoff");
+    ability_t const *mana_on = FindAbilityByOrder("replenishmanaon");
+    ability_t const *mana_off = FindAbilityByOrder("replenishmanaoff");
+    ability_t const *life_on = FindAbilityByOrder("replenishlifeon");
+    ability_t const *life_off = FindAbilityByOrder("replenishlifeoff");
     edict_t *statue;
 
-    T_NOT_NULL(on);
-    T_NOT_NULL(off);
-    if (!on || !off) return;
-    T_EQ(on->proc, CAbilityReplenishMana);
-    T_EQ(off->proc, CAbilityReplenishMana);
+    T_NOT_NULL(mana_on); T_NOT_NULL(mana_off);
+    T_NOT_NULL(life_on); T_NOT_NULL(life_off);
+    if (!mana_on || !mana_off || !life_on || !life_off) return;
+    T_EQ(mana_on->proc, CAbilityReplenishMana);
+    T_EQ(mana_off->proc, CAbilityReplenishMana);
+    T_EQ(life_on->proc, CAbilityReplenishLife);
+    T_EQ(life_off->proc, CAbilityReplenishLife);
     reset_entities(); setup_test_world();
     rows = parse_slk_string(slk); old = G_SetSLKRows("AbilityData", rows);
     statue = alloc_test_unit(MAKEFOURCC('u','o','b','s'), 0, 0);
-    T_ASSERT(G_ActorAddSkill(statue, code));
+    T_ASSERT(G_ActorAddSkill(statue, mana_code));
+    T_ASSERT(G_ActorAddSkill(statue, life_code));
     T_ASSERT(unit_issueimmediateorder(statue, "replenishmanaon"));
-    T_EQ(statue->unit_state->autocast, code);
-    T_ASSERT(G_UnitAutocastIsOn(statue, code));
+    T_EQ(statue->unit_state->autocast, mana_code);
+    T_ASSERT(G_UnitAutocastIsOn(statue, mana_code));
     T_ASSERT(unit_issueimmediateorder(statue, "replenishmanaoff"));
     T_EQ(statue->unit_state->autocast, 0u);
-    T_ASSERT(!G_UnitAutocastIsOn(statue, code));
+    T_ASSERT(!G_UnitAutocastIsOn(statue, mana_code));
+    T_ASSERT(unit_issueimmediateorder(statue, "replenishlifeon"));
+    T_EQ(statue->unit_state->autocast, life_code);
+    T_ASSERT(G_UnitAutocastIsOn(statue, life_code));
+    T_ASSERT(unit_issueimmediateorder(statue, "replenishlifeoff"));
+    T_EQ(statue->unit_state->autocast, 0u);
+    T_ASSERT(!G_UnitAutocastIsOn(statue, life_code));
     G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
 }
 #endif /* BZ_TESTS */

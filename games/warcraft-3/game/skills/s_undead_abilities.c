@@ -213,6 +213,11 @@ BZ_ABILITY_PROC(CAbilityReplenishLife) {
     case A_AUTOCAST_ON: return ent && ent->unit_state && ent->unit_state->autocast == code;
     case A_AUTOCAST_SET: return true;
     case A_AUTOCAST_ACQUIRE: return undead_area_autocast_acquire(ent, code, true);
+    case A_ORDER:
+        if (!code || !call || !call->order) return false;
+        if (!strcmp(call->order, "replenishlifeon")) return G_SetUnitAutocast(ent, code, true);
+        if (!strcmp(call->order, "replenishlifeoff")) return G_SetUnitAutocast(ent, code, false);
+        return false;
     default: return CAbilitySimpleSpell(ent, msg, call);
     }
 }
