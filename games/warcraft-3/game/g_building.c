@@ -442,6 +442,23 @@ static bool G_UnitAbilityResearchState(edict_t const *unit, uint32_t ability_id,
         return researchable && G_GetPlayerTechResearchedLevel(
             bear_owner, MAKEFOURCC('R','e','e','b')) >= 1;
     }
+    /* Exhume Corpses is a Meat Wagon passive unlocked by Ruex. The stock
+     * Wagon upgrade list does not include Ruex, so resolve this research
+     * directly instead of letting the passive run as soon as Aexh is present. */
+    if (ability_id == MAKEFOURCC('A','e','x','h')) {
+        int32_t maximum;
+        if (!unit) {
+            if (visible) *visible = false;
+            return false;
+        }
+        owner = G_GetPlayerClientByNumber(unit->s.player);
+        if (!owner || owner->ps.number != unit->s.player) return false;
+        maximum = G_GetPlayerTechMaxAllowed(owner, MAKEFOURCC('R','u','e','x'));
+        researchable = maximum < 0 || maximum >= 1;
+        if (visible) *visible = researchable;
+        return researchable && G_GetPlayerTechResearchedLevel(
+            owner, MAKEFOURCC('R','u','e','x')) >= 1;
+    }
     if (!unit || !ability_id || !unit->data.UnitBalance) return true;
     ability = G_AbilityData(ability_id);
     if (!ability || ability->id != ability_id) return true;
