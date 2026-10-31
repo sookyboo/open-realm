@@ -100,6 +100,13 @@ static bool undead_replenish_eligible(edict_t *caster, edict_t *target, uint32_t
     if (!caster || !target || !S_SpellIsAliveTarget(target) ||
         !S_SpellIsFriend(caster, target) ||
         !S_SpellAllowsAreaTarget(code, caster, target)) return false;
+    /* The recipient buff gates overlapping pulses from different Statues.
+     * This uses normal timed status persistence, including save/load, rather
+     * than a per-frame static cache that would desynchronize after loading. */
+    {
+        cstring_t buff = S_SpellBuffId(code, S_SpellLevel(caster, code));
+        if (buff && strlen(buff) >= 4 && unit_findstatus(target, FS_SLKKey(buff))) return false;
+    }
     return health ? target->health.value < target->health.max_value :
         (target->mana.max_value > 0.0f && target->mana.value < target->mana.max_value);
 }
@@ -165,15 +172,27 @@ BZ_ABILITY_PROC(CAbilityReplenish) {
 
 static void undead_replenish_execute(edict_t *caster, abilityitem_t const *spell, bool health) {
     uint32_t level, recipients = 0;
-    float area, amount;
+    float area, amount, cost;
+    cstring_t buff;
     if (!caster || !spell) return;
     level = S_SpellLevel(caster, spell->code);
     area = undead_replenish_radius(caster, spell->code);
     amount = S_SpellData(spell->code, level, health ? 1 : 2);
+    cost = MAX(0.0f, S_SpellNumber(spell->code, ABILITY_NUMBER_COST, level));
+    buff = S_SpellBuffId(spell->code, level);
     if (amount <= 0.0f) return;
     FILTER_EDICTS(target, undead_replenish_eligible(caster, target, spell->code, health) &&
                   Vector2_distance(&target->s.origin2, &caster->s.origin2) <= area) {
+        float duration;
         if (recipients >= OBSIDIAN_REPLENISH_MAX_TARGETS) break;
+        /* The first recipient's base cost has already been charged by the
+         * shared spell commit. Charge recipients 2–5 here; the sixth is free. */
+        if (recipients > 0 && recipients < 5 && caster->mana.value < cost) break;
+        duration = S_SpellDuration(spell->code, level, false);
+        if (buff && strlen(buff) >= 4 &&
+            !S_SpellApplyTimedTargetStatus(target, spell->code, level, buff,
+                                          duration > 0.0f ? duration : 1.0f)) continue;
+        if (recipients > 0 && recipients < 5) caster->mana.value -= cost;
         if (health) S_SpellHeal(target, amount);
         else target->mana.value = MIN(target->mana.max_value, target->mana.value + amount);
         recipients++;
