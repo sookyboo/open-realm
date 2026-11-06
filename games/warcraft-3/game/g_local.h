@@ -3747,6 +3747,7 @@ void G_ActivateIdleWorkerShortcut(edict_t *clent, uint32_t hinted_number);
 void G_UpdateClientUnitShortcuts(void);
 void UI_WriteUnitShortcutLayer(edict_t *ent);
 void UI_AddCancelButton(edict_t *);
+void UI_SetGamepadBuildMenu(bool active);
 void UI_WriteCommandButtonFrame(gameCommandButton_t const *button);
 void UI_AddCommandButton(cstring_t);
 void UI_AddCommandButtonExtended(cstring_t code, bool research, uint32_t level);
