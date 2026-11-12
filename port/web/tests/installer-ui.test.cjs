@@ -45,7 +45,7 @@ function harness({storage = true, session = new Map()} = {}) {
   let worker;
   class Worker {
     constructor(url) {
-      assert.equal(url, 'install-worker.js');
+      assert.equal(url, 'install-worker.js?v=20261112-custom-maps');
       worker = this;
       this.messages = [];
     }
@@ -80,7 +80,7 @@ test('both browser pages expose ISO/mixed selection and detected archive list', 
     assert.match(html, /id="game-files"[^>]*accept="\.iso,\.mpq,\.w3m,\.w3x"[^>]*multiple/);
     for (const id of ['selection-summary', 'discovered-files', 'archive-list', 'data-status', 'installation-edition'])
       assert.ok(html.includes(`id="${id}"`), `${name}: missing ${id}`);
-    assert.match(html, /<script src="installer\.js"><\/script>/);
+    assert.match(html, /<script src="installer\.js\?v=20261112-custom-maps"><\/script>/);
   }
 });
 
