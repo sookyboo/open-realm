@@ -44,7 +44,7 @@
     const busy = value !== null;
     fileInput.disabled = busy;
     if (mapInput) mapInput.disabled = busy;
-    if (addMaps) addMaps.disabled = busy || !playable || !mapInput.files.length;
+    if (addMaps) addMaps.disabled = busy || !mapInput.files.length;
     install.disabled = busy;
     install.classList.toggle('has-selection', value !== 'import' && !!(fileInput.files && fileInput.files.length));
     cancel.disabled = value !== 'import' && value !== 'add-maps';
@@ -57,7 +57,7 @@
         file.name.toLowerCase() === 'war3.mpq') &&
       (manifest.edition === undefined || manifest.edition === 'retail' || manifest.edition === 'demo'));
     if (mapInput) mapInput.disabled = operation !== null;
-    if (addMaps) addMaps.disabled = operation !== null || !playable || !mapInput.files.length;
+    if (addMaps) addMaps.disabled = operation !== null || !mapInput.files.length;
     if (play) {
       play.hidden = !playable;
       play.disabled = operation !== null || !playable;
@@ -177,10 +177,10 @@
   };
   fileInput.addEventListener('change', showSelection);
   if (mapInput) mapInput.addEventListener('change', () => {
-    if (addMaps) addMaps.disabled = operation !== null || !playable || !mapInput.files.length;
+    if (addMaps) addMaps.disabled = operation !== null || !mapInput.files.length;
   });
   if (addMaps) addMaps.addEventListener('click', () => {
-    if (operation || !playable || !mapInput.files.length) return;
+    if (operation || !mapInput.files.length) return;
     warnings = [];
     clearDiscovery();
     progress.removeAttribute('value');
