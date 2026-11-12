@@ -373,7 +373,7 @@ void NET_Shutdown(void) {
 
 bool NET_StringToAdr(cstring_t s, unsigned short default_port, netadr_t *adr) {
     if (!s || !adr) return false;
-    if (!strncmp(s, "eos:", 4)) {
+    if (!strncmp(s, "eos:", 4) || !strncmp(s, "rtc:", 4)) {
         if (strlen(s + 4) != 32) return false;
         memset(adr, 0, sizeof(*adr));
         for (uint32_t i = 0; i < 32; i++) {
@@ -381,7 +381,7 @@ bool NET_StringToAdr(cstring_t s, unsigned short default_port, netadr_t *adr) {
             if (!isxdigit(c)) return false;
             adr->peer[i] = (char)tolower(c);
         }
-        adr->type = NA_EOS;
+        adr->type = s[0] == 'e' ? NA_EOS : NA_WEBRTC;
         return true;
     }
     char host[256];
@@ -431,8 +431,8 @@ cstring_t NET_AdrToString(netadr_t const *adr) {
         snprintf(out, sizeof(buffers[0]), "loopback");
         return out;
     }
-    if (adr->type == NA_EOS) {
-        snprintf(out, sizeof(buffers[0]), "eos:%s", adr->peer);
+    if (NET_IsOnlineAddress(adr->type)) {
+        snprintf(out, sizeof(buffers[0]), "%s:%s", adr->type == NA_EOS ? "eos" : "rtc", adr->peer);
         return out;
     }
     inet_ntop(AF_INET, adr->ip, host, sizeof(host));
@@ -445,7 +445,7 @@ bool NET_CompareAdr(netadr_t const *a, netadr_t const *b) {
     switch (a->type) {
     case NA_LOOPBACK: return true;
     case NA_IP: case NA_BROADCAST: return !memcmp(a->ip, b->ip, sizeof(a->ip)) && a->port == b->port;
-    case NA_EOS: return !strcmp(a->peer, b->peer);
+    case NA_EOS: case NA_WEBRTC: return !strcmp(a->peer, b->peer);
     default: return false;
     }
 }
@@ -468,6 +468,7 @@ void NET_SendPacket(NETSOURCE netsrc, int length, void const *data, netadr_t to)
         NET_SendLoopPacket(netsrc, length, data);
         break;
     case NA_EOS:
+    case NA_WEBRTC:
         Online_Send(netsrc, length, data, &to);
         break;
     case NA_IP:
@@ -665,3 +666,23 @@ void Netchan_OutOfBandPrint(NETSOURCE netsrc, netadr_t adr, cstring_t format, ..
     string[sizeof(string) - 1] = '\0';
     Netchan_OutOfBand(netsrc, adr, (uint32_t)strlen(string), (uint8_t *)string);
 }
+
+#ifdef BZ_TESTS
+#include "shared/test.h"
+TEST(net_address, browser_peer_addresses_are_distinct_from_eos_and_udp) {
+    netadr_t rtc, rtc2, eos, ip;
+    T_ASSERT(NET_StringToAdr("rtc:0123456789ABCDEF0123456789ABCDEF", 0, &rtc));
+    T_ASSERT(NET_StringToAdr("rtc:0123456789abcdef0123456789abcdef", 0, &rtc2));
+    T_ASSERT(NET_StringToAdr("eos:0123456789abcdef0123456789abcdef", 0, &eos));
+    T_ASSERT(NET_StringToAdr("127.0.0.1:27910", 0, &ip));
+    T_EQ(rtc.type, NA_WEBRTC);
+    T_ASSERT(NET_IsOnlineAddress(rtc.type));
+    T_ASSERT(NET_IsOnlineAddress(eos.type));
+    T_ASSERT(!NET_IsOnlineAddress(ip.type));
+    T_ASSERT(NET_CompareAdr(&rtc, &rtc2));
+    T_ASSERT(!NET_CompareAdr(&rtc, &eos));
+    T_STREQ(NET_AdrToString(&rtc), "rtc:0123456789abcdef0123456789abcdef");
+    T_ASSERT(!NET_StringToAdr("rtc:123", 0, &rtc));
+    T_ASSERT(!NET_StringToAdr("rtc:0123456789abcdef0123456789abcdeg", 0, &rtc));
+}
+#endif

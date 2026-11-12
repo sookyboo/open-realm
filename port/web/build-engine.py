@@ -43,6 +43,8 @@ def main():
     parser.add_argument("--check", action="store_true", help="validate/generate sources without invoking Emscripten")
     parser.add_argument("--debug", action="store_true",
                         help="build an unoptimized, DWARF-symbolized browser engine for runtime failures")
+    parser.add_argument("--web-multiplayer", action="store_true",
+                        help="include experimental browser WebRTC Internet multiplayer")
     parser.add_argument("--compat-workarounds", type=int, choices=(0, 1), default=1,
                         help="enable compatibility workarounds (default: 1)")
     args = parser.parse_args()
@@ -109,6 +111,8 @@ def main():
              "-DBZ_GL_ES3", "-DBZ_MSAA_SAMPLES=0",
              "-DBZ_COMPAT_WORKAROUNDS=" + str(args.compat_workarounds),
              "-sUSE_SDL=2", "-sUSE_ZLIB=1", "-pthread"]
+    if args.web_multiplayer:
+        flags.append("-DBZ_WEB_MULTIPLAYER=1")
     objects = []
     for name, files in module_sources.items():
         unit = out / (name + "_unity.c")
@@ -142,9 +146,21 @@ def main():
     if not (ROOT / "renderer/conchars_sysfont.h").exists():
         raise SystemExit("renderer/conchars_sysfont.h missing; run native `make font` first")
     if args.check:
+        if args.web_multiplayer and not (ROOT / "port/web/site/web-multiplayer.js").is_file():
+            raise SystemExit("missing browser WebRTC frontend")
         print("Source validation complete; generated unity files in", out)
         return
     shell = ROOT / "port/web/site/engine-shell.html"
+    if args.web_multiplayer:
+        # Only the flagged build loads signalling and WebRTC. The normal web
+        # output has neither the script nor Internet-service dependencies.
+        shell = out / "engine-shell-multiplayer.html"
+        template = (ROOT / "port/web/site/engine-shell.html").read_text(encoding="utf-8")
+        marker = '<script src="pages-isolation.js"></script>'
+        if template.count(marker) != 1:
+            raise SystemExit("browser multiplayer injection point changed")
+        shell.write_text(template.replace(marker,
+            '<script src="web-multiplayer.js"></script>\n' + marker), encoding="utf-8")
     run([emcc, *objects, optimization, *debug_flags, "-sUSE_SDL=2", "-sUSE_ZLIB=1",
          "-sMIN_WEBGL_VERSION=2", "-sMAX_WEBGL_VERSION=2", "-sFULL_ES3=1",
          "-sWASMFS=1", "-pthread", "-sPROXY_TO_PTHREAD=1", "-sPTHREAD_POOL_SIZE=2",
@@ -167,6 +183,8 @@ def main():
          "-o", out / "index.html"])
     for name in ("browser-keyboard.js", "browser-gamepad.js", "game-shortcut-menus.js", "fullscreen-controls.js", "early-map-loading.js", "installer.js", "install-worker.js", "iso9660.js", "setup-mpq.js", "mpq-header.js", "filesystem-bridge.js", "audio-worklet.js", "ios-audio-session.js"):
         shutil.copy2(ROOT / "port/web/site" / name, out / name)
+    if args.web_multiplayer:
+        shutil.copy2(ROOT / "port/web/site/web-multiplayer.js", out / "web-multiplayer.js")
     shutil.copy2(ROOT / "port/web/site/fullscreen-resize.js", out / "fullscreen-resize.js")
     shutil.copy2(ROOT / "port/web/site/ios-home-screen.js", out / "ios-home-screen.js")
     shutil.copy2(ROOT / "port/web/site/manifest.webmanifest", out / "manifest.webmanifest")

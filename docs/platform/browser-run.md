@@ -193,3 +193,15 @@ application when reliability or performance matters.
 For implementation details, see [Browser platform](browser.md),
 [Browser filesystem](browser-filesystem.md), and
 [Browser ISO import](browser-iso9660.md).
+
+## Optional browser multiplayer
+
+The web build can optionally include experimental, browser-hosted WebRTC
+Internet games:
+
+```sh
+make web-warcraft3-engine WEB_MULTIPLAYER=1
+```
+
+See [Browser multiplayer](browser-multiplayer.md) for room codes, browser
+requirements, native EOS separation and deployment limitations.

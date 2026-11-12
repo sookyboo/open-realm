@@ -2,6 +2,7 @@
 # This target intentionally does not claim that the native engine links to WASM.
 EMCC ?= emcc
 WEB_BUILD_DIR ?= build/web
+WEB_MULTIPLAYER ?= 0
 WEB_PROBE_SRC := port/web/src/web_probe.c
 WEB_PROBE_HTML := $(WEB_BUILD_DIR)/index.html
 
@@ -30,9 +31,9 @@ web-warcraft3-engine-check:
 # a standalone graphics probe; this target compiles the real source modules.
 .PHONY: web-warcraft3-engine
 web-warcraft3-engine:
-	python3 port/web/build-engine.py --emcc $(EMCC) --compat-workarounds $(COMPAT_WORKAROUNDS) --out $(WEB_BUILD_DIR)/engine
+	python3 port/web/build-engine.py --emcc $(EMCC) --compat-workarounds $(COMPAT_WORKAROUNDS) $(if $(filter 1,$(WEB_MULTIPLAYER)),--web-multiplayer,) --out $(WEB_BUILD_DIR)/engine
 
 # Patch 10: non-compiling source-layout preflight. Useful before installing emsdk.
 .PHONY: web-warcraft3-preflight
 web-warcraft3-preflight:
-	python3 port/web/build-engine.py --check --out $(WEB_BUILD_DIR)/engine
+	python3 port/web/build-engine.py --check $(if $(filter 1,$(WEB_MULTIPLAYER)),--web-multiplayer,) --out $(WEB_BUILD_DIR)/engine

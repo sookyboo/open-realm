@@ -337,8 +337,8 @@ void SV_DirectConnect(netadr_t const *from, cstring_t userinfo) {
         Netchan_OutOfBandPrint(NS_SERVER, existing->netchan.remote_address, "client_connect %d", BZ_PROTOCOL_VERSION);
         return;
     }
-    if ((Cvar_Integer("online_mode", 0) && from->type != NA_EOS && from->type != NA_LOOPBACK) ||
-        (from->type == NA_EOS && sv.state != ss_lobby)) {
+    if ((Cvar_Integer("online_mode", 0) && !NET_IsOnlineAddress(from->type) && from->type != NA_LOOPBACK) ||
+        (NET_IsOnlineAddress(from->type) && sv.state != ss_lobby)) {
         fprintf(stderr, "SV_DirectConnect: Internet games admit lobby members before match start\n");
         return;
     }

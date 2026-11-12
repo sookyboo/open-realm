@@ -13,9 +13,13 @@
 
 #include "../shared/shared.h"
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #define strcasecmp _stricmp
 #define strncasecmp _strnicmp
+#endif
+
+/* Emscripten's libc does not expose the BSD/GNU strcasestr extension. */
+#if defined(_WIN32) || defined(__EMSCRIPTEN__)
 static inline char const *bz_strcasestr(char const *haystack, char const *needle) {
     size_t needle_len = strlen(needle);
     if (!needle_len) return haystack;

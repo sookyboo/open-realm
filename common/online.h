@@ -7,7 +7,7 @@ typedef struct {
     uint32_t players, maxPlayers, speed, slots;
 } onlineGame_t;
 
-#ifdef BZ_EOS
+#if defined(BZ_EOS) || defined(BZ_WEB_MULTIPLAYER)
 #ifdef BZ_TESTS
 void Online_Acceptance_f(void);
 #endif
@@ -34,7 +34,7 @@ int Online_Receive(NETSOURCE source, netadr_t *from, sizeBuf_t *message);
 static inline bool Online_Begin(void) { return false; }
 static inline void Online_Frame(uint32_t msec) { (void)msec; }
 static inline void Online_Shutdown(void) {}
-static inline cstring_t Online_Status(void) { return "Internet play requires an EOS-enabled build."; }
+static inline cstring_t Online_Status(void) { return "Internet play requires an online-enabled build."; }
 static inline bool Online_Ready(void) { return false; }
 static inline bool Online_IsHost(void) { return false; }
 static inline bool Online_HostReady(void) { return false; }

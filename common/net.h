@@ -26,6 +26,7 @@ typedef enum {
     NA_BROADCAST,
     NA_IP,
     NA_EOS,
+    NA_WEBRTC, /* browser peer identity; reliable/ordered DataChannel */
     NA_IPX,
     NA_BROADCAST_IPX
 } netadrtype_t;
@@ -47,11 +48,15 @@ typedef struct {
     uint8_t ip[4];
     uint8_t ipx[10];
     unsigned short port;        // stored in network byte order
-    char peer[33];              // EOS Product User ID, lowercase hex; never an IP alias
+    char peer[33];              // EOS PUID or WebRTC peer ID (32 lowercase hex characters)
 } netadr_t;
 
 #define NETCHAN_HEADER_SIZE 8 // bytes; sequence word then acknowledge word, on sequenced (NA_IP) packets only
 #define NETCHAN_RELIABLE_MAX (16 * 1024) // bytes; one reliable message in flight plus one being built
+
+static inline bool NET_IsOnlineAddress(netadrtype_t type) {
+    return type == NA_EOS || type == NA_WEBRTC;
+}
 
 /* Quake 2 netchan. message is the unreliable stream (frames, sounds, layouts): sent once, never resent. reliable
  * is the reliable stream (live configstrings, a client's "nodelta"): resent until the peer acknowledges it. Only

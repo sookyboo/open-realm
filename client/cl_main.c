@@ -228,7 +228,7 @@ static void CL_DisconnectInternal(cstring_t reason, bool notify, bool queue_menu
 
     CL_SendDisconnect();
 
-    if (cls.netchan.remote_address.type == NA_EOS) Online_Leave();
+    if (NET_IsOnlineAddress(cls.netchan.remote_address.type)) Online_Leave();
     CL_ClearState();
     cls.state = ca_disconnected;
     cl_last_packet_time = 0;
@@ -498,7 +498,7 @@ static bool CL_OnlineGame(uint32_t index, menuLanGame_t *out) {
 
 static void CL_OnlineLeave(void) {
     bool const host = Online_IsHost();
-    if (host || cls.netchan.remote_address.type == NA_EOS)
+    if (host || NET_IsOnlineAddress(cls.netchan.remote_address.type))
         CL_DisconnectInternal("Left Internet room.", false, false);
     if (host) SV_Shutdown();
     Online_Leave();
@@ -1341,7 +1341,7 @@ TEST(client_session, connection_reply_restarts_sequenced_netchan) {
 #endif
 
 static void CL_ReadPacketMessage(netadr_t const *from, sizeBuf_t *msg, int length) {
-    if ((from->type == NA_EOS || (cls.state != ca_disconnected && cls.netchan.remote_address.type == NA_EOS)) &&
+    if ((NET_IsOnlineAddress(from->type) || (cls.state != ca_disconnected && NET_IsOnlineAddress(cls.netchan.remote_address.type))) &&
         !NET_CompareAdr(from, &cls.netchan.remote_address)) {
         fprintf(stderr, "CL_ReadPackets: rejected packet outside the connected Internet host\n");
         return;
@@ -1486,7 +1486,7 @@ void CL_Connect(cstring_t host, unsigned short port) {
     }
     // Loopback (localhost) needs no UDP socket — packets go through the
     // in-memory ring buffer.  Only open the socket for remote addresses.
-    if (adr.type == NA_EOS && (!Online_Ready() || !Online_InLobby())) {
+    if (NET_IsOnlineAddress(adr.type) && (!Online_Ready() || !Online_InLobby())) {
         fprintf(stderr, "CL_Connect: join an Internet room before connecting to its host\n");
         return;
     }
@@ -1563,14 +1563,14 @@ void CL_Frame(uint32_t msec) {
         Cvar_Set("connect", address);
         CL_Connect(address, 0);
     }
-    if (cls.netchan.remote_address.type == NA_EOS && cls.state != ca_disconnected && !Online_InLobby())
+    if (NET_IsOnlineAddress(cls.netchan.remote_address.type) && cls.state != ca_disconnected && !Online_InLobby())
         CL_Disconnect("The Internet room has closed.", true);
     CL_ProcessPendingMenuAction();
     CL_Input();
     CL_CanvasFrame(cl_realtime);
     CL_MovieUpdate();
     CL_ReadPackets();
-    if (cls.state == ca_connecting && cls.netchan.remote_address.type == NA_EOS) {
+    if (cls.state == ca_connecting && NET_IsOnlineAddress(cls.netchan.remote_address.type)) {
         if (cl_realtime - cl_connect_started > CL_TIMEOUT_MSEC) {
             CL_Disconnect("Internet host connection timed out.", true);
         } else if (cl_realtime - cl_connect_retry >= 1000) {
