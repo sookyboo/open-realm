@@ -4,6 +4,11 @@ const ROOT = 'openrealm';
 const GAME = 'game-data';
 const WC3 = 'wc3';
 const META = 'installation.json';
+const MAP_LIBRARY = 'map-library';
+const MAP_META = 'maps.json';
+const MAP_LOCK = 'openrealm-wc3-map-generation:';
+const MAP_NAME = /^[a-z0-9(][a-z0-9 _().-]{0,200}\.w3[mx]$/i;
+const mapPath = name => 'Maps/Download/' + name;
 const CHUNK = 1024 * 1024;
 const MAX_INPUT_FILES = 512; // Match filesystem-bridge.js manifest limit.
 const MAX_ISO_IMAGES = 8; // Limit expensive full-directory scans per import.
@@ -24,6 +29,7 @@ let scanController = null;
 const allowed = name => /\.(mpq|w3m|w3x)$/i.test(name);
 const isoName = name => /\.iso$/i.test(name);
 const cleanName = name => typeof name === 'string' && /^[a-z0-9][a-z0-9 _().-]{0,200}$/i.test(name) && name !== '.' && name !== '..';
+const validMap = name => typeof name === 'string' && MAP_NAME.test(name);
 function checkCancelled() {
   if (cancelled) throw new Error('Import cancelled');
 }
@@ -36,7 +42,7 @@ async function selectSources(files) {
   if (images.length > MAX_ISO_IMAGES) {
     throw new Error('Too many ISO images in one import (maximum 8)');
   }
-  if (files.some(f => !f || !cleanName(f.name) ||
+  if (files.some(f => !f || !(cleanName(f.name) || validMap(f.name)) ||
                        (!isoName(f.name) && !allowed(f.name)) ||
                        !Number.isSafeInteger(f.size) || f.size < 0 ||
                        typeof f.slice !== 'function')) {
@@ -67,7 +73,7 @@ async function selectSources(files) {
     checkCancelled();
     if (!isoName(file.name)) {
       if (/^setup\.mpq$/i.test(file.name)) setups.push({blob:file, source:file.name});
-      else add(file.name, file, file.name);
+      else add(validMap(file.name) ? mapPath(file.name) : file.name, file, file.name);
       continue;
     }
     postMessage({type:'phase', phase:'scanning', source:file.name});
@@ -227,11 +233,46 @@ async function directory(create) {
   const game = await root.getDirectoryHandle(GAME, {create});
   return game.getDirectoryHandle(WC3, {create});
 }
-async function metadata(dir) {
+async function metadata(dir, filename = META) {
   try {
-    const file = await (await dir.getFileHandle(META)).getFile();
+    const file = await (await dir.getFileHandle(filename)).getFile();
     return JSON.parse(await file.text());
   } catch (err) { if (err.name === 'NotFoundError') return null; throw err; }
+}
+// Map imports live in a separate, small, versioned library. Existing MPQ
+// generations and their shared game-session leases are never touched.
+async function mapDirectory(create) {
+  const dir = await directory(create);
+  return dir.getDirectoryHandle(MAP_LIBRARY, {create});
+}
+function validateMapManifest(manifest) {
+  if (!manifest || manifest.version !== 1 ||
+      !/^maps-[a-z0-9]+-[a-z0-9]{1,16}$/.test(manifest.generation) ||
+      !Array.isArray(manifest.files) || manifest.files.length > MAX_INPUT_FILES ||
+      !Number.isSafeInteger(manifest.bytes) || manifest.bytes < 0)
+    throw new Error('Invalid imported map library manifest');
+  let bytes = 0;
+  const seen = new Set();
+  for (const entry of manifest.files) {
+    if (!entry || typeof entry.name !== 'string' ||
+        !entry.name.startsWith('Maps/Download/') ||
+        !validMap(entry.name.slice('Maps/Download/'.length)) ||
+        !Number.isSafeInteger(entry.size) || entry.size < 32 ||
+        seen.has(entry.name.toLowerCase()))
+      throw new Error('Invalid imported map library entry');
+    seen.add(entry.name.toLowerCase());
+    bytes += entry.size;
+  }
+  if (bytes !== manifest.bytes || !Number.isSafeInteger(bytes))
+    throw new Error('Invalid imported map library size');
+  return manifest;
+}
+async function mapMetadata() {
+  try {
+    const manifest = await metadata(await mapDirectory(false), MAP_META);
+    return manifest ? validateMapManifest(manifest) : null;
+  }
+  catch (err) { if (err.name === 'NotFoundError') return null; throw err; }
 }
 // Require a structurally valid MPQ envelope and in-bounds tables. This is
 // stronger than magic-byte checking but does not prove every payload is intact.
@@ -294,6 +335,136 @@ async function collectOldGenerations(dir, current, previous) {
   }
 }
 
+const isMapGeneration = name => /^maps-[a-z0-9]+-[a-z0-9]{1,16}$/.test(name);
+async function withMapGenerationLocks(names, action, index = 0) {
+  if (index === names.length) return action();
+  return navigator.locks.request(MAP_LOCK + names[index],
+    {mode:'exclusive', ifAvailable:true}, async lock => {
+      if (!lock) throw new Error('Close other Warcraft III game tabs before removing installed maps');
+      return withMapGenerationLocks(names, action, index + 1);
+    });
+}
+async function collectOldMapGenerations(dir, current, previous) {
+  for await (const [name, entry] of dir.entries()) {
+    if (entry.kind !== 'directory' || !isMapGeneration(name) ||
+        name === current || name === previous) continue;
+    try {
+      await navigator.locks.request(MAP_LOCK + name,
+        {mode:'exclusive', ifAvailable:true}, async lock => {
+          if (lock) await dir.removeEntry(name, {recursive:true});
+        });
+    } catch (_) {
+      postMessage({type:'notice', message:'Could not clean up old map library ' + name});
+    }
+  }
+}
+async function addMaps(files) {
+  if (active) throw new Error('Another import is already in progress');
+  active = true;
+  cancelled = false;
+  scanController = new AbortController();
+  let dir, generation, committed = false;
+  try {
+    if (!Array.isArray(files) || !files.length || files.length > MAX_INPUT_FILES ||
+        files.some(file => !file || !validMap(file.name) ||
+          !Number.isSafeInteger(file.size) || file.size < 32 ||
+          typeof file.slice !== 'function'))
+      throw new Error('Choose 1-512 standalone .w3m or .w3x map files');
+    const selected = new Map();
+    for (const file of files) {
+      const name = mapPath(file.name), key = name.toLowerCase();
+      if (selected.has(key)) throw new Error('Duplicate map filename: ' + file.name);
+      selected.set(key, {name, blob:file, size:file.size, source:file.name});
+    }
+    let base;
+    try { base = await metadata(await directory(false)); }
+    catch (err) { if (err.name !== 'NotFoundError') throw err; }
+    if (!base || !Array.isArray(base.files) ||
+        !base.files.some(file => file && file.name.toLowerCase() === 'war3.mpq'))
+      throw new Error('Install War3.mpq before adding maps');
+    postMessage({type:'phase', phase:'validating'});
+    for (const file of selected.values()) await checkMpqHeader(file);
+    checkCancelled();
+    let previous = await mapMetadata();
+    try { dir = await mapDirectory(false); }
+    catch (err) { if (err.name !== 'NotFoundError') throw err; }
+    const sources = new Map();
+    if (previous) {
+      dir = await mapDirectory(false);
+      const old = await dir.getDirectoryHandle(previous.generation);
+      for (const entry of previous.files) {
+        const parts = entry.name.split('/');
+        const folder = await (await old.getDirectoryHandle('Maps')).getDirectoryHandle('Download');
+        const blob = await (await folder.getFileHandle(parts.at(-1))).getFile();
+        if (blob.size !== entry.size) throw new Error('Existing map changed: ' + entry.name);
+        sources.set(entry.name.toLowerCase(), {name:entry.name, size:entry.size,
+          blob, source:'Previously imported map'});
+      }
+    }
+    for (const [key, entry] of selected) sources.set(key, entry); // Newer upload replaces same-name map.
+    if (sources.size > MAX_INPUT_FILES) throw new Error('Too many imported maps (maximum 512)');
+    const all = [...sources.values()];
+    const total = all.reduce((sum, file) => sum + file.size, 0);
+    if (!Number.isSafeInteger(total)) throw new Error('Map library size overflow');
+    postMessage({type:'discovered', files:all.map(f =>
+      ({name:f.name, size:f.size, source:f.source})), bytes:total});
+    postMessage({type:'phase', phase:'storage'});
+    if (dir) await collectOldMapGenerations(dir, previous && previous.generation, null);
+    await checkAvailableStorage(total);
+    checkCancelled();
+    if (!dir) dir = await mapDirectory(true);
+    generation = 'maps-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    const stage = await dir.getDirectoryHandle(generation, {create:true});
+    const maps = await (await stage.getDirectoryHandle('Maps', {create:true}))
+      .getDirectoryHandle('Download', {create:true});
+    let copied = 0;
+    postMessage({type:'phase', phase:'copying'});
+    for (const [index, file] of all.entries()) {
+      checkCancelled();
+      const dest = await maps.getFileHandle(file.name.slice('Maps/Download/'.length), {create:true});
+      const writer = await openWriter(dest);
+      try {
+        for (let offset = 0; offset < file.size; offset += CHUNK) {
+          checkCancelled();
+          const bytes = await file.blob.slice(offset, Math.min(offset + CHUNK, file.size)).arrayBuffer();
+          checkCancelled();
+          await writer.write(bytes);
+          copied += bytes.byteLength;
+          postMessage({type:'progress', file:file.name, copied, total,
+            index:index+1, count:all.length});
+        }
+        await writer.close();
+      } catch (err) { await writer.abort().catch(()=>{}); throw err; }
+    }
+    checkCancelled();
+    postMessage({type:'phase', phase:'committing'});
+    const manifest = {version:1, generation, files:all.map(f => ({name:f.name, size:f.size})), bytes:total};
+    // Commit the new map generation after every file is complete, preserving
+    // the previous map library if validation, copying or commit fails.
+    const temporary = await stage.getFileHandle(MAP_META, {create:true});
+    const atomicStream = typeof temporary.createWritable === 'function';
+    if (atomicStream) await stage.removeEntry(MAP_META);
+    const target = atomicStream ? await dir.getFileHandle(MAP_META, {create:true}) : temporary;
+    const writer = await openWriter(target);
+    try {
+      await writer.write(JSON.stringify(manifest));
+      checkCancelled();
+      await writer.close();
+    } catch (err) { await writer.abort().catch(()=>{}); throw err; }
+    if (!atomicStream) {
+      if (typeof target.move !== 'function') throw new Error('This browser cannot commit a map library');
+      await target.move(dir, MAP_META);
+    }
+    committed = true;
+    await collectOldMapGenerations(dir, generation, previous && previous.generation).catch(() => {});
+    postMessage({type:'maps-added', manifest, added:selected.size});
+  } finally {
+    if (dir && generation && !committed)
+      await dir.removeEntry(generation, {recursive:true}).catch(()=>{});
+    scanController = null;
+    active = false;
+  }
+}
 async function install(files) {
   if (active) throw new Error('An installation is already in progress');
   // Own the entire scan, validation and copy lifecycle, not only OPFS writes.
@@ -408,8 +579,10 @@ async function install(files) {
   }
 }
 async function list() {
-  try { postMessage({type:'list', manifest:await metadata(await directory(false))}); }
-  catch (err) { if (err.name === 'NotFoundError') postMessage({type:'list',manifest:null}); else throw err; }
+  let manifest = null;
+  try { manifest = await metadata(await directory(false)); }
+  catch (err) { if (err.name !== 'NotFoundError') throw err; }
+  postMessage({type:'list', manifest, maps:await mapMetadata()});
 }
 async function remove() {
   if (active) throw new Error('Cannot remove files while importing');
@@ -418,8 +591,14 @@ async function remove() {
     const root = await origin.getDirectoryHandle(ROOT);
     const game = await root.getDirectoryHandle(GAME);
     const dir = await game.getDirectoryHandle(WC3);
+    let mapNames = [];
+    try {
+      const maps = await dir.getDirectoryHandle(MAP_LIBRARY);
+      for await (const [name, entry] of maps.entries())
+        if (entry.kind === 'directory' && isMapGeneration(name)) mapNames.push(name);
+    } catch (err) { if (err.name !== 'NotFoundError') throw err; }
     await withGenerationLocks([...(await generations(dir)), 'legacy'],
-      () => game.removeEntry(WC3, {recursive:true}));
+      () => withMapGenerationLocks(mapNames, () => game.removeEntry(WC3, {recursive:true})));
   } catch (err) { if (err.name !== 'NotFoundError') throw err; }
   postMessage({type:'list',manifest:null});
 }
@@ -430,6 +609,7 @@ onmessage = async ({data}) => {
   }
   try {
     if(data.type==='import') await withCommitLock(() => install(data.files));
+    else if(data.type==='add-maps') await withCommitLock(() => addMaps(data.files));
     else if(data.type==='list') await list();
     else if(data.type==='remove') await withCommitLock(remove);
   } catch(err) {

@@ -13,22 +13,27 @@ map.writeUInt32LE(32, 16); map.writeUInt32LE(48, 20);
 map.writeUInt32LE(1, 24); map.writeUInt32LE(1, 28);
 const mpq = Buffer.from(map.subarray(0, 64));
 mpq.writeUInt32LE(64, 8);
+function notFound(name) {
+  const error = new Error('Missing ' + name);
+  error.name = 'NotFoundError';
+  return error;
+}
 function dir(entries) {
   return {
     async getDirectoryHandle(name) {
       const value = entries[name];
-      if (!value || typeof value.getDirectoryHandle !== 'function') throw new Error('Missing directory ' + name);
+      if (!value || typeof value.getDirectoryHandle !== 'function') throw notFound('directory ' + name);
       return value;
     },
     async getFileHandle(name) {
       const value = entries[name];
-      if (!(value instanceof Blob)) throw new Error('Missing file ' + name);
+      if (!(value instanceof Blob)) throw notFound('file ' + name);
       return {getFile: async () => value};
     }
   };
 }
 async function launch(mapPath, {corruptBase = false, edition, completeness, expansion = false,
-  requested = null, startResult = true} = {}) {
+  requested = null, startResult = true, customMaps = false, badMap = false} = {}) {
   const manifest = {
     version:3, generation:'install-abcd-1234',
     ...(edition ? {edition, completeness} : {}),
@@ -42,9 +47,16 @@ async function launch(mapPath, {corruptBase = false, edition, completeness, expa
     ...(expansion ? {'War3x.mpq':new Blob([mpq])} : {}), 'Maps':dir({
     '(4)LostTemple.w3m':new Blob([map])
   })});
+  const extraMap = badMap ? new Blob([Buffer.alloc(96)]) : new Blob([map]);
+  const libraryManifest = {version:1, generation:'maps-abcd-1234',
+    files:[{name:'Maps/Download/Custom.w3x', size:extraMap.size}], bytes:extraMap.size};
   const store = dir({openrealm:dir({'game-data':dir({wc3:dir({
     'installation.json':new Blob([JSON.stringify(manifest)]),
-    'install-abcd-1234':stage
+    'install-abcd-1234':stage,
+    ...(customMaps ? {'map-library':dir({
+      'maps.json':new Blob([JSON.stringify(libraryManifest)]),
+      'maps-abcd-1234':dir({'Maps':dir({'Download':dir({'Custom.w3x':extraMap})})})
+    })} : {})
   })})})});
   const starts = [];
   const lockRequests = [];
@@ -147,4 +159,24 @@ test('TFT preference falls back safely for a base-only install', async () => {
   assert.equal(result.selector.disabled, true);
   assert.equal(result.selector.value, 'roc');
   assert.deepEqual(Array.from(result.starts[0].slice(-3)), ['+set','fs_expansion','0']);
+});
+
+
+test('separate map library mounts via extra_data and holds a map generation lease', async () => {
+  const result = await launch('Maps/(4)LostTemple.w3m', {customMaps:true});
+  assert.equal(result.starts.length, 1);
+  assert.deepEqual(Array.from(result.starts[0].slice(1, 4)), ['+set', 'extra_data',
+    '/opfs/openrealm/game-data/wc3/map-library/maps-abcd-1234']);
+  assert.deepEqual(result.lockRequests, [
+    ['openrealm-wc3-installation', 'shared'],
+    ['openrealm-wc3-generation:install-abcd-1234', 'shared'],
+    ['openrealm-wc3-map-generation:maps-abcd-1234', 'shared']
+  ]);
+  assert.ok(result.activeLocks.has('openrealm-wc3-map-generation:maps-abcd-1234'));
+});
+
+test('corrupt custom map is rejected before engine startup', async () => {
+  const result = await launch('Maps/(4)LostTemple.w3m', {customMaps:true, badMap:true});
+  assert.equal(result.starts.length, 0);
+  assert.match(result.status.textContent, /Invalid imported map/);
 });

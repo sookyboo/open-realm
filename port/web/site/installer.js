@@ -4,6 +4,9 @@
   const fileInput = document.getElementById('game-files');
   const install = document.getElementById('install-data');
   const cancel = document.getElementById('cancel-install');
+  const mapInput = document.getElementById('map-files');
+  const addMaps = document.getElementById('add-maps');
+  const mapStatus = document.getElementById('map-library-status');
   const play = document.getElementById('play-game');
   const remove = document.getElementById('remove-data');
   const status = document.getElementById('data-status');
@@ -17,6 +20,8 @@
     status.textContent = 'OPFS, Web Workers and Web Locks are required to install files safely in this browser.';
     install.disabled = true;
     fileInput.disabled = true;
+    if (mapInput) mapInput.disabled = true;
+    if (addMaps) addMaps.disabled = true;
     remove.disabled = true;
     return;
   }
@@ -38,9 +43,11 @@
     operation = value;
     const busy = value !== null;
     fileInput.disabled = busy;
+    if (mapInput) mapInput.disabled = busy || !playable;
+    if (addMaps) addMaps.disabled = busy || !playable || !mapInput.files.length;
     install.disabled = busy;
     install.classList.toggle('has-selection', value !== 'import' && !!(fileInput.files && fileInput.files.length));
-    cancel.disabled = value !== 'import';
+    cancel.disabled = value !== 'import' && value !== 'add-maps';
     remove.disabled = busy;
     if (play) play.disabled = busy || !playable;
   }
@@ -49,10 +56,21 @@
       manifest.files.some(file => file && typeof file.name === 'string' &&
         file.name.toLowerCase() === 'war3.mpq') &&
       (manifest.edition === undefined || manifest.edition === 'retail' || manifest.edition === 'demo'));
+    if (mapInput) mapInput.disabled = operation !== null || !playable;
+    if (addMaps) addMaps.disabled = operation !== null || !playable || !mapInput.files.length;
     if (play) {
       play.hidden = !playable;
       play.disabled = operation !== null || !playable;
     }
+  }
+  function showMaps(manifest) {
+    if (!playable) {
+      if (mapStatus) mapStatus.textContent = 'Install Warcraft III data before adding maps.';
+      return;
+    }
+    if (mapStatus) mapStatus.textContent = manifest && manifest.files.length
+      ? `Custom maps: ${manifest.files.length}. Add more maps without reinstalling MPQs.`
+      : 'No separately imported maps. Choose .w3m or .w3x files to add.';
   }
   function clearDiscovery() {
     archives.replaceChildren();
@@ -77,17 +95,20 @@
       : 'No files selected.';
   }
   worker.onmessage = ({data}) => {
-    if (data.type === 'notice' && operation === 'import') {
+    if (data.type === 'notice' && (operation === 'import' || operation === 'add-maps')) {
       warnings.push(data.message);
       status.textContent = data.message;
-    } else if (data.type === 'phase' && operation === 'import') {
+    } else if (data.type === 'phase' && (operation === 'import' || operation === 'add-maps')) {
       if (data.phase === 'scanning') status.textContent = 'Scanning ISO: ' + data.source;
       else if (data.phase === 'extracting') status.textContent = 'Extracting supported maps from Setup.mpq…';
-      else if (data.phase === 'validating') status.textContent = 'Validating game archives…';
+      else if (data.phase === 'validating') status.textContent = operation === 'add-maps'
+        ? 'Validating custom maps…' : 'Validating game archives…';
       else if (data.phase === 'storage') status.textContent = 'Checking available browser storage…';
-      else if (data.phase === 'copying') status.textContent = 'Copying detected game archives…';
-      else if (data.phase === 'committing') status.textContent = 'Saving installation manifest…';
-    } else if (data.type === 'discovered' && operation === 'import') {
+      else if (data.phase === 'copying') status.textContent = operation === 'add-maps'
+        ? 'Saving custom maps…' : 'Copying detected game archives…';
+      else if (data.phase === 'committing') status.textContent = operation === 'add-maps'
+        ? 'Saving custom map library…' : 'Saving installation manifest…';
+    } else if (data.type === 'discovered' && (operation === 'import' || operation === 'add-maps')) {
       // Names come from the selected ISO: never parse them as HTML.
       clearDiscovery();
       for (const file of data.files) {
@@ -97,7 +118,7 @@
       }
       discovered.hidden = false;
       status.textContent = `Found ${data.files.length} game file(s), ${sizeLabel(data.bytes)} to copy.`;
-    } else if (data.type === 'progress' && operation === 'import') {
+    } else if (data.type === 'progress' && (operation === 'import' || operation === 'add-maps')) {
       progress.value = data.total ? data.copied / data.total : 0;
       const fileNumber = data.index ? ` (${data.index}/${data.count})` : '';
       status.textContent = `Copying ${data.file}${fileNumber}: ` +
@@ -116,15 +137,24 @@
         (warnings.length ? ' Note: ' + warnings.join(' | ') : '');
       fileInput.value = '';
       showSelection();
+    } else if (data.type === 'maps-added' && operation === 'add-maps') {
+      setOperation(null);
+      progress.value = 1;
+      mapInput.value = '';
+      if (addMaps) addMaps.disabled = true;
+      showMaps(data.manifest);
+      mapStatus.textContent = `Added ${data.added} map(s); ${data.manifest.files.length} in the custom map library. Reload to see them in game.`;
+      status.textContent = 'Custom maps saved. Existing MPQs and installed maps were preserved.';
     } else if (data.type === 'list') {
       if (operation === 'remove' && pendingRemoval) {
         sessionStorage.removeItem(REMOVE_ON_RELOAD);
       }
-      if (operation === 'import') return; // Ignore a delayed initial list response.
+      if (operation === 'import' || operation === 'add-maps') return; // Ignore a delayed initial list response.
       setOperation(null);
       const manifest = data.manifest;
       showEdition(manifest);
       updatePlayable(manifest);
+      showMaps(data.maps);
       if (dataPanel) dataPanel.open = !manifest;
       status.textContent = manifest
         ? (manifest.edition === 'demo' ? 'Warcraft III Demo installed (limited content). ' :
@@ -146,6 +176,18 @@
     status.textContent = 'Game-data worker failed. Reload the page before retrying.';
   };
   fileInput.addEventListener('change', showSelection);
+  if (mapInput) mapInput.addEventListener('change', () => {
+    if (addMaps) addMaps.disabled = operation !== null || !playable || !mapInput.files.length;
+  });
+  if (addMaps) addMaps.addEventListener('click', () => {
+    if (operation || !playable || !mapInput.files.length) return;
+    warnings = [];
+    clearDiscovery();
+    progress.removeAttribute('value');
+    setOperation('add-maps');
+    status.textContent = 'Validating selected maps…';
+    worker.postMessage({type:'add-maps', files:Array.from(mapInput.files)});
+  });
   install.addEventListener('click', () => {
     if (operation) return;
     const files = Array.from(fileInput.files || []);
@@ -158,7 +200,7 @@
     worker.postMessage({type:'import', files});
   });
   cancel.addEventListener('click', () => {
-    if (operation !== 'import') return;
+    if (operation !== 'import' && operation !== 'add-maps') return;
     cancel.disabled = true;
     status.textContent = 'Cancelling import…';
     worker.postMessage({type:'cancel'});

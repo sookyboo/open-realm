@@ -100,8 +100,36 @@ each import must include the base `War3.mpq` archive.
 - The documented September 2002 demo ISO is supported separately. The page
   labels it as a limited demo installation; do not combine it with retail ISOs
   or standalone MPQs. Other demo disc layouts are not recognized.
-- Direct MPQ uploads and loose maps are supported. `Setup.mpq` is installer
-  data and is not installed as a game archive.
+- Direct MPQ uploads and loose maps are supported. Directly selected `.w3m`
+  and `.w3x` files go under `Maps/Download/` instead of the archive root.
+  `Setup.mpq` is installer data and is not installed as a game archive.
+
+### Add maps without reinstalling game data
+
+After the base game MPQs are installed, use the separate **Custom Warcraft III
+maps** picker and **Add selected maps** button. Only `.w3m` and `.w3x`
+files are accepted. They are structurally checked as MPQ archives and stored
+under `Maps/Download/` inside an independent OPFS map library. Reload the
+browser game to see them under **Single Player → Custom Game** or in the
+multiplayer map selector. `.w3x` maps need Frozen Throne mode and its expansion
+archives. Every multiplayer participant must import matching map content.
+
+Map-only imports do not require selecting `War3.mpq` again. Existing MPQs and
+other imported maps are preserved. Importing a new map with the same filename
+replaces that custom map in the library, not the base MPQ or stock maps. Maps
+imported with an older full installation remain in that installation's
+`Maps/` tree; newer separately imported maps are mounted alongside it through
+the existing `extra_data` filesystem path. An archive installation replacement
+also retains the independent custom map library; **Remove local data** deletes
+both. The new map library is committed as an immutable generation; failed or
+cancelled imports keep the previous active set. Browser storage quota must
+accommodate one new copy of the custom map library while committing.
+
+The launcher holds a shared lease on the chosen map generation just as it does
+for the game archives. Other tabs can add maps while the game is running, but
+the running game keeps using its existing map generation until reload; removal
+is blocked while a tab holds a generation lease. This feature has not been
+validated on every browser/device and map format.
 
 On older Safari (including iPadOS 17), the installer uses synchronous OPFS
 access handles inside its dedicated worker, because Safari does not expose
@@ -175,7 +203,7 @@ been verified across all retail game data.
 The browser target statically links the engine, renders through WebGL 2,
 embeds Warcraft III default configuration, imports supported media into OPFS,
 and mounts the selected generation through WasmFS. The page includes local
-installer status, detected archives, import cancellation/removal, persistent
+installer status, detected archives, incremental custom maps, import cancellation/removal, persistent
 Escape and fullscreen controls during fullscreen and canvas resizing, and
 AudioWorklet playback.
 
@@ -185,8 +213,8 @@ Run the dependency-free browser tests from the repository root with:
 node --test port/web/tests/*.test.cjs
 ```
 
-These tests cover ISO parsing, synthetic archive imports, UI and launcher
-behavior. They do not establish compatibility with every retail disc, map,
+These tests cover ISO parsing, synthetic archive imports, custom map libraries,
+UI and launcher behavior. They do not establish compatibility with every retail disc, map,
 browser/device combination or a complete real-data playthrough. Use the native
 application when reliability or performance matters.
 

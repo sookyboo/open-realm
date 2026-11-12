@@ -7,6 +7,8 @@
   const MANIFEST_PATH = ['openrealm', 'game-data', 'wc3'];
   const COMMIT_LOCK = 'openrealm-wc3-installation';
   const GENERATION_LOCK = 'openrealm-wc3-generation:';
+  const MAP_LOCK = 'openrealm-wc3-map-generation:';
+  const MAP_NAME = /^[a-z0-9(][a-z0-9 _().-]{0,200}\.w3[mx]$/i;
   const MODE_KEY = 'openrealm-wc3-browser-mode';
   function status(message) {
     const node = document.getElementById('status');
@@ -87,6 +89,53 @@
       edition:manifest.edition === 'demo' ? 'demo' : 'retail',
       hasExpansion:seen.has('war3x.mpq')};
   }
+  // Maps are an independent, immutable overlay. Do not duplicate MPQs when
+  // installing a new map; the engine mounts the overlay via extra_data.
+  async function validateMapLibrary() {
+    let dir = await navigator.storage.getDirectory();
+    try {
+      for (const segment of [...MANIFEST_PATH, 'map-library'])
+        dir = await dir.getDirectoryHandle(segment);
+    } catch (error) {
+      if (error.name === 'NotFoundError') return null;
+      throw error;
+    }
+    let manifest;
+    try {
+      manifest = JSON.parse(await (await (await dir.getFileHandle('maps.json')).getFile()).text());
+    } catch (error) {
+      if (error.name === 'NotFoundError') return null;
+      throw error;
+    }
+    if (!manifest || manifest.version !== 1 ||
+        typeof manifest.generation !== 'string' ||
+        !/^maps-[a-z0-9]+-[a-z0-9]{1,16}$/.test(manifest.generation) ||
+        !Array.isArray(manifest.files) || manifest.files.length > 512 ||
+        !Number.isSafeInteger(manifest.bytes) || manifest.bytes < 0)
+      throw new Error('Invalid imported map library manifest');
+    const generation = await dir.getDirectoryHandle(manifest.generation);
+    const downloaded = await (await generation.getDirectoryHandle('Maps'))
+      .getDirectoryHandle('Download');
+    let bytes = 0;
+    const names = new Set();
+    for (const entry of manifest.files) {
+      const name = entry && typeof entry.name === 'string' &&
+        entry.name.startsWith('Maps/Download/') ?
+        entry.name.slice('Maps/Download/'.length) : '';
+      if (!MAP_NAME.test(name) || !Number.isSafeInteger(entry.size) || entry.size < 32 ||
+          names.has(name.toLowerCase()))
+        throw new Error('Invalid imported map library entry');
+      names.add(name.toLowerCase());
+      const file = await (await downloaded.getFileHandle(name)).getFile();
+      if (file.size !== entry.size) throw new Error('Imported map size changed: ' + name);
+      try { await window.MPQHeader.validate(file); }
+      catch (err) { throw new Error('Invalid imported map ' + name + ': ' + err.message); }
+      bytes += file.size;
+    }
+    if (!Number.isSafeInteger(bytes) || bytes !== manifest.bytes)
+      throw new Error('Imported map library size mismatch');
+    return {generation:manifest.generation, path:ROOT + '/map-library/' + manifest.generation};
+  }
   // A shared commit lock protects the manifest-to-generation transition.
   // After reading it, hold a shared generation lease for this tab's lifetime,
   // so another tab cannot delete archives that the engine has open. Web Locks
@@ -96,6 +145,7 @@
       throw new Error('Web Locks API is required to protect installed game data');
     await navigator.locks.request(COMMIT_LOCK, {mode:'shared'}, async () => {
       const installation = await validate();
+      const maps = await validateMapLibrary();
       const selector = document.getElementById('game-edition');
       const requested = sessionStorage.getItem(MODE_KEY);
       const mode = requested === 'tft' && installation.hasExpansion &&
@@ -108,25 +158,33 @@
       await new Promise((resolve, reject) => {
         navigator.locks.request(GENERATION_LOCK + installation.generation,
           {mode:'shared'}, async () => {
-            try {
-              status(installation.edition === 'demo'
-                ? 'Warcraft III Demo installation — limited content; starting experimental engine…'
-                : 'Validated browser installation; starting engine…');
-              const started = await window.openrealmStartEngine([
-                '+openrealm-data=' + installation.path,
-                '+set', 'fs_expansion', mode === 'tft' ? '1' : '0']);
-              if (!started) {
-                const error = new Error('Browser support or cross-origin isolation is unavailable.');
-                error.code = 'OPENREALM_STARTUP_UNAVAILABLE';
-                reject(error);
-                return;
-              }
-              if (window.openrealmGamePresentation) window.openrealmGamePresentation('playing');
-              resolve(); // Release commit lock after acquiring the lease.
-            } catch (err) { reject(err); return; }
-            // The engine may access WasmFS indefinitely. Keep this lease until
-            // the document is unloaded; never rely on a guessed timeout.
-            await new Promise(() => {});
+            const start = async () => {
+              try {
+                status(installation.edition === 'demo'
+                  ? 'Warcraft III Demo installation — limited content; starting experimental engine…'
+                  : 'Validated browser installation; starting engine…');
+                const args = ['+openrealm-data=' + installation.path];
+                if (maps) args.push('+set', 'extra_data', maps.path);
+                args.push('+set', 'fs_expansion', mode === 'tft' ? '1' : '0');
+                const started = await window.openrealmStartEngine(args);
+                if (!started) {
+                  const error = new Error('Browser support or cross-origin isolation is unavailable.');
+                  error.code = 'OPENREALM_STARTUP_UNAVAILABLE';
+                  reject(error);
+                  return;
+                }
+                if (window.openrealmGamePresentation) window.openrealmGamePresentation('playing');
+                resolve(); // Release commit lock after acquiring both leases.
+              } catch (err) { reject(err); return; }
+              // Keep both archive and map leases while WasmFS is in use.
+              await new Promise(() => {});
+            };
+            if (maps) {
+              await navigator.locks.request(MAP_LOCK + maps.generation,
+                {mode:'shared'}, start);
+            } else {
+              await start();
+            }
           }).catch(reject);
       });
     });

@@ -100,8 +100,10 @@ installer worker with up to eight ISO files plus direct game archive files in
 one selection, to selectively copy recognized Warcraft III game MPQs through
 the existing OPFS generation writer. It requires `War3.mpq` in the combined
 selection, rejects duplicate archive names and checks estimated storage quota
-before staging when the browser provides an estimate. Imports still replace,
-rather than merge with, the existing installation. Both browser file pickers
+before staging when the browser provides an estimate. Full archive imports still replace, rather than merge with, the existing
+installation. A separate custom-map picker adds `.w3m` / `.w3x` maps to a
+versioned `Maps/Download/` overlay without re-importing MPQs; the engine
+loads that overlay via the existing `extra_data` directory on the next reload. Both browser file pickers
 now accept ISO images alongside standalone archives and show detected files
 and copy progress (patch 4). Patch 5 extracts the 44-map profile observed
 on one original RoC `Setup.mpq` disc, without executing installer code;

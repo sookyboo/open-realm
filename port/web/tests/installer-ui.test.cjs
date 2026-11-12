@@ -28,7 +28,7 @@ class Element {
   get value() { return this._value; }
   set value(value) {
     this._value = value;
-    if (this.id === 'game-files' && value === '') this.files = [];
+    if (['game-files', 'map-files'].includes(this.id) && value === '') this.files = [];
   }
   addEventListener(name, callback) { this.listeners.set(name, callback); }
   fire(name) { this.listeners.get(name)(); }
@@ -37,7 +37,8 @@ class Element {
   removeAttribute(name) { if (name === 'value') this.value = undefined; }
 }
 function harness({storage = true, session = new Map()} = {}) {
-  const ids = ['game-files', 'install-data', 'cancel-install', 'remove-data',
+  const ids = ['game-files', 'map-files', 'add-maps', 'map-library-status',
+    'install-data', 'cancel-install', 'remove-data',
     'data-status', 'install-progress', 'selection-summary', 'discovered-files', 'archive-list',
     'installation-edition', 'play-game', 'data-panel'];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
@@ -261,4 +262,23 @@ test('successful playable import reveals Play Game and reloads into autostart', 
   assert.equal(e['play-game'].hidden, false);
   e['play-game'].fire('click');
   assert.equal(page.reloads, 1);
+});
+
+
+test('map-only button requires installed game data and imports maps without sending MPQs', () => {
+  const {elements:e, worker} = harness();
+  e['map-files'].files = [{name:'New.w3m'}];
+  e['map-files'].fire('change');
+  assert.equal(e['add-maps'].disabled, true);
+  worker.send({type:'list', manifest:{version:3, edition:'retail',
+    files:[{name:'War3.mpq', size:64}]}, maps:null});
+  e['map-files'].fire('change');
+  assert.equal(e['add-maps'].disabled, false);
+  e['add-maps'].fire('click');
+  assert.equal(worker.messages.at(-1).type, 'add-maps');
+  assert.equal(worker.messages.at(-1).files.length, 1);
+  assert.equal(e['cancel-install'].disabled, false);
+  worker.send({type:'maps-added', added:1, manifest:{files:[{name:'Maps/Download/New.w3m'}]}});
+  assert.match(e['map-library-status'].textContent, /Reload to see them/);
+  assert.match(e['data-status'].textContent, /Existing MPQs/);
 });

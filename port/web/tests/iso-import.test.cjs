@@ -238,11 +238,16 @@ function makeWorker({estimate, failWritesFor = null, failMovesFor = null,
     await context.onmessage({data: {type:'import', files}});
     return messages.slice();
   }
+  async function runMaps(files) {
+    messages.length = 0;
+    await context.onmessage({data:{type:'add-maps', files}});
+    return messages.slice();
+  }
   async function gameDir() {
     return (await (await root.getDirectoryHandle('openrealm')).getDirectoryHandle('game-data'))
       .getDirectoryHandle('wc3');
   }
-  return {run, messages, context, gameDir, locks};
+  return {run, runMaps, messages, context, gameDir, locks};
 }
 
 test('ISO import copies only recognized archive extents and writes v3 manifest', async () => {
@@ -909,4 +914,76 @@ test('realistic multi-sector fixture preserves nonoverlapping source extents', a
   const b = Buffer.from(await (await (await stage.getFileHandle('War3x.mpq')).getFile()).arrayBuffer());
   assert.equal(Buffer.compare(a, large), 0);
   assert.equal(Buffer.compare(b, base), 0);
+});
+
+
+test('standalone map alongside MPQs is placed under Maps/Download, not in the archive root', async () => {
+  const worker = makeWorker();
+  const events = await worker.run([namedBlob(mpq(), 'War3.mpq'),
+    namedBlob(mpq(), '(2)Standalone.w3m')]);
+  assert.equal(events.at(-1).type, 'done');
+  assert.deepEqual(Array.from(events.at(-1).manifest.files, f => f.name),
+    ['War3.mpq', 'Maps/Download/(2)Standalone.w3m']);
+  const stage = await (await worker.gameDir()).getDirectoryHandle(events.at(-1).manifest.generation);
+  const maps = await (await stage.getDirectoryHandle('Maps')).getDirectoryHandle('Download');
+  assert.equal((await (await maps.getFileHandle('(2)Standalone.w3m')).getFile()).size, 64);
+});
+
+test('map-only imports preserve the installed MPQs, merge maps and replace duplicate map names', async () => {
+  const worker = makeWorker();
+  const original = (await worker.run([namedBlob(mpq(), 'War3.mpq')])).at(-1).manifest;
+  const added = await worker.runMaps([namedBlob(mpq(64), '(2)New.w3m')]);
+  assert.equal(added.at(-1).type, 'maps-added');
+  assert.equal(added.at(-1).added, 1);
+  const first = added.at(-1).manifest;
+  assert.deepEqual(Array.from(first.files, f => f.name), ['Maps/Download/(2)New.w3m']);
+  const dir = await worker.gameDir();
+  const savedBase = JSON.parse(await (await (await dir.getFileHandle('installation.json')).getFile()).text());
+  assert.deepEqual(savedBase, JSON.parse(JSON.stringify(original)));
+  const updated = (await worker.runMaps([namedBlob(mpq(96), '(2)New.w3m'),
+    namedBlob(mpq(), '(4)Other.w3x')])).at(-1).manifest;
+  assert.equal(updated.files.length, 2);
+  assert.equal(updated.files[0].size, 96);
+  assert.equal(updated.bytes, 160);
+  const mapRoot = await dir.getDirectoryHandle('map-library');
+  const persisted = JSON.parse(await (await (await mapRoot.getFileHandle('maps.json')).getFile()).text());
+  assert.equal(persisted.generation, updated.generation);
+  const gameGeneration = await dir.getDirectoryHandle(original.generation);
+  assert.equal((await (await gameGeneration.getFileHandle('War3.mpq')).getFile()).size, 64);
+});
+
+test('maps cannot be imported before a base MPQ installation', async () => {
+  const worker = makeWorker();
+  const result = await worker.runMaps([namedBlob(mpq(), 'New.w3x')]);
+  assert.equal(result.at(-1).type, 'error');
+  assert.match(result.at(-1).message, /Install War3\.mpq/);
+});
+
+test('bad map uploads preserve the previously committed map generation', async () => {
+  const worker = makeWorker();
+  await worker.run([namedBlob(mpq(), 'War3.mpq')]);
+  const first = (await worker.runMaps([namedBlob(mpq(), 'Good.w3m')])).at(-1).manifest;
+  const result = await worker.runMaps([namedBlob(Buffer.alloc(96), 'Bad.w3x')]);
+  assert.equal(result.at(-1).type, 'error');
+  assert.match(result.at(-1).message, /Invalid MPQ archive/);
+  const mapRoot = await (await worker.gameDir()).getDirectoryHandle('map-library');
+  const manifest = JSON.parse(await (await (await mapRoot.getFileHandle('maps.json')).getFile()).text());
+  assert.equal(manifest.generation, first.generation);
+});
+
+test('map generation lease protects a running game from cleanup and removal', async () => {
+  const worker = makeWorker();
+  await worker.run([namedBlob(mpq(), 'War3.mpq')]);
+  const first = (await worker.runMaps([namedBlob(mpq(), 'First.w3m')])).at(-1).manifest;
+  const release = worker.locks.hold('openrealm-wc3-map-generation:' + first.generation);
+  const second = (await worker.runMaps([namedBlob(mpq(), 'Second.w3m')])).at(-1).manifest;
+  const root = await (await worker.gameDir()).getDirectoryHandle('map-library');
+  assert.ok(await root.getDirectoryHandle(first.generation));
+  assert.ok(await root.getDirectoryHandle(second.generation));
+  const removeResult = [];
+  await worker.context.onmessage({data:{type:'remove'}});
+  removeResult.push(...worker.messages);
+  assert.equal(removeResult.at(-1).type, 'error');
+  assert.match(removeResult.at(-1).message, /Close other Warcraft III game tabs/);
+  release();
 });
