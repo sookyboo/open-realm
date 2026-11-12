@@ -267,9 +267,14 @@ test('successful playable import reveals Play Game and reloads into autostart', 
 
 test('map-only button requires installed game data and imports maps without sending MPQs', () => {
   const {elements:e, worker} = harness();
+  assert.equal(e['map-files'].disabled, false);
   e['map-files'].files = [{name:'New.w3m'}];
   e['map-files'].fire('change');
   assert.equal(e['add-maps'].disabled, true);
+  worker.send({type:'list', manifest:null, maps:null});
+  assert.equal(e['map-files'].disabled, false);
+  assert.equal(e['add-maps'].disabled, true);
+  assert.match(e['map-library-status'].textContent, /Install Warcraft III data/);
   worker.send({type:'list', manifest:{version:3, edition:'retail',
     files:[{name:'War3.mpq', size:64}]}, maps:null});
   e['map-files'].fire('change');

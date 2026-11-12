@@ -43,7 +43,7 @@
     operation = value;
     const busy = value !== null;
     fileInput.disabled = busy;
-    if (mapInput) mapInput.disabled = busy || !playable;
+    if (mapInput) mapInput.disabled = busy;
     if (addMaps) addMaps.disabled = busy || !playable || !mapInput.files.length;
     install.disabled = busy;
     install.classList.toggle('has-selection', value !== 'import' && !!(fileInput.files && fileInput.files.length));
@@ -56,7 +56,7 @@
       manifest.files.some(file => file && typeof file.name === 'string' &&
         file.name.toLowerCase() === 'war3.mpq') &&
       (manifest.edition === undefined || manifest.edition === 'retail' || manifest.edition === 'demo'));
-    if (mapInput) mapInput.disabled = operation !== null || !playable;
+    if (mapInput) mapInput.disabled = operation !== null;
     if (addMaps) addMaps.disabled = operation !== null || !playable || !mapInput.files.length;
     if (play) {
       play.hidden = !playable;
