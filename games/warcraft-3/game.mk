@@ -106,6 +106,15 @@ WC3_CFLAGS += -DBZ_FFMPEG $(shell pkg-config --cflags $(FFMPEG_PKGS))
 WC3_FFMPEG_LIBS := $(shell pkg-config --libs $(FFMPEG_PKGS))
 endif
 
+# Changing media mode must rebuild all affected objects when switching between
+# the default build and a system FFmpeg build.
+WC3_FFMPEG_BUILD_CONFIG := $(BIN_DIR)/.wc3-ffmpeg-build-config
+.PHONY: wc3-ffmpeg-build-config-force
+$(WC3_FFMPEG_BUILD_CONFIG): wc3-ffmpeg-build-config-force | $(BIN_DIR)
+	@printf '%s\n' '$(FFMPEG) $(WC3_FFMPEG_LIBS) $(WC3_CFLAGS)' > $@.tmp
+	@cmp -s $@.tmp $@ || cp $@.tmp $@
+	@rm -f $@.tmp
+
 # Optional SC2API compatibility core. This remains game-module-owned: enabling
 # it must not add Warcraft-specific branches to the generic engine/server.
 # Protobuf is an independent opt-in dependency: SC2API=1 builds the internal
@@ -176,6 +185,7 @@ SHEET_LIB    := $(LIB_DIR)/libsheet$(LIB_EXT)
 RENDERER_LIB := $(LIB_DIR)/librenderer$(LIB_EXT)
 GAME_LIB     := $(LIB_DIR)/libgame$(LIB_EXT)
 $(GAME_LIB): $(WC3_SC2API_BUILD_CONFIG)
+$(JASS_LIB) $(RENDERER_LIB) $(GAME_LIB) $(MENU_LIB): $(WC3_FFMPEG_BUILD_CONFIG)
 MENU_LIB       := $(LIB_DIR)/libmenu$(LIB_EXT)
 BINARY       := $(BIN_DIR)/openwarcraft3$(EXE_EXT)
 MPQ_TEST     := $(BIN_DIR)/test_mpq_compat$(EXE_EXT)

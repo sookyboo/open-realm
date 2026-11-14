@@ -15,6 +15,12 @@ and installer scripts to a separate publication job. See
 [EOS packaging](architecture/epic-online-services.md#github-release-builds)
 and [Flatpak setup](flatpak-steam-deck.md) for their runtime contracts.
 
+PortMaster's independent `dist-scripts/portmaster/build.sh` workflow is not
+one of the five release assets below. It builds FFmpeg 6.1.6 shared libraries
+for AArch64 and bundles them with the port. See
+[PortMaster FFmpeg](platform/portmaster-ffmpeg.md) for its packaging and
+validation contract.
+
 ## Publication and verification
 
 ```sh

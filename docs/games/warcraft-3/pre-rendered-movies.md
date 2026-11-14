@@ -22,6 +22,10 @@ The default build has no FFmpeg dependency. Enable the movie decoder with:
 make FFMPEG=1
 ```
 
+PortMaster AArch64 enables the same client decoder through dynamically linked
+FFmpeg libraries built from pinned source and bundled in `libs.aarch64/`; see
+[PortMaster FFmpeg packaging](../../platform/portmaster-ffmpeg.md).
+
 The Warcraft III build then requires only these pkg-config packages:
 
 ```text

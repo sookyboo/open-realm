@@ -54,6 +54,11 @@ make clean
 make build -j4 FFMPEG=1
 ```
 
+The PortMaster AArch64 package builds pinned FFmpeg 6.1.6 shared libraries
+from source and bundles them under `libs.aarch64/`. The normal Linux GitHub
+release's shared-library bundling in `bundle_media.py` remains unchanged. See
+[PortMaster FFmpeg packaging](../../platform/portmaster-ffmpeg.md).
+
 The Warcraft III build already uses these pkg-config libraries for pre-rendered movies and now reuses them for music:
 
 ```text

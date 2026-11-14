@@ -48,6 +48,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | Entity sound architecture | [architecture/sound.md](architecture/sound.md) |
 | WC3 retail audio admission, Ghidra/r2 setup, recovered structures and parity gaps | [docs/games/warcraft-3/audio-retail-analysis.md](docs/games/warcraft-3/audio-retail-analysis.md) |
 | WC3 background music, `Music.slk`/skin lookup, `svc_music`, optional FFmpeg streaming | [docs/games/warcraft-3/music.md](docs/games/warcraft-3/music.md) |
+| PortMaster AArch64 FFmpeg static build, packaging, LGPL source and relinking | [docs/platform/portmaster-ffmpeg.md](docs/platform/portmaster-ffmpeg.md) |
 | WC3 Phoenix summon, Phoenix Fire, self-damage, Egg rebirth and verification | [docs/games/warcraft-3/phoenix.md](docs/games/warcraft-3/phoenix.md) |
 | WC3 Naga Sea Witch Tornado summon, damage/slow/spin/wander and lifecycle | [docs/games/warcraft-3/tornado.md](docs/games/warcraft-3/tornado.md) |
 | WC3 MDX material filter ordering, layered composition and HumanX03Secret portal | [docs/games/warcraft-3/mdx-materials.md](docs/games/warcraft-3/mdx-materials.md) |

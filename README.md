@@ -66,6 +66,8 @@ make build -j4 FFMPEG=1
 
 On macOS, install these dependencies with `brew install pkg-config ffmpeg`. Ordinary sound effects and unit voices work without `FFMPEG=1`. See [Pre-Rendered Movies](docs/games/warcraft-3/pre-rendered-movies.md).
 
+PortMaster AArch64 builds pinned FFmpeg shared libraries and bundles them with the port; launch the Docker workflow with `./dist-scripts/portmaster/build.sh`. See [PortMaster FFmpeg packaging](docs/platform/portmaster-ffmpeg.md).
+
 Useful targets:
 
 ```bash
