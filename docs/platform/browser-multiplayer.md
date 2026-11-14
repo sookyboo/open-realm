@@ -107,7 +107,11 @@ short-lived credentials from a trusted service instead.
 
 * Browser tabs may be suspended; the **host's browser is the game server**.
   A suspended host can stall the game, and closing it ends the match. There
-  is no host migration or dedicated-server persistence.
+  is no host migration or dedicated-server persistence. During lobby-to-game
+  map loading, browser guests allow up to 300 seconds without an engine packet
+  because a host can synchronously prepare a large map. Normal active-game
+  WebRTC and native networking keep the 10-second watchdog; closed DataChannels
+  are still reported independently.
 * The experimental WebRTC backend does not join native EOS/UDP games.
 * Users must select a room in the browser panel; Internet Games without a
   room is not ready. A private room has no public discoverability.

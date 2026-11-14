@@ -36,7 +36,8 @@ menuExport_t menu;
 struct client_static cls;
 struct client_state cl;
 
-#define CL_TIMEOUT_MSEC 10000
+#define CL_TIMEOUT_MSEC 10000 // milliseconds; active-game and native connection watchdog
+#define CL_WEBRTC_LOADING_TIMEOUT_MSEC 300000 // milliseconds; browser host may synchronously prepare a large map
 #define CL_LOADING_PUMP_MSEC 16 // milliseconds; one 60 Hz platform pump; bounds checkpoint overhead during loading
 
 typedef struct { cstring_t name; xcommand_t call; } clMenuCommand_t;
@@ -1434,15 +1435,60 @@ void CL_SendCmd(void) {
     Netchan_Transmit(NS_CLIENT, &cls.netchan);
 }
 
-static void CL_CheckTimeout(void) {
-    if (cls.state < ca_connected || cl_last_packet_time == 0) {
-        return;
-    }
-    if (cl_realtime - cl_last_packet_time <= CL_TIMEOUT_MSEC) {
-        return;
-    }
-    CL_Disconnect("Connection to host timed out.", true);
+/* While the browser host synchronously prepares a Warcraft map it cannot
+ * pump its server frames. An otherwise healthy guest can spend more than ten
+ * seconds in the lobby/loading handshake without a packet. WebRTC itself
+ * reports a closed DataChannel separately, so use a longer packet watchdog
+ * only until the first active game frame. Never extend native EOS/UDP or
+ * active WebRTC gameplay timeouts. */
+static uint32_t CL_TimeoutBudget(void) {
+    if (cls.state == ca_connected && cls.netchan.remote_address.type == NA_WEBRTC)
+        return CL_WEBRTC_LOADING_TIMEOUT_MSEC;
+    return CL_TIMEOUT_MSEC;
 }
+
+static bool CL_ConnectionTimedOut(void) {
+    return cls.state >= ca_connected && cl_last_packet_time != 0 &&
+           cl_realtime - cl_last_packet_time > CL_TimeoutBudget();
+}
+
+static void CL_CheckTimeout(void) {
+    if (CL_ConnectionTimedOut())
+        CL_Disconnect("Connection to host timed out.", true);
+}
+
+#ifdef BZ_TESTS
+TEST(client_session, browser_map_loading_allows_five_minutes_without_packet) {
+    connstate_t const old_state = cls.state;
+    netadrtype_t const old_type = cls.netchan.remote_address.type;
+    uint32_t const old_realtime = cl_realtime;
+    uint32_t const old_last_packet = cl_last_packet_time;
+
+    cls.netchan.remote_address.type = NA_WEBRTC;
+    cls.state = ca_connected;
+    cl_last_packet_time = 100;
+    cl_realtime = cl_last_packet_time + CL_TIMEOUT_MSEC + 1;
+    T_ASSERT(!CL_ConnectionTimedOut());
+    cl_realtime = cl_last_packet_time + CL_WEBRTC_LOADING_TIMEOUT_MSEC;
+    T_ASSERT(!CL_ConnectionTimedOut());
+    cl_realtime++;
+    T_ASSERT(CL_ConnectionTimedOut());
+
+    cls.state = ca_active;
+    cl_realtime = cl_last_packet_time + CL_TIMEOUT_MSEC + 1;
+    T_ASSERT(CL_ConnectionTimedOut());
+    cls.state = ca_connected;
+    cls.netchan.remote_address.type = NA_EOS;
+    T_ASSERT(CL_ConnectionTimedOut());
+    cls.netchan.remote_address.type = NA_IP;
+    T_ASSERT(CL_ConnectionTimedOut());
+
+    cls.state = old_state;
+    cls.netchan.remote_address.type = old_type;
+    cl_realtime = old_realtime;
+    cl_last_packet_time = old_last_packet;
+}
+#endif
 
 /* Set up the netchan to point at a remote server and send an initial
  * connection request.  The server will respond with an out-of-band
