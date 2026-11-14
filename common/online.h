@@ -23,6 +23,9 @@ bool Online_IsHost(void);
 bool Online_HostReady(void);
 bool Online_InLobby(void);
 bool Online_ConnectionLost(NETSOURCE source, netadr_t const *address);
+#if defined(BZ_WEB_MULTIPLAYER) && BZ_WEB_MULTIPLAYER
+bool Online_PeerBackpressured(netadr_t const *address); /* Avoid stale ordered snapshots behind WebRTC backlog. */
+#endif
 void Online_Refresh(void);
 uint32_t Online_NumGames(void);
 bool Online_Game(uint32_t index, onlineGame_t *out);

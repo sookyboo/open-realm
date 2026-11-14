@@ -18,12 +18,14 @@
 #define WEB_MAX_PEERS 128 // tombstones; accommodate repeated browser peer churn before consumption
 #define WEB_ROOM_LIMIT 24 // players; match browser room and server admission capacity
 #define WEB_RECEIVE_BUDGET 128 // records/frame and queue slots; limits game-thread work
+#define WEB_BRIDGE_SOFT_LIMIT (96u * 1024u) // bytes; stop queuing snapshots if the main-thread bridge is delayed
 
 /* Record bytes, all little-endian: uint32 total size, byte event, byte
  * NETSOURCE, 2 reserved bytes, 32 ASCII hex bytes identifying the peer,
  * followed by a payload. Records never straddle a producer transaction. */
 enum { WEB_PACKET = 1, WEB_READY, WEB_GAME, WEB_CONNECTED, WEB_CLOSED,
-       WEB_ROOM_CLOSED, WEB_HOST_READY, WEB_FAILED, WEB_CLEAR_GAMES, WEB_DROP_PEER };
+       WEB_ROOM_CLOSED, WEB_HOST_READY, WEB_FAILED, WEB_CLEAR_GAMES, WEB_DROP_PEER,
+       WEB_FLOW_PAUSE, WEB_FLOW_RESUME };
 
 typedef struct {
     uint32_t read, write; /* atomic release/acquire, shared with JS Atomics */
@@ -40,9 +42,15 @@ typedef struct {
     uint32_t crc;
 } webGame_t;
 
+typedef struct {
+    char peer[33];
+    bool paused;
+} webFlow_t;
+
 static struct {
     webRing_t to_browser, from_browser;
     webGame_t games[WEB_MAX_GAMES];
+    webFlow_t flow[WEB_ROOM_LIMIT];
     char closed_peers[WEB_MAX_PEERS][33];
     bool pending_close[WEB_MAX_PEERS]; /* retry commands until the JS network layer receives them */
     char host[33], status[192];
@@ -168,6 +176,41 @@ static bool Web_IsClosed(char const *peer) {
         if (!strcmp(web.closed_peers[i], peer)) return true;
     return false;
 }
+/* Flow notifications are event-driven on the JS main thread, while the
+ * shared bridge occupancy catches scheduling delays before JS can report.
+ * A slot is reused only after a peer closes or reconnects. */
+static void Web_ClearFlow(char const *peer) {
+    for (uint32_t i = 0; i < WEB_ROOM_LIMIT; ++i)
+        if (!strcmp(web.flow[i].peer, peer)) memset(&web.flow[i], 0, sizeof(web.flow[i]));
+}
+static void Web_SetFlow(char const *peer, bool paused) {
+    if (!Web_HexId(peer) || Web_IsClosed(peer)) return;
+    for (uint32_t i = 0; i < WEB_ROOM_LIMIT; ++i) {
+        if (strcmp(web.flow[i].peer, peer)) continue;
+        web.flow[i].paused = paused;
+        return;
+    }
+    if (!paused) return;
+    for (uint32_t i = 0; i < WEB_ROOM_LIMIT; ++i) {
+        if (web.flow[i].peer[0]) continue;
+        memcpy(web.flow[i].peer, peer, 33);
+        web.flow[i].paused = true;
+        return;
+    }
+    /* Full means all server slots already have peers. The bridge's global
+     * soft limit still protects against a saturated main thread. */
+}
+
+bool Online_PeerBackpressured(netadr_t const *address) {
+    if (!address || address->type != NA_WEBRTC) return false;
+    uint32_t const write = __atomic_load_n(&web.to_browser.write, __ATOMIC_ACQUIRE);
+    uint32_t const read = __atomic_load_n(&web.to_browser.read, __ATOMIC_ACQUIRE);
+    if (write - read >= WEB_BRIDGE_SOFT_LIMIT) return true;
+    for (uint32_t i = 0; i < WEB_ROOM_LIMIT; ++i)
+        if (web.flow[i].paused && !strcmp(web.flow[i].peer, address->peer)) return true;
+    return false;
+}
+
 static void Web_MarkClosed(char const *peer, bool notify) {
     if (!Web_HexId(peer)) return;
     for (uint32_t i = 0; i < web.closed_count; ++i) {
@@ -223,6 +266,7 @@ void Online_Leave(void) {
     web.host[0] = 0;
     memset(&web.hosted, 0, sizeof(web.hosted));
     web.count = web.closed_count = 0;
+    memset(web.flow, 0, sizeof(web.flow));
     Web_ClearPackets();
     __atomic_store_n(&web.from_browser.read,
         __atomic_load_n(&web.from_browser.write, __ATOMIC_ACQUIRE), __ATOMIC_RELEASE);
@@ -408,6 +452,7 @@ void Online_Frame(uint32_t msec) {
             if (!web.ready) web.host_ready = false;
             Web_Status(web.ready ? "Browser room connected." : "Browser signalling disconnected.");
         } else if (kind == WEB_FAILED && Web_HexId(peer)) {
+            Web_ClearFlow(peer);
             Web_MarkClosed(peer, false);
             Web_DiscardPeerPackets(peer);
             if (!web.hosting && !strcmp(web.host, peer)) {
@@ -439,12 +484,14 @@ void Online_Frame(uint32_t msec) {
             }
         } else if (kind == WEB_CONNECTED && Web_HexId(peer)) {
             Web_ClearClosed(peer);
+            Web_ClearFlow(peer);
             Web_DiscardPeerPackets(peer);
             if (!web.hosting && web.in_lobby && !strcmp(web.host, peer)) {
                 web.connecting = false; web.connection_available = true;
                 Web_Status("Connected to browser host.");
             }
         } else if (kind == WEB_CLOSED && Web_HexId(peer)) {
+            Web_ClearFlow(peer);
             Web_MarkClosed(peer, false);
             Web_DiscardPeerPackets(peer);
             if (!web.hosting && web.in_lobby && !strcmp(web.host, peer)) {
@@ -458,11 +505,14 @@ void Online_Frame(uint32_t msec) {
             web.ready = web.in_lobby = web.hosting = web.connecting = false;
             web.host_ready = web.connection_available = false;
             web.closed_count = 0;
+            memset(web.flow, 0, sizeof(web.flow));
             web.count = 0;
             web.host[0] = 0;
             memset(&web.hosted, 0, sizeof(web.hosted));
             Web_ClearPackets();
             Web_Status("Browser room was closed.");
+        } else if ((kind == WEB_FLOW_PAUSE || kind == WEB_FLOW_RESUME) && Web_HexId(peer)) {
+            Web_SetFlow(peer, kind == WEB_FLOW_PAUSE);
         } else if (kind == WEB_PACKET && web.in_lobby && source <= NS_SERVER &&
                    Web_HexId(peer) && !Web_IsClosed(peer) && size > 0 && size <= MAX_MSGLEN) {
             uint32_t count = packet_queues[source].write - packet_queues[source].read;

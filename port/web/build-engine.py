@@ -165,7 +165,7 @@ def main():
         if template.count(marker) != 1:
             raise SystemExit("browser multiplayer injection point changed")
         shell.write_text(template.replace(marker,
-            '<script src="web-multiplayer.js"></script>\n' + marker), encoding="utf-8")
+            '<script src="web-multiplayer.js?v=20261114-flow-control"></script>\n' + marker), encoding="utf-8")
     run([emcc, *objects, optimization, *debug_flags, "-sUSE_SDL=2", "-sUSE_ZLIB=1",
          "-sMIN_WEBGL_VERSION=2", "-sMAX_WEBGL_VERSION=2", "-sFULL_ES3=1",
          "-sWASMFS=1", "-pthread", "-sPROXY_TO_PTHREAD=1", "-sPTHREAD_POOL_SIZE=2",

@@ -108,6 +108,47 @@ test('packet writers reserve shared-memory capacity for terminal control events'
   assert.ok(Atomics.load(words, (RING + 8 + 4) / 4) > 0);
 });
 
+test('high/low WebRTC buffered amounts pause and resume server snapshots', () => {
+  const t = harness(); t.attach();
+  const peer = t.api.createPeer(ID);
+  peer.open = true; peer.channel.readyState = 'open';
+  peer.channel.bufferedAmount = 128 * 1024;
+  t.api.flushPeer(peer);
+  assert.equal(peer.flowPaused, true);
+  const mem = new DataView(t.heap);
+  const inbound = RING + 8;
+  let offset = inbound + 8;
+  // attach() wrote READY first, then the peer FLOW_PAUSE event.
+  offset += mem.getUint32(offset, true);
+  assert.equal(mem.getUint8(offset + 4), 11);
+  peer.channel.bufferedAmount = 32 * 1024;
+  t.api.flushPeer(peer);
+  assert.equal(peer.flowPaused, true, 'remain paused through the hysteresis band');
+  peer.channel.bufferedAmount = 0;
+  t.api.flushPeer(peer);
+  assert.equal(peer.flowPaused, false);
+  offset += mem.getUint32(offset, true);
+  assert.equal(mem.getUint8(offset + 4), 12);
+});
+
+test('backpressure never discards an already queued reliable WebRTC packet', () => {
+  const t = harness(); t.attach();
+  const peer = t.api.createPeer(ID);
+  peer.open = true; peer.channel.readyState = 'open';
+  const payload = new Uint8Array(1400);
+  peer.queued.push({bytes:payload, source:1});
+  peer.queuedBytes = payload.length;
+  peer.channel.bufferedAmount = 3 * 1024 * 1024;
+  t.api.flushPeer(peer);
+  assert.equal(peer.queuedBytes, payload.length, 'queued packet waits for channel to drain');
+  assert.equal(peer.flowPaused, true);
+  peer.channel.bufferedAmount = 0;
+  t.api.flushPeer(peer);
+  assert.equal(peer.queuedBytes, 0);
+  assert.equal(peer.channel.sent.length, 1);
+  assert.equal(peer.sentPackets, 1);
+});
+
 test('engine overflow close request tears down the JavaScript DataChannel', () => {
   const t = harness(); t.attach();
   const peer = t.api.createPeer(ID);

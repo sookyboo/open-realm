@@ -9,6 +9,8 @@
   const MAX_PACKET = 256 * 1024;
   const FRAGMENT = 12 * 1024;
   const MAX_BUFFERED = 4 * 1024 * 1024;
+  const FLOW_HIGH = 96 * 1024; // bytes; prevent ordered snapshot latency growing indefinitely
+  const FLOW_LOW = 24 * 1024; // bytes; hysteresis prevents per-frame pause/resume chatter
   const MAX_MQTT = 128 * 1024;
   const ROOM_LIMIT = 24;
   const CONTROL_RESERVE = 64 * 1024; // Reserve ring space for disconnect/failure events.
@@ -18,7 +20,7 @@
   const HOST_PUBLISH_INTERVAL = 8000; // ms; keep listings fresh (<16s expiry).
   const RECORD = { PACKET: 1, READY: 2, GAME: 3, CONNECTED: 4, CLOSED: 5,
     ROOM_CLOSED: 6, HOST_READY: 7, FAILED: 8, CLEAR_GAMES: 9,
-    DROP_PEER: 10 };
+    DROP_PEER: 10, FLOW_PAUSE: 11, FLOW_RESUME: 12 };
   // All participants must use the same broker: independent MQTT brokers
   // are not bridged. Production deployments should configure one endpoint.
   const DEFAULT_BROKERS = ['wss://broker.emqx.io:8084/mqtt'];
@@ -384,7 +386,8 @@
     const peer = { id, pc, channel: pc.createDataChannel('openrealm',
       { negotiated: true, id: 0, ordered: true }), pending: [], open: false,
       queued: [], queuedBytes: 0, incoming: null, lastMessage: Date.now(),
-      started: Date.now(), disconnectedAt: null };
+      started: Date.now(), disconnectedAt: null, flowPaused: false,
+      sentPackets: 0, receivedPackets: 0 };
     /* queued is the bounded C-to-JS packet queue; queue stores pending fragments. */
     state.peers.set(id, peer);
     peer.channel.binaryType = 'arraybuffer';
@@ -426,9 +429,20 @@
     record(error ? RECORD.FAILED : RECORD.CLOSED, peer.id);
     if (error) updateStatus(error);
   }
+  function updatePeerFlow(peer) {
+    if (!peer.open || peer.channel.readyState !== 'open') return;
+    const pending = peer.queuedBytes + peer.channel.bufferedAmount;
+    if (!peer.flowPaused && pending >= FLOW_HIGH) {
+      if (record(RECORD.FLOW_PAUSE, peer.id)) peer.flowPaused = true;
+    } else if (peer.flowPaused && pending <= FLOW_LOW) {
+      if (record(RECORD.FLOW_RESUME, peer.id)) peer.flowPaused = false;
+    }
+  }
   function flushPeer(peer) {
     if (!peer.open || peer.channel.readyState !== 'open') return;
-    while (peer.queued.length && peer.channel.bufferedAmount < MAX_BUFFERED / 2) {
+    /* Keep only a small amount in the ordered DataChannel: once queued,
+     * old snapshots cannot be discarded without breaking delta bases. */
+    while (peer.queued.length && peer.channel.bufferedAmount < FLOW_HIGH) {
       const next = peer.queued.shift();
       peer.queuedBytes -= next.bytes.length;
       const messageId = ++state.messageId >>> 0;
@@ -443,7 +457,9 @@
         frame.set(payload, 13);
         peer.channel.send(frame);
       }
+      peer.sentPackets++;
     }
+    updatePeerFlow(peer);
     if (peer.channel.bufferedAmount > MAX_BUFFERED) dropPeer(peer, 'Browser network congestion.');
   }
   function onFragment(peer, frame) {
@@ -466,6 +482,7 @@
     item.received += frame.length - 13;
     if (item.received === total) {
       peer.incoming = null;
+      peer.receivedPackets++;
       if (!record(RECORD.PACKET, peer.id, item.bytes, state.hosting ? 1 : 0))
         dropPeer(peer, 'Browser receive queue overflow.');
     }
@@ -674,6 +691,15 @@
     attach, activate() { activate(); setHeartbeat(); }, deactivate,
     host, closeAdmission, refresh, connectHost, selectRoom,
     status() { return state.status; },
+    stats() {
+      const bridge = ring(0);
+      const bridgeBytes = bridge ? (load32(bridge, 4) - load32(bridge, 0)) >>> 0 : 0;
+      return {visibility:document.visibilityState || 'unknown', bridgeBytes,
+        peers:Array.from(state.peers.values(), p => ({peer:p.id.slice(0, 8), open:p.open,
+          bufferedBytes:p.channel.bufferedAmount, queuedBytes:p.queuedBytes,
+          sentPackets:p.sentPackets, receivedPackets:p.receivedPackets,
+          paused:p.flowPaused}))};
+    },
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installControls);
   else installControls();

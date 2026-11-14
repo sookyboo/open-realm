@@ -152,6 +152,35 @@ notifications have reserved ring capacity and a bounded retry mailbox.
 Host metadata publishes on change and refreshes periodically (every eight
 seconds) so discovered entries expire only when a host stops advertising.
 
+
+## Live gameplay latency and backpressure
+
+The authoritative server simulates at 100 ms per game frame (10 Hz) independently
+of the browser's render FPS. Unit state should arrive with low latency even
+when the renderer draws 30+ FPS. WebRTC uses a reliable, ordered DataChannel;
+dropping packets after the server has delta-encoded them is unsafe because the
+next delta may reference the missing snapshot.
+
+The browser reports high/low DataChannel buffered-water marks through the
+existing control ring. The host pauses *new snapshot generation* for a
+backpressured WebRTC peer while continuing to drain existing packets and
+reliable sign-on messages. The C side also checks outgoing shared-ring
+occupancy so throttled JavaScript pumps cannot accumulate unlimited snapshots.
+Native EOS, UDP and local loopback are unaffected. Skipping snapshots reduces
+update frequency under poor connectivity rather than allowing seconds of old
+unit positions to queue up; it cannot create bandwidth or overcome a stalled
+browser tab.
+
+For a lag report, keep the **host** browser tab foreground and run
+`openrealmWebMultiplayer.stats()` in the browser developer console on both
+sides. Watch `bufferedBytes`, `queuedBytes`, `bridgeBytes`, `paused`, `sentPackets`,
+`receivedPackets` and `visibility` while issuing unit orders. Compare packet
+counts over a few seconds: a normal in-game host should generate approximately
+10 snapshots per second per active client, plus occasional control packets.
+Sustained positive queues on the host indicate transport congestion; empty
+queues with low received packet counts point to host game scheduling instead. `chrome://webrtc-internals/` can also help
+inspect selected-candidate RTT and DataChannel throughput.
+
 ## Automated checks
 
 CI runs `node --test port/web/tests/*.test.cjs` and builds both the ordinary

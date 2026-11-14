@@ -13,6 +13,7 @@
 #include <stdlib.h>
 
 #include "server.h"
+#include "common/online.h"
 
 #define VISUAL_DISTANCE 1500
 #define SNAPSHOT_NEAR_ENTITY_DISTANCE 256 // world units; nearby world presentation outranks distant contacts under saturation
@@ -414,6 +415,14 @@ uint32_t SV_WriteFrameToClient(client_t *client) {
 
 /* True while a rate-limited client's link is still draining its previous snapshot (Q2 SV_RateDrop). */
 bool SV_ClientLinkBusy(client_t const *client) {
+#if defined(BZ_WEB_MULTIPLAYER) && BZ_WEB_MULTIPLAYER
+    /* Reliable ordered WebRTC cannot discard an obsolete snapshot: the next
+     * delta references it. Pause building NEW frames while the DataChannel or
+     * browser bridge drains instead of queuing seconds of stale positions.
+     * Already-queued reliable protocol messages remain free to transmit. */
+    if (client->netchan.remote_address.type == NA_WEBRTC &&
+        Online_PeerBackpressured(&client->netchan.remote_address)) return true;
+#endif
     return Netchan_IsSequenced(&client->netchan) && Cvar_Integer("sv_rate", 0) > 0 && svs.realtime < client->rate_clear_msec;
 }
 
