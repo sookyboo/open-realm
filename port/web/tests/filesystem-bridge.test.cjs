@@ -17,7 +17,11 @@ function dir(entries) {
   return {
     async getDirectoryHandle(name) {
       const value = entries[name];
-      if (!value || typeof value.getDirectoryHandle !== 'function') throw new Error('Missing directory ' + name);
+      if (!value || typeof value.getDirectoryHandle !== 'function') {
+        const error = new Error('Missing directory ' + name);
+        error.name = 'NotFoundError';
+        throw error;
+      }
       return value;
     },
     async getFileHandle(name) {
@@ -73,7 +77,7 @@ async function launch(mapPath, {corruptBase = false, edition, completeness, expa
     sessionStorage:{getItem:key=>session.get(key) ?? null,setItem:(key,value)=>session.set(key,value)},
     location:{reload:()=>{reloads++;}},
     window:{openrealmStartEngine:args => { starts.push(args); return startResult; },
-      MPQHeader:require('../site/mpq-header.js')},
+      openrealmPagesReady:Promise.resolve(true), MPQHeader:require('../site/mpq-header.js')},
     Uint8Array, Number, DataView
   });
   vm.runInContext(fs.readFileSync(path.join(site, 'filesystem-bridge.js'), 'utf8'), context);

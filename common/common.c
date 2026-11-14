@@ -851,15 +851,15 @@ static PATHSTR fs_map_overlay;
 void FS_SetMapOverlayDirectory(cstring_t dir) {
     snprintf(fs_map_overlay, sizeof(fs_map_overlay), "%s", dir ? dir : "");
 }
-static bool FS_OverlayMapPath(cstring_t path) {
-    if (!fs_map_overlay[0] || !path ||
-        (strncasecmp(path, "Maps/Download/", 14) && strncasecmp(path, "Maps\\Download\\", 14))) return false;
-    if (strstr(path, "..")) return false;
-    return FS_HasExtension(path, ".w3m") || FS_HasExtension(path, ".w3x");
-}
 static bool FS_OverlayMapExists(cstring_t path) {
     char full[MAX_PATHLEN * 2];
-    if (!FS_OverlayMapPath(path)) return false;
+    char normalized[MAX_PATHLEN];
+    if (!fs_map_overlay[0] || !path || !*path || strlen(path) >= sizeof(normalized) ||
+        strchr(path, '\\')) return false;
+    snprintf(normalized, sizeof(normalized), "%s", path);
+    if (strstr(normalized, "..") || normalized[0] == '/' || strchr(normalized, ':')) return false;
+    char *slash = strchr(normalized, '/');
+    if (!slash || (size_t)(slash - normalized) != 4 || strncasecmp(normalized, "Maps", 4)) return false;
     FS_MakeDiskPath(fs_map_overlay, path, full, sizeof(full));
     return FS_FileOnDiskExists(full);
 }
@@ -1134,6 +1134,10 @@ handle_t FS_OpenFile(cstring_t fileName) {
     if (!fileName || !*fileName) {
         filelock = false;
         return NULL;
+    }
+    if (FS_OverlayMapExists(fileName)) {
+        filelock = false;
+        return NULL; /* FS_ReadFile routes this exact loose member ahead of archives. */
     }
     if (priority_archive) {
         handle_t file;
@@ -2150,8 +2154,8 @@ TEST(fs, browser_map_overlay_precedence) {
     char *bytes = FS_ReadFile("Maps/Download/OverlayCheck.w3x", &size);
     T_NOT_NULL(bytes);
     if (bytes) { T_EQ(size, 7u); T_ASSERT(!memcmp(bytes, "new-map", 7)); FS_FreeFile(bytes); }
-    T_ASSERT(!FS_OverlayMapPath("Units/UnitData.slk"));
-    T_ASSERT(!FS_OverlayMapPath("Maps/Download/../OverlayCheck.w3x"));
+    T_ASSERT(!FS_OverlayMapExists("Units/UnitData.slk"));
+    T_ASSERT(!FS_OverlayMapExists("Maps/Download/../OverlayCheck.w3x"));
     FS_SetMapOverlayDirectory(old_overlay);
     memcpy(gameDirs, old_dirs, sizeof(gameDirs));
 }

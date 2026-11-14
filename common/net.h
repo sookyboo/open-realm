@@ -84,6 +84,8 @@ void NET_Config(bool multiplayer);
 void NET_ConfigSource(NETSOURCE netsrc, bool open);
 bool NET_IsConfigured(NETSOURCE netsrc);
 void NET_Shutdown(void);
+/* Packet-loss policy is selected by the transport owning this address. */
+uint32_t NET_ConnectionTimeoutMsec(netadrtype_t type, bool loading);
 
 // Parse "host", "host:port" or "eos:<ProductUserId>" into a netadr_t. default_port is used
 // when no port is present in the string.  Returns true on success.

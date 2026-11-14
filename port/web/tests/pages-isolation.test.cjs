@@ -101,7 +101,7 @@ test('boot script loads before filesystem launcher and gates engine startup', ()
   const shell = fs.readFileSync(path.join(repo, 'port/web/site/engine-shell.html'), 'utf8');
   assert.equal(shell.match(/src="pages-isolation\.js"/g)?.length, 1);
   assert.ok(shell.indexOf('src="pages-isolation.js"') < shell.indexOf('var webglProbe'));
-  assert.ok(shell.indexOf('src="pages-isolation.js"') < shell.indexOf('src="filesystem-bridge.js"'));
+  assert.ok(shell.indexOf('src="pages-isolation.js"') < shell.indexOf('src="filesystem-bridge.js?v=20261114-map-library"'));
   assert.match(shell, /Cross-origin isolation bootstrap was not loaded/);
   assert.match(shell, /if \(!browserCapable\) \{\s*browserUnsupported\.hidden = false/);
   assert.match(shell, /if \(ready\) \{\s*pageContent\.hidden = false/);

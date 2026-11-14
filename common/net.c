@@ -359,6 +359,11 @@ bool NET_IsConfigured(NETSOURCE netsrc) {
     return netsrc <= NS_SERVER && udp_sockets[netsrc] != NET_INVALID_SOCKET;
 }
 
+uint32_t NET_ConnectionTimeoutMsec(netadrtype_t type, bool loading) {
+    enum { NATIVE_TIMEOUT_MSEC = 10000, WEBRTC_LOADING_TIMEOUT_MSEC = 300000 };
+    return type == NA_WEBRTC && loading ? WEBRTC_LOADING_TIMEOUT_MSEC : NATIVE_TIMEOUT_MSEC;
+}
+
 void NET_Shutdown(void) {
     Online_Shutdown();
     NET_Config(false);

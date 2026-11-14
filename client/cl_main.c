@@ -36,8 +36,6 @@ menuExport_t menu;
 struct client_static cls;
 struct client_state cl;
 
-#define CL_TIMEOUT_MSEC 10000 // milliseconds; active-game and native connection watchdog
-#define CL_WEBRTC_LOADING_TIMEOUT_MSEC 300000 // milliseconds; browser host may synchronously prepare a large map
 #define CL_LOADING_PUMP_MSEC 16 // milliseconds; one 60 Hz platform pump; bounds checkpoint overhead during loading
 
 typedef struct { cstring_t name; xcommand_t call; } clMenuCommand_t;
@@ -1442,9 +1440,8 @@ void CL_SendCmd(void) {
  * only until the first active game frame. Never extend native EOS/UDP or
  * active WebRTC gameplay timeouts. */
 static uint32_t CL_TimeoutBudget(void) {
-    if (cls.state == ca_connected && cls.netchan.remote_address.type == NA_WEBRTC)
-        return CL_WEBRTC_LOADING_TIMEOUT_MSEC;
-    return CL_TIMEOUT_MSEC;
+    return NET_ConnectionTimeoutMsec(cls.netchan.remote_address.type,
+                                     cls.state == ca_connected);
 }
 
 static bool CL_ConnectionTimedOut(void) {
@@ -1467,15 +1464,15 @@ TEST(client_session, browser_map_loading_allows_five_minutes_without_packet) {
     cls.netchan.remote_address.type = NA_WEBRTC;
     cls.state = ca_connected;
     cl_last_packet_time = 100;
-    cl_realtime = cl_last_packet_time + CL_TIMEOUT_MSEC + 1;
+    cl_realtime = cl_last_packet_time + NET_ConnectionTimeoutMsec(NA_WEBRTC, false) + 1;
     T_ASSERT(!CL_ConnectionTimedOut());
-    cl_realtime = cl_last_packet_time + CL_WEBRTC_LOADING_TIMEOUT_MSEC;
+    cl_realtime = cl_last_packet_time + NET_ConnectionTimeoutMsec(NA_WEBRTC, true);
     T_ASSERT(!CL_ConnectionTimedOut());
     cl_realtime++;
     T_ASSERT(CL_ConnectionTimedOut());
 
     cls.state = ca_active;
-    cl_realtime = cl_last_packet_time + CL_TIMEOUT_MSEC + 1;
+    cl_realtime = cl_last_packet_time + NET_ConnectionTimeoutMsec(NA_WEBRTC, false) + 1;
     T_ASSERT(CL_ConnectionTimedOut());
     cls.state = ca_connected;
     cls.netchan.remote_address.type = NA_EOS;
@@ -1620,7 +1617,8 @@ void CL_Frame(uint32_t msec) {
     CL_MovieUpdate();
     CL_ReadPackets();
     if (cls.state == ca_connecting && NET_IsOnlineAddress(cls.netchan.remote_address.type)) {
-        if (cl_realtime - cl_connect_started > CL_TIMEOUT_MSEC) {
+        if (cl_realtime - cl_connect_started > NET_ConnectionTimeoutMsec(
+                cls.netchan.remote_address.type, cls.state == ca_connected)) {
             CL_Disconnect("Internet host connection timed out.", true);
         } else if (cl_realtime - cl_connect_retry >= 1000) {
             cl_connect_retry = cl_realtime;

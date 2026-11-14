@@ -229,9 +229,13 @@ async function openWriter(file) {
 }
 async function directory(create) {
   const origin = await navigator.storage.getDirectory();
-  const root = await origin.getDirectoryHandle(ROOT, {create});
-  const game = await root.getDirectoryHandle(GAME, {create});
-  return game.getDirectoryHandle(WC3, {create});
+  let root, game;
+  try { root = await origin.getDirectoryHandle(ROOT, {create}); }
+  catch (error) { if (!create && error.name === 'NotFoundError') return null; throw error; }
+  try { game = await root.getDirectoryHandle(GAME, {create}); }
+  catch (error) { if (!create && error.name === 'NotFoundError') return null; throw error; }
+  try { return await game.getDirectoryHandle(WC3, {create}); }
+  catch (error) { if (!create && error.name === 'NotFoundError') return null; throw error; }
 }
 async function metadata(dir, filename = META) {
   try {
@@ -376,7 +380,8 @@ async function addMaps(files) {
       if (selected.has(key)) throw new Error('Duplicate map filename: ' + file.name);
       selected.set(key, {name, blob:file, size:file.size, source:file.name});
     }
-    const base = await metadata(await directory(false));
+    const baseDir = await directory(false);
+    const base = baseDir ? await metadata(baseDir) : null;
     if (!base || !Array.isArray(base.files) ||
         !base.files.some(file => file && file.name.toLowerCase() === 'war3.mpq'))
       throw new Error('Install War3.mpq before adding maps');
@@ -578,7 +583,7 @@ async function install(files) {
 }
 async function list() {
   let manifest = null;
-  try { manifest = await metadata(await directory(false)); }
+  try { const dir = await directory(false); manifest = dir ? await metadata(dir) : null; }
   catch (err) { if (err.name !== 'NotFoundError') throw err; }
   postMessage({type:'list', manifest, maps:await mapMetadata()});
 }

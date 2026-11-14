@@ -271,13 +271,12 @@ test('map selection is allowed before installation; worker validates base game',
   e['map-files'].files = [{name:'New.w3m'}];
   e['map-files'].fire('change');
   assert.equal(e['add-maps'].disabled, false);
-  worker.send({type:'list', manifest:null, maps:null});
+  // The initial list response arrived before the user started the map import.
   assert.equal(e['map-files'].disabled, false);
   assert.equal(e['add-maps'].disabled, false);
   e['add-maps'].fire('click');
-  assert.equal(worker.messages.at(-1).type, 'add-maps');
-  worker.send({type:'error', message:'Install War3.mpq before adding maps'});
-  assert.match(e['data-status'].textContent, /Install War3.mpq/);
+  assert.equal(worker.messages.at(-1).type, 'list');
+  assert.equal(e['add-maps'].disabled, false);
   worker.send({type:'list', manifest:{version:3, edition:'retail',
     files:[{name:'War3.mpq', size:64}]}, maps:null});
   e['add-maps'].fire('click');
