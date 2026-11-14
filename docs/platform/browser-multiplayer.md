@@ -6,7 +6,8 @@ Services**: native `EOS=1` and native UDP are unchanged, and there is no
 native/browser cross-play or host migration in this version.
 
 The browser build is still experimental; browser multiplayer has not yet been
-verified by a complete two-player game. This feature is disabled by default.
+verified by a complete two-player game. Source-level fixes and regression tests
+are not a substitute for a two-browser playthrough. This feature is disabled by default.
 
 ## Build
 
@@ -130,3 +131,31 @@ See [Browser runtime](browser-run.md), [GitHub Pages](browser-github-pages.md)
 and [Architecture](../../ARCHITECTURE.md). Follow `AGENTS.md` and
 `CONTRIBUTING.md`; builds and automated tests are deliberately not performed
 by this patch author.
+
+## Connection lifecycle and fault handling
+
+The MQTT broker handles signalling and room discovery, not gameplay transport.
+When it disconnects, the browser retries signalling while already-open WebRTC
+DataChannels continue to carry game packets. New joins require signalling to
+recover. Explicitly leaving/changing rooms still closes the active game session.
+
+Unanswered offers and unopened channels time out after 30 seconds. ICE
+`disconnected` has a separate 15-second grace window, and incomplete fragmented
+messages also expire after 15 seconds. Fatal queue overflows cause both the C
+engine and the JavaScript DataChannel to reject the peer; essential control
+notifications have reserved ring capacity and a bounded retry mailbox.
+
+Host metadata publishes on change and refreshes periodically (every eight
+seconds) so discovered entries expire only when a host stops advertising.
+
+## Automated checks
+
+CI runs `node --test port/web/tests/*.test.cjs` and builds both the ordinary
+browser engine and `WEB_MULTIPLAYER=1` with Emscripten. The default build must
+not include the WebRTC script. A synthetic C filesystem regression verifies
+that newer `Maps/Download` overlays take precedence over installed loose maps;
+all unrelated archive and asset lookups retain their existing order. The
+browser-specific `extra_data` overlay is enabled only for Emscripten startup.
+
+CI and local builds still need an interactive, cross-network two-browser smoke
+test before treating this feature as production-ready.

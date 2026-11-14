@@ -178,6 +178,7 @@ void LoadMap(cstring_t pFilename);
 bool Com_ResolveMapArgument(cstring_t arg, string_t out, uint32_t out_size);
 
 void FS_Init(void);
+void FS_SetMapOverlayDirectory(cstring_t dir); // browser-only downloaded map precedence
 void FS_SetShareDirectory(cstring_t dir);
 void FS_SetHomeDirectory(cstring_t dir);
 cstring_t FS_BasePath(void);

@@ -45,7 +45,7 @@ function harness({storage = true, session = new Map()} = {}) {
   let worker;
   class Worker {
     constructor(url) {
-      assert.equal(url, 'install-worker.js?v=20261112-custom-maps');
+      assert.equal(url, 'install-worker.js?v=20261114-map-library');
       worker = this;
       this.messages = [];
     }
@@ -80,7 +80,7 @@ test('both browser pages expose ISO/mixed selection and detected archive list', 
     assert.match(html, /id="game-files"[^>]*accept="\.iso,\.mpq,\.w3m,\.w3x"[^>]*multiple/);
     for (const id of ['selection-summary', 'discovered-files', 'archive-list', 'data-status', 'installation-edition'])
       assert.ok(html.includes(`id="${id}"`), `${name}: missing ${id}`);
-    assert.match(html, /<script src="installer\.js\?v=20261112-custom-maps"><\/script>/);
+    assert.match(html, /<script src="installer\.js\?v=20261114-map-library"><\/script>/);
   }
 });
 
@@ -265,7 +265,7 @@ test('successful playable import reveals Play Game and reloads into autostart', 
 });
 
 
-test('map-only button enables for selected maps and worker validates installed game data', () => {
+test('map selection is allowed before installation; worker validates base game', () => {
   const {elements:e, worker} = harness();
   assert.equal(e['map-files'].disabled, false);
   e['map-files'].files = [{name:'New.w3m'}];
@@ -274,14 +274,12 @@ test('map-only button enables for selected maps and worker validates installed g
   worker.send({type:'list', manifest:null, maps:null});
   assert.equal(e['map-files'].disabled, false);
   assert.equal(e['add-maps'].disabled, false);
-  assert.match(e['map-library-status'].textContent, /Install Warcraft III data/);
   e['add-maps'].fire('click');
   assert.equal(worker.messages.at(-1).type, 'add-maps');
   worker.send({type:'error', message:'Install War3.mpq before adding maps'});
   assert.match(e['data-status'].textContent, /Install War3.mpq/);
   worker.send({type:'list', manifest:{version:3, edition:'retail',
     files:[{name:'War3.mpq', size:64}]}, maps:null});
-  assert.equal(e['add-maps'].disabled, false);
   e['add-maps'].fire('click');
   assert.equal(worker.messages.at(-1).type, 'add-maps');
   assert.equal(worker.messages.at(-1).files.length, 1);

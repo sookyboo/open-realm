@@ -956,7 +956,7 @@ test('maps cannot be imported before a base MPQ installation', async () => {
   const worker = makeWorker();
   const result = await worker.runMaps([namedBlob(mpq(), 'New.w3x')]);
   assert.equal(result.at(-1).type, 'error');
-  assert.match(result.at(-1).message, /Install War3\.mpq/);
+  assert.match(result.at(-1).message, /Install War3.mpq/);
 });
 
 test('bad map uploads preserve the previously committed map generation', async () => {

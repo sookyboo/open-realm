@@ -7,7 +7,7 @@ typedef struct {
     uint32_t players, maxPlayers, speed, slots;
 } onlineGame_t;
 
-#if defined(BZ_EOS) || defined(BZ_WEB_MULTIPLAYER)
+#if defined(BZ_EOS) || (defined(BZ_WEB_MULTIPLAYER) && BZ_WEB_MULTIPLAYER)
 #ifdef BZ_TESTS
 void Online_Acceptance_f(void);
 #endif
@@ -16,6 +16,9 @@ void Online_Frame(uint32_t msec);
 void Online_Shutdown(void);
 cstring_t Online_Status(void);
 bool Online_Ready(void);
+#if defined(BZ_WEB_MULTIPLAYER) && BZ_WEB_MULTIPLAYER
+bool Online_SessionAlive(void); /* MQTT may fail while an active DataChannel survives */
+#endif
 bool Online_IsHost(void);
 bool Online_HostReady(void);
 bool Online_InLobby(void);

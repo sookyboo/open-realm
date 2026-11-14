@@ -52,6 +52,11 @@ def main():
         args.out = "build/web/engine-debug"
     out = (ROOT / args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
+    # A flag-off rebuild must not leave a runnable old multiplayer script or
+    # generated shell in the output directory, even when --check is selected.
+    if not args.web_multiplayer:
+        for stale in ("web-multiplayer.js", "engine-shell-multiplayer.html"):
+            (out / stale).unlink(missing_ok=True)
     emcc = shutil.which(args.emcc)
     if emcc is None and not args.check:
         parser.error("emcc not available; activate the Emscripten SDK")

@@ -181,7 +181,7 @@ body.ios-web-app #game-fullscreen { display: none; }
 <button id="remove-data" type="button">Remove local data</button>
 <div id="map-library-panel">
 <p>Add standalone custom maps without replacing game archives. Maps appear under <code>Maps/Download/</code> after reloading the game.</p>
-<input id="map-files" type="file" accept=".w3m,.w3x" multiple aria-label="Custom Warcraft III maps">
+<input id="map-files" type="file" accept=".w3m,.w3x" multiple disabled aria-label="Custom Warcraft III maps">
 <button id="add-maps" type="button" disabled>Add selected maps</button>
 <p id="map-library-status" role="status">Install Warcraft III data before adding maps.</p>
 </div>
@@ -481,9 +481,9 @@ openrealmInstallFullscreenControls(window, document, gameContainer, gameCanvas,
   gameFullscreen, document.getElementById('status'));
 </script>
 <script src="early-map-loading.js"></script>
-<script src="installer.js?v=20261112-custom-maps"></script>
+<script src="installer.js?v=20261114-map-library"></script>
 <script src="mpq-header.js"></script>
-<script src="filesystem-bridge.js"></script>
+<script src="filesystem-bridge.js?v=20261114-map-library"></script>
 <template id="engine-script">{{{ SCRIPT }}}</template>
 </body>
 </html>

@@ -330,7 +330,14 @@ void SV_SetPaused(bool paused) {
 void SV_Frame(uint32_t msec) {
     uint32_t external_steps = 0, completed_steps = 0;
     bool external_clock;
+    /* A WebRTC game stays connected after the MQTT signalling broker goes down.
+     * EOS still requires its original Online_Ready() host session check.
+     * A new web host also needs to survive until its first advertisement. */
+#if defined(BZ_WEB_MULTIPLAYER) && BZ_WEB_MULTIPLAYER
+    if (Cvar_Integer("online_mode", 0) && SV_IsActive() && !Online_SessionAlive()) {
+#else
     if (Cvar_Integer("online_mode", 0) && SV_IsActive() && !Online_Ready()) {
+#endif
         fprintf(stderr, "Internet host lost its online session: %s\n", Online_Status());
         SV_Shutdown();
         return;

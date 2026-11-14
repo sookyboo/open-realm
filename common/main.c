@@ -551,7 +551,13 @@ int main(int argc, string_t argv[]) {
 
     cstring_t extra_data_dir = Cvar_String("extra_data", "");
     if (extra_data_dir && *extra_data_dir) {
-        FS_AddDataDirectory(extra_data_dir);
+        if (FS_AddDataDirectory(extra_data_dir)) {
+#ifdef __EMSCRIPTEN__
+            /* Browser map generations intentionally override only matching
+             * Maps/Download files, not ordinary engine assets. */
+            FS_SetMapOverlayDirectory(extra_data_dir);
+#endif
+        }
     }
 
     if (!data) {

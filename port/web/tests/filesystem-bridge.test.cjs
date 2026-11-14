@@ -13,21 +13,16 @@ map.writeUInt32LE(32, 16); map.writeUInt32LE(48, 20);
 map.writeUInt32LE(1, 24); map.writeUInt32LE(1, 28);
 const mpq = Buffer.from(map.subarray(0, 64));
 mpq.writeUInt32LE(64, 8);
-function notFound(name) {
-  const error = new Error('Missing ' + name);
-  error.name = 'NotFoundError';
-  return error;
-}
 function dir(entries) {
   return {
     async getDirectoryHandle(name) {
       const value = entries[name];
-      if (!value || typeof value.getDirectoryHandle !== 'function') throw notFound('directory ' + name);
+      if (!value || typeof value.getDirectoryHandle !== 'function') throw new Error('Missing directory ' + name);
       return value;
     },
     async getFileHandle(name) {
       const value = entries[name];
-      if (!(value instanceof Blob)) throw notFound('file ' + name);
+      if (!(value instanceof Blob)) throw new Error('Missing file ' + name);
       return {getFile: async () => value};
     }
   };

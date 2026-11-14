@@ -11,8 +11,14 @@
   const MAX_BUFFERED = 4 * 1024 * 1024;
   const MAX_MQTT = 128 * 1024;
   const ROOM_LIMIT = 24;
+  const CONTROL_RESERVE = 64 * 1024; // Reserve ring space for disconnect/failure events.
+  const MAX_CONTROLS = 256; // Bounded retry mailbox for main-thread to engine events.
+  const CONNECT_TIMEOUT = 30000; // ms; no answer or channel-open confirmation.
+  const DISCONNECT_GRACE = 15000; // ms; ICE transient disconnection allowance.
+  const HOST_PUBLISH_INTERVAL = 8000; // ms; keep listings fresh (<16s expiry).
   const RECORD = { PACKET: 1, READY: 2, GAME: 3, CONNECTED: 4, CLOSED: 5,
-    ROOM_CLOSED: 6, HOST_READY: 7, FAILED: 8, CLEAR_GAMES: 9 };
+    ROOM_CLOSED: 6, HOST_READY: 7, FAILED: 8, CLEAR_GAMES: 9,
+    DROP_PEER: 10 };
   // All participants must use the same broker: independent MQTT brokers
   // are not bridged. Production deployments should configure one endpoint.
   const DEFAULT_BROKERS = ['wss://broker.emqx.io:8084/mqtt'];
@@ -29,6 +35,8 @@
     peers: new Map(), games: new Map(), hostId: '', hosting: false,
     hosted: null, admissionClosed: false, messageId: 0, pendingIce: new Map(),
     status: 'Create a room or enter an invitation code.',
+    controls: [], hostRevision: 0, publishedRevision: 0, lastPublished: 0,
+    publishing: false,
   };
 
   function hex(size) {
@@ -85,24 +93,48 @@
     if (first < length) result.set(r.bytes.subarray(base, base + length - first), first);
     return result;
   }
-  function record(kind, peerId = '', payload = null, source = 0) {
+  /* A gameplay packet must never consume the last reserved capacity needed
+   * for a CLOSED/FAILED notification. Control records retry in FIFO order on
+   * the next pump rather than disappearing when the shared ring is full. */
+  function writeRecord(entry, reserve = 0) {
     const r = ring(1);
     if (!r) return false;
-    const bytes = payload || new Uint8Array(0);
+    const bytes = entry.payload || new Uint8Array(0);
     const length = HEADER + bytes.length;
     const read = load32(r, 0), write = load32(r, 4);
-    if (length > r.size || (write - read >>> 0) > r.size ||
-        length > r.size - (write - read >>> 0)) return false;
+    const occupied = (write - read) >>> 0;
+    if (length + reserve > r.size || occupied > r.size ||
+        length + reserve > r.size - occupied) return false;
     const header = new Uint8Array(HEADER);
     new DataView(header.buffer).setUint32(0, length, true);
-    header[4] = kind; header[5] = source;
-    if (/^[0-9a-f]{32}$/.test(peerId)) header.set(encoder.encode(peerId), 8);
+    header[4] = entry.kind; header[5] = entry.source;
+    if (/^[0-9a-f]{32}$/.test(entry.peerId)) header.set(encoder.encode(entry.peerId), 8);
     copyRing(r, write, header);
     if (bytes.length) copyRing(r, write + HEADER, bytes);
     store32(r, 4, (write + length) >>> 0);
     return true;
   }
+  function flushControls() {
+    while (state.controls.length && writeRecord(state.controls[0])) state.controls.shift();
+  }
+  function record(kind, peerId = '', payload = null, source = 0) {
+    const entry = { kind, peerId, payload, source };
+    if (kind === RECORD.PACKET) {
+      flushControls();
+      // Packet overflow is fatal to the peer, not an acceptable lost message.
+      return !state.controls.length && writeRecord(entry, CONTROL_RESERVE);
+    }
+    flushControls();
+    if (!state.controls.length && writeRecord(entry)) return true;
+    if (state.controls.length >= MAX_CONTROLS) {
+      updateStatus('Browser control queue exhausted; leave and reload the room.');
+      return false;
+    }
+    state.controls.push(entry);
+    return true;
+  }
   function pump() {
+    flushControls();
     const r = ring(0);
     if (!r) return;
     let read = load32(r, 0);
@@ -118,7 +150,11 @@
         updateStatus('Browser network queue contained a malformed record.');
         break;
       }
-      if (header[4] === RECORD.PACKET && (header[5] === 0 || header[5] === 1)) {
+      if (header[4] === RECORD.DROP_PEER) {
+        const peerId = decoder.decode(header.subarray(8, 40));
+        const peer = state.peers.get(peerId);
+        if (peer) dropPeer(peer, 'Engine rejected browser packet stream.');
+      } else if (header[4] === RECORD.PACKET && (header[5] === 0 || header[5] === 1)) {
         const peerId = decoder.decode(header.subarray(8, 40));
         const peer = state.peers.get(peerId);
         if (peer && peer.open && ((state.hosting && header[5] === 1) ||
@@ -132,12 +168,14 @@
       read = (read + length) >>> 0;
     }
     store32(r, 0, read);
+    flushControls();
     for (const peer of state.peers.values()) flushPeer(peer);
   }
   function attach(_unusedBuffer, to, from, dataOffset, size, stride) {
     if (size !== RING_SIZE || stride !== size + dataOffset ||
         to % 4 || from % 4 || dataOffset % 4) throw Error('Invalid OpenRealm network ring layout.');
     state.shared = { to, from, dataOffset, size };
+    flushControls();
     if (!state.pump) state.pump = setInterval(pump, 4);
     record(RECORD.READY, '', new Uint8Array([state.ready ? 1 : 0]));
     if (state.hosting && state.ready) record(RECORD.HOST_READY);
@@ -206,7 +244,7 @@
       'Signalling unavailable; retrying broker connection.');
     if (ready) {
       signal({ type: 'hello' });
-      if (state.hosted) publishHost();
+      if (state.hosted) publishHost(true);
     }
   }
   function connectBroker(epoch) {
@@ -282,6 +320,11 @@
     state.seen.add(message.from + message.nonce);
     if (state.seen.size > 2048) state.seen.clear();
     try { await handleSignal(message); } catch (err) {
+      /* Failed SDP/ICE operations must close the peer so the join attempt
+       * terminates instead of remaining stuck in Connecting forever. */
+      const peer = state.peers.get(message.from);
+      if (peer && ['offer', 'answer', 'ice'].includes(message.type))
+        dropPeer(peer, 'Browser signalling negotiation failed.');
       console.warn('OpenRealm signalling message rejected:', err);
     }
   }
@@ -302,10 +345,24 @@
     record(RECORD.CLEAR_GAMES);
     for (const game of state.games.values()) announceGame(game);
   }
-  function publishHost() {
-    if (!state.hosted || !state.ready) return;
-    signal({ type: 'host', ...state.hosted, closed: state.admissionClosed })
-      .then(sent => { if (sent && !state.admissionClosed) record(RECORD.HOST_READY); });
+  function publishHost(force = false) {
+    if (!state.hosted || !state.ready || state.publishing) return;
+    const now = Date.now();
+    if (!force && state.publishedRevision === state.hostRevision &&
+        now - state.lastPublished < HOST_PUBLISH_INTERVAL) return;
+    const epoch = state.generation, revision = state.hostRevision;
+    const advertised = { type: 'host', ...state.hosted, closed: state.admissionClosed };
+    state.publishing = true;
+    signal(advertised).then(sent => {
+      if (epoch !== state.generation) return;
+      if (sent) {
+        state.lastPublished = Date.now();
+        state.publishedRevision = revision;
+        if (!state.admissionClosed && revision === state.hostRevision) record(RECORD.HOST_READY);
+      }
+    }).catch(() => updateStatus('Could not publish browser lobby.')).finally(() => {
+      if (epoch === state.generation) state.publishing = false;
+    });
   }
   function acceptHost(message) {
     if (state.hosting || message.closed ||
@@ -326,24 +383,32 @@
     const pc = new RTCPeerConnection({ iceServers });
     const peer = { id, pc, channel: pc.createDataChannel('openrealm',
       { negotiated: true, id: 0, ordered: true }), pending: [], open: false,
-      queue: [], queued: [], queuedBytes: 0, incoming: null, lastMessage: 0 };
+      queued: [], queuedBytes: 0, incoming: null, lastMessage: Date.now(),
+      started: Date.now(), disconnectedAt: null };
     /* queued is the bounded C-to-JS packet queue; queue stores pending fragments. */
     state.peers.set(id, peer);
     peer.channel.binaryType = 'arraybuffer';
     peer.channel.onopen = () => {
       if (state.peers.get(id) !== peer) return;
       peer.open = true;
+      peer.disconnectedAt = null;
       record(RECORD.CONNECTED, id);
       flushPeer(peer);
       updateStatus('Connected to browser player.');
     };
     peer.channel.onmessage = event => {
+      if (state.peers.get(id) !== peer || !peer.open) return;
       peer.lastMessage = Date.now();
       onFragment(peer, new Uint8Array(event.data));
     };
     peer.channel.onclose = () => dropPeer(peer);
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') dropPeer(peer);
+      if (state.peers.get(id) !== peer) return; // Ignore callbacks from replaced connections.
+      if (pc.connectionState === 'failed') dropPeer(peer, 'Browser peer negotiation failed.');
+      else if (pc.connectionState === 'closed') dropPeer(peer);
+      else if (pc.connectionState === 'disconnected' && peer.disconnectedAt === null)
+        peer.disconnectedAt = Date.now();
+      else if (pc.connectionState === 'connected') peer.disconnectedAt = null;
     };
     pc.onicecandidate = event => {
       if (event.candidate) signal({ type: 'ice', to: id, candidate: event.candidate.toJSON() });
@@ -356,7 +421,9 @@
     peer.open = false;
     try { peer.channel.close(); } catch (_) { /* already closed */ }
     try { peer.pc.close(); } catch (_) { /* already closed */ }
-    record(RECORD.CLOSED, peer.id);
+    /* Error events are terminal for a joining browser, while ordinary close
+     * events are still sent to the server to reap a connected player slot. */
+    record(error ? RECORD.FAILED : RECORD.CLOSED, peer.id);
     if (error) updateStatus(error);
   }
   function flushPeer(peer) {
@@ -455,9 +522,12 @@
   async function setupRoom(code) {
     const epoch = ++state.generation;
     state.ready = false;
+    state.controls = state.controls.filter(item => item.kind === RECORD.ROOM_CLOSED);
     state.seen.clear(); state.games.clear(); state.pendingIce.clear();
     record(RECORD.CLEAR_GAMES);
     for (const peer of [...state.peers.values()]) dropPeer(peer);
+    state.hostRevision = state.publishedRevision = state.lastPublished = 0;
+    state.publishing = false;
     state.hosting = false; state.hostId = ''; state.hosted = null; state.admissionClosed = false;
     const { key, topic } = await derive(code);
     if (epoch !== state.generation) return;
@@ -499,6 +569,9 @@
     for (const peer of [...state.peers.values()]) dropPeer(peer);
     state.hosted = null; state.hosting = false; state.hostId = '';
     state.games.clear(); state.pendingIce.clear(); state.admissionClosed = false;
+    state.hostRevision = state.publishedRevision = state.lastPublished = 0;
+    state.publishing = false;
+    record(RECORD.ROOM_CLOSED);
     record(RECORD.CLEAR_GAMES);
     if (!keepCode) { state.code = ''; state.key = null; state.topic = ''; }
     updateStatus(keepCode ? 'Room selected. Open Internet Games to connect.' : 'Left browser multiplayer room.');
@@ -507,11 +580,20 @@
   function host(map, name, players, slots, speed, crc) {
     if (!state.active || !state.ready || !state.code) return;
     state.hosting = true;
-    state.hosted = { map: shortText(map, 79), name: shortText(name, 79),
+    const updated = { map: shortText(map, 79), name: shortText(name, 79),
       players, slots, speed, crc };
+    if (JSON.stringify(state.hosted) !== JSON.stringify(updated)) {
+      state.hosted = updated;
+      state.hostRevision++;
+    }
     publishHost();
   }
-  function closeAdmission() { state.admissionClosed = true; if (state.hosted) publishHost(); }
+  function closeAdmission() {
+    if (state.admissionClosed) return;
+    state.admissionClosed = true;
+    state.hostRevision++;
+    if (state.hosted) publishHost(true);
+  }
   function refresh() { state.games.clear(); record(RECORD.CLEAR_GAMES); signal({ type: 'request' }); }
   async function connectHost(id) {
     if (!state.active || !state.ready || state.hosting || !/^[0-9a-f]{32}$/.test(id)) return;
@@ -520,7 +602,8 @@
     try {
       const offer = await peer.pc.createOffer();
       await peer.pc.setLocalDescription(offer);
-      await signal({ type: 'offer', to: id, sdp: peer.pc.localDescription.sdp });
+      if (!(await signal({ type: 'offer', to: id, sdp: peer.pc.localDescription.sdp })))
+        dropPeer(peer, 'Could not send browser host offer.');
     } catch (_) { dropPeer(peer, 'Could not connect to browser host.'); }
   }
   function sweep() {
@@ -531,9 +614,9 @@
     }
     if (changed) rebuildGameList();
     for (const peer of state.peers.values()) {
-      if ((peer.pc.connectionState === 'disconnected' &&
-           now - peer.lastMessage > 15000) ||
-          (peer.incoming && now - peer.lastMessage > 15000)) {
+      if ((!peer.open && now - peer.started >= CONNECT_TIMEOUT) ||
+          (peer.disconnectedAt !== null && now - peer.disconnectedAt >= DISCONNECT_GRACE) ||
+          (peer.incoming && now - peer.lastMessage >= DISCONNECT_GRACE)) {
         dropPeer(peer, 'Browser peer connection timed out.');
       }
     }
@@ -541,10 +624,13 @@
   function setHeartbeat() {
     if (state.heartbeat) return;
     state.heartbeat = setInterval(() => {
-      if (!state.ready) return;
-      signal({ type: 'hello' });
-      if (state.hosted) publishHost();
+      /* An existing DataChannel still needs timeouts/cleanup when MQTT is down. */
       sweep();
+      flushControls();
+      if (state.ready) {
+        signal({ type: 'hello' });
+        if (state.hosted) publishHost();
+      }
     }, 4000);
   }
 

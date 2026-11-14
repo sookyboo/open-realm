@@ -36,6 +36,31 @@ jobs:
       - name: Run unit tests
         run: make test
 
+  browser:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Browser JavaScript regression tests
+        run: node --test port/web/tests/*.test.cjs
+      - name: Set up Emscripten
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: "4.0.21"
+      - name: Generate embedded browser font
+        run: make font
+      - name: Build default web target
+        run: make web-warcraft3-engine WEB_BUILD_DIR=build/web/engine-default
+      - name: Build optional WebRTC web target
+        run: make web-warcraft3-engine WEB_MULTIPLAYER=1 WEB_BUILD_DIR=build/web/engine-webrtc
+      - name: Verify build-flag isolation
+        run: |
+          test ! -e build/web/engine-default/engine/web-multiplayer.js
+          test -e build/web/engine-webrtc/engine/web-multiplayer.js
+
   build:
     runs-on: ubuntu-latest
     container:

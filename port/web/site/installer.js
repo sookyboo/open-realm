@@ -29,7 +29,7 @@
   // On the next load, delete before starting any new game worker.
   const REMOVE_ON_RELOAD = 'openrealm-wc3-remove-after-reload';
   const pendingRemoval = sessionStorage.getItem(REMOVE_ON_RELOAD) === '1';
-  const worker = new Worker('install-worker.js?v=20261112-custom-maps');
+  const worker = new Worker('install-worker.js?v=20261114-map-library');
   let operation = null;
   let warnings = [];
   let playable = false;
@@ -180,7 +180,7 @@
     if (addMaps) addMaps.disabled = operation !== null || !mapInput.files.length;
   });
   if (addMaps) addMaps.addEventListener('click', () => {
-    if (operation || !mapInput.files.length) return;
+    if (operation || !playable || !mapInput.files.length) return;
     warnings = [];
     clearDiscovery();
     progress.removeAttribute('value');

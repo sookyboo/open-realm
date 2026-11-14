@@ -233,3 +233,12 @@ make web-warcraft3-engine WEB_MULTIPLAYER=1
 
 See [Browser multiplayer](browser-multiplayer.md) for room codes, browser
 requirements, native EOS separation and deployment limitations.
+
+### Custom-map replacement precedence
+
+The browser's versioned custom-map library takes precedence for matching
+`Maps/Download/*.w3m` and `*.w3x` paths, including when an older map with the
+same name exists in the installation. This applies to bytes used by map
+loading and multiplayer CRC validation. Non-map MPQ/assets keep the existing
+search order. Re-importing maps does not rewrite the base MPQ generation;
+reload the running game to select the newer map generation.

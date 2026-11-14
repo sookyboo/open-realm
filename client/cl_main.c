@@ -1486,7 +1486,10 @@ void CL_Connect(cstring_t host, unsigned short port) {
     }
     // Loopback (localhost) needs no UDP socket — packets go through the
     // in-memory ring buffer.  Only open the socket for remote addresses.
-    if (NET_IsOnlineAddress(adr.type) && (!Online_Ready() || !Online_InLobby())) {
+    /* A WebRTC DataChannel may already be open when MQTT signalling drops;
+     * preserve its engine handshake. EOS still requires service readiness. */
+    if (NET_IsOnlineAddress(adr.type) && (!Online_InLobby() ||
+        (adr.type == NA_EOS && !Online_Ready()))) {
         fprintf(stderr, "CL_Connect: join an Internet room before connecting to its host\n");
         return;
     }

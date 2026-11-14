@@ -844,6 +844,26 @@ uint32_t FS_ListSaves(string_t out, uint32_t out_size) {
     return written;
 }
 
+/* Browser custom maps are a loose, explicitly opted-in overlay. Game data
+ * must keep its existing MPQ/search precedence; only downloaded map paths
+ * can supersede an older copy in the installed generation. */
+static PATHSTR fs_map_overlay;
+void FS_SetMapOverlayDirectory(cstring_t dir) {
+    snprintf(fs_map_overlay, sizeof(fs_map_overlay), "%s", dir ? dir : "");
+}
+static bool FS_OverlayMapPath(cstring_t path) {
+    if (!fs_map_overlay[0] || !path ||
+        (strncasecmp(path, "Maps/Download/", 14) && strncasecmp(path, "Maps\\Download\\", 14))) return false;
+    if (strstr(path, "..")) return false;
+    return FS_HasExtension(path, ".w3m") || FS_HasExtension(path, ".w3x");
+}
+static bool FS_OverlayMapExists(cstring_t path) {
+    char full[MAX_PATHLEN * 2];
+    if (!FS_OverlayMapPath(path)) return false;
+    FS_MakeDiskPath(fs_map_overlay, path, full, sizeof(full));
+    return FS_FileOnDiskExists(full);
+}
+
 static void FS_AddGameDirectory(cstring_t dirname) {
     if (!dirname || !*dirname) {
         return;
@@ -1205,16 +1225,18 @@ bool FS_FileExists(cstring_t fileName) {
 }
 
 handle_t FS_ReadLooseFile(cstring_t filename, uint32_t *size, uint32_t extraBytes) {
-    FOR_LOOP(i, MAX_GAME_DIRS) {
+    /* Prefer the immutable custom-map generation, never the previous base
+     * installation's loose map with the same name. */
+    bool overlay = FS_OverlayMapExists(filename);
+    for (int i = overlay ? -1 : 0; i < MAX_GAME_DIRS; i++) {
         char path[MAX_PATHLEN * 2];
         FILE *file;
         long fileSize;
         uint8_t *buffer;
 
-        if (!gameDirs[i][0]) {
-            continue;
-        }
-        FS_MakeDiskPath(gameDirs[i], filename, path, sizeof(path));
+        cstring_t root = i < 0 ? fs_map_overlay : gameDirs[i];
+        if (!root[0]) continue;
+        FS_MakeDiskPath(root, filename, path, sizeof(path));
         file = fopen(path, "rb");
         if (!file) {
             continue;
@@ -1313,6 +1335,9 @@ handle_t FS_ReadPriorityFile(cstring_t filename, uint32_t *size) {
 }
 
 handle_t FS_ReadFile(cstring_t filename, uint32_t *size) {
+    /* A custom map must win over archive members as well as loose installed
+     * copies, so its CRC and its runtime bytes resolve identically. */
+    if (FS_OverlayMapExists(filename)) return FS_ReadLooseFile(filename, size, 0);
     handle_t fp = FS_OpenFile(filename);
     uint32_t read_size = 0;
     if (!fp) {
@@ -2094,3 +2119,40 @@ void Com_Error(errorCode_t code, cstring_t fmt, ...) {
     
     fprintf(stderr, "%s", msg);
 }
+
+#ifdef BZ_TESTS
+/* Use synthetic loose files, not a developer's Warcraft III MPQs. These
+ * assertions demonstrate that replacing a downloaded map wins over the old
+ * installed copy without altering unrelated file lookups. */
+TEST(fs, browser_map_overlay_precedence) {
+    char base[MAX_PATHLEN], newer[MAX_PATHLEN], path[MAX_PATHLEN * 2];
+    PATHSTR old_dirs[MAX_GAME_DIRS], old_overlay;
+    cstring_t root = Test_TempPath("browser-map-precedence");
+    uint32_t size = 0;
+    memcpy(old_dirs, gameDirs, sizeof(old_dirs));
+    snprintf(old_overlay, sizeof(old_overlay), "%s", fs_map_overlay);
+    snprintf(base, sizeof(base), "%s/base", root);
+    snprintf(newer, sizeof(newer), "%s/new", root);
+    snprintf(path, sizeof(path), "%s/Maps/Download", base);
+    T_ASSERT(FS_CreateDirectoryPath(path));
+    snprintf(path, sizeof(path), "%s/Maps/Download", newer);
+    T_ASSERT(FS_CreateDirectoryPath(path));
+    FS_MakeDiskPath(base, "Maps/Download/OverlayCheck.w3x", path, sizeof(path));
+    FILE *old = fopen(path, "wb");
+    T_NOT_NULL(old);
+    if (old) { fwrite("old", 1, 3, old); fclose(old); }
+    FS_MakeDiskPath(newer, "Maps/Download/OverlayCheck.w3x", path, sizeof(path));
+    FILE *fresh = fopen(path, "wb");
+    T_NOT_NULL(fresh);
+    if (fresh) { fwrite("new-map", 1, 7, fresh); fclose(fresh); }
+    FS_AddGameDirectory(base);
+    FS_SetMapOverlayDirectory(newer);
+    char *bytes = FS_ReadFile("Maps/Download/OverlayCheck.w3x", &size);
+    T_NOT_NULL(bytes);
+    if (bytes) { T_EQ(size, 7u); T_ASSERT(!memcmp(bytes, "new-map", 7)); FS_FreeFile(bytes); }
+    T_ASSERT(!FS_OverlayMapPath("Units/UnitData.slk"));
+    T_ASSERT(!FS_OverlayMapPath("Maps/Download/../OverlayCheck.w3x"));
+    FS_SetMapOverlayDirectory(old_overlay);
+    memcpy(gameDirs, old_dirs, sizeof(gameDirs));
+}
+#endif

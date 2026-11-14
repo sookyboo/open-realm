@@ -376,9 +376,7 @@ async function addMaps(files) {
       if (selected.has(key)) throw new Error('Duplicate map filename: ' + file.name);
       selected.set(key, {name, blob:file, size:file.size, source:file.name});
     }
-    let base;
-    try { base = await metadata(await directory(false)); }
-    catch (err) { if (err.name !== 'NotFoundError') throw err; }
+    const base = await metadata(await directory(false));
     if (!base || !Array.isArray(base.files) ||
         !base.files.some(file => file && file.name.toLowerCase() === 'war3.mpq'))
       throw new Error('Install War3.mpq before adding maps');
